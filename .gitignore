@@ -1,0 +1,17 @@
+# Model files (too large for git)
+models/
+*.safetensors
+*.pt
+*.bin
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Logs
+*.log
+*.txt
+
+# Cache
+.cache/
