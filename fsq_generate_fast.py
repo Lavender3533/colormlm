@@ -1,334 +1,288 @@
 # -*- coding: utf-8 -*-
-"""FSQ Fast Inference - Optimized Block-8bit with mmap + KV cache"""
-import os, torch, json, time, math
+"""
+ColorLM V5 - LRU Cache Inference
+Key optimizations:
+1. Expert LRU cache: convert uint8->float16 on first access, then cached
+2. Pre-loaded non-expert weights
+3. Open safetensors handles at startup (no repeated file open)
+Memory: ~8GB (3GB non-expert + 5GB cache)
+"""
+import os, sys, torch, json, time
+from collections import OrderedDict
 from safetensors import safe_open
 from transformers import AutoTokenizer
-import numpy as np
 
-class MmapWeightStore:
-    """Weight storage with lazy shard loading"""
+BLOCK = 128
+MAX_CACHED_EXPERTS = 32  # 32 * 150MB = 4.8GB
+
+class ExpertCache:
+    """LRU cache for expert weights. Converts uint8->float16 on first access."""
+    def __init__(self, max_size=MAX_CACHED_EXPERTS):
+        self.cache = OrderedDict()
+        self.max_size = max_size
+        self.hits = 0
+        self.misses = 0
+
+    def get(self, key):
+        if key in self.cache:
+            self.hits += 1
+            self.cache.move_to_end(key)
+            return self.cache[key]
+        return None
+
+    def put(self, key, value):
+        self.misses += 1
+        self.cache[key] = value
+        self.cache.move_to_end(key)
+        while len(self.cache) > self.max_size:
+            self.cache.popitem(last=False)
+
+    def stats(self):
+        total = self.hits + self.misses
+        rate = self.hits / total * 100 if total > 0 else 0
+        return f"Cache: {len(self.cache)}/{self.max_size}, hit rate: {rate:.1f}% ({self.hits}/{total})"
+
+
+class FastModel:
     def __init__(self, model_dir):
         self.model_dir = model_dir
-        
-        with open(os.path.join(model_dir, "model.safetensors.index.json"), "r") as f:
-            self.weight_map = json.load(f).get("weight_map", {})
-        
-        # Group keys by shard
-        self.shard_keys = {}
-        for key, shard in self.weight_map.items():
-            if shard not in self.shard_keys:
-                self.shard_keys[shard] = []
-            self.shard_keys[shard].append(key)
-        
-        # No shard cache - open/close each time
-        
-        print(f"  WeightStore: {len(self.weight_map)} weights in {len(self.shard_keys)} shards")
-    
-    def get_tensor(self, key):
-        shard = self.weight_map[key]
-        path = os.path.join(self.model_dir, shard)
-        f = safe_open(path, framework="pt", device="cpu")
-        
-        # Check if block-quantized
-        all_keys = list(f.keys())
-        if key + "._bq_codes" in all_keys:
-            codes = f.get_tensor(key + "._bq_codes")
+        with open(os.path.join(model_dir, "config.json")) as f:
+            self.cfg = json.load(f)
+        self.tok = AutoTokenizer.from_pretrained(model_dir, trust_remote_code=True)
+        with open(os.path.join(model_dir, "model.safetensors.index.json")) as f:
+            self.wmap = json.load(f).get("weight_map", {})
+
+        self.L = self.cfg["num_hidden_layers"]
+        self.H = self.cfg["hidden_size"]
+        self.NH = self.cfg["num_attention_heads"]
+        self.NK = self.cfg.get("num_key_value_heads", self.NH)
+        self.HD = self.cfg.get("head_dim", self.H // self.NH)
+        self.NE = self.cfg.get("num_experts", 128)
+        self.TK = self.cfg.get("num_experts_per_tok", 8)
+        self.eps = self.cfg.get("rms_norm_eps", 1e-6)
+        self.scale = self.HD ** -0.5
+        self.rep = self.NH // self.NK
+
+        inv = 1.0 / (10000.0 ** (torch.arange(0, self.HD, 2).float() / self.HD))
+        self.inv = inv
+
+        # Open all safetensors handles at startup
+        self._shards = {}
+
+        # Expert LRU cache
+        self.expert_cache = ExpertCache(MAX_CACHED_EXPERTS)
+
+        print("Loading non-expert weights...")
+        self.embed = self._ld("model.embed_tokens.weight").half()
+        self.norm_w = self._ld("model.norm.weight").half()
+        self.lm_w = self._ld("lm_head.weight").half()
+
+        print("Pre-loading attention weights for all layers...")
+        self.layers = []
+        for i in range(self.L):
+            lw = self._load_layer(i)
+            self.layers.append(lw)
+            if i % 8 == 0:
+                print(f"  Layer {i}/{self.L}")
+
+        self.kv_k = [None] * self.L
+        self.kv_v = [None] * self.L
+        print(f"Ready: {self.L}L, {self.NH}H, {self.NE}E, {self.TK}K")
+        print(f"Expert cache: {MAX_CACHED_EXPERTS} slots")
+
+    def _get_shard(self, name):
+        if name not in self._shards:
+            self._shards[name] = safe_open(
+                os.path.join(self.model_dir, name), framework="pt", device="cpu"
+            )
+        return self._shards[name]
+
+    def _ld(self, key):
+        shard = self.wmap[key]
+        f = self._get_shard(shard)
+        ck = key + "._bq_codes"
+        if ck in f.keys():
+            codes = f.get_tensor(ck)
             meta = f.get_tensor(key + "._bq_meta")
             shape_t = f.get_tensor(key + "._bq_shape")
             shape = [shape_t[0].item(), shape_t[1].item()]
-            
             n = codes.shape[0]
-            b_min = meta[:n].unsqueeze(1)
-            b_max = meta[n:].unsqueeze(1)
-            recon = codes.float() / 255.0 * (b_max - b_min) + b_min
-            return recon.flatten()[:shape[0]*shape[1]].reshape(shape)
-        
+            mn = meta[:n].unsqueeze(1)
+            mx = meta[n:].unsqueeze(1)
+            sc = (mx - mn) / 255.0
+            w = codes.float() * sc + mn
+            return w.flatten()[:shape[0]*shape[1]].reshape(shape)
         t = f.get_tensor(key)
-        if t.dtype == torch.bfloat16:
-            t = t.float()
-        return t
-    
-    def get_layer_weights(self, layer_idx):
-        """Load only attention/norm/router weights for a layer (not experts)"""
-        prefix = f"model.layers.{layer_idx}."
-        weights = {}
-        for key in self.weight_map:
-            if key.startswith(prefix) and "experts." not in key:
-                short = key[len(prefix):]
-                if "._bq" not in short:
-                    weights[short] = self.get_tensor(key)
-        return weights
-    
-    def get_expert_weight(self, layer_idx, expert_idx, proj):
-        """Load a single expert weight on demand"""
-        key = f"model.layers.{layer_idx}.mlp.experts.{expert_idx}.{proj}.weight"
-        return self.get_tensor(key)
+        return t.float() if t.dtype == torch.bfloat16 else t
 
-class FastFSQModel:
-    def __init__(self, model_dir, device="cpu"):
-        self.model_dir = model_dir
-        self.device = device
-        
-        with open(os.path.join(model_dir, "config.json"), "r") as f:
-            self.config = json.load(f)
-        
-        self.tokenizer = AutoTokenizer.from_pretrained(model_dir, trust_remote_code=True)
-        
-        self.num_layers = self.config["num_hidden_layers"]
-        self.hidden_size = self.config["hidden_size"]
-        self.num_heads = self.config["num_attention_heads"]
-        self.num_kv_heads = self.config.get("num_key_value_heads", self.num_heads)
-        self.head_dim = self.config.get("head_dim", self.hidden_size // self.num_heads)
-        self.num_experts = self.config.get("num_experts", 128)
-        self.top_k = self.config.get("num_experts_per_tok", 8)
-        self.rms_norm_eps = self.config.get("rms_norm_eps", 1e-6)
-        self.scaling = self.head_dim ** -0.5
-        
-        # RoPE frequencies
-        inv_freq = 1.0 / (10000.0 ** (torch.arange(0, self.head_dim, 2, dtype=torch.float32) / self.head_dim))
-        self.inv_freq = inv_freq
-        
-        # Load weights with mmap
-        print("Loading weights (mmap)...")
-        self.store = MmapWeightStore(model_dir)
-        
-        # Load non-layer weights
-        self.embed = self.store.get_tensor("model.embed_tokens.weight")
-        self.norm = self.store.get_tensor("model.norm.weight")
-        self.lm_head = self.store.get_tensor("lm_head.weight")
-        
-        # Cache for layer weights
-        self.layer_cache = {}
-        self.max_cached_layers = 3  # Keep 3 layers in memory
-        
-        # KV cache
-        self.kv_cache = [None] * self.num_layers
-        
-        print("Model ready!")
-    
-    def get_layer(self, layer_idx):
-        if layer_idx not in self.layer_cache:
-            # Evict old layers if cache is full
-            if len(self.layer_cache) >= self.max_cached_layers:
-                oldest = min(self.layer_cache.keys())
-                del self.layer_cache[oldest]
-            self.layer_cache[layer_idx] = self.store.get_layer_weights(layer_idx)
-        return self.layer_cache[layer_idx]
-    
-    def rms_norm(self, x, weight):
-        x_f = x.float()
-        var = x_f.pow(2).mean(-1, keepdim=True)
-        return (weight * x_f * torch.rsqrt(var + self.rms_norm_eps)).to(x.dtype)
-    
-    def apply_rope(self, q, k, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float()
-        pos_expanded = position_ids[:, None, :].float()
-        freqs = (inv_freq_expanded @ pos_expanded).transpose(1, 2)
+    def _load_layer(self, idx):
+        """Load non-expert weights for a layer"""
+        prefix = f"model.layers.{idx}."
+        w = {}
+        for key in self.wmap:
+            if key.startswith(prefix) and "experts." not in key and "._bq" not in key:
+                w[key[len(prefix):]] = self._ld(key).half()
+        return w
+
+    def _get_expert(self, layer, expert, proj):
+        """Get expert weight with LRU cache. Converts uint8->float16 on first access."""
+        cache_key = f"L{layer}E{expert}_{proj}"
+        cached = self.expert_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        # Cache miss: load from safetensors and convert
+        key = f"model.layers.{layer}.mlp.experts.{expert}.{proj}.weight"
+        shard = self.wmap[key]
+        f = self._get_shard(shard)
+        codes = f.get_tensor(key + "._bq_codes")
+        meta = f.get_tensor(key + "._bq_meta")
+        shape_t = f.get_tensor(key + "._bq_shape")
+        shape = [shape_t[0].item(), shape_t[1].item()]
+        n = codes.shape[0]
+        mn = meta[:n].unsqueeze(1)
+        mx = meta[n:].unsqueeze(1)
+        sc = (mx - mn) / 255.0
+        w = (codes.float() * sc + mn).flatten()[:shape[0]*shape[1]].reshape(shape).half()
+
+        self.expert_cache.put(cache_key, w)
+        return w
+
+    def _rms(self, x, w):
+        xf = x.float()
+        return (w.float() * xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + self.eps)).half()
+
+    def _rope(self, q, k, pos):
+        inv = self.inv[None, :, None].float()
+        pf = pos[:, None, :].float()
+        freqs = (inv @ pf).transpose(1, 2)
         emb = torch.cat((freqs, freqs), dim=-1)
-        cos = emb.cos().unsqueeze(1)
-        sin = emb.sin().unsqueeze(1)
-        
-        half = q.shape[-1] // 2
-        q_out = q * cos + torch.cat([-q[..., half:], q[..., :half]], dim=-1) * sin
-        k_out = k * cos + torch.cat([-k[..., half:], k[..., :half]], dim=-1) * sin
-        return q_out, k_out
-    
-    def forward_layer_with_cache(self, layer_idx, hidden_states, position_ids, use_cache=True):
-        weights = self.get_layer(layer_idx)
-        
-        # Attention
-        residual = hidden_states
-        h = self.rms_norm(hidden_states, weights["input_layernorm.weight"])
-        
-        B, S, _ = h.shape
-        q = h @ weights["self_attn.q_proj.weight"].T
-        k = h @ weights["self_attn.k_proj.weight"].T
-        v = h @ weights["self_attn.v_proj.weight"].T
-        
-        q = q.view(B, S, self.num_heads, self.head_dim).transpose(1, 2)
-        k = k.view(B, S, self.num_kv_heads, self.head_dim).transpose(1, 2)
-        v = v.view(B, S, self.num_kv_heads, self.head_dim).transpose(1, 2)
-        
-        # QK Norm
-        q = self.rms_norm(q, weights["self_attn.q_norm.weight"])
-        k = self.rms_norm(k, weights["self_attn.k_norm.weight"])
-        
-        # RoPE
-        q, k = self.apply_rope(q, k, position_ids)
-        
-        # KV Cache
-        if use_cache and self.kv_cache[layer_idx] is not None:
-            prev_k, prev_v = self.kv_cache[layer_idx]
-            k = torch.cat([prev_k, k], dim=2)
-            v = torch.cat([prev_v, v], dim=2)
-        if use_cache:
-            self.kv_cache[layer_idx] = (k.detach(), v.detach())
-        
-        # GQA expand
-        if self.num_kv_heads < self.num_heads:
-            repeat = self.num_heads // self.num_kv_heads
-            k = k.repeat_interleave(repeat, dim=1)
-            v = v.repeat_interleave(repeat, dim=1)
-        
-        # Attention
-        attn = (q @ k.transpose(-2, -1)) * self.scaling
-        
-        # Causal mask (only for new tokens)
-        total_len = k.shape[2]
-        if total_len > S:
-            # We have cached KV, mask differently
-            causal = torch.zeros(S, total_len, device=hidden_states.device, dtype=torch.bool)
-            for i in range(S):
-                causal[i, total_len - S + i + 1:] = True
-        else:
-            causal = torch.triu(torch.ones(S, S, device=hidden_states.device, dtype=torch.bool), diagonal=1)
-        
-        attn.masked_fill_(causal.unsqueeze(0).unsqueeze(0), float("-inf"))
-        attn = torch.softmax(attn, dim=-1)
-        attn_out = (attn @ v).transpose(1, 2).reshape(B, S, -1)
-        
-        o_proj = weights["self_attn.o_proj.weight"]
-        attn_out = (o_proj @ attn_out.transpose(-1, -2)).transpose(-1, -2)
-        
-        hidden_states = residual + attn_out
-        
-        # MoE
-        residual = hidden_states
-        h = self.rms_norm(hidden_states, weights["post_attention_layernorm.weight"])
-        
-        gate_w = weights["mlp.gate.weight"]
-        router_logits = h @ gate_w.T
-        router_logits = torch.softmax(router_logits.float(), dim=-1)
-        topk_values, topk_indices = torch.topk(router_logits, self.top_k, dim=-1)
-        topk_values /= topk_values.sum(dim=-1, keepdim=True)
-        
-        moe_out = torch.zeros_like(h)
-        for i in range(self.top_k):
-            idx = topk_indices[0, 0, i].item()
-            w = topk_values[0, 0, i].item()
-            
-            gate_w = self.store.get_expert_weight(layer_idx, idx, "gate_proj")
-            up_w = self.store.get_expert_weight(layer_idx, idx, "up_proj")
-            down_w = self.store.get_expert_weight(layer_idx, idx, "down_proj")
-            
-            gate = h @ gate_w.T
-            up = h @ up_w.T
-            gate = torch.nn.functional.silu(gate)
-            expert_out = (gate * up) @ down_w.T
-            
-            del gate_w, up_w, down_w
-            moe_out = moe_out + expert_out * w
-        
-        hidden_states = residual + moe_out
-        
-        import gc
-        del weights, h, moe_out
-        gc.collect()
-        
-        return hidden_states
-    
-    def clear_cache(self):
-        self.kv_cache = [None] * self.num_layers
-    
+        c = emb.cos().unsqueeze(1).half()
+        s = emb.sin().unsqueeze(1).half()
+        h = q.shape[-1] // 2
+        return (q * c + torch.cat([-q[..., h:], q[..., :h]], dim=-1) * s,
+                k * c + torch.cat([-k[..., h:], k[..., :h]], dim=-1) * s)
+
+    def forward(self, hidden, pos):
+        B, S, _ = hidden.shape
+        for i in range(self.L):
+            w = self.layers[i]
+            res = hidden
+            h = self._rms(hidden, w["input_layernorm.weight"])
+
+            q = (h @ w["self_attn.q_proj.weight"].T).view(B, S, self.NH, self.HD).transpose(1, 2)
+            k = (h @ w["self_attn.k_proj.weight"].T).view(B, S, self.NK, self.HD).transpose(1, 2)
+            v = (h @ w["self_attn.v_proj.weight"].T).view(B, S, self.NK, self.HD).transpose(1, 2)
+
+            q = self._rms(q, w["self_attn.q_norm.weight"])
+            k = self._rms(k, w["self_attn.k_norm.weight"])
+            q, k = self._rope(q, k, pos)
+
+            if self.kv_k[i] is not None:
+                k = torch.cat([self.kv_k[i], k], dim=2)
+                v = torch.cat([self.kv_v[i], v], dim=2)
+            self.kv_k[i] = k.detach()
+            self.kv_v[i] = v.detach()
+
+            if self.rep > 1:
+                k = k.repeat_interleave(self.rep, dim=1)
+                v = v.repeat_interleave(self.rep, dim=1)
+
+            attn = (q @ k.transpose(-2, -1)) * self.scale
+            tl = k.shape[2]
+            if tl > S:
+                mask = torch.ones(S, tl, dtype=torch.bool, device=hidden.device)
+                for j in range(S):
+                    mask[j, :tl - S + j + 1] = False
+            else:
+                mask = torch.triu(torch.ones(S, S, dtype=torch.bool, device=hidden.device), diagonal=1)
+            attn.masked_fill_(mask[None, None], float("-inf"))
+            attn = torch.softmax(attn.float(), dim=-1).half()
+            ao = (attn @ v).transpose(1, 2).reshape(B, S, -1)
+            ao = (w["self_attn.o_proj.weight"] @ ao.transpose(-1, -2)).transpose(-1, -2)
+            hidden = res + ao
+
+            # MoE with expert LRU cache
+            res = hidden
+            h = self._rms(hidden, w["post_attention_layernorm.weight"])
+            logits = (h @ w["mlp.gate.weight"].T).float()
+            logits = torch.softmax(logits, dim=-1)
+            tv, ti = torch.topk(logits, self.TK, dim=-1)
+            tv /= tv.sum(dim=-1, keepdim=True)
+
+            moe = torch.zeros_like(h)
+            for j in range(self.TK):
+                idx = ti[0, 0, j].item()
+                wt = tv[0, 0, j].item()
+                g = self._get_expert(i, idx, "gate_proj")
+                u = self._get_expert(i, idx, "up_proj")
+                d = self._get_expert(i, idx, "down_proj")
+                gate = torch.nn.functional.silu(h @ g.T)
+                up = h @ u.T
+                moe = moe + (gate * up) @ d.T * wt
+
+            hidden = res + moe
+        return hidden
+
+    def clear_kv(self):
+        self.kv_k = [None] * self.L
+        self.kv_v = [None] * self.L
+
     @torch.no_grad()
-    def generate(self, prompt, max_new_tokens=50, temperature=0.7, top_p=0.9):
-        input_ids = self.tokenizer.encode(prompt, return_tensors="pt")
-        tokens = input_ids[0].tolist()
-        
-        self.clear_cache()
-        
+    def generate(self, prompt, max_new=64, temp=0.7, top_p=0.9):
+        ids = self.tok.encode(prompt, return_tensors="pt")
+        tokens = ids[0].tolist()
+        self.clear_kv()
+
         print("Generating...")
         t0 = time.time()
-        first_token_time = None
-        
-        # Prefill: process all input tokens at once
-        input_t = torch.tensor([tokens], dtype=torch.long)
-        hidden_states = self.embed[input_t].float()
-        position_ids = torch.arange(hidden_states.shape[1]).unsqueeze(0)
-        
-        import psutil
-        for i in range(self.num_layers):
-            try:
-                hidden_states = self.forward_layer_with_cache(i, hidden_states, position_ids, use_cache=True)
-                if i % 10 == 0:
-                    mem = psutil.virtual_memory()
-                    print(f"  Layer {i}: mem={mem.percent}%")
-            except Exception as e:
-                print(f"  Error at layer {i}: {e}")
-                import traceback
-                traceback.print_exc()
-                break
-        
-        hidden_states = self.rms_norm(hidden_states, self.norm)
-        logits = hidden_states @ self.lm_head.T
-        
-        first_token_time = time.time() - t0
-        print(f"  Prefill: {len(tokens)} tokens in {first_token_time:.2f}s")
-        
-        # Decode: generate tokens one by one
-        decode_start = time.time()
-        
-        for step in range(max_new_tokens):
-            next_logits = logits[0, -1, :] / temperature
-            sorted_logits, sorted_indices = torch.sort(next_logits, descending=True)
-            cumsum = torch.cumsum(torch.softmax(sorted_logits, dim=-1), dim=-1)
-            mask = cumsum - torch.softmax(sorted_logits, dim=-1) >= top_p
-            sorted_logits[mask] = float("-inf")
-            probs = torch.softmax(sorted_logits, dim=-1)
-            next_idx = torch.multinomial(probs, 1).item()
-            next_token = sorted_indices[next_idx].item()
-            
-            tokens.append(next_token)
-            if next_token == self.tokenizer.eos_token_id:
-                break
-            
-            # Forward the new token
-            try:
-                input_t = torch.tensor([[next_token]], dtype=torch.long)
-                hidden_states = self.embed[input_t].float()
-                position_ids = torch.tensor([[len(tokens) - 1]])
-                
-                for i in range(self.num_layers):
-                    hidden_states = self.forward_layer_with_cache(i, hidden_states, position_ids, use_cache=True)
-            except Exception as e:
-                print(f"  Decode error at step {step}: {e}")
-                import traceback
-                traceback.print_exc()
-                break
-            
-            hidden_states = self.rms_norm(hidden_states, self.norm)
-            logits = hidden_states @ self.lm_head.T
-            
-            if step % 10 == 0:
-                elapsed = time.time() - decode_start
-                speed = (step + 1) / elapsed if elapsed > 0 else 0
-                print(f"  Step {step}: {speed:.2f} tok/s")
-        
-        total_time = time.time() - t0
-        decode_time = time.time() - decode_start
-        n_generated = len(tokens) - len(input_ids[0])
-        
-        print(f"\nResults:")
-        print(f"  Prefill: {first_token_time:.2f}s ({len(tokens) - n_generated} tokens)")
-        print(f"  Decode: {decode_time:.2f}s ({n_generated} tokens)")
-        print(f"  Speed: {n_generated / decode_time:.2f} tok/s (decode)")
-        print(f"  Total: {total_time:.2f}s")
-        
-        return self.tokenizer.decode(tokens)
 
-def main():
-    import sys
-    model_dir = sys.argv[1] if len(sys.argv) > 1 else r"D:\\project\\大模型ssd化\\models\\qwen3-coder-bq8"
-    
-    print("=" * 50)
-    print("FSQ Fast Inference (mmap + KV cache)")
-    print("=" * 50)
-    
-    model = FastFSQModel(model_dir)
-    result = model.generate("def fibonacci", max_new_tokens=50)
-    
-    print("\nOutput:")
-    print(result)
+        h = self.embed[ids].half()
+        pos = torch.arange(h.shape[1]).unsqueeze(0)
+        h = self.forward(h, pos)
+        h = self._rms(h, self.norm_w)
+        logits = (h @ self.lm_w.T).float()
+
+        t_pre = time.time() - t0
+        print(f"  Prefill: {t_pre:.2f}s")
+
+        t_dec = time.time()
+        for step in range(max_new):
+            lg = logits[0, -1, :] / temp
+            sl, si = torch.sort(lg, descending=True)
+            probs = torch.softmax(sl, dim=-1)
+            mask = torch.cumsum(probs, dim=-1) - probs >= top_p
+            sl[mask] = float("-inf")
+            probs = torch.softmax(sl, dim=-1)
+            nxt = si[torch.multinomial(probs, 1).item()].item()
+            tokens.append(nxt)
+            if nxt == self.tok.eos_token_id:
+                break
+
+            h = self.embed[torch.tensor([[nxt]])].half()
+            pos = torch.tensor([[len(tokens) - 1]])
+            h = self.forward(h, pos)
+            h = self._rms(h, self.norm_w)
+            logits = (h @ self.lm_w.T).float()
+
+            if step % 5 == 0 and step > 0:
+                e = time.time() - t_dec
+                print(f"  Step {step}: {step/e:.2f} tok/s | {self.expert_cache.stats()}")
+
+        total = time.time() - t0
+        dec = time.time() - t_dec
+        n = len(tokens) - len(ids[0])
+        speed = n / dec if dec > 0 else 0
+        print(f"\nPrefill: {t_pre:.2f}s, Decode: {dec:.2f}s ({n} tok, {speed:.2f} tok/s)")
+        print(self.expert_cache.stats())
+        return self.tok.decode(tokens)
+
 
 if __name__ == "__main__":
-    main()
+    d = sys.argv[1] if len(sys.argv) > 1 else r"D:\project\大模型ssd化\models\qwen3-coder-bq8"
+    print("=" * 50)
+    print("ColorLM V5 - LRU Cache Inference")
+    print("=" * 50)
+    m = FastModel(d)
+    r = m.generate("def fibonacci", max_new=50)
+    print("\n" + r)
