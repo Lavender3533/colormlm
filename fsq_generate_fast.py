@@ -1,51 +1,60 @@
 # -*- coding: utf-8 -*-
 """
-ColorLM V5 - LRU Cache Inference
-Key optimizations:
-1. Expert LRU cache: convert uint8->float16 on first access, then cached
-2. Pre-loaded non-expert weights
-3. Open safetensors handles at startup (no repeated file open)
-Memory: ~8GB (3GB non-expert + 5GB cache)
+ColorLM V5 - Direct Reader, zero-copy BF16->F16
 """
-import os, sys, torch, json, time
+import os, sys, torch, json, time, gc, struct
+import numpy as np
 from collections import OrderedDict
-from safetensors import safe_open
 from transformers import AutoTokenizer
 
-BLOCK = 128
-MAX_CACHED_EXPERTS = 32  # 32 * 150MB = 4.8GB
+MAX_CACHED = 12
 
-class ExpertCache:
-    """LRU cache for expert weights. Converts uint8->float16 on first access."""
-    def __init__(self, max_size=MAX_CACHED_EXPERTS):
-        self.cache = OrderedDict()
-        self.max_size = max_size
-        self.hits = 0
-        self.misses = 0
+def read_safetensor(path, key):
+    """Read tensor from safetensors directly, produce float16"""
+    with open(path, "rb") as f:
+        header_len = struct.unpack("<Q", f.read(8))[0]
+        header = json.loads(f.read(header_len))
+        info = header[key]
+        dtype_str = info["dtype"]
+        shape = info["shape"]
+        begin, end = info["data_offsets"]
+        f.seek(8 + header_len + begin)
+        raw = f.read(end - begin)
 
-    def get(self, key):
-        if key in self.cache:
-            self.hits += 1
-            self.cache.move_to_end(key)
-            return self.cache[key]
-        return None
+    n = 1
+    for s in shape:
+        n *= s
 
-    def put(self, key, value):
-        self.misses += 1
-        self.cache[key] = value
-        self.cache.move_to_end(key)
-        while len(self.cache) > self.max_size:
-            self.cache.popitem(last=False)
-
-    def stats(self):
-        total = self.hits + self.misses
-        rate = self.hits / total * 100 if total > 0 else 0
-        return f"Cache: {len(self.cache)}/{self.max_size}, hit rate: {rate:.1f}% ({self.hits}/{total})"
+    if dtype_str == "BF16":
+        # Chunked conversion to avoid large intermediate allocations
+        CHUNK = 8 * 1024 * 1024  # 8M elements per chunk (~16MB)
+        out = torch.empty(n, dtype=torch.float16)
+        raw_bytes = bytes(raw)
+        t16 = torch.frombuffer(bytearray(raw_bytes), dtype=torch.int16)
+        for i in range(0, n, CHUNK):
+            end = min(i + CHUNK, n)
+            chunk_f32 = (t16[i:end].to(torch.int32) << 16).view(torch.float32)
+            out[i:end] = chunk_f32.half()
+            del chunk_f32
+        del t16
+        return out.reshape(shape)
+    elif dtype_str == "F16":
+        return torch.from_numpy(np.frombuffer(raw, dtype="<f2").copy()).reshape(shape)
+    elif dtype_str == "F32":
+        return torch.from_numpy(np.frombuffer(raw, dtype="<f4").copy()).reshape(shape).half()
+    elif dtype_str == "U8":
+        return torch.from_numpy(np.frombuffer(raw, dtype=np.uint8).copy()).reshape(shape)
+    elif dtype_str == "I32":
+        return torch.from_numpy(np.frombuffer(raw, dtype=np.int32).copy()).reshape(shape)
+    elif dtype_str == "I64":
+        return torch.from_numpy(np.frombuffer(raw, dtype=np.int64).copy()).reshape(shape)
+    else:
+        raise ValueError(f"Unknown dtype: {dtype_str}")
 
 
 class FastModel:
     def __init__(self, model_dir):
-        self.model_dir = model_dir
+        self.dir = model_dir
         with open(os.path.join(model_dir, "config.json")) as f:
             self.cfg = json.load(f)
         self.tok = AutoTokenizer.from_pretrained(model_dir, trust_remote_code=True)
@@ -62,90 +71,75 @@ class FastModel:
         self.eps = self.cfg.get("rms_norm_eps", 1e-6)
         self.scale = self.HD ** -0.5
         self.rep = self.NH // self.NK
+        self.inv = 1.0 / (10000.0 ** (torch.arange(0, self.HD, 2).float() / self.HD))
 
-        inv = 1.0 / (10000.0 ** (torch.arange(0, self.HD, 2).float() / self.HD))
-        self.inv = inv
+        self.cache = OrderedDict()
+        self.ch = 0
+        self.cm = 0
 
-        # Open all safetensors handles at startup
-        self._shards = {}
-
-        # Expert LRU cache
-        self.expert_cache = ExpertCache(MAX_CACHED_EXPERTS)
-
-        print("Loading non-expert weights...")
-        self.embed = self._ld("model.embed_tokens.weight").half()
-        self.norm_w = self._ld("model.norm.weight").half()
-        self.lm_w = self._ld("lm_head.weight").half()
-
-        print("Pre-loading attention weights for all layers...")
-        self.layers = []
-        for i in range(self.L):
-            lw = self._load_layer(i)
-            self.layers.append(lw)
-            if i % 8 == 0:
-                print(f"  Layer {i}/{self.L}")
+        print("Loading model (direct file read)...")
+        self._load_all()
 
         self.kv_k = [None] * self.L
         self.kv_v = [None] * self.L
-        print(f"Ready: {self.L}L, {self.NH}H, {self.NE}E, {self.TK}K")
-        print(f"Expert cache: {MAX_CACHED_EXPERTS} slots")
+        print(f"Ready: {self.L}L, {self.NE}E, cache={MAX_CACHED}")
 
-    def _get_shard(self, name):
-        if name not in self._shards:
-            self._shards[name] = safe_open(
-                os.path.join(self.model_dir, name), framework="pt", device="cpu"
-            )
-        return self._shards[name]
+    def _load_all(self):
+        self.embed = None
+        self.norm_w = None
+        self.lm_w = None
+        self.layers = [{} for _ in range(self.L)]
 
-    def _ld(self, key):
-        shard = self.wmap[key]
-        f = self._get_shard(shard)
-        ck = key + "._bq_codes"
-        if ck in f.keys():
-            codes = f.get_tensor(ck)
-            meta = f.get_tensor(key + "._bq_meta")
-            shape_t = f.get_tensor(key + "._bq_shape")
-            shape = [shape_t[0].item(), shape_t[1].item()]
-            n = codes.shape[0]
-            mn = meta[:n].unsqueeze(1)
-            mx = meta[n:].unsqueeze(1)
-            sc = (mx - mn) / 255.0
-            w = codes.float() * sc + mn
-            return w.flatten()[:shape[0]*shape[1]].reshape(shape)
-        t = f.get_tensor(key)
-        return t.float() if t.dtype == torch.bfloat16 else t
+        shard_keys = {}
+        for key, shard in self.wmap.items():
+            if "experts." in key or "._bq" in key:
+                continue
+            shard_keys.setdefault(shard, []).append(key)
 
-    def _load_layer(self, idx):
-        """Load non-expert weights for a layer"""
-        prefix = f"model.layers.{idx}."
-        w = {}
-        for key in self.wmap:
-            if key.startswith(prefix) and "experts." not in key and "._bq" not in key:
-                w[key[len(prefix):]] = self._ld(key).half()
+        for si, (shard_name, keys) in enumerate(sorted(shard_keys.items())):
+            path = os.path.join(self.dir, shard_name)
+            for key in keys:
+                val = read_safetensor(path, key)
+                if key == "model.embed_tokens.weight":
+                    self.embed = val
+                elif key == "model.norm.weight":
+                    self.norm_w = val
+                elif key == "lm_head.weight":
+                    self.lm_w = val
+                elif key.startswith("model.layers."):
+                    idx = int(key.split(".")[2])
+                    short = key[len(f"model.layers.{idx}."):]
+                    self.layers[idx][short] = val
+                gc.collect()
+            loaded = sum(1 for l in self.layers if l)
+            print(f"  Shard {si+1}/16: {loaded}/{self.L} layers loaded")
+
+    def _dequant_expert(self, key):
+        path = os.path.join(self.dir, self.wmap[key])
+        codes = read_safetensor(path, key + "._bq_codes")
+        meta = read_safetensor(path, key + "._bq_meta")
+        shape_t = read_safetensor(path, key + "._bq_shape")
+        shape = [shape_t[0].item(), shape_t[1].item()]
+        n = codes.shape[0]
+        sc = ((meta[n:] - meta[:n]) / 255.0).unsqueeze(1)
+        w = (codes.float() * sc + meta[:n].unsqueeze(1)).flatten()[:shape[0]*shape[1]].reshape(shape).half()
+        del codes, meta, shape_t, sc
+        gc.collect()
         return w
 
     def _get_expert(self, layer, expert, proj):
-        """Get expert weight with LRU cache. Converts uint8->float16 on first access."""
-        cache_key = f"L{layer}E{expert}_{proj}"
-        cached = self.expert_cache.get(cache_key)
-        if cached is not None:
-            return cached
-
-        # Cache miss: load from safetensors and convert
+        ck = f"L{layer}E{expert}_{proj}"
+        if ck in self.cache:
+            self.ch += 1
+            self.cache.move_to_end(ck)
+            return self.cache[ck]
+        self.cm += 1
         key = f"model.layers.{layer}.mlp.experts.{expert}.{proj}.weight"
-        shard = self.wmap[key]
-        f = self._get_shard(shard)
-        codes = f.get_tensor(key + "._bq_codes")
-        meta = f.get_tensor(key + "._bq_meta")
-        shape_t = f.get_tensor(key + "._bq_shape")
-        shape = [shape_t[0].item(), shape_t[1].item()]
-        n = codes.shape[0]
-        mn = meta[:n].unsqueeze(1)
-        mx = meta[n:].unsqueeze(1)
-        sc = (mx - mn) / 255.0
-        w = (codes.float() * sc + mn).flatten()[:shape[0]*shape[1]].reshape(shape).half()
-
-        self.expert_cache.put(cache_key, w)
+        w = self._dequant_expert(key)
+        self.cache[ck] = w
+        self.cache.move_to_end(ck)
+        while len(self.cache) > MAX_CACHED:
+            self.cache.popitem(last=False)
         return w
 
     def _rms(self, x, w):
@@ -202,7 +196,6 @@ class FastModel:
             ao = (w["self_attn.o_proj.weight"] @ ao.transpose(-1, -2)).transpose(-1, -2)
             hidden = res + ao
 
-            # MoE with expert LRU cache
             res = hidden
             h = self._rms(hidden, w["post_attention_layernorm.weight"])
             logits = (h @ w["mlp.gate.weight"].T).float()
@@ -236,13 +229,11 @@ class FastModel:
 
         print("Generating...")
         t0 = time.time()
-
         h = self.embed[ids].half()
         pos = torch.arange(h.shape[1]).unsqueeze(0)
         h = self.forward(h, pos)
         h = self._rms(h, self.norm_w)
         logits = (h @ self.lm_w.T).float()
-
         t_pre = time.time() - t0
         print(f"  Prefill: {t_pre:.2f}s")
 
@@ -258,31 +249,35 @@ class FastModel:
             tokens.append(nxt)
             if nxt == self.tok.eos_token_id:
                 break
-
             h = self.embed[torch.tensor([[nxt]])].half()
             pos = torch.tensor([[len(tokens) - 1]])
             h = self.forward(h, pos)
             h = self._rms(h, self.norm_w)
             logits = (h @ self.lm_w.T).float()
-
             if step % 5 == 0 and step > 0:
                 e = time.time() - t_dec
-                print(f"  Step {step}: {step/e:.2f} tok/s | {self.expert_cache.stats()}")
+                t = self.ch + self.cm
+                r = self.ch / t * 100 if t > 0 else 0
+                print(f"  Step {step}: {step/e:.2f} tok/s | cache {len(self.cache)}/{MAX_CACHED} hit {r:.0f}%")
 
-        total = time.time() - t0
         dec = time.time() - t_dec
         n = len(tokens) - len(ids[0])
         speed = n / dec if dec > 0 else 0
+        t = self.ch + self.cm
+        r = self.ch / t * 100 if t > 0 else 0
         print(f"\nPrefill: {t_pre:.2f}s, Decode: {dec:.2f}s ({n} tok, {speed:.2f} tok/s)")
-        print(self.expert_cache.stats())
+        print(f"Cache: {len(self.cache)}/{MAX_CACHED}, hit: {r:.1f}%")
         return self.tok.decode(tokens)
 
 
 if __name__ == "__main__":
     d = sys.argv[1] if len(sys.argv) > 1 else r"D:\project\大模型ssd化\models\qwen3-coder-bq8"
     print("=" * 50)
-    print("ColorLM V5 - LRU Cache Inference")
+    print("ColorLM V5 - Direct File Reader")
     print("=" * 50)
     m = FastModel(d)
     r = m.generate("def fibonacci", max_new=50)
     print("\n" + r)
+
+
+
