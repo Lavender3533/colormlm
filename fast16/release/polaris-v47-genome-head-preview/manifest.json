@@ -1,0 +1,21 @@
+{
+  "format": "polaris-research-release-manifest-v1",
+  "model_family": "北极星",
+  "english_name": "Polaris",
+  "version": "v47-parallel-genome-head-preview",
+  "status": "research_preview",
+  "base_model_included": false,
+  "parameter_count": 278911,
+  "input_width": 2048,
+  "claim_limit": "内部Genome字段准确不等于最终网页或通用能力；冻结validation与blind尚未完成。",
+  "files": {
+    "dataset.jsonl": "1f47dae1e686effff458a45e78c4558abca60759cad8fa4529e4f25a1e134e79",
+    "fit_report.json": "0a8f917a345f26ccd8719487083f2851a26dad7164f51d6e9c5671d3b0eb64b5",
+    "genome_head_ontology.json": "b14ae08ab0b338aa79ff6ef26c4abab907bc3c2b6ee72f80209d95f8d8f0ed6a",
+    "genome_head.npz": "ed7cc08be7877befa6f346e69479e6cc06dde4e06fb7d04b05b289a580c04a2d",
+    "initial_states_hidden_only.cnob": "0128763e06189cc53764acbd6841989dcbd23fb33ae9881e088867773e5a33c9",
+    "initial_states_hidden_only.manifest.json": "db22a925a5ac85f0a1afb4d6385709cd36f75f15d8af0265091b08ea8439e747",
+    "negative_contract.json": "f88055e94dc4e8acd6c0d712d3c6057bea69dd2606c41b7eb4580bdac53a7243",
+    "train_polaris_design_donor.py": "59c50dedf08737612a001762f4b84b93fe8d4408c09aee9a85ef49f502ff94d2"
+  }
+}

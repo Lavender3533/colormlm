@@ -1,0 +1,20 @@
+{
+  "format": "colorlm-v13-counterfactual-teacher-manifest-v1",
+  "source_tasks": "D:\\project\\大模型ssd化\\fast16\\research\\v47_dual_tempo_bus\\genome_dataset_v1\\tasks.jsonl",
+  "source_tasks_sha256": "88eb7693258051c5783b864b7fa5674ab991fa0c7d62d5b50d1809286eeba453",
+  "teacher": "initial_teacher.jsonl",
+  "teacher_sha256": "53531971507821e6dd0820e400affd81424e199f21e8a721df3252119599c316",
+  "sample_count": 144,
+  "task_count": 144,
+  "boundary_fallbacks": 0,
+  "max_target_tokens": 1,
+  "max_prefix_tokens": 2048,
+  "tokenizer_endpoint": {
+    "endpoint": "http://127.0.0.1:8138",
+    "models": [
+      "ColorLM-v38-Qwen36-Shared-Sequence-Policy"
+    ],
+    "model_path": "fast16\\models\\ColorLM-v36-Qwen36-Global-Shared-Backbone.gguf",
+    "context": 16384
+  }
+}

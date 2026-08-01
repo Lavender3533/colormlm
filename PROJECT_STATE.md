@@ -1,8 +1,16 @@
-# ColorLM 项目现状
+# 北极星（Polaris）项目现状
 
 更新日期：2026-08-01
 
 跨对话/跨工程接手续读：`fast16/HANDOFF_2026-07-31.md`。
+
+## 正式命名与兼容层
+
+- 2026-08-01 起，模型与项目的正式对外名称为**北极星（Polaris）**。
+- 历史版本号继续沿用；下一正式运行别名使用`Polaris-v*`。现有`ColorLM-v*`名称只表示历史实验
+  证据，不能因为品牌更名而改写旧结果。
+- 为避免一次性破坏运行时，`COLORLM_*`环境变量、`fast16/`研究路径和已有脚本文件名暂时作为
+  底层兼容层保留。兼容命名不代表仍以ColorLM作为对外品牌。
 
 ## 2026-08-01 目标与算力约束再确认
 
@@ -960,3 +968,22 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
 - 下一步顺序：8条train紧凑IR教师与真实initial-hidden采集→序列岛→8条validation门；并行训练
   rank-64/192行草稿头并先看完整轨迹接受长度。validation通过后才一次blind；DALI分页保持暂停。
   完整交接见`fast16/research/v47_dual_tempo_bus/HANDOFF.md`。
+
+### 2026-08-01 北极星 v47 Parallel Genome Head 真实主干训练
+
+- 新编译的`build-v19-dual-head`服务已完成terminal-only capture冒烟：1条`kind=4`记录，hidden
+  宽度2048且全部有限。随后对144条唯一prompt正式重放，NLL精确覆盖`144/144`，耗时
+  `257.73s`；CNOB含连续record `0..143`，共144条2048维terminal hidden，SHA-256为
+  `5b664eb4bbd9f52e856b4feb956fcef4b46027436bdf4206145d45c4745ae400`。
+- 27.9万参数、latent 128、20字段并行Genome Head在本机CPU训练约`3.84s`。train完整Genome
+  `128/128`；train-only internal validation完整Genome率`93.75%`、字段准确率`99.6875%`、
+  最弱字段`93.75%`，通过预注册的`75% / 90% / 50%`内部开发门。
+- 六个历史网页已转成九类哈希化负约束：默认三卡片、emoji图标、假交互、远程资源、焦点、
+  减少运动、响应式、语义HTML和表单标签。数据生成器现在严格投影全部九类合同，不复制历史
+  HTML正文、远程URL或绝对路径。
+- 当前决策仅为`allow_compiler_ab`：Genome字段准确不等于网页质量。下一步必须将头输出交给
+  确定性编译器，在冻结validation上跑静态评分与375/768/1024/1440四档浏览器action trace；
+  通过后才允许一次blind，未通过前不得宣称北极星v47能力晋级。
+- 免费Ascend 910B4已用4096×4096 FP16矩阵乘真实验证。`fast16/cloud/ascend910b/`提供强制
+  `npu:0`的doctor与训练包装器；若未真正落到NPU会失败，禁止静默CPU冒充。该云算力主要用于
+  后续更大的多能力头、LoRA和蒸馏，而不是为了加速本机仅需数秒的小头。

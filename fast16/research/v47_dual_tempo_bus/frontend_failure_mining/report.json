@@ -1,0 +1,941 @@
+{
+  "aggregate_support": [
+    {
+      "failure_rate": 0.833333,
+      "failure_sample_count": 5,
+      "id": "default_three_cards",
+      "sample_ids": [
+        "desktop-e1177cbe8f30097c",
+        "desktop-7d7858ca25c230ba",
+        "desktop-74bebeefa23cfee3",
+        "desktop-23d1718816a0e4a8",
+        "desktop-d55e39464fd3d848"
+      ]
+    },
+    {
+      "failure_rate": 0.333333,
+      "failure_sample_count": 2,
+      "id": "emoji_ui_icons",
+      "sample_ids": [
+        "desktop-7d7858ca25c230ba",
+        "desktop-74bebeefa23cfee3"
+      ]
+    },
+    {
+      "failure_rate": 0.5,
+      "failure_sample_count": 3,
+      "id": "dead_controls",
+      "sample_ids": [
+        "desktop-e6c08d4db2e22720",
+        "desktop-7d7858ca25c230ba",
+        "desktop-d55e39464fd3d848"
+      ]
+    },
+    {
+      "failure_rate": 0.333333,
+      "failure_sample_count": 2,
+      "id": "remote_placeholder_assets",
+      "sample_ids": [
+        "desktop-e6c08d4db2e22720",
+        "desktop-23d1718816a0e4a8"
+      ]
+    },
+    {
+      "failure_rate": 1.0,
+      "failure_sample_count": 6,
+      "id": "visible_focus",
+      "sample_ids": [
+        "desktop-e6c08d4db2e22720",
+        "desktop-e1177cbe8f30097c",
+        "desktop-7d7858ca25c230ba",
+        "desktop-74bebeefa23cfee3",
+        "desktop-23d1718816a0e4a8",
+        "desktop-d55e39464fd3d848"
+      ]
+    },
+    {
+      "failure_rate": 1.0,
+      "failure_sample_count": 6,
+      "id": "reduced_motion",
+      "sample_ids": [
+        "desktop-e6c08d4db2e22720",
+        "desktop-e1177cbe8f30097c",
+        "desktop-7d7858ca25c230ba",
+        "desktop-74bebeefa23cfee3",
+        "desktop-23d1718816a0e4a8",
+        "desktop-d55e39464fd3d848"
+      ]
+    },
+    {
+      "failure_rate": 0.166667,
+      "failure_sample_count": 1,
+      "id": "responsive_layout",
+      "sample_ids": [
+        "desktop-23d1718816a0e4a8"
+      ]
+    },
+    {
+      "failure_rate": 1.0,
+      "failure_sample_count": 6,
+      "id": "semantic_html",
+      "sample_ids": [
+        "desktop-e6c08d4db2e22720",
+        "desktop-e1177cbe8f30097c",
+        "desktop-7d7858ca25c230ba",
+        "desktop-74bebeefa23cfee3",
+        "desktop-23d1718816a0e4a8",
+        "desktop-d55e39464fd3d848"
+      ]
+    },
+    {
+      "failure_rate": 0.166667,
+      "failure_sample_count": 1,
+      "id": "form_labels",
+      "sample_ids": [
+        "desktop-23d1718816a0e4a8"
+      ]
+    }
+  ],
+  "format": "colorlm-v47-frontend-failure-report-v1",
+  "generator_version": "colorlm-v47-frontend-failure-miner-v1.0.0",
+  "limitations": [
+    "静态检测不执行 JavaScript。",
+    "静态检测不渲染 375/768/1024/1440px 截图。",
+    "emoji 上下文检测是保守启发式；最终拒绝由教师筛选和浏览器复核共同决定。"
+  ],
+  "negative_contract_sha256": "f88055e94dc4e8acd6c0d712d3c6057bea69dd2606c41b7eb4580bdac53a7243",
+  "privacy": {
+    "absolute_source_paths_copied": false,
+    "remote_identifiers": "SHA-256 only",
+    "remote_urls_copied": false,
+    "source_text_copied": false,
+    "whole_html_copied": false
+  },
+  "sample_count": 6,
+  "samples": [
+    {
+      "failure_fingerprint_sha256": "3d6acd265041eab1e0937b2d29d7edc0bc2b0d7d2898c7ce2f7bf392e80bf327",
+      "failures": {
+        "dead_controls": {
+          "evidence": {
+            "button_count": 1,
+            "event_wiring_signal_count": 4,
+            "form_path_passed": true,
+            "inert_button_risk": false,
+            "link_count": 4,
+            "placeholder_link_count": 4,
+            "submit_button_count": 0
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "default_three_cards": {
+          "evidence": {
+            "article_count": 0,
+            "contract_triggered": false,
+            "generic_card_class_max_repeat": 3,
+            "grid_three_columns_declared": false,
+            "penalty": 0.0
+          },
+          "failed": false,
+          "severity": "hard"
+        },
+        "emoji_ui_icons": {
+          "evidence": {
+            "codepoint_sha256": [],
+            "emoji_total": 0,
+            "ui_icon_candidate_count": 0
+          },
+          "failed": false,
+          "severity": "hard"
+        },
+        "form_labels": {
+          "evidence": {
+            "control_count": 0,
+            "line_numbers_retained": false,
+            "unlabeled_control_count": 0
+          },
+          "failed": false,
+          "severity": "hard"
+        },
+        "reduced_motion": {
+          "evidence": {
+            "motion_declared": true,
+            "reduced_motion_rule": false
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "remote_placeholder_assets": {
+          "evidence": {
+            "asset_identifier_sha256": [
+              "63634e3c57cea5e7f5624c392b11f5e77eaf27f561d7f2fb86ae09ee8d476014",
+              "c88e02a02f2a8eda092cab8ee7145fed48f79534cd6e27b5a18ce8ce752d0cfd",
+              "e3238157beceb956263bdb0406402d3c5ad33902ab0e79dc2d1f18b74699c04d"
+            ],
+            "host_sha256": [
+              "63978de5251d679e907026bb61eb098f88e5f29e9040a77a1f26a905be296ccf"
+            ],
+            "placeholder_like_count": 3,
+            "raw_urls_retained": false,
+            "remote_asset_count": 3
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "responsive_layout": {
+          "evidence": {
+            "declared_breakpoints": [
+              "768px"
+            ],
+            "media_query_count": 1,
+            "obvious_overflow_check_passed": true,
+            "required_runtime_viewports": [
+              375,
+              768,
+              1024,
+              1440
+            ],
+            "viewport_meta_passed": true
+          },
+          "failed": false,
+          "severity": "hard"
+        },
+        "semantic_html": {
+          "evidence": {
+            "h1_count": 1,
+            "heading_order_passed": false,
+            "landmarks_present": [
+              "header",
+              "nav"
+            ],
+            "missing_core_landmarks": [
+              "footer",
+              "main"
+            ],
+            "semantic_click_targets_passed": true
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "visible_focus": {
+          "evidence": {
+            "visible_focus_rule_passed": false
+          },
+          "failed": true,
+          "severity": "hard"
+        }
+      },
+      "privacy": {
+        "remote_urls_retained": false,
+        "source_html_retained": false,
+        "source_text_retained": false
+      },
+      "sample_id": "desktop-e6c08d4db2e22720",
+      "scoring_snapshot": {
+        "dimension_scores": {
+          "accessibility": 12.0,
+          "dependency_safety": 8.5,
+          "interaction": 11.25,
+          "responsive": 14.0,
+          "structure": 17.0,
+          "visual_complexity": 15.6
+        },
+        "final_score": 75.35,
+        "gross_score": 78.35,
+        "template_penalty": 3.0,
+        "tier": "advanced"
+      },
+      "source_bytes": 10548,
+      "source_label": "index.html",
+      "source_sha256": "e6c08d4db2e22720e624b11c9b5bc15fd692b9011921a77c4b151a5a0f07f6ae"
+    },
+    {
+      "failure_fingerprint_sha256": "46c2194b3b21371b3d2b03fc451f9d301625543ef8b41c9d11d30210b0d18485",
+      "failures": {
+        "dead_controls": {
+          "evidence": {
+            "button_count": 1,
+            "event_wiring_signal_count": 1,
+            "form_path_passed": true,
+            "inert_button_risk": false,
+            "link_count": 3,
+            "placeholder_link_count": 0,
+            "submit_button_count": 0
+          },
+          "failed": false,
+          "severity": "hard"
+        },
+        "default_three_cards": {
+          "evidence": {
+            "article_count": 0,
+            "contract_triggered": true,
+            "generic_card_class_max_repeat": 3,
+            "grid_three_columns_declared": false,
+            "penalty": 6.0
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "emoji_ui_icons": {
+          "evidence": {
+            "codepoint_sha256": [
+              "60f0ce838e81f1d4f2776778300c45864218138365ea3d4a56785adc90e112ed",
+              "cc13ee6f077aa44e84a51e060f23b74c9f4405d2589b42d9045a4706b6d4431e",
+              "dbb0dbc0aaa2924b77ebea5df389ca74cd76183ce21fd1df87f1add234f4a485",
+              "ebbc0b2870eb323f2b6cffa5c493ceef81ae7eb36afc73d4e0367301631daec5"
+            ],
+            "emoji_total": 4,
+            "ui_icon_candidate_count": 0
+          },
+          "failed": false,
+          "severity": "hard"
+        },
+        "form_labels": {
+          "evidence": {
+            "control_count": 0,
+            "line_numbers_retained": false,
+            "unlabeled_control_count": 0
+          },
+          "failed": false,
+          "severity": "hard"
+        },
+        "reduced_motion": {
+          "evidence": {
+            "motion_declared": true,
+            "reduced_motion_rule": false
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "remote_placeholder_assets": {
+          "evidence": {
+            "asset_identifier_sha256": [],
+            "host_sha256": [],
+            "placeholder_like_count": 0,
+            "raw_urls_retained": false,
+            "remote_asset_count": 0
+          },
+          "failed": false,
+          "severity": "hard"
+        },
+        "responsive_layout": {
+          "evidence": {
+            "declared_breakpoints": [
+              "768px"
+            ],
+            "media_query_count": 1,
+            "obvious_overflow_check_passed": true,
+            "required_runtime_viewports": [
+              375,
+              768,
+              1024,
+              1440
+            ],
+            "viewport_meta_passed": true
+          },
+          "failed": false,
+          "severity": "hard"
+        },
+        "semantic_html": {
+          "evidence": {
+            "h1_count": 1,
+            "heading_order_passed": true,
+            "landmarks_present": [
+              "footer",
+              "header",
+              "nav"
+            ],
+            "missing_core_landmarks": [
+              "main"
+            ],
+            "semantic_click_targets_passed": true
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "visible_focus": {
+          "evidence": {
+            "visible_focus_rule_passed": false
+          },
+          "failed": true,
+          "severity": "hard"
+        }
+      },
+      "privacy": {
+        "remote_urls_retained": false,
+        "source_html_retained": false,
+        "source_text_retained": false
+      },
+      "sample_id": "desktop-e1177cbe8f30097c",
+      "scoring_snapshot": {
+        "dimension_scores": {
+          "accessibility": 14.5,
+          "dependency_safety": 10.0,
+          "interaction": 11.25,
+          "responsive": 14.0,
+          "structure": 18.0,
+          "visual_complexity": 15.8
+        },
+        "final_score": 75.55,
+        "gross_score": 83.55,
+        "template_penalty": 8.0,
+        "tier": "competent"
+      },
+      "source_bytes": 6415,
+      "source_label": "index.v17版本产出.html",
+      "source_sha256": "e1177cbe8f30097ca3d725e1e56620b906f03b84309b3d896ef80c217e53c365"
+    },
+    {
+      "failure_fingerprint_sha256": "0f4c597598edf13e7b2103c466581df0e096d6b4bb3dd20fcd2df8836ef653eb",
+      "failures": {
+        "dead_controls": {
+          "evidence": {
+            "button_count": 0,
+            "event_wiring_signal_count": 0,
+            "form_path_passed": true,
+            "inert_button_risk": false,
+            "link_count": 5,
+            "placeholder_link_count": 1,
+            "submit_button_count": 0
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "default_three_cards": {
+          "evidence": {
+            "article_count": 0,
+            "contract_triggered": true,
+            "generic_card_class_max_repeat": 3,
+            "grid_three_columns_declared": false,
+            "penalty": 6.0
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "emoji_ui_icons": {
+          "evidence": {
+            "codepoint_sha256": [
+              "2566561f81db7a7c4adb6cee3e93139155a6b01d52ff0d3d5c11648f46bc79bb",
+              "dbb0dbc0aaa2924b77ebea5df389ca74cd76183ce21fd1df87f1add234f4a485",
+              "ebbc0b2870eb323f2b6cffa5c493ceef81ae7eb36afc73d4e0367301631daec5"
+            ],
+            "emoji_total": 3,
+            "ui_icon_candidate_count": 3
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "form_labels": {
+          "evidence": {
+            "control_count": 0,
+            "line_numbers_retained": false,
+            "unlabeled_control_count": 0
+          },
+          "failed": false,
+          "severity": "hard"
+        },
+        "reduced_motion": {
+          "evidence": {
+            "motion_declared": true,
+            "reduced_motion_rule": false
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "remote_placeholder_assets": {
+          "evidence": {
+            "asset_identifier_sha256": [],
+            "host_sha256": [],
+            "placeholder_like_count": 0,
+            "raw_urls_retained": false,
+            "remote_asset_count": 0
+          },
+          "failed": false,
+          "severity": "hard"
+        },
+        "responsive_layout": {
+          "evidence": {
+            "declared_breakpoints": [
+              "768px"
+            ],
+            "media_query_count": 1,
+            "obvious_overflow_check_passed": true,
+            "required_runtime_viewports": [
+              375,
+              768,
+              1024,
+              1440
+            ],
+            "viewport_meta_passed": true
+          },
+          "failed": false,
+          "severity": "hard"
+        },
+        "semantic_html": {
+          "evidence": {
+            "h1_count": 1,
+            "heading_order_passed": true,
+            "landmarks_present": [
+              "footer",
+              "header",
+              "nav"
+            ],
+            "missing_core_landmarks": [
+              "main"
+            ],
+            "semantic_click_targets_passed": true
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "visible_focus": {
+          "evidence": {
+            "visible_focus_rule_passed": false
+          },
+          "failed": true,
+          "severity": "hard"
+        }
+      },
+      "privacy": {
+        "remote_urls_retained": false,
+        "source_html_retained": false,
+        "source_text_retained": false
+      },
+      "sample_id": "desktop-7d7858ca25c230ba",
+      "scoring_snapshot": {
+        "dimension_scores": {
+          "accessibility": 14.5,
+          "dependency_safety": 10.0,
+          "interaction": 7.5,
+          "responsive": 14.0,
+          "structure": 18.0,
+          "visual_complexity": 14.55
+        },
+        "final_score": 67.55,
+        "gross_score": 78.55,
+        "template_penalty": 11.0,
+        "tier": "template_or_incomplete"
+      },
+      "source_bytes": 6178,
+      "source_label": "index.v19测试版产出.html",
+      "source_sha256": "7d7858ca25c230bafdc2d9aa346f749725b0dbdd9cb186cd4588937e3d906575"
+    },
+    {
+      "failure_fingerprint_sha256": "c112674cb50e0f3e5f4e4f962524f55b9971de7d78c5100050cdbea6ba2817ae",
+      "failures": {
+        "dead_controls": {
+          "evidence": {
+            "button_count": 0,
+            "event_wiring_signal_count": 6,
+            "form_path_passed": true,
+            "inert_button_risk": false,
+            "link_count": 5,
+            "placeholder_link_count": 0,
+            "submit_button_count": 0
+          },
+          "failed": false,
+          "severity": "hard"
+        },
+        "default_three_cards": {
+          "evidence": {
+            "article_count": 0,
+            "contract_triggered": true,
+            "generic_card_class_max_repeat": 3,
+            "grid_three_columns_declared": false,
+            "penalty": 6.0
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "emoji_ui_icons": {
+          "evidence": {
+            "codepoint_sha256": [
+              "2566561f81db7a7c4adb6cee3e93139155a6b01d52ff0d3d5c11648f46bc79bb",
+              "67cfd5703605f042019598ad9c2cc84be6c7932b087269ad190a4832631f82d9",
+              "6ae1d2ee2e9592ea2e665661450a09fed95f7652324c4801c47aafe618daf96f",
+              "ebbc0b2870eb323f2b6cffa5c493ceef81ae7eb36afc73d4e0367301631daec5"
+            ],
+            "emoji_total": 4,
+            "ui_icon_candidate_count": 4
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "form_labels": {
+          "evidence": {
+            "control_count": 0,
+            "line_numbers_retained": false,
+            "unlabeled_control_count": 0
+          },
+          "failed": false,
+          "severity": "hard"
+        },
+        "reduced_motion": {
+          "evidence": {
+            "motion_declared": true,
+            "reduced_motion_rule": false
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "remote_placeholder_assets": {
+          "evidence": {
+            "asset_identifier_sha256": [],
+            "host_sha256": [],
+            "placeholder_like_count": 0,
+            "raw_urls_retained": false,
+            "remote_asset_count": 0
+          },
+          "failed": false,
+          "severity": "hard"
+        },
+        "responsive_layout": {
+          "evidence": {
+            "declared_breakpoints": [
+              "768px"
+            ],
+            "media_query_count": 1,
+            "obvious_overflow_check_passed": true,
+            "required_runtime_viewports": [
+              375,
+              768,
+              1024,
+              1440
+            ],
+            "viewport_meta_passed": true
+          },
+          "failed": false,
+          "severity": "hard"
+        },
+        "semantic_html": {
+          "evidence": {
+            "h1_count": 1,
+            "heading_order_passed": true,
+            "landmarks_present": [
+              "footer",
+              "header",
+              "nav"
+            ],
+            "missing_core_landmarks": [
+              "main"
+            ],
+            "semantic_click_targets_passed": false
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "visible_focus": {
+          "evidence": {
+            "visible_focus_rule_passed": false
+          },
+          "failed": true,
+          "severity": "hard"
+        }
+      },
+      "privacy": {
+        "remote_urls_retained": false,
+        "source_html_retained": false,
+        "source_text_retained": false
+      },
+      "sample_id": "desktop-74bebeefa23cfee3",
+      "scoring_snapshot": {
+        "dimension_scores": {
+          "accessibility": 13.5,
+          "dependency_safety": 10.0,
+          "interaction": 14.0,
+          "responsive": 13.25,
+          "structure": 15.0,
+          "visual_complexity": 15.7
+        },
+        "final_score": 75.45,
+        "gross_score": 81.45,
+        "template_penalty": 6.0,
+        "tier": "competent"
+      },
+      "source_bytes": 8229,
+      "source_label": "index.v7版本产出.html",
+      "source_sha256": "74bebeefa23cfee3cc98eba9db1125794852d6b6fc86d6d425fef8410bd6e87e"
+    },
+    {
+      "failure_fingerprint_sha256": "b34129f4d7d351dbf43fe8b46bceb2cd5dc804fbb1669d032b86d45803a35154",
+      "failures": {
+        "dead_controls": {
+          "evidence": {
+            "button_count": 1,
+            "event_wiring_signal_count": 4,
+            "form_path_passed": true,
+            "inert_button_risk": false,
+            "link_count": 4,
+            "placeholder_link_count": 0,
+            "submit_button_count": 1
+          },
+          "failed": false,
+          "severity": "hard"
+        },
+        "default_three_cards": {
+          "evidence": {
+            "article_count": 0,
+            "contract_triggered": true,
+            "generic_card_class_max_repeat": 3,
+            "grid_three_columns_declared": false,
+            "penalty": 6.0
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "emoji_ui_icons": {
+          "evidence": {
+            "codepoint_sha256": [
+              "6ae1d2ee2e9592ea2e665661450a09fed95f7652324c4801c47aafe618daf96f",
+              "dbb0dbc0aaa2924b77ebea5df389ca74cd76183ce21fd1df87f1add234f4a485",
+              "ebbc0b2870eb323f2b6cffa5c493ceef81ae7eb36afc73d4e0367301631daec5"
+            ],
+            "emoji_total": 3,
+            "ui_icon_candidate_count": 0
+          },
+          "failed": false,
+          "severity": "hard"
+        },
+        "form_labels": {
+          "evidence": {
+            "control_count": 3,
+            "line_numbers_retained": false,
+            "unlabeled_control_count": 3
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "reduced_motion": {
+          "evidence": {
+            "motion_declared": true,
+            "reduced_motion_rule": false
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "remote_placeholder_assets": {
+          "evidence": {
+            "asset_identifier_sha256": [
+              "50cdc53cba904184df0b3d572ef6adb8e52e93d80a028a60b2de1fad1c157a66"
+            ],
+            "host_sha256": [
+              "05d01fdfff38822fc8b266a5aa2f21f236815cf62414a89801d89e77e31fe527"
+            ],
+            "placeholder_like_count": 1,
+            "raw_urls_retained": false,
+            "remote_asset_count": 1
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "responsive_layout": {
+          "evidence": {
+            "declared_breakpoints": [],
+            "media_query_count": 0,
+            "obvious_overflow_check_passed": true,
+            "required_runtime_viewports": [
+              375,
+              768,
+              1024,
+              1440
+            ],
+            "viewport_meta_passed": true
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "semantic_html": {
+          "evidence": {
+            "h1_count": 1,
+            "heading_order_passed": true,
+            "landmarks_present": [
+              "footer",
+              "header",
+              "nav"
+            ],
+            "missing_core_landmarks": [
+              "main"
+            ],
+            "semantic_click_targets_passed": true
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "visible_focus": {
+          "evidence": {
+            "visible_focus_rule_passed": false
+          },
+          "failed": true,
+          "severity": "hard"
+        }
+      },
+      "privacy": {
+        "remote_urls_retained": false,
+        "source_html_retained": false,
+        "source_text_retained": false
+      },
+      "sample_id": "desktop-23d1718816a0e4a8",
+      "scoring_snapshot": {
+        "dimension_scores": {
+          "accessibility": 11.5,
+          "dependency_safety": 9.5,
+          "interaction": 13.75,
+          "responsive": 10.5,
+          "structure": 18.0,
+          "visual_complexity": 13.74
+        },
+        "final_score": 68.99,
+        "gross_score": 76.99,
+        "template_penalty": 8.0,
+        "tier": "competent"
+      },
+      "source_bytes": 6761,
+      "source_label": "index38.html",
+      "source_sha256": "23d1718816a0e4a8e393ade763638db617f73bd06a0106ca85593941496b6de0"
+    },
+    {
+      "failure_fingerprint_sha256": "59e833c51714327ea20d5f5ef390cbf6eedd38d2ba6c0e6353040032c1739045",
+      "failures": {
+        "dead_controls": {
+          "evidence": {
+            "button_count": 0,
+            "event_wiring_signal_count": 3,
+            "form_path_passed": true,
+            "inert_button_risk": false,
+            "link_count": 5,
+            "placeholder_link_count": 1,
+            "submit_button_count": 0
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "default_three_cards": {
+          "evidence": {
+            "article_count": 0,
+            "contract_triggered": true,
+            "generic_card_class_max_repeat": 3,
+            "grid_three_columns_declared": false,
+            "penalty": 6.0
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "emoji_ui_icons": {
+          "evidence": {
+            "codepoint_sha256": [
+              "c46dddf1242ca083bbbf9888b6c77ba0c86d1ca9ef81c6069e13cec04670cb42",
+              "dbb0dbc0aaa2924b77ebea5df389ca74cd76183ce21fd1df87f1add234f4a485",
+              "ebbc0b2870eb323f2b6cffa5c493ceef81ae7eb36afc73d4e0367301631daec5"
+            ],
+            "emoji_total": 3,
+            "ui_icon_candidate_count": 0
+          },
+          "failed": false,
+          "severity": "hard"
+        },
+        "form_labels": {
+          "evidence": {
+            "control_count": 0,
+            "line_numbers_retained": false,
+            "unlabeled_control_count": 0
+          },
+          "failed": false,
+          "severity": "hard"
+        },
+        "reduced_motion": {
+          "evidence": {
+            "motion_declared": true,
+            "reduced_motion_rule": false
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "remote_placeholder_assets": {
+          "evidence": {
+            "asset_identifier_sha256": [],
+            "host_sha256": [],
+            "placeholder_like_count": 0,
+            "raw_urls_retained": false,
+            "remote_asset_count": 0
+          },
+          "failed": false,
+          "severity": "hard"
+        },
+        "responsive_layout": {
+          "evidence": {
+            "declared_breakpoints": [
+              "768px"
+            ],
+            "media_query_count": 1,
+            "obvious_overflow_check_passed": true,
+            "required_runtime_viewports": [
+              375,
+              768,
+              1024,
+              1440
+            ],
+            "viewport_meta_passed": true
+          },
+          "failed": false,
+          "severity": "hard"
+        },
+        "semantic_html": {
+          "evidence": {
+            "h1_count": 1,
+            "heading_order_passed": false,
+            "landmarks_present": [
+              "footer",
+              "header",
+              "nav"
+            ],
+            "missing_core_landmarks": [
+              "main"
+            ],
+            "semantic_click_targets_passed": true
+          },
+          "failed": true,
+          "severity": "hard"
+        },
+        "visible_focus": {
+          "evidence": {
+            "visible_focus_rule_passed": false
+          },
+          "failed": true,
+          "severity": "hard"
+        }
+      },
+      "privacy": {
+        "remote_urls_retained": false,
+        "source_html_retained": false,
+        "source_text_retained": false
+      },
+      "sample_id": "desktop-d55e39464fd3d848",
+      "scoring_snapshot": {
+        "dimension_scores": {
+          "accessibility": 12.5,
+          "dependency_safety": 10.0,
+          "interaction": 10.0,
+          "responsive": 13.25,
+          "structure": 18.0,
+          "visual_complexity": 14.86
+        },
+        "final_score": 70.61,
+        "gross_score": 78.61,
+        "template_penalty": 8.0,
+        "tier": "competent"
+      },
+      "source_bytes": 5962,
+      "source_label": "index46.html",
+      "source_sha256": "d55e39464fd3d848e9af315a21cd16d559582817e5f547a6e699637fd5374aa4"
+    }
+  ],
+  "source_contract": {
+    "contract_version": "parallel-frontend-contract-v1",
+    "scorer_path": "fast16/research/parallel_frontend_v47/score_html.py",
+    "scorer_sha256": "3029838222c3a47295d7dc7b5211ad63981ab04896921db67edbbce039303d44",
+    "scorer_version": "parallel-frontend-static-v1.0.0",
+    "scoring_contract_path": "fast16/research/parallel_frontend_v47/scoring_contract.json",
+    "scoring_contract_sha256": "d0eb0d44d866d61c828b886034cf4dcb3b7bc916f52ed4e0ae967db8c8a1bb07"
+  }
+}

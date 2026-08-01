@@ -1,0 +1,242 @@
+{
+  "claim_limit": "静态负样本只能证明可观察源码信号；真实交互、视觉与四档视口仍需浏览器验证。",
+  "constraint_set_sha256": "8c53044181a6143c9570cee86f1c94d6d0499e40369b19954d54b3a6ee76619e",
+  "constraints": [
+    {
+      "dataset_key": "forbid_default_three_cards",
+      "dataset_value": true,
+      "id": "default_three_cards",
+      "prompt_requirement": "不得退化为默认三卡片或三项卖点模板；信息架构必须由任务决定。",
+      "severity": "hard",
+      "teacher_filter": {
+        "reject_when": "failures.default_three_cards.failed == true"
+      }
+    },
+    {
+      "dataset_key": "forbid_emoji_icons",
+      "dataset_value": true,
+      "id": "emoji_ui_icons",
+      "prompt_requirement": "不得用 emoji 充当 UI 图标；图标使用统一内联 SVG，并提供可访问名称。",
+      "severity": "hard",
+      "teacher_filter": {
+        "reject_when": "failures.emoji_ui_icons.failed == true"
+      }
+    },
+    {
+      "dataset_key": "forbid_dead_controls",
+      "dataset_value": true,
+      "id": "dead_controls",
+      "prompt_requirement": "不得出现空链接、假按钮或无提交路径的表单；每个控件必须产生可验证反馈。",
+      "severity": "hard",
+      "teacher_filter": {
+        "reject_when": "failures.dead_controls.failed == true"
+      }
+    },
+    {
+      "dataset_key": "forbid_remote_assets",
+      "dataset_value": true,
+      "id": "remote_placeholder_assets",
+      "prompt_requirement": "不得依赖远程图片、占位图或第三方视觉资源；页面应可离线复现。",
+      "severity": "hard",
+      "teacher_filter": {
+        "reject_when": "failures.remote_placeholder_assets.failed == true"
+      }
+    },
+    {
+      "dataset_key": "require_visible_focus",
+      "dataset_value": true,
+      "id": "visible_focus",
+      "prompt_requirement": "所有键盘可达控件必须具有清晰可见的 focus-visible 状态。",
+      "severity": "hard",
+      "teacher_filter": {
+        "reject_when": "failures.visible_focus.failed == true"
+      }
+    },
+    {
+      "dataset_key": "require_reduced_motion",
+      "dataset_value": true,
+      "id": "reduced_motion",
+      "prompt_requirement": "使用动画或过渡时必须支持 prefers-reduced-motion: reduce。",
+      "severity": "hard",
+      "teacher_filter": {
+        "reject_when": "failures.reduced_motion.failed == true"
+      }
+    },
+    {
+      "dataset_key": "viewports",
+      "dataset_value": [
+        375,
+        768,
+        1024,
+        1440
+      ],
+      "id": "responsive_layout",
+      "prompt_requirement": "必须在 375/768/1024/1440px 检查布局、交互与横向溢出，窄屏保持信息等价。",
+      "severity": "hard",
+      "teacher_filter": {
+        "reject_when": "failures.responsive_layout.failed == true"
+      }
+    },
+    {
+      "dataset_key": "require_semantic_html",
+      "dataset_value": true,
+      "id": "semantic_html",
+      "prompt_requirement": "必须使用合理的 header/nav/main/footer、连续标题层级和原生交互元素。",
+      "severity": "hard",
+      "teacher_filter": {
+        "reject_when": "failures.semantic_html.failed == true"
+      }
+    },
+    {
+      "dataset_key": "require_form_labels",
+      "dataset_value": true,
+      "id": "form_labels",
+      "prompt_requirement": "每个非隐藏表单控件必须通过 label、aria-label 或 aria-labelledby 获得名称。",
+      "severity": "hard",
+      "teacher_filter": {
+        "reject_when": "failures.form_labels.failed == true"
+      }
+    }
+  ],
+  "dataset_projection": {
+    "merge_strategy": "strict_deep_merge_reject_conflicts",
+    "target_field": "anti_pattern_contract",
+    "value": {
+      "forbid_dead_controls": true,
+      "forbid_default_three_cards": true,
+      "forbid_emoji_icons": true,
+      "forbid_remote_assets": true,
+      "require_form_labels": true,
+      "require_reduced_motion": true,
+      "require_semantic_html": true,
+      "require_visible_focus": true,
+      "viewports": [
+        375,
+        768,
+        1024,
+        1440
+      ]
+    }
+  },
+  "evidence_support": [
+    {
+      "failure_rate": 0.833333,
+      "failure_sample_count": 5,
+      "id": "default_three_cards",
+      "sample_ids": [
+        "desktop-e1177cbe8f30097c",
+        "desktop-7d7858ca25c230ba",
+        "desktop-74bebeefa23cfee3",
+        "desktop-23d1718816a0e4a8",
+        "desktop-d55e39464fd3d848"
+      ]
+    },
+    {
+      "failure_rate": 0.333333,
+      "failure_sample_count": 2,
+      "id": "emoji_ui_icons",
+      "sample_ids": [
+        "desktop-7d7858ca25c230ba",
+        "desktop-74bebeefa23cfee3"
+      ]
+    },
+    {
+      "failure_rate": 0.5,
+      "failure_sample_count": 3,
+      "id": "dead_controls",
+      "sample_ids": [
+        "desktop-e6c08d4db2e22720",
+        "desktop-7d7858ca25c230ba",
+        "desktop-d55e39464fd3d848"
+      ]
+    },
+    {
+      "failure_rate": 0.333333,
+      "failure_sample_count": 2,
+      "id": "remote_placeholder_assets",
+      "sample_ids": [
+        "desktop-e6c08d4db2e22720",
+        "desktop-23d1718816a0e4a8"
+      ]
+    },
+    {
+      "failure_rate": 1.0,
+      "failure_sample_count": 6,
+      "id": "visible_focus",
+      "sample_ids": [
+        "desktop-e6c08d4db2e22720",
+        "desktop-e1177cbe8f30097c",
+        "desktop-7d7858ca25c230ba",
+        "desktop-74bebeefa23cfee3",
+        "desktop-23d1718816a0e4a8",
+        "desktop-d55e39464fd3d848"
+      ]
+    },
+    {
+      "failure_rate": 1.0,
+      "failure_sample_count": 6,
+      "id": "reduced_motion",
+      "sample_ids": [
+        "desktop-e6c08d4db2e22720",
+        "desktop-e1177cbe8f30097c",
+        "desktop-7d7858ca25c230ba",
+        "desktop-74bebeefa23cfee3",
+        "desktop-23d1718816a0e4a8",
+        "desktop-d55e39464fd3d848"
+      ]
+    },
+    {
+      "failure_rate": 0.166667,
+      "failure_sample_count": 1,
+      "id": "responsive_layout",
+      "sample_ids": [
+        "desktop-23d1718816a0e4a8"
+      ]
+    },
+    {
+      "failure_rate": 1.0,
+      "failure_sample_count": 6,
+      "id": "semantic_html",
+      "sample_ids": [
+        "desktop-e6c08d4db2e22720",
+        "desktop-e1177cbe8f30097c",
+        "desktop-7d7858ca25c230ba",
+        "desktop-74bebeefa23cfee3",
+        "desktop-23d1718816a0e4a8",
+        "desktop-d55e39464fd3d848"
+      ]
+    },
+    {
+      "failure_rate": 0.166667,
+      "failure_sample_count": 1,
+      "id": "form_labels",
+      "sample_ids": [
+        "desktop-23d1718816a0e4a8"
+      ]
+    }
+  ],
+  "format": "colorlm-v47-frontend-negative-contract-v1",
+  "generator_version": "colorlm-v47-frontend-failure-miner-v1.0.0",
+  "scope": "前端教师筛选与 Parallel Genome 数据 anti_pattern_contract 投影",
+  "status": "frozen_negative_contract",
+  "teacher_screening": {
+    "policy": "all_hard_constraints_must_pass",
+    "required_failure_state": {
+      "dead_controls": false,
+      "default_three_cards": false,
+      "emoji_ui_icons": false,
+      "form_labels": false,
+      "reduced_motion": false,
+      "remote_placeholder_assets": false,
+      "responsive_layout": false,
+      "semantic_html": false,
+      "visible_focus": false
+    },
+    "runtime_checks_not_proven_by_static_mining": [
+      "四档视口的实际横向溢出",
+      "点击、键盘、ESC 与焦点回退",
+      "计算后正文对比度至少 4.5:1",
+      "控制台无错误"
+    ]
+  }
+}

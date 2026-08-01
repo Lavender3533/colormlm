@@ -1,0 +1,14 @@
+{
+  "format": "polaris-v47-terminal-hidden-compact-manifest-v1",
+  "status": "research_training_asset",
+  "source": "D:\\project\\大模型ssd化\\fast16\\research\\v47_dual_tempo_bus\\genome_dataset_v1\\initial_states.cnob",
+  "source_sha256": "5b664eb4bbd9f52e856b4feb956fcef4b46027436bdf4206145d45c4745ae400",
+  "source_total_cnob_records": 288,
+  "output": "initial_states_hidden_only.cnob",
+  "output_sha256": "0128763e06189cc53764acbd6841989dcbd23fb33ae9881e088867773e5a33c9",
+  "output_bytes": 1188864,
+  "hidden_records": 144,
+  "hidden_width": 2048,
+  "record_ids_contiguous": true,
+  "claim_limit": "仅用于复现 Parallel Genome Head；不包含主模型权重，也不构成能力晋级。"
+}

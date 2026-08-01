@@ -1,0 +1,25 @@
+{
+  "format": "colorlm-v13-counterfactual-route-shard-manifest-v1",
+  "route": "v47-initial-state",
+  "route_attestation": "process-level --force-path plus expected API alias",
+  "teacher": "D:\\project\\大模型ssd化\\fast16\\research\\v47_dual_tempo_bus\\genome_dataset_v1\\initial_teacher.jsonl",
+  "teacher_sha256": "53531971507821e6dd0820e400affd81424e199f21e8a721df3252119599c316",
+  "shard": "initial_nll_capture_v2.jsonl",
+  "shard_sha256": "c6d3af01de8a44ab1169c4f051a5414d0a41fd15d19e5bdebc53229e4fc4c3e4",
+  "sample_count": 144,
+  "exact_count": 144,
+  "exact_coverage": 1.0,
+  "n_probs": 1,
+  "elapsed_seconds": 257.728544,
+  "server": {
+    "endpoint": "http://127.0.0.1:8138",
+    "models": [
+      "ColorLM-v47-Genome-Capture"
+    ],
+    "model_path": "fast16\\models\\ColorLM-v36-Qwen36-Global-Shared-Backbone.gguf",
+    "context": 4096
+  },
+  "expected_model": "ColorLM-v47-Genome-Capture",
+  "hidden": null,
+  "k3_features": null
+}

@@ -1,0 +1,121 @@
+{
+  "format": "colorlm-v47-parallel-genome-dataset-manifest-v1",
+  "status": "train_only_prepared",
+  "claim_limit": "internal validation 仍来自 8 个 train 家族，只用于实现开发；不等于冻结 validation 泛化。",
+  "row_count": 144,
+  "split_counts": {
+    "train": 128,
+    "validation": 16
+  },
+  "source_family_count": 8,
+  "unique_prompt_count": 144,
+  "label_field_count": 20,
+  "source_files": [
+    {
+      "path": "fast16/research/parallel_frontend_v47/data/train.jsonl",
+      "sha256": "82ff801e45489f40823489655670db7d2482667883ce9b4281cdaadb9879289f"
+    },
+    {
+      "path": "fast16/research/v47_dual_tempo_bus/genome_head_ontology.json",
+      "sha256": "b14ae08ab0b338aa79ff6ef26c4abab907bc3c2b6ee72f80209d95f8d8f0ed6a"
+    },
+    {
+      "path": "fast16/research/v47_dual_tempo_bus/frontend_failure_mining/negative_contract.json",
+      "sha256": "f88055e94dc4e8acd6c0d712d3c6057bea69dd2606c41b7eb4580bdac53a7243"
+    },
+    {
+      "path": "fast16/research/parallel_design_ir_v47/teachers/pf47-train-01.genome.json",
+      "sha256": "9dd24bec090c3f3fd1ed275dea56dfd6bc36d56cd0f075c1c41b745d5f9dafc2"
+    },
+    {
+      "path": "fast16/research/parallel_design_ir_v47/teachers/pf47-train-01.slots.json",
+      "sha256": "88463d8b0ffa1063e98caa840f82e8b44a93cbeadb63b774089a7e2a97f3204f"
+    },
+    {
+      "path": "fast16/research/parallel_design_ir_v47/teachers/pf47-train-02.genome.json",
+      "sha256": "1223be2eb6d0d3aae479c9e34b7a9291a921b86ac31bb0c4a44543e9b4b45d09"
+    },
+    {
+      "path": "fast16/research/parallel_design_ir_v47/teachers/pf47-train-02.slots.json",
+      "sha256": "c0f279efdedea6b6929c517d0b0c9aee86f64882648b6eb1c43d66965c3d50c5"
+    },
+    {
+      "path": "fast16/research/parallel_design_ir_v47/teachers/pf47-train-03.genome.json",
+      "sha256": "92d53c307cabe04c7d1d3a83033e4e934cc04ba38efde4a5d2f1892122bc1e35"
+    },
+    {
+      "path": "fast16/research/parallel_design_ir_v47/teachers/pf47-train-03.slots.json",
+      "sha256": "c350ef7586ab74ba84a5a3bb379337928c54302525899fd71c5f547f7218bcd6"
+    },
+    {
+      "path": "fast16/research/parallel_design_ir_v47/teachers/pf47-train-04.genome.json",
+      "sha256": "afe6b7dbf22e4cc70e421ffff582934f7ffdf6331fc5e5bbb3febfeb67985c7f"
+    },
+    {
+      "path": "fast16/research/parallel_design_ir_v47/teachers/pf47-train-04.slots.json",
+      "sha256": "8453dd36ed8174278d679326da0e8d5043e2c3c3f11a42710d52caf31499e7d1"
+    },
+    {
+      "path": "fast16/research/parallel_design_ir_v47/teachers/pf47-train-05.genome.json",
+      "sha256": "f2b48cd9dc0c68adc2f500c501a4d22b74014d614feccf3bf47b3460dfd153c8"
+    },
+    {
+      "path": "fast16/research/parallel_design_ir_v47/teachers/pf47-train-05.slots.json",
+      "sha256": "b29872f910108748dc67921f7323e4cfb2340b34b80ac6b2709c3dd230a9fa2a"
+    },
+    {
+      "path": "fast16/research/parallel_design_ir_v47/teachers/pf47-train-06.genome.json",
+      "sha256": "730bd0bde416fd1ae606eef7a113d5d7096c8ee18e857dfd73b313c3bf64c4a2"
+    },
+    {
+      "path": "fast16/research/parallel_design_ir_v47/teachers/pf47-train-06.slots.json",
+      "sha256": "cac13bd4686a9fcb40b90319a60aced2b673b0fd7bdef5b9692e499c4d6f600e"
+    },
+    {
+      "path": "fast16/research/parallel_design_ir_v47/teachers/pf47-train-07.genome.json",
+      "sha256": "e681dc306cc98768e39df3727c205e4741c9317e585c7cf465289f24ef4c5c77"
+    },
+    {
+      "path": "fast16/research/parallel_design_ir_v47/teachers/pf47-train-07.slots.json",
+      "sha256": "6b5f7c0389ab35e1d27c0354f15482e9c4991eb677e908b5501504fa160b594c"
+    },
+    {
+      "path": "fast16/research/parallel_design_ir_v47/teachers/pf47-train-08.genome.json",
+      "sha256": "6ac1a92e090ddbdade5f33ab9f41db552c14dc5ef0e0052775d3cf948aa98784"
+    },
+    {
+      "path": "fast16/research/parallel_design_ir_v47/teachers/pf47-train-08.slots.json",
+      "sha256": "895d2b9609a70206cff2a822bf7e8473314203514577e9ac13a5edc50e1cce89"
+    }
+  ],
+  "official_validation_or_blind_read": false,
+  "copy_candidates_per_row": 6,
+  "anti_pattern_contract_sha256": "21b14e5f3170422b8741c518cb23b2921ee351a7840c04e80e6e1f67398e6480",
+  "anti_patterns": [
+    "dead_controls",
+    "default_three_cards",
+    "emoji_ui_icons",
+    "form_labels",
+    "reduced_motion",
+    "remote_placeholder_assets",
+    "responsive_layout",
+    "semantic_html",
+    "visible_focus"
+  ],
+  "research_basis": [
+    {
+      "name": "Design2Code",
+      "url": "https://arxiv.org/abs/2403.03163",
+      "implication": "监督视觉元素召回与布局，而非只检查语法"
+    },
+    {
+      "name": "WebDesignIter",
+      "url": "https://arxiv.org/abs/2607.10621",
+      "implication": "持久设计知识与结构合同优先于自由长代码"
+    }
+  ],
+  "tasks": "D:\\project\\大模型ssd化\\fast16\\research\\v47_dual_tempo_bus\\genome_dataset_v1\\tasks.jsonl",
+  "tasks_sha256": "88eb7693258051c5783b864b7fa5674ab991fa0c7d62d5b50d1809286eeba453",
+  "dataset": "D:\\project\\大模型ssd化\\fast16\\research\\v47_dual_tempo_bus\\genome_dataset_v1\\dataset.jsonl",
+  "dataset_sha256": "1f47dae1e686effff458a45e78c4558abca60759cad8fa4529e4f25a1e134e79"
+}

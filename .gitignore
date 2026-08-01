@@ -5,6 +5,7 @@ models/
 *.pt
 *.bin
 *.cnob
+*.arm
 *.npy
 *.npz
 *.f16
