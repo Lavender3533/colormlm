@@ -1,4 +1,4 @@
-"""以真实 Range 页连续执行 Polaris S14 token0 与 token1。
+"""以真实 Range 页连续执行 Polaris S14 token 流。
 
 执行器只接受固定 revision 与固定 14 层。每层先读取 non-expert/router，
 算出原生 top-6 后才允许 Range 状态机提供命中专家页。它复用已经冻结的 L42
@@ -11,6 +11,7 @@ FP8/FP4/HC CPU 数值路径，并修正为官方 Expert.forward 的 route-weight
 from __future__ import annotations
 
 import argparse
+import hashlib
 import http.client
 import json
 import math
@@ -95,6 +96,14 @@ _DTYPE_BYTES = {
     "F8_E4M3": 1,
     "I8": 1,
 }
+FORCED_PREFILL_FORMAT = "polaris-s14-forced-prefill-v1"
+MAX_RUNTIME_POSITIONS = 1_048_576
+INDEX_TOP_K = 512
+FP4_BLOCK_SIZE = 32
+_FP4_LEVELS = torch.tensor(
+    [-6.0, -4.0, -3.0, -2.0, -1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0],
+    dtype=torch.float32,
+)
 
 
 class ContractError(RuntimeError):
@@ -190,6 +199,142 @@ def _advance_window_kv(
     return window
 
 
+def _cpu_hadamard_rotate(x: torch.Tensor) -> torch.Tensor:
+    """CPU 参考版 ``rotate_activation``；最后一维必须是 2 的幂。"""
+
+    if x.dtype != torch.bfloat16:
+        raise ContractError("Hadamard 输入必须是 BF16")
+    width = x.shape[-1]
+    if width <= 0 or width & (width - 1):
+        raise ContractError("Hadamard 最后一维必须是正的 2 次幂")
+    y = x.float().contiguous()
+    step = 1
+    while step < width:
+        shape = (*y.shape[:-1], -1, 2, step)
+        paired = y.reshape(shape)
+        left = paired[..., 0, :].clone()
+        right = paired[..., 1, :].clone()
+        y = torch.cat((left + right, left - right), dim=-1).reshape_as(y)
+        step *= 2
+    return (y * (width**-0.5)).to(torch.bfloat16)
+
+
+def _cpu_fp4_activation_quant(x: torch.Tensor, block_size: int = FP4_BLOCK_SIZE) -> torch.Tensor:
+    """按官方 E2M1、每 32 元素 UE8M0 scale 做 quant-dequant CPU 参考。"""
+
+    if x.dtype != torch.bfloat16 or x.shape[-1] % block_size:
+        raise ContractError("FP4 激活必须是 BF16 且最后一维整除 block_size")
+    flat = x.float().reshape(-1, x.shape[-1])
+    output = torch.empty_like(flat)
+    levels = _FP4_LEVELS.to(flat.device)
+    minimum = torch.tensor(6.0 * (2.0**-126), dtype=torch.float32, device=flat.device)
+    for start in range(0, flat.shape[1], block_size):
+        block = flat[:, start : start + block_size]
+        amax = torch.maximum(block.abs().amax(dim=1, keepdim=True), minimum)
+        scale = torch.pow(2.0, torch.ceil(torch.log2(amax / 6.0)))
+        normalized = (block / scale).clamp(-6.0, 6.0)
+        distances = (normalized.unsqueeze(-1) - levels).abs()
+        quantized = levels[distances.argmin(dim=-1)]
+        output[:, start : start + block_size] = quantized * scale
+    return output.reshape_as(x).to(torch.bfloat16)
+
+
+def _advance_compressor_buffers(
+    previous_kv: torch.Tensor | None,
+    previous_score: torch.Tensor | None,
+    current_kv: torch.Tensor,
+    current_score: torch.Tensor,
+    *,
+    position: int,
+    ratio: int,
+    overlap: bool,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None, int]:
+    """官方 decode Compressor remainder 状态机，不含投影、norm、RoPE 与量化。"""
+
+    if position < 0 or ratio <= 0 or overlap != (ratio == 4):
+        raise ContractError("compressor position/ratio/overlap 合同非法")
+    if current_kv.ndim != 3 or current_kv.shape[1] != 1 or current_kv.shape != current_score.shape:
+        raise ContractError("compressor 当前 projection 必须是同形 [B,1,D]")
+    batch, _, projected_dim = current_kv.shape
+    coff = 2 if overlap else 1
+    if projected_dim % coff:
+        raise ContractError("overlap projection 最后一维不能均分")
+    head_dim = projected_dim // coff
+    state_shape = (batch, coff * ratio, projected_dim)
+    if previous_kv is None or previous_score is None:
+        if position != 0:
+            raise ContractError("非 position0 compressor 缺少前一 remainder")
+        kv_state = torch.zeros(state_shape, dtype=torch.float32, device=current_kv.device)
+        score_state = torch.full(state_shape, -torch.inf, dtype=torch.float32, device=current_kv.device)
+    else:
+        if position == 0 or tuple(previous_kv.shape) != state_shape or previous_score.shape != previous_kv.shape:
+            raise ContractError("compressor 前一 remainder shape/position 漂移")
+        kv_state = previous_kv.clone()
+        score_state = previous_score.clone()
+    row = ratio + position % ratio if overlap else position % ratio
+    kv_state[:, row] = current_kv[:, 0].float()
+    score_state[:, row] = current_score[:, 0].float()
+    if (position + 1) % ratio:
+        return kv_state, score_state, None, row
+
+    if overlap:
+        pooled_kv = torch.cat(
+            (kv_state[:, :ratio, :head_dim], kv_state[:, ratio:, head_dim:]), dim=1
+        )
+        pooled_score = torch.cat(
+            (score_state[:, :ratio, :head_dim], score_state[:, ratio:, head_dim:]), dim=1
+        )
+    else:
+        pooled_kv = kv_state
+        pooled_score = score_state
+    # overlap 的第一个 block 没有上一组前半维；该组全为 -inf。
+    # 把“全无效”明确视为零贡献，避免通用 softmax 产生 NaN。
+    has_value = torch.isfinite(pooled_score).any(dim=1, keepdim=True)
+    safe_score = torch.where(has_value, pooled_score, torch.zeros_like(pooled_score))
+    weights = torch.where(has_value, safe_score.softmax(dim=1), torch.zeros_like(safe_score))
+    compressed = (pooled_kv * weights).sum(dim=1, keepdim=True)
+    if overlap:
+        kv_state[:, :ratio] = kv_state[:, ratio:]
+        score_state[:, :ratio] = score_state[:, ratio:]
+    return kv_state, score_state, compressed, row
+
+
+def _append_compressed_cache(
+    previous: torch.Tensor | None,
+    value: torch.Tensor,
+    *,
+    position: int,
+    ratio: int,
+) -> torch.Tensor:
+    if value.ndim != 3 or value.shape[1] != 1:
+        raise ContractError("compressed KV 必须是 [B,1,D]")
+    expected_index = position // ratio
+    if previous is None:
+        if expected_index != 0:
+            raise ContractError("compressed cache 缺少前序 block")
+        previous = value.new_empty((value.shape[0], 0, value.shape[-1]))
+    if previous.shape[0] != value.shape[0] or previous.shape[-1] != value.shape[-1]:
+        raise ContractError("compressed cache batch/head_dim 漂移")
+    if previous.shape[1] != expected_index:
+        raise ContractError("compressed cache block 序号不连续")
+    return torch.cat((previous, value), dim=1)
+
+
+def _deterministic_compressed_topk_indices(
+    ratio: int,
+    position: int,
+    compressed_count: int,
+    *,
+    offset: int = WINDOW_SIZE,
+) -> torch.Tensor:
+    expected = (position + 1) // ratio
+    if compressed_count != expected:
+        raise ContractError(
+            f"ratio{ratio} compressed_count={compressed_count}，官方期望 {expected}"
+        )
+    return (torch.arange(compressed_count, dtype=torch.int32) + offset).view(1, 1, -1)
+
+
 @dataclass(frozen=True)
 class ExecutionConfig:
     asset_root: Path = DEFAULT_ASSET_ROOT
@@ -202,6 +347,7 @@ class ExecutionConfig:
     range_attempts: int = 4
     range_workers: int = 3
     token_count: int = 1
+    forced_prefill_path: Path | None = None
 
     def validate(self) -> None:
         if self.stop_after_layer is not None and self.stop_after_layer not in REGISTERED_LAYERS:
@@ -216,8 +362,8 @@ class ExecutionConfig:
             raise ValueError("range_attempts 必须为正整数")
         if not 1 <= self.range_workers <= 3:
             raise ValueError("range_workers 必须在 1..3")
-        if not 1 <= self.token_count <= 2:
-            raise ValueError("当前 correctness executor 的 token_count 只允许 1 或 2")
+        if not 1 <= self.token_count <= MAX_RUNTIME_POSITIONS:
+            raise ValueError(f"token_count 必须在 1..{MAX_RUNTIME_POSITIONS}")
         if self.stop_after_layer is not None and self.token_count != 1:
             raise ValueError("stop_after_layer 只能用于单 token checkpoint")
         if not self.endpoint.startswith("https://"):
@@ -297,8 +443,10 @@ class CompressorRemainderState:
     overlap: bool
     main_kv_state: torch.Tensor
     main_score_state: torch.Tensor
+    main_compressed_kv: torch.Tensor
     indexer_kv_state: torch.Tensor | None
     indexer_score_state: torch.Tensor | None
+    indexer_compressed_kv: torch.Tensor | None
 
 
 @dataclass
@@ -317,8 +465,12 @@ def _clone_compressor_state(state: CompressorRemainderState | None) -> Compresso
         overlap=state.overlap,
         main_kv_state=state.main_kv_state.clone(),
         main_score_state=state.main_score_state.clone(),
+        main_compressed_kv=state.main_compressed_kv.clone(),
         indexer_kv_state=None if state.indexer_kv_state is None else state.indexer_kv_state.clone(),
         indexer_score_state=None if state.indexer_score_state is None else state.indexer_score_state.clone(),
+        indexer_compressed_kv=(
+            None if state.indexer_compressed_kv is None else state.indexer_compressed_kv.clone()
+        ),
     )
 
 
@@ -332,11 +484,46 @@ def _clone_layer_state(state: LayerRuntimeState) -> LayerRuntimeState:
 
 
 @dataclass(frozen=True)
+class ForcedTokenQueue:
+    """不可变 forced-prefill 队列；cursor 指向当前 snapshot 的输入 token。"""
+
+    token_ids: tuple[int, ...]
+    cursor: int
+    artifact_sha256: str
+
+    def validate(self) -> None:
+        if not self.token_ids or self.token_ids[0] != BOS_TOKEN_ID:
+            raise ContractError("forced-prefill 必须以 BOS 0 开始")
+        if any(
+            isinstance(token_id, bool)
+            or not isinstance(token_id, int)
+            or not 0 <= token_id < VOCAB_SIZE
+            for token_id in self.token_ids
+        ):
+            raise ContractError("forced-prefill token ID 越界")
+        if not 0 <= self.cursor <= len(self.token_ids):
+            raise ContractError("forced-prefill cursor 越界")
+        if len(self.artifact_sha256) != 64:
+            raise ContractError("forced-prefill artifact SHA-256 非法")
+
+    @property
+    def active(self) -> bool:
+        return self.cursor < len(self.token_ids)
+
+    @property
+    def current_token_id(self) -> int:
+        if not self.active:
+            raise ContractError("forced-prefill 队列已耗尽")
+        return self.token_ids[self.cursor]
+
+
+@dataclass(frozen=True)
 class DecoderSnapshot:
     position: int = 0
     input_token_id: int = BOS_TOKEN_ID
     layer_states: Mapping[int, LayerRuntimeState] = field(default_factory=dict)
-    committed_tokens: tuple[Mapping[str, int], ...] = ()
+    committed_tokens: tuple[Mapping[str, Any], ...] = ()
+    forced_queue: ForcedTokenQueue | None = None
 
 
 @dataclass(frozen=True)
@@ -377,6 +564,10 @@ class DecoderRuntime:
         """以私有 state clone 运行一个 token；任何异常都保持旧 snapshot。"""
 
         before = self.snapshot
+        if before.forced_queue is not None:
+            before.forced_queue.validate()
+            if before.forced_queue.active and before.input_token_id != before.forced_queue.current_token_id:
+                raise ContractError("snapshot input_token_id 与 forced-prefill cursor 漂移")
         working_previous = {layer: _clone_layer_state(state) for layer, state in before.layer_states.items()}
         session = online_range.RouteFirstSession(self.catalog, self.cache)
         computation = worker(before.position, before.input_token_id, working_previous, session)
@@ -392,16 +583,36 @@ class DecoderRuntime:
             state = computation.next_layer_states[layer]
             if state.layer != layer or state.position != before.position:
                 raise ContractError(f"L{layer} next runtime state 的 layer/position 漂移")
-        committed = {
+        next_input_token_id = computation.output_token_id
+        next_forced_queue = before.forced_queue
+        committed: dict[str, Any] = {
             "position": before.position,
             "input_token_id": before.input_token_id,
             "output_token_id": computation.output_token_id,
         }
+        if before.forced_queue is not None and before.forced_queue.active:
+            next_cursor = before.forced_queue.cursor + 1
+            next_forced_queue = ForcedTokenQueue(
+                token_ids=before.forced_queue.token_ids,
+                cursor=next_cursor,
+                artifact_sha256=before.forced_queue.artifact_sha256,
+            )
+            next_forced_queue.validate()
+            if next_forced_queue.active:
+                next_input_token_id = next_forced_queue.current_token_id
+            committed.update(
+                {
+                    "input_source": "forced_prefill",
+                    "forced_cursor": before.forced_queue.cursor,
+                    "next_input_token_id": next_input_token_id,
+                }
+            )
         next_snapshot = DecoderSnapshot(
             position=before.position + 1,
-            input_token_id=computation.output_token_id,
+            input_token_id=next_input_token_id,
             layer_states=dict(computation.next_layer_states),
             committed_tokens=before.committed_tokens + (committed,),
+            forced_queue=next_forced_queue,
         )
         # 所有 tensor、final logits 与合同都成功后，只有这一处替换 committed state。
         self.snapshot = next_snapshot
@@ -462,34 +673,6 @@ class NativeLayerReference(_InlineForward):
     def _summary_tensor(tensor: torch.Tensor) -> dict[str, Any]:
         return _InlineForward._summary(tensor)
 
-    def _compressor_projection(
-        self,
-        x: torch.Tensor,
-        prefix: str,
-        *,
-        ratio: int,
-        head_dim: int,
-        overlap: bool,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        coff = 2 if overlap else 1
-        expected = coff * head_dim
-        wkv = self._load_tensor(prefix + ".wkv.weight")
-        wgate = self._load_tensor(prefix + ".wgate.weight")
-        ape = self._load_tensor(prefix + ".ape")
-        if tuple(wkv.shape) != (expected, HIDDEN_SIZE) or tuple(wgate.shape) != tuple(wkv.shape):
-            raise ContractError(f"{prefix} projection shape 漂移")
-        if tuple(ape.shape) != (ratio, expected):
-            raise ContractError(f"{prefix}.ape shape 漂移")
-        projected = F.linear(x.float(), wkv.float())
-        score = F.linear(x.float(), wgate.float()) + ape[0].view(1, 1, expected)
-        state_rows = coff * ratio
-        kv_state = torch.zeros((x.shape[0], state_rows, expected), dtype=torch.float32)
-        score_state = torch.full_like(kv_state, -torch.inf)
-        offset = ratio if overlap else 0
-        kv_state[:, offset] = projected[:, 0]
-        score_state[:, offset] = score[:, 0]
-        return kv_state, score_state
-
     def _advance_compressor_state(
         self,
         x: torch.Tensor,
@@ -502,73 +685,126 @@ class NativeLayerReference(_InlineForward):
             if previous is not None:
                 raise ContractError(f"L{self.layer} ratio0 不得携带 compressor state")
             return None
-        if position > 1:
-            raise ContractError("当前连续 executor 只实现到 position1；尚未触碰 p3/p127 压缩边界")
         overlap = ratio == 4
-        if position > 0:
-            if previous is None:
-                raise ContractError(f"L{self.layer} position{position} 缺少已提交 compressor remainder")
-            if previous.ratio != ratio or previous.overlap != overlap:
-                raise ContractError(f"L{self.layer} compressor ratio/overlap 漂移")
-            current = _clone_compressor_state(previous)
-            if current is None:
-                raise AssertionError("compressor clone 不应为空")
-            row = ratio + position % ratio if overlap else position % ratio
+        if position == 0:
+            if previous is not None:
+                raise ContractError(f"L{self.layer} position0 不得携带旧 compressor state")
+        elif previous is None:
+            raise ContractError(f"L{self.layer} position{position} 缺少已提交 compressor state")
+        if previous is not None and (previous.ratio != ratio or previous.overlap != overlap):
+            raise ContractError(f"L{self.layer} compressor ratio/overlap 漂移")
 
-            def append(prefix: str, kv_state: torch.Tensor, score_state: torch.Tensor) -> None:
-                expected = kv_state.shape[-1]
-                wkv = self._load_tensor(prefix + ".wkv.weight")
-                wgate = self._load_tensor(prefix + ".wgate.weight")
-                ape = self._load_tensor(prefix + ".ape")
-                if tuple(wkv.shape) != (expected, HIDDEN_SIZE) or tuple(wgate.shape) != tuple(wkv.shape):
-                    raise ContractError(f"{prefix} projection shape 漂移")
-                if tuple(ape.shape) != (ratio, expected):
-                    raise ContractError(f"{prefix}.ape shape 漂移")
-                projected = F.linear(x.float(), wkv.float())
-                score = F.linear(x.float(), wgate.float()) + ape[position % ratio].view(1, 1, expected)
-                kv_state[:, row] = projected[:, 0]
-                score_state[:, row] = score[:, 0]
+        def project(prefix: str, expected: int) -> tuple[torch.Tensor, torch.Tensor]:
+            wkv = self._load_tensor(prefix + ".wkv.weight")
+            wgate = self._load_tensor(prefix + ".wgate.weight")
+            ape = self._load_tensor(prefix + ".ape")
+            if tuple(wkv.shape) != (expected, HIDDEN_SIZE) or tuple(wgate.shape) != tuple(wkv.shape):
+                raise ContractError(f"{prefix} projection shape 漂移")
+            if tuple(ape.shape) != (ratio, expected):
+                raise ContractError(f"{prefix}.ape shape 漂移")
+            projected = F.linear(x.float(), wkv.float())
+            score = F.linear(x.float(), wgate.float()) + ape[position % ratio].view(1, 1, expected)
+            return projected, score
 
-            append(self._name("attn.compressor"), current.main_kv_state, current.main_score_state)
-            if ratio == 4:
-                if current.indexer_kv_state is None or current.indexer_score_state is None:
-                    raise ContractError(f"L{self.layer} ratio4 缺少独立 indexer remainder")
-                append(
-                    self._name("attn.indexer.compressor"),
-                    current.indexer_kv_state,
-                    current.indexer_score_state,
-                )
-            elif current.indexer_kv_state is not None or current.indexer_score_state is not None:
-                raise ContractError(f"L{self.layer} ratio128 不得携带 indexer remainder")
-            return current
+        def finish_compressed(
+            compressed: torch.Tensor,
+            prefix: str,
+            *,
+            rotate: bool,
+        ) -> torch.Tensor:
+            compressed = self._rms_norm(
+                compressed.to(torch.bfloat16), self._load_tensor(prefix + ".norm.weight")
+            )
+            rope_position = position + 1 - ratio
+            freqs = _precompute_position_freqs(ratio, seqlen=rope_position + 1)[
+                rope_position : rope_position + 1
+            ]
+            _apply_position_rope(compressed[..., -64:], freqs)
+            if rotate:
+                compressed = _cpu_hadamard_rotate(compressed)
+                compressed = _cpu_fp4_activation_quant(compressed)
+            else:
+                compressed[..., :-64] = torch.from_numpy(
+                    self._activation_quant(compressed[..., :-64].float().numpy(), 64)
+                ).to(torch.bfloat16)
+            return compressed
 
-        if previous is not None:
-            raise ContractError(f"L{self.layer} position0 不得携带旧 compressor state")
-        main_prefix = self._name("attn.compressor")
-        main_kv, main_score = self._compressor_projection(
-            x,
-            main_prefix,
+        previous_main_kv = None if previous is None else previous.main_kv_state
+        previous_main_score = None if previous is None else previous.main_score_state
+        main_projected, main_gate = project(
+            self._name("attn.compressor"), (2 if overlap else 1) * 512
+        )
+        main_kv, main_score, main_block, _ = _advance_compressor_buffers(
+            previous_main_kv,
+            previous_main_score,
+            main_projected,
+            main_gate,
+            position=position,
             ratio=ratio,
-            head_dim=512,
             overlap=overlap,
         )
+        main_cache = (
+            torch.empty((x.shape[0], 0, 512), dtype=torch.bfloat16)
+            if previous is None
+            else previous.main_compressed_kv.clone()
+        )
+        if main_block is not None:
+            main_block = finish_compressed(
+                main_block, self._name("attn.compressor"), rotate=False
+            )
+            main_cache = _append_compressed_cache(
+                main_cache, main_block, position=position, ratio=ratio
+            )
+
         index_kv: torch.Tensor | None = None
         index_score: torch.Tensor | None = None
+        index_cache: torch.Tensor | None = None
         if ratio == 4:
-            index_kv, index_score = self._compressor_projection(
-                x,
-                self._name("attn.indexer.compressor"),
+            if previous is not None and (
+                previous.indexer_kv_state is None
+                or previous.indexer_score_state is None
+                or previous.indexer_compressed_kv is None
+            ):
+                raise ContractError(f"L{self.layer} ratio4 缺少独立 indexer state")
+            index_projected, index_gate = project(
+                self._name("attn.indexer.compressor"), 2 * 128
+            )
+            index_kv, index_score, index_block, _ = _advance_compressor_buffers(
+                None if previous is None else previous.indexer_kv_state,
+                None if previous is None else previous.indexer_score_state,
+                index_projected,
+                index_gate,
+                position=position,
                 ratio=ratio,
-                head_dim=128,
                 overlap=True,
             )
+            index_cache = (
+                torch.empty((x.shape[0], 0, 128), dtype=torch.bfloat16)
+                if previous is None
+                else previous.indexer_compressed_kv.clone()
+            )
+            if index_block is not None:
+                index_block = finish_compressed(
+                    index_block, self._name("attn.indexer.compressor"), rotate=True
+                )
+                index_cache = _append_compressed_cache(
+                    index_cache, index_block, position=position, ratio=ratio
+                )
+        elif previous is not None and (
+            previous.indexer_kv_state is not None
+            or previous.indexer_score_state is not None
+            or previous.indexer_compressed_kv is not None
+        ):
+            raise ContractError(f"L{self.layer} ratio128 不得携带 indexer state")
         return CompressorRemainderState(
             ratio=ratio,
             overlap=overlap,
             main_kv_state=main_kv,
             main_score_state=main_score,
+            main_compressed_kv=main_cache,
             indexer_kv_state=index_kv,
             indexer_score_state=index_score,
+            indexer_compressed_kv=index_cache,
         )
 
     def _attention(
@@ -599,7 +835,7 @@ class NativeLayerReference(_InlineForward):
         branch_np = branch.float().numpy()
 
         q_low = torch.from_numpy(self._linear_fp8(branch_np, prefix + ".attn.wq_a")).to(torch.bfloat16)
-        q_low = self._rms_norm(q_low, self._load_tensor(prefix + ".attn.q_norm.weight"))
+        qr = q_low = self._rms_norm(q_low, self._load_tensor(prefix + ".attn.q_norm.weight"))
         q = torch.from_numpy(self._linear_fp8(q_low.float().numpy(), prefix + ".attn.wq_b"))
         q = q.to(torch.bfloat16).reshape(1, 1, 64, 512)
         q *= torch.rsqrt(q.square().mean(-1, keepdim=True) + 1e-6)
@@ -622,9 +858,51 @@ class NativeLayerReference(_InlineForward):
             previous=None if previous_runtime is None else previous_runtime.window_kv,
         )
         topk_indices = _window_topk_indices(position)
+        attention_kv = kv if position == 0 else window_kv
+        ratio = COMPRESS_RATIOS[self.layer]
+        if ratio:
+            if compressor_state is None:
+                raise ContractError(f"L{self.layer} ratio{ratio} 缺少 compressor state")
+            main_cache = compressor_state.main_compressed_kv
+            expected_count = (position + 1) // ratio
+            if tuple(main_cache.shape) != (1, expected_count, 512):
+                raise ContractError(f"L{self.layer} main compressed cache 数量/shape 漂移")
+            if ratio == 4:
+                index_cache = compressor_state.indexer_compressed_kv
+                if index_cache is None or tuple(index_cache.shape) != (1, expected_count, 128):
+                    raise ContractError(f"L{self.layer} indexer compressed cache 数量/shape 漂移")
+                index_q = torch.from_numpy(
+                    self._linear_fp8(qr.float().numpy(), prefix + ".attn.indexer.wq_b")
+                ).to(torch.bfloat16).reshape(1, 1, 64, 128)
+                if position:
+                    _apply_position_rope(index_q[..., -64:], freqs_cis)
+                index_q = _cpu_hadamard_rotate(index_q)
+                index_q = _cpu_fp4_activation_quant(index_q)
+                index_weights = F.linear(
+                    branch, self._load_tensor(prefix + ".attn.indexer.weights_proj.weight")
+                )
+                index_weights *= 128**-0.5 * 64**-0.5
+                index_score = torch.einsum(
+                    "bshd,btd->bsht", index_q.float(), index_cache.float()
+                )
+                index_score = (
+                    index_score.relu() * index_weights.float().unsqueeze(-1)
+                ).sum(dim=2)
+                index_k = min(INDEX_TOP_K, expected_count)
+                compress_topk = index_score.topk(index_k, dim=-1).indices.to(torch.int32)
+                compress_topk += WINDOW_SIZE
+            else:
+                compress_topk = _deterministic_compressed_topk_indices(
+                    ratio, position, expected_count
+                )
+            topk_indices = torch.cat((topk_indices, compress_topk), dim=-1)
+            if position:
+                attention_kv = torch.cat((window_kv, main_cache), dim=1)
+            elif expected_count:
+                attention_kv = torch.cat((kv, main_cache), dim=1)
         attention = sparse_attention(
             q,
-            kv if position == 0 else window_kv,
+            attention_kv,
             self._load_tensor(prefix + ".attn.attn_sink"),
             topk_indices,
             softmax_scale=512**-0.5,
@@ -771,6 +1049,89 @@ def _read_json(path: Path) -> dict[str, Any]:
     return value
 
 
+def _load_forced_prefill(path: Path) -> ForcedTokenQueue:
+    """严格验收 s14_chat_encoding 的已编码 token 产物。"""
+
+    try:
+        payload = path.resolve().read_bytes()
+    except FileNotFoundError as exc:
+        raise ContractError(f"缺少 forced-prefill 产物: {path}") from exc
+    try:
+        text = payload.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ContractError("forced-prefill 产物不是严格 UTF-8") from exc
+
+    def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        value: dict[str, Any] = {}
+        for key, item in pairs:
+            if key in value:
+                raise ContractError(f"forced-prefill JSON 含重复 key: {key!r}")
+            value[key] = item
+        return value
+
+    def invalid_constant(value: str) -> None:
+        raise ContractError(f"forced-prefill JSON 不允许常量 {value}")
+
+    try:
+        document = json.loads(
+            text,
+            object_pairs_hook=unique_object,
+            parse_constant=invalid_constant,
+        )
+    except ContractError:
+        raise
+    except json.JSONDecodeError as exc:
+        raise ContractError(f"forced-prefill 产物不是合法 JSON: {exc}") from exc
+    if not isinstance(document, dict) or document.get("format") != FORCED_PREFILL_FORMAT:
+        raise ContractError(f"forced-prefill format 必须是 {FORCED_PREFILL_FORMAT}")
+
+    chat_encoding = document.get("chat_encoding")
+    if not isinstance(chat_encoding, dict) or chat_encoding.get("revision") != REVISION:
+        raise ContractError("forced-prefill chat encoding revision 漂移")
+    tokenizer = document.get("tokenizer")
+    if not isinstance(tokenizer, dict):
+        raise ContractError("forced-prefill 缺少 tokenizer 合同")
+    if (
+        tokenizer.get("profile") != "s14"
+        or tokenizer.get("vocab_size") != VOCAB_SIZE
+        or tokenizer.get("bos_token_id") != BOS_TOKEN_ID
+    ):
+        raise ContractError("forced-prefill tokenizer 不兼容 Polaris S14")
+
+    token_ids_value = document.get("token_ids")
+    if not isinstance(token_ids_value, list) or not token_ids_value:
+        raise ContractError("forced-prefill token_ids 必须是非空数组")
+    token_ids = tuple(token_ids_value)
+    if document.get("token_count") != len(token_ids):
+        raise ContractError("forced-prefill token_count 与 token_ids 不一致")
+    if len(token_ids) > MAX_RUNTIME_POSITIONS:
+        raise ContractError("forced-prefill token 数超过 S14 上下文合同")
+    token_hash = hashlib.sha256(
+        json.dumps(
+            list(token_ids), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+    ).hexdigest()
+    if document.get("token_ids_sha256") != token_hash:
+        raise ContractError("forced-prefill token_ids_sha256 不匹配")
+
+    consumption = document.get("decoder_consumption")
+    if not isinstance(consumption, dict) or (
+        consumption.get("mode") != "sequential_forced_prefill"
+        or consumption.get("position_base") != 0
+        or consumption.get("position_count") != len(token_ids)
+        or consumption.get("position_rule") != "token_ids[position]"
+        or consumption.get("polaris_s14_compatible") is not True
+    ):
+        raise ContractError("forced-prefill decoder_consumption 合同不兼容 S14")
+    queue = ForcedTokenQueue(
+        token_ids=token_ids,
+        cursor=0,
+        artifact_sha256=hashlib.sha256(payload).hexdigest(),
+    )
+    queue.validate()
+    return queue
+
+
 def _write_json(path: Path, document: Mapping[str, Any]) -> None:
     path = path.resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -815,6 +1176,8 @@ def _runtime_state_report(state: LayerRuntimeState) -> dict[str, Any]:
         "overlap": compressor.overlap,
         "main_kv_state_shape": list(compressor.main_kv_state.shape),
         "main_score_state_shape": list(compressor.main_score_state.shape),
+        "main_compressed_kv_shape": list(compressor.main_compressed_kv.shape),
+        "main_compressed_blocks": compressor.main_compressed_kv.shape[1],
         "written_row": row,
         "main_kv_written": NativeLayerReference._summary_tensor(
             compressor.main_kv_state[:, row : row + 1]
@@ -824,10 +1187,14 @@ def _runtime_state_report(state: LayerRuntimeState) -> dict[str, Any]:
         ),
     }
     if compressor.indexer_kv_state is not None and compressor.indexer_score_state is not None:
+        if compressor.indexer_compressed_kv is None:
+            raise ContractError("ratio4 runtime report 缺少 indexer compressed cache")
         comp.update(
             {
                 "indexer_kv_state_shape": list(compressor.indexer_kv_state.shape),
                 "indexer_score_state_shape": list(compressor.indexer_score_state.shape),
+                "indexer_compressed_kv_shape": list(compressor.indexer_compressed_kv.shape),
+                "indexer_compressed_blocks": compressor.indexer_compressed_kv.shape[1],
                 "indexer_written_row": row,
                 "indexer_kv_written": NativeLayerReference._summary_tensor(
                     compressor.indexer_kv_state[:, row : row + 1]
@@ -960,6 +1327,10 @@ def _base_report(config: ExecutionConfig) -> dict[str, Any]:
         "range_attempts": config.range_attempts,
         "range_workers": config.range_workers,
         "requested_token_count": config.token_count,
+        "forced_prefill_path": (
+            None if config.forced_prefill_path is None else str(config.forced_prefill_path.resolve())
+        ),
+        "forced_prefill": None,
         "range_retries": [],
         "routed_prefetch_plans": [],
         "tokens": [],
@@ -1122,7 +1493,25 @@ def execute(config: ExecutionConfig) -> dict[str, Any]:
             download_budget_bytes=config.download_budget_bytes,
             timeout=300,
         )
-        runtime = DecoderRuntime(catalog=catalog, cache=cache)
+        forced_queue = (
+            None
+            if config.forced_prefill_path is None
+            else _load_forced_prefill(config.forced_prefill_path)
+        )
+        initial_snapshot = DecoderSnapshot(
+            input_token_id=(
+                BOS_TOKEN_ID if forced_queue is None else forced_queue.current_token_id
+            ),
+            forced_queue=forced_queue,
+        )
+        runtime = DecoderRuntime(catalog=catalog, cache=cache, snapshot=initial_snapshot)
+        if forced_queue is not None:
+            report["forced_prefill"] = {
+                "artifact_sha256": forced_queue.artifact_sha256,
+                "token_count": len(forced_queue.token_ids),
+                "cursor": forced_queue.cursor,
+            }
+            _write_json(report_path, report)
 
         for _ in range(config.token_count):
             token_started = time.perf_counter()
@@ -1130,6 +1519,12 @@ def execute(config: ExecutionConfig) -> dict[str, Any]:
             token_report: dict[str, Any] = {
                 "position": runtime.position,
                 "input_token_id": runtime.input_token_id,
+                "input_source": (
+                    "forced_prefill"
+                    if runtime.snapshot.forced_queue is not None
+                    and runtime.snapshot.forced_queue.active
+                    else "model_argmax"
+                ),
                 "status": "running",
                 "state_committed": False,
                 "embedding": None,
@@ -1306,6 +1701,16 @@ def execute(config: ExecutionConfig) -> dict[str, Any]:
                 "next_position": runtime.position,
                 "next_input_token_id": runtime.input_token_id,
                 "committed_layer_states": sorted(runtime.layer_states),
+                "forced_prefill_cursor": (
+                    None
+                    if runtime.snapshot.forced_queue is None
+                    else runtime.snapshot.forced_queue.cursor
+                ),
+                "forced_prefill_exhausted": (
+                    None
+                    if runtime.snapshot.forced_queue is None
+                    else not runtime.snapshot.forced_queue.active
+                ),
             }
             report["downloaded_bytes"] = cache.downloaded_bytes
             _write_json(report_path, report)
@@ -1336,6 +1741,12 @@ def execute(config: ExecutionConfig) -> dict[str, Any]:
             "next_position": runtime.position,
             "next_input_token_id": runtime.input_token_id,
             "committed_layer_states": sorted(runtime.layer_states),
+            "forced_prefill_cursor": (
+                None if runtime.snapshot.forced_queue is None else runtime.snapshot.forced_queue.cursor
+            ),
+            "forced_prefill_exhausted": (
+                None if runtime.snapshot.forced_queue is None else not runtime.snapshot.forced_queue.active
+            ),
         }
         report["error"] = {
             "stage": stage,
@@ -1364,7 +1775,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--head-chunk-size", type=int, default=4096)
     parser.add_argument("--range-attempts", type=int, default=4)
     parser.add_argument("--range-workers", type=int, default=3)
-    parser.add_argument("--token-count", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--token-count", type=int, default=1)
+    parser.add_argument(
+        "--forced-prefill",
+        type=Path,
+        help="s14_chat_encoding 生成的 forced-prefill token JSON",
+    )
     return parser
 
 
@@ -1381,6 +1797,7 @@ def _main(argv: Sequence[str] | None = None) -> int:
         range_attempts=args.range_attempts,
         range_workers=args.range_workers,
         token_count=args.token_count,
+        forced_prefill_path=args.forced_prefill,
     )
     try:
         report = execute(config)

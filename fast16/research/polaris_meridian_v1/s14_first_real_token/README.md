@@ -1,4 +1,4 @@
-# Polaris S14 连续两个真实 token
+# Polaris S14 连续 token 流
 
 本目录把冻结的 L42 CPU 参考泛化到固定 revision 的预注册 S14 层：
 
@@ -6,13 +6,15 @@
 [0, 1, 2, 6, 7, 14, 15, 22, 23, 30, 31, 40, 41, 42]
 ```
 
-默认执行入口从 BOS token 0 运行一个 token；`--token-count 2` 会在同一
-`DecoderRuntime` 中继续 position1。每个 token 都严格遵守 route-first 生命周期：先校验当前层的
+默认执行入口从 BOS token 0 运行一个 token；`--token-count N` 会在同一
+`DecoderRuntime` 中连续执行，上限为 1,048,576。每个 token 都严格遵守 route-first 生命周期：先校验当前层的
 non-expert/router Range，执行 attention 与原生 router，再把恰好 6 个 expert ID
 提交给 `RouteFirstSession`；只有此后才能读取或下载对应 36 个 routed payload。
 它不会请求完整 embedding 或完整 shard，每个 token 只读取自己的 8,192 字节 embedding 行。
-当前 correctness 范围明确只到 position1；position2 之后以及 ratio4/ratio128 的
-首次压缩输出边界尚未实现，不能据此宣称已经具备任意长度解码。
+当前 correctness 路径已覆盖 position2+、ratio4 的 p3/p7 overlap 边界、ratio128 的
+p127 边界和 p127/p128 窗口环回。新 compressed block 在当前 token attention 前追加；
+ratio4 使用独立 indexer 的 Hadamard+FP4 查询与 top-512，ratio128 使用确定的
+compressed offset 128。这仍是 CPU 参考语义，不代表 GPU kernel 逐 bit 一致或长序列性能。
 
 前三层的 expert ID 来自 checkpoint 中物理 `I64 [129280,6]` 的
 `tid2eid[current_token_id]`，但 routed
@@ -24,10 +26,15 @@ attention HC、FFN HC、6 个 routed expert 和 shared expert。ratio4/ratio128 
 跨 token runtime 长期复用一个 `RangeCache`，但每个 token 新建一个
 `RouteFirstSession`。position1 从 token `108967` 自己的 embedding row 复制出四流输入，
 不复用 position0 final 的单路 hidden；每层先对 q/kv 做 position RoPE，把当前 KV 写入
-窗口后读取 p0+p1，再对 attention 输出做 inverse RoPE。ratio4/ratio128 的 main remainder
-以及 ratio4 独立 indexer remainder 都从已提交 state clone 后追加；p1 不产生 compressed
-block。只有全部 14 层、final HC/norm/BF16 head 与 argmax 都成功，14 层
+窗口后读取 p0+p1，再对 attention 输出做 inverse RoPE。ratio4/ratio128 的 main remainder/cache
+以及 ratio4 独立 indexer remainder/cache 都从已提交 state clone 后追加。只有全部 14 层、
+final HC/norm/BF16 head 与 argmax 都成功，14 层
 `next_layer_states` 和下一个 token ID 才通过单个 snapshot 替换原子提交；失败会保留旧 state。
+
+`s14_chat_encoding` 生成的官方 token 序列可以用 `--forced-prefill` 接入。队列未耗尽时，
+下一个输入严格取 `token_ids[position]`，不使用中间 argmax；最后一个 forced token
+成功提交后才转自回归生成。产物的 format、revision、vocab/BOS、token 数/哈希、
+`sequential_forced_prefill` 和 `polaris_s14_compatible=true` 都会在执行前验收；任何失败都不推进 cursor。
 
 先跑零网络合同自检：
 
@@ -64,6 +71,15 @@ python -X utf8 -m fast16.research.polaris_meridian_v1.s14_first_real_token.execu
   --range-workers 3 `
   --token-count 2 `
   --report D:/models/Polaris-S14/s14_two_real_tokens_report.json
+```
+
+官方聊天 token 序列的短段 forced-prefill（不要在 correctness 路径一次运行数百 token）：
+
+```powershell
+python -X utf8 -m fast16.research.polaris_meridian_v1.s14_first_real_token.executor `
+  --forced-prefill D:/models/Polaris-S14/forced_prefill.json `
+  --token-count 4 `
+  --report D:/models/Polaris-S14/s14_forced_p0_p3_report.json
 ```
 
 `--range-workers` 最大为 3，且只并发已经提交的 top-6 expert 页。执行器先按
