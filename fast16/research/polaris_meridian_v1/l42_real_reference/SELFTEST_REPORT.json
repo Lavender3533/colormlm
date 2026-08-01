@@ -1,0 +1,64 @@
+{
+  "format": "polaris-l42-real-reference-selftest-v1",
+  "status": "passed",
+  "positive": {
+    "source_contract": "passed",
+    "f32_le_sha256": {
+      "attention_branch": "84ce63ca9233b07bea99741f9982accac17bc65025b0098b7017acd7dab6db10",
+      "post_attention_state": "1a04e9b1634409af115c39d12ba72aa031a836fe7ea825778417ace3eeef79f1",
+      "ffn_input": "7e2d3167e3782eca8d762c3cc92d53bb9d64a65c7b18d37d16797ff39f611ad4",
+      "moe_branch": "7ecbb213a3e025fa76cd91a21f295e9234437b301848431a7342ce73c5d62841",
+      "layer_output": "853b8b947a3f7a275cf748d7e97a311ebb22323cd0c2f3e5e973f27b04388895"
+    },
+    "route_ids": [
+      126,
+      12,
+      205,
+      149,
+      227,
+      174
+    ],
+    "route_weights": [
+      0.2747795581817627,
+      0.2491425722837448,
+      0.24045628309249878,
+      0.24615329504013062,
+      0.25386279821395874,
+      0.23560553789138794
+    ],
+    "integrity": {
+      "hashes_checked": 76,
+      "payload_bytes": 247515224,
+      "payload_files": 76
+    }
+  },
+  "negative_tests": [
+    {
+      "name": "missing_payload",
+      "status": "passed",
+      "rejected_by": "FileNotFoundError",
+      "message": "缺少真实 tensor payload: layers.42.attn.attn_sink -> D:\\models\\Polaris-S14\\range_cache\\definitely_missing_l42_payload.bin"
+    },
+    {
+      "name": "sha256_drift",
+      "status": "passed",
+      "rejected_by": "ValueError",
+      "message": "layers.42.attn.attn_sink 的 SHA-256 漂移"
+    },
+    {
+      "name": "revision_drift",
+      "status": "passed",
+      "rejected_by": "ValueError",
+      "message": "manifest revision 漂移"
+    },
+    {
+      "name": "route_tensor_missing",
+      "status": "passed",
+      "rejected_by": "ValueError",
+      "message": "manifest entry 数应为 36，实际为 35"
+    }
+  ],
+  "negative_passed": 4,
+  "negative_total": 4,
+  "claim_limit": "仅证明真实 L42 单层单 token 参考可复现；不是 S14/43 层首 token"
+}
