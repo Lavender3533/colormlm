@@ -1,0 +1,23 @@
+{
+  "format": "polaris-s14-chat-encoding-source-contract-v1",
+  "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+  "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+  "upstream_directory": "encoding",
+  "license": "MIT",
+  "transport": "https://hf-mirror.com",
+  "local_normalization": "UTF-8 without BOM; LF line endings; exactly one trailing LF; upstream test harness removes that normalized fixture LF",
+  "files": [
+    {"path": "OFFICIAL_README.md", "upstream_path": "encoding/README.md", "upstream_blob_oid": "78d93a8a4dd24378356523992dea6517844657e1", "upstream_bytes": 9168, "local_sha256": "294ed6493ebfe5a487f172154d60c494899997fed8806fdd3352dd8e3c33f9de"},
+    {"path": "encoding_dsv4.py", "upstream_path": "encoding/encoding_dsv4.py", "upstream_blob_oid": "66f2d30ece5a93e08fbab47aeb9f3541830930ef", "upstream_bytes": 29001, "local_sha256": "abc0d26120250dda0ae077dc64aa28836026e61e970854aaeb792445e6a0dde6"},
+    {"path": "test_encoding_dsv4.py", "upstream_path": "encoding/test_encoding_dsv4.py", "upstream_blob_oid": "1c896e797e3f0cc6a95f6dd51079df1e6ba1887e", "upstream_bytes": 3741, "local_sha256": "af1f5226cce94c6d81b2538491dd2bb97394c8d8afb08f774c856a95f75306b8"},
+    {"path": "tests/test_input_1.json", "upstream_blob_oid": "d423b221fa88153a826f7724cc938e0703858c21", "upstream_bytes": 2748, "local_sha256": "10e0c074c977c3a80daab758af28219c6b1c2bd7f3f5cf2890c84b361cc32897"},
+    {"path": "tests/test_input_2.json", "upstream_blob_oid": "13b3454a902deecafe75644b41cd6b3e4a0e5354", "upstream_bytes": 526, "local_sha256": "fd985cda88e8640b8e2404d8e659f7006cad204eb41f73c9e6662b1f218c01aa"},
+    {"path": "tests/test_input_3.json", "upstream_blob_oid": "10034844edfc33b954ea530f35590132cdf4a342", "upstream_bytes": 4546, "local_sha256": "4d4c11cbe3ed379219669b4f8133286990a9e0212072bef9a6959bce92f8c469"},
+    {"path": "tests/test_input_4.json", "upstream_blob_oid": "d5e0791dd6997a2007f3aa917919a680521bcd51", "upstream_bytes": 2730, "local_sha256": "2f3672d6750b7f44be756292f693b44f6c81b7b0c655d73db994cf5f1d1d110a"},
+    {"path": "tests/test_output_1.txt", "upstream_blob_oid": "7e3c9bd5a394617f02d76384d613d991e60d48bd", "upstream_bytes": 2390, "local_sha256": "423fd022603fdcb3b4dea418bb55bbab12dea0f41e9f2c05e9881d041c90d15e"},
+    {"path": "tests/test_output_2.txt", "upstream_blob_oid": "fc397ef549728ad6083a577010192e62f3edeee4", "upstream_bytes": 342, "local_sha256": "7d7a91c50ecb2f954645e409cd4b9c7996c44e6a9ba578a4a25a711abdab2490"},
+    {"path": "tests/test_output_3.txt", "upstream_blob_oid": "edee563300d49b0c46af1429a1e1b00b15610a72", "upstream_bytes": 3313, "local_sha256": "c6cf22d720d805c13b8cf5ef23a4d8ec32ec9f81b4e6aaf70c1e88f1448c3fc4"},
+    {"path": "tests/test_output_4.txt", "upstream_blob_oid": "d30bd5d06cf39fe110bc4406292fccde0444c120", "upstream_bytes": 2552, "local_sha256": "97c2e39f8d66ac83ff4b56c316735b699320cdbb97a2f3961c80390c78972970"}
+  ],
+  "claim_limit": "只固定官方消息编码协议；不运行模型，不证明 S14 连续生成、工具能力或质量"
+}
