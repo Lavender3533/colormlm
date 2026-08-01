@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
+from fast16.research.polaris_meridian_v1.fulldepth43_native_top6 import (
+    run_candidate_profile as candidate_runner,
+)
 from fast16.research.polaris_meridian_v1.fulldepth43_native_top6.candidate_profile import (
     CandidateProfiler,
     MaterializedFp8Cache,
@@ -169,3 +174,139 @@ def test_materialized_fp8_cache_resists_sequential_scan_pollution(tmp_path: Path
     assert stats["hits"] == 1
     assert stats["capacity_skips"] == 1
     assert stats["evictions"] == 0
+
+
+@pytest.mark.parametrize(
+    ("token_count", "execution_seconds", "token_walls"),
+    (
+        (1, 4.0, [3.5]),
+        (3, 9.0, [3.5, 2.5, 2.0]),
+    ),
+)
+def test_profiled_candidate_runs_continuous_tokens_and_keeps_single_token_compatibility(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    token_count: int,
+    execution_seconds: float,
+    token_walls: list[float],
+) -> None:
+    worker = tmp_path / "writeback.exe"
+    final_head_worker = tmp_path / "head.exe"
+    worker.write_bytes(b"worker")
+    final_head_worker.write_bytes(b"head")
+    scratch = tmp_path / "head-scratch"
+    observed_configs = []
+
+    class FakeProfiler:
+        def __init__(self) -> None:
+            self._observations = [
+                SimpleNamespace(label="token_total", inclusive_seconds=value)
+                for value in token_walls
+            ]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args) -> None:
+            return None
+
+        def snapshot(self):
+            return {
+                "token_wall_seconds": sum(token_walls),
+                "gc_status": {"gc_removed": True},
+                "vulkan_boundary": {"calls": token_count * 43},
+            }
+
+    def fake_execute(config):
+        observed_configs.append(config)
+        return {
+            "status": "complete",
+            "execution_seconds": execution_seconds,
+            "tokens": [
+                {
+                    "position": position,
+                    "layers": [{"layer": layer} for layer in range(43)],
+                }
+                for position in range(token_count)
+            ],
+            "committed_tokens": [
+                {
+                    "position": position,
+                    "input_token_id": 100 + position,
+                    "output_token_id": 200 + position,
+                }
+                for position in range(token_count)
+            ],
+            "vulkan_writeback_fallbacks": [],
+        }
+
+    monkeypatch.setattr(candidate_runner, "CandidateProfiler", FakeProfiler)
+    monkeypatch.setattr(candidate_runner, "execute", fake_execute)
+    output_root = tmp_path / f"run-{token_count}"
+    summary = candidate_runner.run_profiled_candidate(
+        worker=worker,
+        output_root=output_root,
+        token_count=token_count,
+        vulkan_final_head_worker=final_head_worker,
+        vulkan_final_head_scratch=scratch,
+    )
+
+    assert len(observed_configs) == 1
+    config = observed_configs[0]
+    assert config.token_count == token_count
+    assert config.vulkan_final_head_worker == final_head_worker.resolve()
+    assert config.vulkan_final_head_scratch == scratch.resolve()
+    assert summary["committed_token_count"] == token_count
+    assert summary["per_token_wall_seconds"] == token_walls
+    assert [row["wall_seconds"] for row in summary["tokens"]] == token_walls
+    assert summary["output_token_id"] == 199 + token_count
+    assert summary["tokens_per_second"] == token_count / execution_seconds
+    assert summary["effective_tokens_per_second"] == token_count / execution_seconds
+    runtime = json.loads(
+        (output_root / "runtime_profile.json").read_text(encoding="utf-8")
+    )
+    assert runtime["per_token_wall_seconds"] == token_walls
+
+
+def test_profiled_candidate_rejects_token_count_outside_contract(tmp_path: Path) -> None:
+    for value in (True, 0, 17):
+        with pytest.raises(ValueError, match="1..16"):
+            candidate_runner.run_profiled_candidate(
+                worker=tmp_path / "missing.exe",
+                output_root=tmp_path / f"invalid-{value}",
+                token_count=value,
+            )
+
+
+def test_profiled_candidate_cli_forwards_continuous_head_options(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = {}
+
+    def fake_run(**kwargs):
+        captured.update(kwargs)
+        return {"status": "complete"}
+
+    monkeypatch.setattr(candidate_runner, "run_profiled_candidate", fake_run)
+    worker = tmp_path / "worker.exe"
+    output_root = tmp_path / "output"
+    final_worker = tmp_path / "head.exe"
+    scratch = tmp_path / "scratch"
+    assert candidate_runner.main(
+        [
+            "--worker",
+            str(worker),
+            "--output-root",
+            str(output_root),
+            "--token-count",
+            "4",
+            "--vulkan-final-head-worker",
+            str(final_worker),
+            "--vulkan-final-head-scratch",
+            str(scratch),
+        ]
+    ) == 0
+    assert captured["token_count"] == 4
+    assert captured["vulkan_final_head_worker"] == final_worker
+    assert captured["vulkan_final_head_scratch"] == scratch
