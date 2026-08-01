@@ -11,6 +11,7 @@ gguf_reader = { path = "../gguf_reader" }
 expert_cache = { path = "../expert_cache" }
 predictor = { path = "../predictor" }
 scheduler-core = { path = "../scheduler-core" }
+polaris_s14_runner = { path = "../s14_runner" }
 parking_lot.workspace = true
 tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
 candle-core = { version = "0.8", default-features = false }

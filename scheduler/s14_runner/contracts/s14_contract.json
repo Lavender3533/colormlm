@@ -1,0 +1,60 @@
+{
+  "contract": {
+    "format": "polaris-local-s14-interop-v1",
+    "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+    "selected_layers": [0, 1, 2, 6, 7, 14, 15, 22, 23, 30, 31, 40, 41, 42],
+    "hidden_size": 4096,
+    "hc_streams": 4,
+    "vocab_size": 129280,
+    "routed_experts": 256,
+    "experts_per_token": 6,
+    "route_scale": "1.5_exact",
+    "skipped_block_semantics": "identity_no_state_mutation"
+  },
+  "wire_protocol": {
+    "encoding": "UTF-8 JSON",
+    "capability_manifest_format": "polaris-local-s14-capabilities-v1",
+    "provider_order": [
+      "begin_base_load",
+      "wait_base_ready_after_fence",
+      "execute_attention_then_official_route",
+      "begin_exact_top6_load",
+      "wait_top6_ready_after_fence",
+      "execute_routed_and_shared_moe_then_hc_post",
+      "release_layer"
+    ],
+    "greedy_head": {
+      "input": "full float32 logits[129280]",
+      "selection": "argmax",
+      "tie_break": "lowest_token_id",
+      "nan": "hard_reject",
+      "token_on_any_failure": "forbidden"
+    }
+  },
+  "preregistered_profiles": [
+    {
+      "id": "s14_top6",
+      "priority": "primary_first_test",
+      "layers": [0, 1, 2, 6, 7, 14, 15, 22, 23, 30, 31, 40, 41, 42],
+      "experts_per_token": 6,
+      "skipped_layers": "identity_no_state_mutation"
+    },
+    {
+      "id": "full_depth_top1",
+      "priority": "quality_failure_fallback_only",
+      "layers": "0..42",
+      "experts_per_token": 1,
+      "selection": "official_route_then_pre_registered_top1_reduction",
+      "runtime_ready": false
+    }
+  ],
+  "expert_abi": {
+    "format": "polaris-deepseek-abi-sample-v1",
+    "pure_expert_payload_bytes": 13369344,
+    "l42_e0_sample_with_router_sidecar_bytes": 13377540,
+    "router_sidecar_is_routing_authority": false,
+    "required_route_source": "official Gate.forward for the current token and layer"
+  },
+  "claim_limit": "该契约与 synthetic 测试不证明 DeepSeek S14 已执行；capability gate 未通过时禁止返回 token。"
+}

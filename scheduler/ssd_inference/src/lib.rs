@@ -28,6 +28,7 @@ pub mod simd_dot;
 pub mod ggml_ffi;
 pub mod ggml_bridge;
 pub mod streaming_weights;
+pub mod s14_vulkan;
 
 pub use device::VulkanContext;
 pub use buffer::GpuBuffer;

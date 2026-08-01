@@ -1,0 +1,11 @@
+[package]
+name = "polaris_s14_runner"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Capability-gated DeepSeek-V4 Polaris S14 execution graph contract"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

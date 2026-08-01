@@ -1,0 +1,85 @@
+{
+  "format": "polaris-local-s14-capabilities-v1",
+  "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+  "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+  "profile": "s14_top6",
+  "selected_layers": [0, 1, 2, 6, 7, 14, 15, 22, 23, 30, 31, 40, 41, 42],
+  "experts_per_token": 6,
+  "backend": "vulkan",
+  "evidence_kind": "static_audit",
+  "native_forward_ready": false,
+  "capabilities": {
+    "fixed_revision_official_graph": {
+      "status": "missing",
+      "evidence": "official source audited; no Vulkan graph implementation"
+    },
+    "loading_ready_fence_publication": {
+      "status": "passed",
+      "evidence": "ssd_inference::VramPool + ExpertLoader fence publication and pure logic tests"
+    },
+    "verified_route_first_range_provider": {
+      "status": "missing",
+      "evidence": "interface implemented; authoritative Range SHA provider absent"
+    },
+    "native_tokenizer": {
+      "status": "missing",
+      "evidence": "existing tokenizer path targets GGUF/Qwen, not frozen DeepSeek assets"
+    },
+    "native_bf16_embedding_row_lookup": {
+      "status": "missing",
+      "evidence": "contract and 8,192-byte row budget only"
+    },
+    "mhc_four_stream_sinkhorn": {
+      "status": "missing",
+      "evidence": "no hc_split_sinkhorn Vulkan operator"
+    },
+    "fp8_sparse_attention": {
+      "status": "missing",
+      "evidence": "existing shader is FP32 dense GQA attention, not official sparse MLA"
+    },
+    "compressor_ratio4_overlap_state": {
+      "status": "missing",
+      "evidence": "state container implemented; gated pooling operator absent"
+    },
+    "compressor_ratio128_state": {
+      "status": "missing",
+      "evidence": "state container implemented; gated pooling operator absent"
+    },
+    "indexer_fp4_hadamard_top512": {
+      "status": "missing",
+      "evidence": "state container implemented; official index scoring operator absent"
+    },
+    "hash_router_layers_0_to_2": {
+      "status": "missing",
+      "evidence": "Qwen softmax top-k is not tid2eid hash routing"
+    },
+    "score_router_sqrtsoftplus_bias_scale_1_5": {
+      "status": "missing",
+      "evidence": "Qwen softmax/renormalize path has different selection and weights"
+    },
+    "mxfp4_ue8m0_routed_expert": {
+      "status": "missing",
+      "evidence": "L42/E0 ABI sample exists, but no Vulkan numerical parity kernel yet"
+    },
+    "shared_expert_swiglu_limit_10": {
+      "status": "missing",
+      "evidence": "generic SwiGLU exists; official FP8 weights and clamp semantics not integrated"
+    },
+    "native_hc_head_rmsnorm_bf16_lm_head": {
+      "status": "missing",
+      "evidence": "generic RMSNorm exists; official HC head and BF16 full-vocab head absent"
+    },
+    "greedy_full_vocab_argmax": {
+      "status": "passed",
+      "evidence": "runner validates 129,280 logits, rejects NaN, and applies lowest-ID tie break"
+    },
+    "vulkan_official_numerical_parity": {
+      "status": "missing",
+      "evidence": "no official-reference hidden/router/logit parity artifact"
+    },
+    "s14_identity_skip_state_parity": {
+      "status": "missing",
+      "evidence": "identity graph state machine is tested; official skipped-graph parity is absent"
+    }
+  }
+}

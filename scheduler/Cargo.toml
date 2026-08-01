@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["predictor", "expert_cache", "scheduler-core", "moe_scheduler_c", "gguf_reader", "vulkan_xfer", "ssd_inference", "ssd-helper"]
+members = ["predictor", "expert_cache", "scheduler-core", "moe_scheduler_c", "gguf_reader", "vulkan_xfer", "ssd_inference", "ssd-helper", "s14_runner"]
 
 [workspace.package]
 version = "0.1.0"
