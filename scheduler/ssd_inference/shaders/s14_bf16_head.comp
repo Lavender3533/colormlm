@@ -1,0 +1,78 @@
+#version 450
+
+// DeepSeek-V4 / Polaris 原生 BF16 全词表头。
+//
+// 一个 workgroup 处理一个词表行，一个 wave64 共同扫描 hidden。
+// K=1/4/8 的 hidden 在同一次权重扫描中一起计算，避免把
+// 全词表 head 按 token 重复读 K 次。输入 BF16 权重为 little-endian
+// 两个u16打包到一个uint，logits 为 [batch, vocab] F32。
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer HeadWeights {
+    uint packed_bf16[];
+} head;
+
+layout(set = 0, binding = 1, std430) readonly buffer HiddenStates {
+    float values[];
+} hidden;
+
+layout(set = 0, binding = 2, std430) writeonly buffer Logits {
+    float values[];
+} logits;
+
+layout(push_constant) uniform Push {
+    uint vocab;
+    uint hidden_size;
+    uint batch;
+    uint groups_x;
+} pc;
+
+shared float partial[8][64];
+
+float load_bf16(uint scalar_index) {
+    uint word = head.packed_bf16[scalar_index >> 1u];
+    uint bits = ((scalar_index & 1u) == 0u) ? (word & 0xffffu) : (word >> 16u);
+    return uintBitsToFloat(bits << 16u);
+}
+
+void main() {
+    uint row = gl_WorkGroupID.x + gl_WorkGroupID.y * pc.groups_x;
+    if (row >= pc.vocab || pc.batch == 0u || pc.batch > 8u) {
+        return;
+    }
+
+    uint lane = gl_LocalInvocationID.x;
+    float acc[8];
+    for (uint k = 0u; k < 8u; ++k) {
+        acc[k] = 0.0;
+    }
+
+    uint row_base = row * pc.hidden_size;
+    for (uint dim = lane; dim < pc.hidden_size; dim += 64u) {
+        float weight = load_bf16(row_base + dim);
+        for (uint k = 0u; k < pc.batch; ++k) {
+            acc[k] += weight * hidden.values[k * pc.hidden_size + dim];
+        }
+    }
+
+    for (uint k = 0u; k < pc.batch; ++k) {
+        partial[k][lane] = acc[k];
+    }
+    barrier();
+
+    for (uint stride = 32u; stride > 0u; stride >>= 1u) {
+        if (lane < stride) {
+            for (uint k = 0u; k < pc.batch; ++k) {
+                partial[k][lane] += partial[k][lane + stride];
+            }
+        }
+        barrier();
+    }
+
+    if (lane == 0u) {
+        for (uint k = 0u; k < pc.batch; ++k) {
+            logits.values[k * pc.vocab + row] = partial[k][0];
+        }
+    }
+}

@@ -1182,3 +1182,28 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
   达20/50 token/s仍分别至少需要1.2499243x/3.1248109x吞吐提升，并且不能依靠K值本身自动获得。
 - 下一实现断点：position2+与ratio4/128首次压缩边界、forced token队列原子消费、真实
   FullDepth43 K=1算子/权重入口和固定参考逐token对齐。K=1未运行前没有追上Claude/GPT的质量证据。
+
+### 2026-08-02 FullDepth43 完整聊天前缀、可恢复状态与速度拔钉
+
+- 固定revision的`FullDepth43/native-top6`已真实执行官方聊天前缀
+  `<BOS><User>你好<Assistant><think>`：5个position均完成43/43层、每层原生top-6，
+  最终argmax token ID为`3648`，解码为“好的”。完整correctness运行含首次Range下载，
+  总耗时`4218.604s`；这证明新架构真实闭环，不是可交互速度证据。冻结报告SHA-256为
+  `beaebe27d5a295d68bbf7b475841be428eca60504c792ac8d54b189e17f17908`。
+- `DecoderState`已支持无pickle、原子UTF-8 manifest+内容寻址tensor payload的checkpoint/
+  resume；完整保存43层window KV、HC、ratio4/128 compressor、position、ledger与forced
+  cursor，并绑定model/revision/profile/tokenizer/catalog指纹。五token状态约17,869,056字节。
+  旧报告不含原始tensor，不伪造恢复点；下一次实跑必须显式写checkpoint。
+- 同层K=1/4/8的无损联合专家计划器已合入；它保留每个token原始top-6、route slot
+  和权重，并为相同专家构建一次加载、多命中dispatch。当前仅是可接GPU的真实调度结构，
+  不把K次串行写成批处理。
+- FullDepth Vulkan worker已接入默认10GiB（只允8--12GiB）的已验证host-RAM LRU。
+  payload首次按canonical path/字节数/SHA-256完整读取校验，后续返回不可变`Arc<[u8]>`，
+  不再重复读盘与哈希；worker响应已报hit/miss/disk bytes/resident bytes/eviction/hit rate。
+- 真实`1,059,061,760 B` BF16全词表头已在RX 5700 XT上实现并验证同一次权重扫描的
+  K=1/4/8 Vulkan路径。K=1 CPU/GPU argmax一致且最大token logit绝对误差为0；热态中位数
+  分别为`13.8504ms / 41.2493ms / 67.5480ms`，对应head-only等效
+  `72.20 / 96.97 / 118.43 token/s`。这已拔掉原CPU头约0.305s的上限，但不是整模型速度声明。
+- 43层CPU/GPU BF16逐位门当前在fresh survey为39/43 exact；L5/L7/L9/L41各剩1个
+  BF16边界元素，仍在用确定性accumulator/E4M3FN语义收敛。未放宽容差，在43/43通过前
+  不启用无CPU verify的正式提交路径。

@@ -1,0 +1,99 @@
+{
+  "format": "polaris-s14-real-bf16-head-v1",
+  "gpu": "AMD Radeon RX 5700 XT",
+  "head_path": "\\\\?\\D:\\models\\Polaris-S14\\range_cache\\ac7f39b6146436528a1c856bec3e95865f29bca6f4c0d6861fdbe6085192e494.bin",
+  "head_bytes": 1059061760,
+  "head_sha256": "029e3c5293b29cc426e21d87795e15efa4d363f27b2bc4a9e3aef7d79f047919",
+  "upload_wall_ms": 43.2677,
+  "cpu_reference_wall_ms": 51.8126,
+  "cpu_reference_argmax": 106762,
+  "cpu_reference_max_logit": 4.39032,
+  "k1_gpu_cpu_argmax_equal": true,
+  "k1_argmax_logit_abs_error": 0.0,
+  "batches": [
+    {
+      "batch": 1,
+      "warm_iterations": 7,
+      "wall_ms_samples": [
+        13.6663,
+        13.6942,
+        13.708100000000002,
+        13.8504,
+        13.8596,
+        13.9722,
+        14.345699999999999
+      ],
+      "median_wall_ms": 13.8504,
+      "equivalent_head_tokens_per_second": 72.20008086409057,
+      "argmax_token_ids": [
+        106762
+      ],
+      "max_logits": [
+        4.39032
+      ]
+    },
+    {
+      "batch": 4,
+      "warm_iterations": 7,
+      "wall_ms_samples": [
+        41.0627,
+        41.209999999999994,
+        41.2321,
+        41.249300000000005,
+        41.3559,
+        43.700900000000004,
+        43.9638
+      ],
+      "median_wall_ms": 41.249300000000005,
+      "equivalent_head_tokens_per_second": 96.97134254399468,
+      "argmax_token_ids": [
+        106762,
+        24615,
+        23134,
+        122445
+      ],
+      "max_logits": [
+        4.39032,
+        4.003441,
+        3.7364984,
+        4.40534
+      ]
+    },
+    {
+      "batch": 8,
+      "warm_iterations": 7,
+      "wall_ms_samples": [
+        62.3543,
+        64.7992,
+        65.54400000000001,
+        67.548,
+        68.9529,
+        81.6529,
+        86.4888
+      ],
+      "median_wall_ms": 67.548,
+      "equivalent_head_tokens_per_second": 118.4342985728667,
+      "argmax_token_ids": [
+        106762,
+        24615,
+        23134,
+        122445,
+        118235,
+        41439,
+        6701,
+        89243
+      ],
+      "max_logits": [
+        4.39032,
+        4.003441,
+        3.7364984,
+        4.40534,
+        4.5038714,
+        4.028948,
+        3.4845119,
+        3.8528304
+      ]
+    }
+  ],
+  "claim_limit": "Real fixed-revision BF16 full-vocabulary head only; not an end-to-end model token/s or quality claim."
+}
