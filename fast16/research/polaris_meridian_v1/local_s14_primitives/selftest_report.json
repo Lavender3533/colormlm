@@ -1,0 +1,16 @@
+{
+  "format": "polaris-local-s14-primitives-selftest-v1",
+  "ok": true,
+  "checks": {
+    "e2m1_order": true,
+    "ue8m0_known_bits": true,
+    "e4m3_known_bits": true,
+    "hc_finite_column_normalized": true,
+    "sparse_all_padding_stable_zero": true,
+    "invalid_index_rejected": true
+  },
+  "network_accessed": false,
+  "weights_downloaded": false,
+  "evidence_status": "synthetic_reference_semantics_not_native_s14_forward",
+  "claim_limit": "自检只证明小型参考语义，不证明首 token、速度或质量。"
+}

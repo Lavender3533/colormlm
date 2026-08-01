@@ -1,0 +1,83 @@
+{
+  "format": "polaris-local-s14-vulkan-shader-abi-v1",
+  "status": "future_shader_contract_not_an_implemented_vulkan_backend",
+  "endianness": "little",
+  "buffer_layout": "std430 byte offsets; host validates every offset, byte stride and maximum access before dispatch",
+  "alignment": {
+    "range_pack_segment_bytes": 64,
+    "dynamic_ssbo_offset": "max(64, VkPhysicalDeviceLimits.minStorageBufferOffsetAlignment)"
+  },
+  "common_rules": {
+    "matrix_order": "row_major",
+    "offset_units": "bytes",
+    "strides": "bytes",
+    "accumulation": "F32",
+    "invalid_ue8m0": "host rejects raw 0xFF",
+    "oob_status": "shader atomically stores the first failing logical index; it never clamps to another element"
+  },
+  "kernels": {
+    "mxfp4_linear": {
+      "bindings": {
+        "0": "readonly Params",
+        "1": "readonly activation",
+        "2": "readonly packed_weight_u32_words",
+        "3": "readonly ue8m0_weight_scale_u32_words",
+        "4": "writeonly output",
+        "5": "readwrite status"
+      },
+      "logical_shapes": {
+        "activation": "[M,K]",
+        "packed_weight": "[N,K/2] bytes (safetensors header may call it I8)",
+        "weight_scale": "[N,K/32] bytes",
+        "output": "[M,N]"
+      },
+      "packing": "byte i stores E2M1(k=2i) in low nibble and E2M1(k=2i+1) in high nibble",
+      "constraints": ["K>0", "K%128==0", "FP4 group=32", "activation group=128"]
+    },
+    "fp8_linear": {
+      "bindings": {
+        "0": "readonly Params",
+        "1": "readonly activation_e4m3_bytes",
+        "2": "readonly activation_ue8m0_scale_bytes",
+        "3": "readonly weight_e4m3_bytes",
+        "4": "readonly weight_ue8m0_scale_bytes",
+        "5": "writeonly output",
+        "6": "readwrite status"
+      },
+      "logical_shapes": {
+        "activation": "[M,K]",
+        "activation_scale": "[M,ceil(K/128)]",
+        "weight": "[N,K]",
+        "weight_scale": "[ceil(N/128),ceil(K/128)]",
+        "output": "[M,N]"
+      },
+      "e4m3_nan_codes": [127, 255],
+      "tile": [128, 128]
+    },
+    "hc_split_sinkhorn": {
+      "shapes": {
+        "mixes": "[B,T,24]",
+        "scale": "[3]",
+        "base": "[24]",
+        "pre_post": "[B,T,4]",
+        "comb": "[B,T,4,4]"
+      },
+      "iterations": 20,
+      "epsilon": 0.000001,
+      "normalization_order": "stable row softmax + eps, column, then 19 times row then column"
+    },
+    "sparse_attention": {
+      "shapes": {
+        "q": "[B,M,H,D]",
+        "shared_kv": "[B,N,D]",
+        "indices": "[B,M,Ktop] int32",
+        "sink": "[H] F32",
+        "output": "[B,M,H,D]"
+      },
+      "index_rules": "-1 is padding; [0,N) is valid; every other value is rejected; duplicates are counted repeatedly",
+      "sink_semantics": "one virtual zero-value token per head whose logit contributes only to the denominator",
+      "all_padding_extension": "stable reference returns zero; official GPU kernel is not guaranteed for this case"
+    }
+  },
+  "claim_limit": "该 ABI 是未来 Vulkan shader 的 host/device 合同，不代表 shader 已实现或 RX 5700 XT 已获得任何速度。"
+}

@@ -1,0 +1,44 @@
+{
+  "format": "polaris-local-s14-primitives-source-audit-v1",
+  "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+  "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+  "audited_at": "2026-08-01T00:00:00+09:00",
+  "source_files": {
+    "inference/model.py": {
+      "bytes": 45118,
+      "sha256": "c0c19e6c9fa439bac7fbb1c5bc1868232dfd5aa2f439a548d0e33dcc2a9edd3f",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-0731/blob/7872f01b1d1fe23eabc4c98b48bffcef5a386062/inference/model.py"
+    },
+    "inference/kernel.py": {
+      "bytes": 22198,
+      "sha256": "59b325083d7103975cba025bd0d60ea343bb82d8fff53088afb7c04bd380c0c2",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-0731/blob/7872f01b1d1fe23eabc4c98b48bffcef5a386062/inference/kernel.py"
+    },
+    "inference/config.json": {
+      "bytes": 1162,
+      "sha256": "c90861f3d10a9e4ef5954f8f1a34c529d480da1c5799f84660028f4e38e14e71",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-0731/blob/7872f01b1d1fe23eabc4c98b48bffcef5a386062/inference/config.json"
+    }
+  },
+  "semantic_evidence": {
+    "fp4_layout_and_dispatch": ["model.py:114-158", "kernel.py:442-535"],
+    "fp8_quant_and_linear": ["kernel.py:40-125", "kernel.py:203-273"],
+    "sparse_attention": ["model.py:386-538", "kernel.py:277-368"],
+    "hc_split_sinkhorn": ["model.py:652-715", "kernel.py:371-438"]
+  },
+  "frozen_s14": {
+    "layers": [0, 1, 2, 6, 7, 14, 15, 22, 23, 30, 31, 40, 41, 42],
+    "hidden_size": 4096,
+    "hc_streams": 4,
+    "routed_experts": 256,
+    "experts_per_token": 6
+  },
+  "storage_contract": {
+    "expert_weight_header_dtype": "I8 byte container; each byte stores low-nibble even-K E2M1 then high-nibble odd-K E2M1",
+    "expert_scale_dtype": "F8_E8M0",
+    "nonexpert_weight_dtype": "F8_E4M3",
+    "nonexpert_scale_dtype": "F8_E8M0"
+  },
+  "weights_downloaded_by_this_audit": false,
+  "claim_limit": "该审计只冻结官方 Python 数值语义和来源摘要，不证明本地 S14 forward、速度或质量。"
+}
