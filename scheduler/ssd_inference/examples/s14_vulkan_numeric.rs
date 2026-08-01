@@ -50,7 +50,10 @@ const DEFAULT_PAYLOAD_CACHE_GIB: usize = 10;
 const MIN_PAYLOAD_CACHE_GIB: usize = 8;
 const MAX_PAYLOAD_CACHE_GIB: usize = 12;
 const GPU_PAYLOAD_CACHE_GIB_ENV: &str = "POLARIS_GPU_PAYLOAD_CACHE_GIB";
-const DEFAULT_GPU_PAYLOAD_CACHE_GIB: usize = 6;
+// The experimental resident cache regressed the real sequential FullDepth43
+// workload and could OOM at 6 GiB. Production therefore keeps the original
+// per-request upload path unless an operator explicitly opts in with 1-7 GiB.
+const DEFAULT_GPU_PAYLOAD_CACHE_GIB: usize = 0;
 const MIN_GPU_PAYLOAD_CACHE_GIB: usize = 1;
 const MAX_GPU_PAYLOAD_CACHE_GIB: usize = 7;
 const GPU_VRAM_HARD_LIMIT_GIB: usize = 8;
@@ -1038,6 +1041,7 @@ struct WritebackPayloadCacheTelemetry {
 
 #[derive(Debug, Serialize, PartialEq)]
 struct WritebackGpuPayloadCacheTelemetry {
+    enabled: bool,
     capacity_bytes: u64,
     entries: usize,
     current_bytes: u64,
@@ -1054,6 +1058,25 @@ struct WritebackGpuPayloadCacheTelemetry {
 }
 
 impl WritebackGpuPayloadCacheTelemetry {
+    fn disabled() -> Self {
+        Self {
+            enabled: false,
+            capacity_bytes: 0,
+            entries: 0,
+            current_bytes: 0,
+            peak_bytes: 0,
+            request_hits: 0,
+            request_misses: 0,
+            request_uploaded_bytes: 0,
+            total_hits: 0,
+            total_misses: 0,
+            total_evictions: 0,
+            total_uploaded_bytes: 0,
+            total_hit_rate: 0.0,
+            strict_sha_identity: true,
+        }
+    }
+
     fn between(
         cache: &GpuPayloadCache,
         before: GpuPayloadCacheStats,
@@ -1064,6 +1087,7 @@ impl WritebackGpuPayloadCacheTelemetry {
             .checked_add(after.misses)
             .ok_or_else(|| anyhow::anyhow!("GPU payload cache request total overflow"))?;
         Ok(Self {
+            enabled: true,
             capacity_bytes: cache.capacity_bytes(),
             entries: cache.len(),
             current_bytes: after.current_bytes,
@@ -1325,7 +1349,9 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
     let payload_cache_capacity = payload_cache_capacity_bytes()?;
     let mut payload_cache = VerifiedPayloadCache::new(payload_cache_capacity)?;
     let gpu_payload_cache_capacity = gpu_payload_cache_capacity_bytes()?;
-    let mut gpu_payload_cache = GpuPayloadCache::new(gpu_payload_cache_capacity)?;
+    let mut gpu_payload_cache = gpu_payload_cache_capacity
+        .map(GpuPayloadCache::new)
+        .transpose()?;
     let mut stdout = std::io::stdout().lock();
     serde_json::to_writer(
         &mut stdout,
@@ -1340,8 +1366,8 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
             "official_boundary_graph": true,
             "verified_payload_cache": true,
             "payload_cache_capacity_bytes": payload_cache_capacity,
-            "gpu_payload_cache": true,
-            "gpu_payload_cache_capacity_bytes": gpu_payload_cache_capacity,
+            "gpu_payload_cache": gpu_payload_cache.is_some(),
+            "gpu_payload_cache_capacity_bytes": gpu_payload_cache_capacity.unwrap_or(0),
             "gpu_vram_hard_limit_bytes": GPU_VRAM_HARD_LIMIT_GIB as u64 * 1024 * 1024 * 1024,
             "gpu_payload_identity": "tensor+bytes+sha256",
             "numeric_mode": numeric_mode,
@@ -1374,7 +1400,9 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
                 )?;
                 stdout.write_all(b"\n")?;
                 stdout.flush()?;
-                gpu_payload_cache.destroy(&ctx);
+                if let Some(cache) = gpu_payload_cache.as_mut() {
+                    cache.destroy(&ctx);
+                }
                 pipelines.destroy(&ctx);
                 bail!("writeback worker poisoned by invalid request");
             }
@@ -1400,7 +1428,9 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
             )?;
             stdout.write_all(b"\n")?;
             stdout.flush()?;
-            gpu_payload_cache.destroy(&ctx);
+            if let Some(cache) = gpu_payload_cache.as_mut() {
+                cache.destroy(&ctx);
+            }
             pipelines.destroy(&ctx);
             bail!("writeback worker poisoned by contract drift");
         }
@@ -1433,13 +1463,17 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
                 )?;
                 stdout.write_all(b"\n")?;
                 stdout.flush()?;
-                gpu_payload_cache.destroy(&ctx);
+                if let Some(cache) = gpu_payload_cache.as_mut() {
+                    cache.destroy(&ctx);
+                }
                 pipelines.destroy(&ctx);
                 return Err(error.context("writeback worker poisoned"));
             }
         }
     }
-    gpu_payload_cache.destroy(&ctx);
+    if let Some(cache) = gpu_payload_cache.as_mut() {
+        cache.destroy(&ctx);
+    }
     pipelines.destroy(&ctx);
     Ok(())
 }
@@ -1450,12 +1484,12 @@ fn execute_writeback_request(
     timestamp_bits: u32,
     timestamp_period_ns: f64,
     payload_cache: &mut VerifiedPayloadCache,
-    gpu_payload_cache: &mut GpuPayloadCache,
+    gpu_payload_cache: &mut Option<GpuPayloadCache>,
     request: WritebackRequest,
 ) -> Result<WritebackResponse> {
     let started = Instant::now();
     let cache_before = payload_cache.stats();
-    let gpu_cache_before = gpu_payload_cache.stats();
+    let gpu_cache_before = gpu_payload_cache.as_ref().map(GpuPayloadCache::stats);
     let manifest_path = request
         .manifest
         .canonicalize()
@@ -1520,7 +1554,7 @@ fn execute_writeback_request(
         &input,
         &routed,
         &shared,
-        gpu_payload_cache,
+        gpu_payload_cache.as_mut(),
         diagnostic_dir.is_some(),
     )?;
     if let (Some(root), Some(diagnostics)) = (diagnostic_dir, result.diagnostics.as_ref()) {
@@ -1589,12 +1623,13 @@ fn execute_writeback_request(
     let cache_after = payload_cache.stats();
     let payload_cache_telemetry =
         WritebackPayloadCacheTelemetry::between(payload_cache, cache_before, cache_after)?;
-    let gpu_cache_after = gpu_payload_cache.stats();
-    let gpu_payload_cache_telemetry = WritebackGpuPayloadCacheTelemetry::between(
-        gpu_payload_cache,
-        gpu_cache_before,
-        gpu_cache_after,
-    )?;
+    let gpu_payload_cache_telemetry = match (gpu_payload_cache.as_ref(), gpu_cache_before) {
+        (Some(cache), Some(before)) => {
+            WritebackGpuPayloadCacheTelemetry::between(cache, before, cache.stats())?
+        }
+        (None, None) => WritebackGpuPayloadCacheTelemetry::disabled(),
+        _ => bail!("GPU payload cache enablement changed within one request"),
+    };
     Ok(WritebackResponse {
         protocol: WRITEBACK_PROTOCOL,
         request_id: request.request_id,
@@ -1644,7 +1679,7 @@ fn payload_cache_capacity_bytes() -> Result<usize> {
         .ok_or_else(|| anyhow::anyhow!("verified payload cache byte capacity overflow"))
 }
 
-fn gpu_payload_cache_capacity_bytes() -> Result<u64> {
+fn gpu_payload_cache_capacity_bytes() -> Result<Option<u64>> {
     let gib = match std::env::var(GPU_PAYLOAD_CACHE_GIB_ENV) {
         Ok(value) => value
             .parse::<usize>()
@@ -1652,14 +1687,18 @@ fn gpu_payload_cache_capacity_bytes() -> Result<u64> {
         Err(std::env::VarError::NotPresent) => DEFAULT_GPU_PAYLOAD_CACHE_GIB,
         Err(error) => return Err(error).context(GPU_PAYLOAD_CACHE_GIB_ENV),
     };
+    if gib == 0 {
+        return Ok(None);
+    }
     if !(MIN_GPU_PAYLOAD_CACHE_GIB..=MAX_GPU_PAYLOAD_CACHE_GIB).contains(&gib) {
         bail!(
             "{GPU_PAYLOAD_CACHE_GIB_ENV} must be between {MIN_GPU_PAYLOAD_CACHE_GIB} and {MAX_GPU_PAYLOAD_CACHE_GIB} GiB; one GiB remains reserved under the 8 GiB VRAM hard limit"
         );
     }
-    (gib as u64)
+    let bytes = (gib as u64)
         .checked_mul(1024 * 1024 * 1024)
-        .ok_or_else(|| anyhow::anyhow!("GPU payload cache byte capacity overflow"))
+        .ok_or_else(|| anyhow::anyhow!("GPU payload cache byte capacity overflow"))?;
+    Ok(Some(bytes))
 }
 
 fn validate_writeback_manifest(manifest: &FullDepthBridgeManifest) -> Result<()> {
@@ -1717,6 +1756,42 @@ fn f32_to_bf16_bits(value: f32) -> u16 {
 }
 
 fn run_official_top6_shared_moe_batch(
+    ctx: &VulkanContext,
+    pipelines: &S14NumericPipelines,
+    timestamp_bits: u32,
+    timestamp_period_ns: f64,
+    x: &[f32],
+    routed: &[MoePayload],
+    shared: &MoePayload,
+    gpu_payload_cache: Option<&mut GpuPayloadCache>,
+    capture_shared_diagnostics: bool,
+) -> Result<OfficialMoeResult> {
+    match gpu_payload_cache {
+        Some(cache) => run_official_top6_shared_moe_batch_cached(
+            ctx,
+            pipelines,
+            timestamp_bits,
+            timestamp_period_ns,
+            x,
+            routed,
+            shared,
+            cache,
+            capture_shared_diagnostics,
+        ),
+        None => run_official_top6_shared_moe_batch_uncached(
+            ctx,
+            pipelines,
+            timestamp_bits,
+            timestamp_period_ns,
+            x,
+            routed,
+            shared,
+            capture_shared_diagnostics,
+        ),
+    }
+}
+
+fn run_official_top6_shared_moe_batch_cached(
     ctx: &VulkanContext,
     pipelines: &S14NumericPipelines,
     timestamp_bits: u32,
@@ -1864,7 +1939,199 @@ fn run_official_top6_shared_moe_batch(
     let gpu_kernel_ms = record_official_moe_once(
         ctx,
         pipelines,
-        &buffers,
+        &buffers.accumulator,
+        &buffers.readback,
+        timestamp_bits,
+        timestamp_period_ns,
+        &routed_dispatches,
+        &shared_dispatch,
+    )?;
+    let output = buffers.output();
+    if output.iter().any(|value| !value.is_finite()) {
+        bail!("official Vulkan MoE output contains non-finite values");
+    }
+    let branch_bf16 = output.iter().copied().map(f32_to_bf16_bits).collect();
+    let diagnostics = if capture_shared_diagnostics {
+        let shared = ExpertDiagnostics {
+            expert_id: None,
+            gate: read_device_f32(ctx, &buffers.gate, &buffers.readback, 2048)?,
+            up: read_device_f32(ctx, &buffers.up, &buffers.readback, 2048)?,
+            hidden: read_device_f32(ctx, &buffers.hidden, &buffers.readback, 2048)?,
+            down: read_device_f32(ctx, &buffers.down, &buffers.readback, 4096)?,
+        };
+        let mut routed_diagnostics = Vec::with_capacity(routed_dispatches.len());
+        for (dispatch, payload) in routed_dispatches.iter().zip(routed) {
+            record_routed_diagnostic_once(ctx, pipelines, dispatch)?;
+            routed_diagnostics.push(ExpertDiagnostics {
+                expert_id: payload.expert_id,
+                gate: read_device_f32(ctx, &buffers.gate, &buffers.readback, 2048)?,
+                up: read_device_f32(ctx, &buffers.up, &buffers.readback, 2048)?,
+                hidden: read_device_f32(ctx, &buffers.hidden, &buffers.readback, 2048)?,
+                down: read_device_f32(ctx, &buffers.down, &buffers.readback, 4096)?,
+            });
+        }
+        Some(OfficialMoeDiagnostics {
+            routed: routed_diagnostics,
+            shared,
+            accumulator: output,
+        })
+    } else {
+        None
+    };
+
+    shared_dispatch.accumulate.binder.destroy(ctx);
+    shared_dispatch.w2.binder.destroy(ctx);
+    shared_dispatch.prepare.binder.destroy(ctx);
+    shared_dispatch.w3.binder.destroy(ctx);
+    shared_dispatch.w1.binder.destroy(ctx);
+    for dispatch in routed_dispatches.into_iter().rev() {
+        dispatch.accumulate.binder.destroy(ctx);
+        dispatch.w2.binder.destroy(ctx);
+        dispatch.prepare.binder.destroy(ctx);
+        dispatch.w3.binder.destroy(ctx);
+        dispatch.w1.binder.destroy(ctx);
+    }
+    buffers.destroy(ctx);
+    Ok(OfficialMoeResult {
+        branch_bf16,
+        gpu_kernel_ms,
+        diagnostics,
+    })
+}
+
+fn run_official_top6_shared_moe_batch_uncached(
+    ctx: &VulkanContext,
+    pipelines: &S14NumericPipelines,
+    timestamp_bits: u32,
+    timestamp_period_ns: f64,
+    x: &[f32],
+    routed: &[MoePayload],
+    shared: &MoePayload,
+    capture_shared_diagnostics: bool,
+) -> Result<OfficialMoeResult> {
+    if x.len() != 4096 || routed.len() != 6 || shared.expert_id.is_some() {
+        bail!("official FullDepth43 MoE shape/route contract drift");
+    }
+    let up_shape = S14MatvecShape::new(2048, 4096)?.validate_mxfp4()?;
+    let down_shape = S14MatvecShape::new(4096, 2048)?.validate_mxfp4()?;
+    let shared_up_shape = S14MatvecShape::new(2048, 4096)?.validate_fp8()?;
+    let shared_down_shape = S14MatvecShape::new(4096, 2048)?.validate_fp8()?;
+    for payload in routed {
+        if payload.expert_id.is_none()
+            || !payload.mix_weight.is_finite()
+            || payload.mix_weight < 0.0
+        {
+            bail!("official routed payload contract drift");
+        }
+        for scale in [&payload.s1, &payload.s3, &payload.s2] {
+            validate_ue8m0_codes(scale)?;
+        }
+    }
+    for weight in [&shared.w1, &shared.w3, &shared.w2] {
+        validate_e4m3fn_codes(weight)?;
+    }
+    for scale in [&shared.s1, &shared.s3, &shared.s2] {
+        validate_ue8m0_codes(scale)?;
+    }
+
+    // This is the production default. It is deliberately the original
+    // request-scoped allocation/upload/destroy path: no payload survives into
+    // the next layer request and therefore no resident-cache OOM is possible.
+    let buffers = MoeBatchBuffers::new(ctx, x, routed, shared)?;
+    buffers.upload(ctx)?;
+    let routed_dispatches = buffers
+        .routed
+        .iter()
+        .zip(routed)
+        .map(|(weights, payload)| {
+            Ok(RoutedOfficialDispatch {
+                w1: pipelines.bind_mxfp4(
+                    ctx,
+                    up_shape,
+                    &buffers.x.device,
+                    &weights.w1.device,
+                    &weights.s1.device,
+                    &buffers.gate,
+                )?,
+                w3: pipelines.bind_mxfp4(
+                    ctx,
+                    up_shape,
+                    &buffers.x.device,
+                    &weights.w3.device,
+                    &weights.s3.device,
+                    &buffers.up,
+                )?,
+                prepare: pipelines.bind_official_expert_prepare(
+                    ctx,
+                    2048,
+                    payload.mix_weight,
+                    &buffers.gate,
+                    &buffers.up,
+                    &buffers.hidden,
+                )?,
+                w2: pipelines.bind_mxfp4(
+                    ctx,
+                    down_shape,
+                    &buffers.hidden,
+                    &weights.w2.device,
+                    &weights.s2.device,
+                    &buffers.down,
+                )?,
+                accumulate: pipelines.bind_bf16_accumulate(
+                    ctx,
+                    4096,
+                    &buffers.down,
+                    &buffers.accumulator,
+                )?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let shared_dispatch = SharedOfficialDispatch {
+        w1: pipelines.bind_fp8(
+            ctx,
+            shared_up_shape,
+            &buffers.x.device,
+            &buffers.shared.w1.device,
+            &buffers.shared.s1.device,
+            &buffers.gate,
+        )?,
+        w3: pipelines.bind_fp8(
+            ctx,
+            shared_up_shape,
+            &buffers.x.device,
+            &buffers.shared.w3.device,
+            &buffers.shared.s3.device,
+            &buffers.up,
+        )?,
+        prepare: pipelines.bind_official_expert_prepare(
+            ctx,
+            2048,
+            1.0,
+            &buffers.gate,
+            &buffers.up,
+            &buffers.hidden,
+        )?,
+        w2: pipelines.bind_fp8(
+            ctx,
+            shared_down_shape,
+            &buffers.hidden,
+            &buffers.shared.w2.device,
+            &buffers.shared.s2.device,
+            &buffers.down,
+        )?,
+        accumulate: pipelines.bind_bf16_accumulate(
+            ctx,
+            4096,
+            &buffers.down,
+            &buffers.accumulator,
+        )?,
+    };
+
+    let gpu_kernel_ms = record_official_moe_once(
+        ctx,
+        pipelines,
+        &buffers.accumulator,
+        &buffers.readback,
         timestamp_bits,
         timestamp_period_ns,
         &routed_dispatches,
@@ -2012,7 +2279,8 @@ fn read_device_f32(
 fn record_official_moe_once(
     ctx: &VulkanContext,
     pipelines: &S14NumericPipelines,
-    buffers: &OfficialMoeWorkspace,
+    accumulator: &GpuBuffer,
+    readback: &GpuBuffer,
     timestamp_bits: u32,
     timestamp_period_ns: f64,
     routed: &[RoutedOfficialDispatch],
@@ -2037,7 +2305,7 @@ fn record_official_moe_once(
             .cmd_write_timestamp(cb, vk::PipelineStageFlags::TOP_OF_PIPE, queries, 0);
         ctx.device.cmd_fill_buffer(
             cb,
-            buffers.accumulator.handle(),
+            accumulator.handle(),
             0,
             4096 * std::mem::size_of::<f32>() as u64,
             0,
@@ -2154,8 +2422,8 @@ fn record_official_moe_once(
         copy(
             ctx,
             cb,
-            &buffers.accumulator,
-            &buffers.readback,
+            accumulator,
+            readback,
             4096 * std::mem::size_of::<f32>() as u64,
         );
         ctx.device.end_command_buffer(cb)?;
@@ -4049,6 +4317,16 @@ mod writeback_payload_cache_tests {
         assert!(GpuPayloadCache::new(8 * gib).is_ok());
         assert!(GpuPayloadCache::new(8 * gib + 1).is_err());
         assert!(GpuPayloadCache::new(0).is_err());
+    }
+
+    #[test]
+    fn gpu_payload_cache_is_disabled_by_default() {
+        assert_eq!(DEFAULT_GPU_PAYLOAD_CACHE_GIB, 0);
+        let telemetry = WritebackGpuPayloadCacheTelemetry::disabled();
+        assert!(!telemetry.enabled);
+        assert_eq!(telemetry.capacity_bytes, 0);
+        assert_eq!(telemetry.entries, 0);
+        assert_eq!(telemetry.total_uploaded_bytes, 0);
     }
 
     #[test]
