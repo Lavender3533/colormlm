@@ -1,0 +1,38 @@
+{
+  "format": "polaris-fulldepth43-vulkan-writeback-evidence-v1",
+  "status": "exact_bf16_single_layer_writeback_verified",
+  "source_capture": "scheduler/ssd_inference/evidence/fulldepth43_vulkan_bridge_capture",
+  "source_manifest_sha256": "c3b95b4264451ae6309fabb55b5160d1005d4abe45fc978d78fa2e0da27c372a",
+  "worker": {
+    "protocol": "polaris-fulldepth43-vulkan-writeback-v1",
+    "device": "AMD Radeon RX 5700 XT",
+    "manifest_sha256": "c3b95b4264451ae6309fabb55b5160d1005d4abe45fc978d78fa2e0da27c372a",
+    "output_sha256": "3fa91748b8f797285de2dba37be808d7b1219b6b8feebe38b2f7810f97b8cb2d",
+    "gpu_kernel_ms": 1.72968,
+    "worker_wall_ms": 171.73,
+    "boundaries": [
+      "w1_w3_output_round_to_bf16",
+      "limited_swiglu_f32",
+      "route_weight_before_w2_then_bf16",
+      "e4m3fn_group128_activation_requantize",
+      "w2_output_round_to_bf16_then_fp32_accumulate"
+    ],
+    "persistent_context": true
+  },
+  "cpu_reference": {
+    "semantics": "official Python FullDepth Expert.forward boundaries",
+    "elapsed_seconds": 1.7150263000003179,
+    "output_f32_le_sha256": "78078068c5e5a2e21141b6d459d8c26dfe209fb3d6f2ee36e6111f81280bf868"
+  },
+  "vulkan_output_f32_le_sha256": "78078068c5e5a2e21141b6d459d8c26dfe209fb3d6f2ee36e6111f81280bf868",
+  "comparison": {
+    "exact_bf16_equal": true,
+    "element_count": 4096,
+    "max_abs": 0.0,
+    "rmse": 0.0
+  },
+  "execution_seconds": 2.3027565000011236,
+  "state_transition": "executor accepts this branch only after exact BF16 equality, then feeds the Vulkan tensor itself into hc_post; mismatch poisons the worker and blocks token commit",
+  "expansion_status": "single_real_layer_writeback_only",
+  "claim_limit": "Proves one real FullDepth43 L42 MoE branch writeback. Does not prove all 43 layers on GPU, a complete GPU token, token/s, Kimi capability, or quality."
+}

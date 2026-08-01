@@ -17,10 +17,11 @@ use sha2::{Digest, Sha256};
 use ssd_inference::buffer::GpuBuffer;
 use ssd_inference::device::VulkanContext;
 use ssd_inference::s14_vulkan::{
-    validate_e4m3fn_codes, validate_ue8m0_codes, S14Fp8Dispatch, S14MatvecShape,
-    S14MoeAccumulateDispatch, S14Mxfp4Dispatch, S14NumericPipelines, S14RouteMixDispatch,
-    S14SwigluLimitDispatch,
+    validate_e4m3fn_codes, validate_ue8m0_codes, S14Bf16AccumulateDispatch, S14Fp8Dispatch,
+    S14MatvecShape, S14MoeAccumulateDispatch, S14Mxfp4Dispatch, S14NumericPipelines,
+    S14OfficialExpertPrepareDispatch, S14RouteMixDispatch, S14SwigluLimitDispatch,
 };
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -37,6 +38,9 @@ const NAVI10_DEVICE_ID: u32 = 0x731f;
 const ITERATIONS: u32 = 100;
 const MOE_BATCH_ITERATIONS: u32 = 1;
 const FULLDEPTH_BRIDGE_ITERATIONS: u32 = 20;
+const WRITEBACK_WORKER_ARG: &str = "--fulldepth43-writeback-worker";
+const WRITEBACK_PROTOCOL: &str = "polaris-fulldepth43-vulkan-writeback-v1";
+const WRITEBACK_OUTPUT_FILE: &str = "vulkan_moe_branch.bf16le.bin";
 
 struct DeviceBuffers {
     upload_x: GpuBuffer,
@@ -492,6 +496,22 @@ struct SharedMoeDispatch {
     accumulate: S14MoeAccumulateDispatch,
 }
 
+struct RoutedOfficialDispatch {
+    w1: S14Mxfp4Dispatch,
+    w3: S14Mxfp4Dispatch,
+    prepare: S14OfficialExpertPrepareDispatch,
+    w2: S14Mxfp4Dispatch,
+    accumulate: S14Bf16AccumulateDispatch,
+}
+
+struct SharedOfficialDispatch {
+    w1: S14Fp8Dispatch,
+    w3: S14Fp8Dispatch,
+    prepare: S14OfficialExpertPrepareDispatch,
+    w2: S14Fp8Dispatch,
+    accumulate: S14Bf16AccumulateDispatch,
+}
+
 #[derive(Serialize)]
 struct Timing {
     iterations: u32,
@@ -625,6 +645,56 @@ struct MoeBatchTolerance {
     passed: bool,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WritebackRequest {
+    protocol: String,
+    op: String,
+    request_id: String,
+    manifest: PathBuf,
+}
+
+#[derive(Serialize)]
+struct WritebackOutput {
+    path: PathBuf,
+    dtype: &'static str,
+    shape: [usize; 3],
+    bytes: usize,
+    sha256: String,
+}
+
+#[derive(Serialize)]
+struct WritebackResponse {
+    protocol: &'static str,
+    request_id: String,
+    ok: bool,
+    device: String,
+    manifest_sha256: String,
+    layer: u32,
+    position: u32,
+    input_token_id: u32,
+    output: WritebackOutput,
+    gpu_kernel_ms: f64,
+    wall_ms: f64,
+    boundaries: [&'static str; 5],
+    expansion_status: &'static str,
+    claim_limit: &'static str,
+}
+
+#[derive(Serialize)]
+struct WritebackError<'a> {
+    protocol: &'static str,
+    request_id: &'a str,
+    ok: bool,
+    error: String,
+    poisoned: bool,
+}
+
+struct OfficialMoeResult {
+    branch_bf16: Vec<u16>,
+    gpu_kernel_ms: f64,
+}
+
 #[derive(Serialize)]
 struct FullDepthBridgeDeviceEvidence {
     name: String,
@@ -683,6 +753,9 @@ struct S14Manifest {
 }
 
 fn main() -> Result<()> {
+    if std::env::args().any(|value| value == WRITEBACK_WORKER_ARG) {
+        return run_fulldepth_writeback_worker();
+    }
     if let Some(path) = std::env::var_os(FULLDEPTH_BRIDGE_DIR_ENV) {
         return run_fulldepth_bridge(PathBuf::from(path));
     }
@@ -752,6 +825,640 @@ fn main() -> Result<()> {
         "claim: real L42 packed-matvec and minimal GPU-resident top-6 routed + shared MoE batch parity; no full official expert/layer, token/s, or full S14 forward claim"
     );
     Ok(())
+}
+
+fn run_fulldepth_writeback_worker() -> Result<()> {
+    let ctx = VulkanContext::init()?;
+    let properties = unsafe { ctx.instance.get_physical_device_properties(ctx.physical) };
+    if properties.vendor_id != AMD_VENDOR_ID || properties.device_id != NAVI10_DEVICE_ID {
+        bail!(
+            "FullDepth43 writeback worker requires RX 5700 XT; found 0x{:04x}:0x{:04x} ({})",
+            properties.vendor_id,
+            properties.device_id,
+            ctx.gpu_name
+        );
+    }
+    let queue_properties = unsafe {
+        ctx.instance
+            .get_physical_device_queue_family_properties(ctx.physical)
+    };
+    let timestamp_bits = queue_properties[ctx.qf_graphics as usize].timestamp_valid_bits;
+    if timestamp_bits == 0 {
+        bail!("FullDepth43 writeback worker requires timestamp queries");
+    }
+    let timestamp_period_ns = properties.limits.timestamp_period as f64;
+    let pipelines = S14NumericPipelines::new(&ctx)?;
+    let mut stdout = std::io::stdout().lock();
+    serde_json::to_writer(
+        &mut stdout,
+        &serde_json::json!({
+            "protocol": WRITEBACK_PROTOCOL,
+            "op": "hello",
+            "ready": true,
+            "device": ctx.gpu_name,
+            "vendor_id": format!("0x{:04x}", properties.vendor_id),
+            "device_id": format!("0x{:04x}", properties.device_id),
+            "persistent_context": true,
+            "official_boundary_graph": true,
+        }),
+    )?;
+    stdout.write_all(b"\n")?;
+    stdout.flush()?;
+
+    let stdin = std::io::stdin();
+    for line in BufReader::new(stdin.lock()).lines() {
+        let line = line?;
+        if line.len() > 65_536 {
+            bail!("writeback request exceeds 64 KiB");
+        }
+        let parsed: Result<WritebackRequest> =
+            serde_json::from_str(&line).context("parse writeback JSON request");
+        let request = match parsed {
+            Ok(value) => value,
+            Err(error) => {
+                serde_json::to_writer(
+                    &mut stdout,
+                    &WritebackError {
+                        protocol: WRITEBACK_PROTOCOL,
+                        request_id: "unknown",
+                        ok: false,
+                        error: format!("{error:#}"),
+                        poisoned: true,
+                    },
+                )?;
+                stdout.write_all(b"\n")?;
+                stdout.flush()?;
+                pipelines.destroy(&ctx);
+                bail!("writeback worker poisoned by invalid request");
+            }
+        };
+        if request.protocol != WRITEBACK_PROTOCOL
+            || request.op != "execute_single_layer"
+            || request.request_id.is_empty()
+            || request.request_id.len() > 128
+            || !request
+                .request_id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+        {
+            serde_json::to_writer(
+                &mut stdout,
+                &WritebackError {
+                    protocol: WRITEBACK_PROTOCOL,
+                    request_id: &request.request_id,
+                    ok: false,
+                    error: "writeback request contract drift".to_string(),
+                    poisoned: true,
+                },
+            )?;
+            stdout.write_all(b"\n")?;
+            stdout.flush()?;
+            pipelines.destroy(&ctx);
+            bail!("writeback worker poisoned by contract drift");
+        }
+
+        let request_id = request.request_id.clone();
+        match execute_writeback_request(
+            &ctx,
+            &pipelines,
+            timestamp_bits,
+            timestamp_period_ns,
+            request,
+        ) {
+            Ok(response) => {
+                serde_json::to_writer(&mut stdout, &response)?;
+                stdout.write_all(b"\n")?;
+                stdout.flush()?;
+            }
+            Err(error) => {
+                serde_json::to_writer(
+                    &mut stdout,
+                    &WritebackError {
+                        protocol: WRITEBACK_PROTOCOL,
+                        request_id: &request_id,
+                        ok: false,
+                        error: format!("{error:#}"),
+                        poisoned: true,
+                    },
+                )?;
+                stdout.write_all(b"\n")?;
+                stdout.flush()?;
+                pipelines.destroy(&ctx);
+                return Err(error.context("writeback worker poisoned"));
+            }
+        }
+    }
+    pipelines.destroy(&ctx);
+    Ok(())
+}
+
+fn execute_writeback_request(
+    ctx: &VulkanContext,
+    pipelines: &S14NumericPipelines,
+    timestamp_bits: u32,
+    timestamp_period_ns: f64,
+    request: WritebackRequest,
+) -> Result<WritebackResponse> {
+    let started = Instant::now();
+    let manifest_path = request
+        .manifest
+        .canonicalize()
+        .with_context(|| format!("resolve writeback manifest {}", request.manifest.display()))?;
+    if manifest_path.file_name().and_then(|value| value.to_str()) != Some("bridge_manifest.json") {
+        bail!("writeback manifest filename drift");
+    }
+    let capture_root = manifest_path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("writeback manifest has no parent"))?
+        .canonicalize()?;
+    let manifest_bytes = std::fs::read(&manifest_path)?;
+    let manifest_sha256 = sha256_bytes(&manifest_bytes);
+    let manifest: FullDepthBridgeManifest =
+        serde_json::from_slice(&manifest_bytes).context("parse FullDepth43 writeback manifest")?;
+    validate_writeback_manifest(&manifest)?;
+    let input = load_fulldepth_bridge_input(&manifest, &capture_root)?;
+    let routed = manifest
+        .expert_ids
+        .iter()
+        .zip(&manifest.route_weights)
+        .map(|(&expert_id, &mix_weight)| {
+            let (w1, s1) = load_fulldepth_bridge_pair(&manifest, expert_id, "w1")?;
+            let (w3, s3) = load_fulldepth_bridge_pair(&manifest, expert_id, "w3")?;
+            let (w2, s2) = load_fulldepth_bridge_pair(&manifest, expert_id, "w2")?;
+            Ok(MoePayload {
+                expert_id: Some(expert_id),
+                mix_weight,
+                w1,
+                s1,
+                w3,
+                s3,
+                w2,
+                s2,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let (w1, s1) = load_fulldepth_bridge_shared_pair(&manifest, "w1")?;
+    let (w3, s3) = load_fulldepth_bridge_shared_pair(&manifest, "w3")?;
+    let (w2, s2) = load_fulldepth_bridge_shared_pair(&manifest, "w2")?;
+    let shared = MoePayload {
+        expert_id: None,
+        mix_weight: 1.0,
+        w1,
+        s1,
+        w3,
+        s3,
+        w2,
+        s2,
+    };
+    let result = run_official_top6_shared_moe_batch(
+        ctx,
+        pipelines,
+        timestamp_bits,
+        timestamp_period_ns,
+        &input,
+        &routed,
+        &shared,
+    )?;
+    let mut output_bytes = Vec::with_capacity(result.branch_bf16.len() * 2);
+    for value in result.branch_bf16 {
+        output_bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    if output_bytes.len() != 4096 * 2 {
+        bail!("writeback BF16 output byte count drift");
+    }
+    let output_path = capture_root.join(WRITEBACK_OUTPUT_FILE);
+    if output_path.exists() {
+        bail!("refuse to overwrite existing writeback output");
+    }
+    let temporary = capture_root.join(format!("{WRITEBACK_OUTPUT_FILE}.tmp"));
+    if temporary.exists() {
+        bail!("stale writeback temporary output exists");
+    }
+    {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
+        file.write_all(&output_bytes)?;
+        file.sync_all()?;
+    }
+    std::fs::rename(&temporary, &output_path)?;
+    let output_path = output_path.canonicalize()?;
+    if !output_path.starts_with(&capture_root) {
+        bail!("writeback output escaped capture directory");
+    }
+    Ok(WritebackResponse {
+        protocol: WRITEBACK_PROTOCOL,
+        request_id: request.request_id,
+        ok: true,
+        device: ctx.gpu_name.clone(),
+        manifest_sha256,
+        layer: manifest.layer,
+        position: manifest.position,
+        input_token_id: manifest.input_token_id,
+        output: WritebackOutput {
+            path: output_path,
+            dtype: "bf16_le",
+            shape: [1, 1, 4096],
+            bytes: output_bytes.len(),
+            sha256: sha256_bytes(&output_bytes),
+        },
+        gpu_kernel_ms: result.gpu_kernel_ms,
+        wall_ms: started.elapsed().as_secs_f64() * 1000.0,
+        boundaries: [
+            "w1_w3_output_round_to_bf16",
+            "limited_swiglu_f32",
+            "route_weight_before_w2_then_bf16",
+            "e4m3fn_group128_activation_requantize",
+            "w2_output_round_to_bf16_then_fp32_accumulate",
+        ],
+        expansion_status: "single_real_layer_writeback_only",
+        claim_limit: "One FullDepth43 MoE branch computed by the official-boundary Vulkan graph; no full-layer, full-token, speed, or quality claim.",
+    })
+}
+
+fn validate_writeback_manifest(manifest: &FullDepthBridgeManifest) -> Result<()> {
+    let expected_prefix: Vec<u32> = (0..manifest.layer).collect();
+    if manifest.format != "polaris-fulldepth43-vulkan-bridge-capture-v1"
+        || manifest.revision != REVISION
+        || manifest.profile != "fulldepth43_native_top6"
+        || manifest.layer > 42
+        || manifest.position != 0
+        || manifest.completed_layers_before_capture != expected_prefix
+        || manifest.route_source.is_empty()
+        || manifest.expert_ids.len() != 6
+        || manifest.route_weights.len() != 6
+        || manifest.payload_count != 42
+        || manifest.payloads.len() != 42
+        || manifest.input.name != "ffn_input_activation_quant"
+        || manifest.input.shape != [1, 1, 4096]
+        || manifest.input.bytes != 4096 * std::mem::size_of::<f32>()
+        || manifest.source_ffn_input_f32_le_sha256.len() != 64
+    {
+        bail!("FullDepth43 writeback manifest contract drift");
+    }
+    let mut unique_experts = manifest.expert_ids.clone();
+    unique_experts.sort_unstable();
+    unique_experts.dedup();
+    if unique_experts.len() != 6
+        || manifest
+            .route_weights
+            .iter()
+            .any(|weight| !weight.is_finite() || *weight < 0.0)
+        || (manifest.route_weights.iter().sum::<f32>() - 1.5).abs() > 2.0e-6
+        || (manifest.route_weight_sum - 1.5).abs() > 2.0e-6
+    {
+        bail!("FullDepth43 writeback route is not a valid native top-6");
+    }
+    let observed_payload_bytes = manifest
+        .payloads
+        .iter()
+        .try_fold(0u64, |total, payload| total.checked_add(payload.bytes))
+        .ok_or_else(|| anyhow::anyhow!("FullDepth43 writeback payload byte overflow"))?;
+    if observed_payload_bytes != manifest.payload_bytes {
+        bail!("FullDepth43 writeback payload byte total drift");
+    }
+    Ok(())
+}
+
+fn f32_to_bf16_bits(value: f32) -> u16 {
+    let bits = value.to_bits();
+    let exponent = bits & 0x7f80_0000;
+    let rounded = if exponent == 0x7f80_0000 {
+        bits
+    } else {
+        bits.wrapping_add(0x0000_7fff + ((bits >> 16) & 1))
+    };
+    (rounded >> 16) as u16
+}
+
+fn run_official_top6_shared_moe_batch(
+    ctx: &VulkanContext,
+    pipelines: &S14NumericPipelines,
+    timestamp_bits: u32,
+    timestamp_period_ns: f64,
+    x: &[f32],
+    routed: &[MoePayload],
+    shared: &MoePayload,
+) -> Result<OfficialMoeResult> {
+    if x.len() != 4096 || routed.len() != 6 || shared.expert_id.is_some() {
+        bail!("official FullDepth43 MoE shape/route contract drift");
+    }
+    let up_shape = S14MatvecShape::new(2048, 4096)?.validate_mxfp4()?;
+    let down_shape = S14MatvecShape::new(4096, 2048)?.validate_mxfp4()?;
+    let shared_up_shape = S14MatvecShape::new(2048, 4096)?.validate_fp8()?;
+    let shared_down_shape = S14MatvecShape::new(4096, 2048)?.validate_fp8()?;
+    for payload in routed {
+        if payload.expert_id.is_none()
+            || !payload.mix_weight.is_finite()
+            || payload.mix_weight < 0.0
+        {
+            bail!("official routed payload contract drift");
+        }
+        for scale in [&payload.s1, &payload.s3, &payload.s2] {
+            validate_ue8m0_codes(scale)?;
+        }
+    }
+    for weight in [&shared.w1, &shared.w3, &shared.w2] {
+        validate_e4m3fn_codes(weight)?;
+    }
+    for scale in [&shared.s1, &shared.s3, &shared.s2] {
+        validate_ue8m0_codes(scale)?;
+    }
+
+    let buffers = MoeBatchBuffers::new(ctx, x, routed, shared)?;
+    buffers.upload(ctx)?;
+    let routed_dispatches = buffers
+        .routed
+        .iter()
+        .zip(routed)
+        .map(|(weights, payload)| {
+            Ok(RoutedOfficialDispatch {
+                w1: pipelines.bind_mxfp4(
+                    ctx,
+                    up_shape,
+                    &buffers.x.device,
+                    &weights.w1.device,
+                    &weights.s1.device,
+                    &buffers.gate,
+                )?,
+                w3: pipelines.bind_mxfp4(
+                    ctx,
+                    up_shape,
+                    &buffers.x.device,
+                    &weights.w3.device,
+                    &weights.s3.device,
+                    &buffers.up,
+                )?,
+                prepare: pipelines.bind_official_expert_prepare(
+                    ctx,
+                    2048,
+                    payload.mix_weight,
+                    &buffers.gate,
+                    &buffers.up,
+                    &buffers.hidden,
+                )?,
+                w2: pipelines.bind_mxfp4(
+                    ctx,
+                    down_shape,
+                    &buffers.hidden,
+                    &weights.w2.device,
+                    &weights.s2.device,
+                    &buffers.down,
+                )?,
+                accumulate: pipelines.bind_bf16_accumulate(
+                    ctx,
+                    4096,
+                    &buffers.down,
+                    &buffers.accumulator,
+                )?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let shared_dispatch = SharedOfficialDispatch {
+        w1: pipelines.bind_fp8(
+            ctx,
+            shared_up_shape,
+            &buffers.x.device,
+            &buffers.shared.w1.device,
+            &buffers.shared.s1.device,
+            &buffers.gate,
+        )?,
+        w3: pipelines.bind_fp8(
+            ctx,
+            shared_up_shape,
+            &buffers.x.device,
+            &buffers.shared.w3.device,
+            &buffers.shared.s3.device,
+            &buffers.up,
+        )?,
+        prepare: pipelines.bind_official_expert_prepare(
+            ctx,
+            2048,
+            1.0,
+            &buffers.gate,
+            &buffers.up,
+            &buffers.hidden,
+        )?,
+        w2: pipelines.bind_fp8(
+            ctx,
+            shared_down_shape,
+            &buffers.hidden,
+            &buffers.shared.w2.device,
+            &buffers.shared.s2.device,
+            &buffers.down,
+        )?,
+        accumulate: pipelines.bind_bf16_accumulate(
+            ctx,
+            4096,
+            &buffers.down,
+            &buffers.accumulator,
+        )?,
+    };
+
+    let gpu_kernel_ms = record_official_moe_once(
+        ctx,
+        pipelines,
+        &buffers,
+        timestamp_bits,
+        timestamp_period_ns,
+        &routed_dispatches,
+        &shared_dispatch,
+    )?;
+    let output = buffers.output();
+    if output.iter().any(|value| !value.is_finite()) {
+        bail!("official Vulkan MoE output contains non-finite values");
+    }
+    let branch_bf16 = output.into_iter().map(f32_to_bf16_bits).collect();
+
+    shared_dispatch.accumulate.binder.destroy(ctx);
+    shared_dispatch.w2.binder.destroy(ctx);
+    shared_dispatch.prepare.binder.destroy(ctx);
+    shared_dispatch.w3.binder.destroy(ctx);
+    shared_dispatch.w1.binder.destroy(ctx);
+    for dispatch in routed_dispatches.into_iter().rev() {
+        dispatch.accumulate.binder.destroy(ctx);
+        dispatch.w2.binder.destroy(ctx);
+        dispatch.prepare.binder.destroy(ctx);
+        dispatch.w3.binder.destroy(ctx);
+        dispatch.w1.binder.destroy(ctx);
+    }
+    buffers.destroy(ctx);
+    Ok(OfficialMoeResult {
+        branch_bf16,
+        gpu_kernel_ms,
+    })
+}
+
+fn record_official_moe_once(
+    ctx: &VulkanContext,
+    pipelines: &S14NumericPipelines,
+    buffers: &MoeBatchBuffers,
+    timestamp_bits: u32,
+    timestamp_period_ns: f64,
+    routed: &[RoutedOfficialDispatch],
+    shared: &SharedOfficialDispatch,
+) -> Result<f64> {
+    unsafe {
+        let pool = make_command_pool(ctx)?;
+        let cb = allocate_command_buffer(ctx, pool)?;
+        let queries = ctx.device.create_query_pool(
+            &vk::QueryPoolCreateInfo::default()
+                .query_type(vk::QueryType::TIMESTAMP)
+                .query_count(2),
+            None,
+        )?;
+        ctx.device.begin_command_buffer(
+            cb,
+            &vk::CommandBufferBeginInfo::default()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+        )?;
+        ctx.device.cmd_reset_query_pool(cb, queries, 0, 2);
+        ctx.device
+            .cmd_write_timestamp(cb, vk::PipelineStageFlags::TOP_OF_PIPE, queries, 0);
+        ctx.device.cmd_fill_buffer(
+            cb,
+            buffers.accumulator.handle(),
+            0,
+            4096 * std::mem::size_of::<f32>() as u64,
+            0,
+        );
+        let fill_to_compute = vk::MemoryBarrier::default()
+            .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::SHADER_WRITE);
+        ctx.device.cmd_pipeline_barrier(
+            cb,
+            vk::PipelineStageFlags::TRANSFER,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::DependencyFlags::empty(),
+            &[fill_to_compute],
+            &[],
+            &[],
+        );
+        let shader_raw = vk::MemoryBarrier::default()
+            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ);
+        let shader_serial = vk::MemoryBarrier::default()
+            .src_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::SHADER_WRITE)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::SHADER_WRITE);
+
+        for dispatch in routed {
+            pipelines.cmd_mxfp4_matvec(ctx, cb, &dispatch.w1);
+            pipelines.cmd_mxfp4_matvec(ctx, cb, &dispatch.w3);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[shader_raw],
+                &[],
+                &[],
+            );
+            pipelines.cmd_official_expert_prepare(ctx, cb, &dispatch.prepare);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[shader_raw],
+                &[],
+                &[],
+            );
+            pipelines.cmd_mxfp4_matvec(ctx, cb, &dispatch.w2);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[shader_raw],
+                &[],
+                &[],
+            );
+            pipelines.cmd_bf16_accumulate(ctx, cb, &dispatch.accumulate);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[shader_serial],
+                &[],
+                &[],
+            );
+        }
+
+        pipelines.cmd_fp8_matvec(ctx, cb, &shared.w1);
+        pipelines.cmd_fp8_matvec(ctx, cb, &shared.w3);
+        ctx.device.cmd_pipeline_barrier(
+            cb,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::DependencyFlags::empty(),
+            &[shader_raw],
+            &[],
+            &[],
+        );
+        pipelines.cmd_official_expert_prepare(ctx, cb, &shared.prepare);
+        ctx.device.cmd_pipeline_barrier(
+            cb,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::DependencyFlags::empty(),
+            &[shader_raw],
+            &[],
+            &[],
+        );
+        pipelines.cmd_fp8_matvec(ctx, cb, &shared.w2);
+        ctx.device.cmd_pipeline_barrier(
+            cb,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::DependencyFlags::empty(),
+            &[shader_raw],
+            &[],
+            &[],
+        );
+        pipelines.cmd_bf16_accumulate(ctx, cb, &shared.accumulate);
+        ctx.device
+            .cmd_write_timestamp(cb, vk::PipelineStageFlags::BOTTOM_OF_PIPE, queries, 1);
+        let readback_barrier = vk::MemoryBarrier::default()
+            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .dst_access_mask(vk::AccessFlags::TRANSFER_READ);
+        ctx.device.cmd_pipeline_barrier(
+            cb,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::PipelineStageFlags::TRANSFER,
+            vk::DependencyFlags::empty(),
+            &[readback_barrier],
+            &[],
+            &[],
+        );
+        copy(
+            ctx,
+            cb,
+            &buffers.accumulator,
+            &buffers.readback,
+            4096 * std::mem::size_of::<f32>() as u64,
+        );
+        ctx.device.end_command_buffer(cb)?;
+        submit_and_wait(ctx, cb)?;
+        let mut ticks = [0u64; 2];
+        ctx.device.get_query_pool_results(
+            queries,
+            0,
+            &mut ticks,
+            vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT,
+        )?;
+        let mask = if timestamp_bits >= 64 {
+            u64::MAX
+        } else {
+            (1u64 << timestamp_bits) - 1
+        };
+        let elapsed_ticks = ticks[1].wrapping_sub(ticks[0]) & mask;
+        let elapsed_ms = elapsed_ticks as f64 * timestamp_period_ns / 1_000_000.0;
+        ctx.device.destroy_query_pool(queries, None);
+        ctx.device.destroy_command_pool(pool, None);
+        Ok(elapsed_ms)
+    }
 }
 
 fn run_fulldepth_bridge(capture_dir: PathBuf) -> Result<()> {
@@ -2353,7 +3060,7 @@ fn read_verified_payload(
     if bytes.len() != expected_bytes || actual_sha256 != expected_sha256 {
         bail!("{tensor} payload size/SHA-256 drift");
     }
-    println!("real payload {tensor} sha256={actual_sha256}");
+    eprintln!("real payload {tensor} sha256={actual_sha256}");
     Ok(bytes)
 }
 
