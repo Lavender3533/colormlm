@@ -63,6 +63,7 @@ VOCAB_SIZE = 129280
 TOP_K = 6
 WINDOW_SIZE = 128
 ROUTE_SCALE = 1.5
+ROUTE_SUM_ABS_TOL = TOP_K * torch.finfo(torch.float32).eps * ROUTE_SCALE
 SWIGLU_LIMIT = 10.0
 DEFAULT_ASSET_ROOT = Path("D:/models/Polaris-S14")
 DEFAULT_REPORT = Path(__file__).resolve().parent / "last_run_report.json"
@@ -423,11 +424,24 @@ class PendingLayer:
 class NativeLayerReference(_InlineForward):
     """catalog 驱动的单层 CPU 参考，数值核继承冻结 L42 路径。"""
 
-    def __init__(self, layer: int, store: TensorStore):
-        if layer not in REGISTERED_LAYERS:
+    def __init__(
+        self,
+        layer: int,
+        store: TensorStore,
+        *,
+        profile_layers: Sequence[int] = REGISTERED_LAYERS,
+        compress_ratios: Mapping[int, int] = COMPRESS_RATIOS,
+    ):
+        if layer not in profile_layers:
             raise ContractError(f"未预注册层: {layer}")
+        if set(compress_ratios) != set(profile_layers):
+            raise ContractError("profile layer/compressor ratio 映射不闭合")
+        if compress_ratios[layer] not in {0, 4, 128}:
+            raise ContractError(f"L{layer} compressor ratio 不受支持")
         self.layer = layer
         self.store = store
+        self.profile_layers = tuple(profile_layers)
+        self.compress_ratios = dict(compress_ratios)
         super().__init__(store.bundle())
 
     def add_routed(self, ranges: Iterable[online_range.CachedRange]) -> None:
@@ -483,7 +497,7 @@ class NativeLayerReference(_InlineForward):
         position: int,
         previous: CompressorRemainderState | None,
     ) -> CompressorRemainderState | None:
-        ratio = COMPRESS_RATIOS[self.layer]
+        ratio = self.compress_ratios[self.layer]
         if ratio == 0:
             if previous is not None:
                 raise ContractError(f"L{self.layer} ratio0 不得携带 compressor state")
@@ -589,7 +603,7 @@ class NativeLayerReference(_InlineForward):
         q = torch.from_numpy(self._linear_fp8(q_low.float().numpy(), prefix + ".attn.wq_b"))
         q = q.to(torch.bfloat16).reshape(1, 1, 64, 512)
         q *= torch.rsqrt(q.square().mean(-1, keepdim=True) + 1e-6)
-        freqs_cis = _precompute_position_freqs(COMPRESS_RATIOS[self.layer], seqlen=position + 1)[
+        freqs_cis = _precompute_position_freqs(self.compress_ratios[self.layer], seqlen=position + 1)[
             position : position + 1
         ]
         if position:
@@ -663,8 +677,12 @@ class NativeLayerReference(_InlineForward):
         weights = scores.gather(1, indices)
         weights = weights / weights.sum(dim=-1, keepdim=True) * ROUTE_SCALE
         route_weights = [float(value) for value in weights[0].tolist()]
-        if not math.isclose(sum(route_weights), ROUTE_SCALE, rel_tol=0, abs_tol=2e-7):
-            raise ContractError(f"L{self.layer} route 权重和不等于 1.5")
+        route_sum = math.fsum(route_weights)
+        if not math.isclose(route_sum, ROUTE_SCALE, rel_tol=0, abs_tol=ROUTE_SUM_ABS_TOL):
+            raise ContractError(
+                f"L{self.layer} route 权重和超出 float32 归一化容差: "
+                f"sum={route_sum:.9g}, expected={ROUTE_SCALE}, tol={ROUTE_SUM_ABS_TOL:.3g}"
+            )
         return route_ids, route_weights, source
 
     def prepare_route(
