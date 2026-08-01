@@ -128,7 +128,7 @@ class FullDepthRangeSession:
 
     def _fetch_all(self, entries: Iterable[Mapping[str, Any]]) -> tuple[online_range.CachedRange, ...]:
         frozen = tuple(entries)
-        if self.range_workers == 1 or not self.cache.allow_fetch or len(frozen) <= 1:
+        if self.range_workers == 1 or len(frozen) <= 1:
             return tuple(self._fetch_one(entry) for entry in frozen)
         with ThreadPoolExecutor(max_workers=self.range_workers, thread_name_prefix="fd43-range") as pool:
             return tuple(pool.map(self._fetch_one, frozen))

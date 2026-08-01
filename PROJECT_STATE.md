@@ -1235,6 +1235,11 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
 - 主机 FP8 materialization cache 从6GiB增到8GiB后，命中率从约`18.01%`升到`22.67%`，
   但第二 token 仅为`59.35s`，相对6GiB基线约`60.14s`没有脱离机器噪声；完整两 token
   还因冷态波动为`171.7050s`。8GiB不晋级，生产研究默认继续使用6GiB，停止扫描更大容量。
+- 允许本地已缓存 Range 页也走有序3线程获取后，同一 `[5, 223]` 两 token 门耗时降为
+  `139.9329s`，相对`146.5560s`基线缩短约`4.52%`，有效TPS提高约`4.73%`；逐 token 为
+  `80.55s / 58.58s`。`range_fetch_routed`从`32.58s`降到`18.04s`，`range_prepare_layer`
+  从`16.87s`降到`10.07s`，输出、43/43层和零fallback均保持；该小步晋级并由并发/顺序
+  保持测试固化，FullDepth43测试现为`42 passed, 2 subtests passed`。
 - 连续剖析 runner 已支持 `1..16` token、持久 GPU 词表头和逐 token 精确 wall time，并对
   position、43层覆盖、committed ledger 与 profiler 次数 fail-closed；FullDepth43 测试为
   `41 passed, 2 subtests passed`。

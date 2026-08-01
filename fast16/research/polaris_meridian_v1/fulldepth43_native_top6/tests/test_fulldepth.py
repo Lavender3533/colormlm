@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import tempfile
+import threading
 import unittest
 from dataclasses import replace
 from pathlib import Path
@@ -18,6 +19,7 @@ from fast16.research.polaris_meridian_v1.fulldepth43_native_top6.executor import
     ExecutionConfig,
     FullDepthError,
     FullDepthNativeLayerReference,
+    FullDepthRangeSession,
     execute,
 )
 from fast16.research.polaris_meridian_v1.fulldepth43_native_top6.preflight import run_preflight
@@ -50,6 +52,26 @@ def full_states(position: int) -> dict[int, s14.LayerRuntimeState]:
 
 
 class FullDepthContractTests(unittest.TestCase):
+    def test_offline_cached_ranges_use_ordered_parallel_fetch(self) -> None:
+        class OfflineCache:
+            allow_fetch = False
+
+            def __init__(self) -> None:
+                self.barrier = threading.Barrier(3)
+
+            def fetch(self, entry: dict[str, int]) -> int:
+                self.barrier.wait(timeout=2.0)
+                return entry["value"]
+
+        session = object.__new__(FullDepthRangeSession)
+        session.cache = OfflineCache()
+        session.range_attempts = 1
+        session.range_workers = 3
+        self.assertEqual(
+            session._fetch_all(({"value": 3}, {"value": 1}, {"value": 2})),
+            (3, 1, 2),
+        )
+
     def test_attention_reads_injected_full_depth_compression_map(self) -> None:
         source = inspect.getsource(s14.NativeLayerReference._attention)
         self.assertIn("ratio = self.compress_ratios[self.layer]", source)
