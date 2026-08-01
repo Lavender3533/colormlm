@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Polaris v0.1 Preview</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #172033;
+      --panel-strong: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --muted: #a8b4c7;
+      --green: #22c55e;
+      --green-dark: #15803d;
+      --amber: #fbbf24;
+      --blue: #38bdf8;
+      --danger-bg: #352918;
+      font-family: "Cascadia Code", "SFMono-Regular", Consolas, "Microsoft YaHei UI", monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 82% 8%, rgba(34, 197, 94, .13), transparent 28rem),
+        radial-gradient(circle at 0 100%, rgba(56, 189, 248, .09), transparent 32rem),
+        var(--bg);
+    }
+
+    button, textarea { font: inherit; }
+
+    .shell {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 28px 0 40px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 22px;
+    }
+
+    .brand { display: flex; align-items: center; gap: 13px; }
+
+    .mark {
+      display: grid;
+      width: 42px;
+      height: 42px;
+      place-items: center;
+      border: 1px solid #4ade80;
+      border-radius: 12px;
+      color: #86efac;
+      background: #12261c;
+      box-shadow: 0 0 26px rgba(34, 197, 94, .14);
+    }
+
+    .mark svg { width: 23px; height: 23px; }
+    h1 { margin: 0; font-size: clamp(20px, 3vw, 28px); letter-spacing: -.04em; }
+    .subtitle { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+
+    .live {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 34px;
+      padding: 7px 11px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: #dbeafe;
+      background: rgba(30, 41, 59, .82);
+      font-size: 12px;
+    }
+
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); }
+    .dot.up { background: var(--green); box-shadow: 0 0 12px rgba(34, 197, 94, .7); }
+
+    .notice {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 11px;
+      padding: 15px 17px;
+      margin-bottom: 18px;
+      border: 1px solid #805f1d;
+      border-radius: 14px;
+      color: #fde68a;
+      background: var(--danger-bg);
+      line-height: 1.6;
+      font-size: 13px;
+    }
+
+    .notice svg { width: 20px; height: 20px; margin-top: 1px; }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .card {
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: rgba(23, 32, 51, .92);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, .2);
+    }
+
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 54px;
+      padding: 12px 17px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel-strong);
+    }
+
+    .card-head strong { font-size: 14px; }
+    .card-head span { color: var(--muted); font-size: 11px; }
+
+    #messages {
+      min-height: 390px;
+      max-height: 56vh;
+      overflow-y: auto;
+      padding: 20px;
+      scroll-behavior: smooth;
+    }
+
+    .message {
+      width: fit-content;
+      max-width: 88%;
+      margin: 0 0 16px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 5px 14px 14px 14px;
+      color: #e2e8f0;
+      background: #131c2d;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      line-height: 1.65;
+      font-family: Inter, "Microsoft YaHei UI", sans-serif;
+      font-size: 14px;
+    }
+
+    .message.user {
+      margin-left: auto;
+      border-color: #247943;
+      border-radius: 14px 5px 14px 14px;
+      background: #173925;
+    }
+
+    .message.error { border-color: #b45309; color: #fed7aa; }
+    .empty { padding: 74px 16px; color: var(--muted); text-align: center; line-height: 1.75; }
+
+    form { padding: 15px; border-top: 1px solid var(--border); }
+
+    label {
+      display: block;
+      margin: 0 0 8px 2px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .composer { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; }
+
+    textarea {
+      width: 100%;
+      min-height: 82px;
+      max-height: 210px;
+      resize: vertical;
+      padding: 12px 13px;
+      border: 1px solid #475569;
+      border-radius: 12px;
+      outline: none;
+      color: var(--text);
+      background: #0d1524;
+      line-height: 1.5;
+      transition: border-color .2s, box-shadow .2s;
+    }
+
+    textarea:focus-visible { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(56, 189, 248, .18); }
+
+    button {
+      min-width: 96px;
+      min-height: 46px;
+      padding: 0 17px;
+      border: 1px solid #4ade80;
+      border-radius: 12px;
+      color: #052e16;
+      background: var(--green);
+      font-weight: 700;
+      cursor: pointer;
+      transition: background-color .2s, border-color .2s;
+    }
+
+    button:hover { background: #4ade80; }
+    button:focus-visible { outline: 3px solid rgba(56, 189, 248, .65); outline-offset: 2px; }
+    button:disabled { border-color: #64748b; color: #cbd5e1; background: #475569; cursor: wait; }
+
+    aside { display: grid; gap: 12px; }
+    .side-body { padding: 16px; }
+
+    dl { display: grid; grid-template-columns: 1fr auto; gap: 12px 8px; margin: 0; font-size: 12px; }
+    dt { color: var(--muted); }
+    dd { margin: 0; color: #e2e8f0; text-align: right; overflow-wrap: anywhere; }
+    .bad { color: #fbbf24; }
+    .good { color: #86efac; }
+
+    code {
+      display: block;
+      padding: 11px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: #bae6fd;
+      background: #0d1524;
+      font-size: 11px;
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 800px) {
+      main { grid-template-columns: 1fr; }
+      aside { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      #messages { min-height: 330px; max-height: 50vh; }
+    }
+
+    @media (max-width: 560px) {
+      .shell { width: min(100% - 20px, 1120px); padding-top: 16px; }
+      header { align-items: flex-start; }
+      .subtitle { max-width: 210px; }
+      .live { padding: 7px 9px; }
+      main, aside { grid-template-columns: 1fr; }
+      .composer { grid-template-columns: 1fr; }
+      button { width: 100%; }
+      .message { max-width: 95%; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div class="brand">
+        <div class="mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M12 2.5 14.7 9l6.8 3-6.8 3L12 21.5 9.3 15l-6.8-3 6.8-3L12 2.5Z"/>
+          </svg>
+        </div>
+        <div>
+          <h1>Polaris v0.1 Preview</h1>
+          <p class="subtitle">今日可体验的 v38 草稿代理</p>
+        </div>
+      </div>
+      <div class="live" id="live"><span class="dot" id="dot"></span><span id="liveText">检查上游</span></div>
+    </header>
+
+    <div class="notice" role="note">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M12 9v4m0 4h.01M10.3 3.8 2.1 18a2 2 0 0 0 1.7 3h16.4a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z"/>
+      </svg>
+      <div><strong>草稿模式：</strong>当前响应来自 ColorLM v38。精确验证器尚未就绪，结果不代表 FullDepth 验证，也不具备 K3 能力。</div>
+    </div>
+
+    <main>
+      <section class="card" aria-labelledby="chatTitle">
+        <div class="card-head">
+          <strong id="chatTitle">对话体验</strong>
+          <span>SSE 流式输出</span>
+        </div>
+        <div id="messages" aria-live="polite">
+          <div class="empty" id="empty">输入一个问题，直接体验 Polaris Preview。<br>模型别名会自动映射到当前 v38 上游。</div>
+        </div>
+        <form id="chatForm">
+          <label for="prompt">消息（Ctrl + Enter 发送）</label>
+          <div class="composer">
+            <textarea id="prompt" required placeholder="例如：帮我写一个带重试的 Python HTTP 请求函数"></textarea>
+            <button id="send" type="submit">发送</button>
+          </div>
+        </form>
+      </section>
+
+      <aside aria-label="Preview 状态">
+        <section class="card">
+          <div class="card-head"><strong>运行契约</strong><span>公开状态</span></div>
+          <div class="side-body">
+            <dl>
+              <dt>output_mode</dt><dd class="bad">draft_only</dd>
+              <dt>exact_verifier</dt><dd class="bad">not_ready</dd>
+              <dt>FullDepth</dt><dd>不可用</dd>
+              <dt>K3</dt><dd>不可用</dd>
+              <dt>响应标记</dt><dd class="good">draft-only</dd>
+            </dl>
+          </div>
+        </section>
+        <section class="card">
+          <div class="card-head"><strong>API 接入</strong><span>OpenAI / Anthropic</span></div>
+          <div class="side-body"><code>Base URL<br>http://127.0.0.1:8140/v1<br><br>Model<br>polaris-preview</code></div>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <script>
+    const form = document.getElementById('chatForm');
+    const promptInput = document.getElementById('prompt');
+    const sendButton = document.getElementById('send');
+    const messages = document.getElementById('messages');
+    const history = [];
+
+    function addMessage(role, text, extraClass = '') {
+      document.getElementById('empty')?.remove();
+      const node = document.createElement('div');
+      node.className = `message ${role === 'user' ? 'user' : ''} ${extraClass}`.trim();
+      node.textContent = text;
+      messages.appendChild(node);
+      messages.scrollTop = messages.scrollHeight;
+      return node;
+    }
+
+    function appendOpenAIEvent(target, raw) {
+      if (!raw || raw === '[DONE]') return;
+      try {
+        const event = JSON.parse(raw);
+        const delta = event.choices?.[0]?.delta?.content ?? event.choices?.[0]?.text ?? '';
+        if (delta) {
+          target.textContent += delta;
+          messages.scrollTop = messages.scrollHeight;
+        }
+      } catch (_) {
+        // 忽略 SSE 注释或非 JSON 扩展事件。
+      }
+    }
+
+    async function streamAnswer(response, target) {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (line.startsWith('data:')) appendOpenAIEvent(target, line.slice(5).trim());
+        }
+        if (done) break;
+      }
+      if (buffer.startsWith('data:')) appendOpenAIEvent(target, buffer.slice(5).trim());
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const prompt = promptInput.value.trim();
+      if (!prompt || sendButton.disabled) return;
+      addMessage('user', prompt);
+      history.push({ role: 'user', content: prompt });
+      promptInput.value = '';
+      sendButton.disabled = true;
+      sendButton.textContent = '生成中';
+      const answer = addMessage('assistant', '');
+      try {
+        const response = await fetch('/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'polaris-preview',
+            messages: history,
+            stream: true,
+            max_tokens: 1024
+          })
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+        if ((response.headers.get('content-type') || '').includes('text/event-stream')) {
+          await streamAnswer(response, answer);
+        } else {
+          const result = await response.json();
+          answer.textContent = result.choices?.[0]?.message?.content || JSON.stringify(result, null, 2);
+        }
+        if (!answer.textContent) answer.textContent = '上游已结束响应，但没有返回文本。';
+        history.push({ role: 'assistant', content: answer.textContent });
+      } catch (error) {
+        answer.classList.add('error');
+        answer.textContent = `请求失败：${error.message}`;
+      } finally {
+        sendButton.disabled = false;
+        sendButton.textContent = '发送';
+        promptInput.focus();
+      }
+    });
+
+    promptInput.addEventListener('keydown', (event) => {
+      if (event.ctrlKey && event.key === 'Enter') form.requestSubmit();
+    });
+
+    fetch('/polaris/status')
+      .then((response) => response.json())
+      .then((status) => {
+        document.getElementById('liveText').textContent = status.upstream_tcp_reachable ? 'v38 上游在线' : '等待 v38 上游';
+        if (status.upstream_tcp_reachable) document.getElementById('dot').classList.add('up');
+      })
+      .catch(() => { document.getElementById('liveText').textContent = '状态不可用'; });
+  </script>
+</body>
+</html>
