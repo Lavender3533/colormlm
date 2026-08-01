@@ -1124,3 +1124,40 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
   max abs `1.072883606e-6`、RMSE `1.483723944e-7`；真实 FP8 `wq_a` 平均 `0.0838004 ms`。
   这证明 packed 核与最小专家整链 parity，不代表完整层或整模型 token/s。下一步扩展为 top-6
   加 shared 的批量租约、fence publication、generation-safe eviction 与 GPU accumulator。
+
+### 2026-08-01 北极星连续 token、GPU top-6/shared 与 Exact Cascade 决策
+
+- 同一 `DecoderRuntime` 已真实完成连续两个 S14 token。position0 为
+  `0 -> 108967 (" Compression")`；position1 消费 token `108967`，输出
+  `53 ("S")`。position1 通过14/14层和真实 final head 后，14层 window KV、HC、
+  ratio4/128 compressor/indexer remainder 才一次性提交；`committed_tokens=2`、`error=null`。
+- position1 normalized SHA-256 为
+  `243451bf535ee60e67e0ff89031abb3008266f0f116b084f6f9ed88322f71465`，logits SHA-256 为
+  `46b95489427932a0d5acfacd5ee6bc9ceac495df3daed5a6a58681a0d95a141d`。完整外部报告为
+  `D:/models/Polaris-S14/s14_two_real_tokens_report.json`，251,656字节，SHA-256
+  `5ce3d5bcf1f1ad788659487cd070005078787736d104cba39fcb71108a25abe8`；仓内冻结摘要为
+  `fast16/research/polaris_meridian_v1/s14_first_real_token/TWO_TOKEN_REAL_REPORT.json`。
+- 本次新增下载 `1,016,078,336 B`，总 correctness 耗时 `1005.144s`，其中 position1
+  `951.225s`。该耗时包含慢速精确 Range 与 CPU reference，只作为正确性记录。
+- 两个相邻 token 的同层 top-6 交集总计仅 `8/84=9.5238%`：L2/L15/L22/L30各复用1个，
+  L41/L42各复用2个，其余层0。单样本不能外推长序列稳态，但足以否决“仅缓存上一 token
+  专家即可获得高命中”的假设；速度路径必须研究更大的跨 token 工作集、预测预取和批量验证。
+- RX 5700 XT 已真实完成同一 L42 输入的六路 routed expert 顺序计算、accumulator 清零、
+  route-weight 累加以及 shared FP8 累加，共35个 dispatch，GPU时间 `1.3696000 ms`；对CPU参考
+  max abs `1.096725464e-5`、RMSE `1.426471034e-6`。`VramPool` 已加入 generation/pin，
+  Loading与pinned页不可淘汰，双池批量在全部preflight成功前不可发布，失败全回滚，compute
+  fence释放前slot不可复用。该结果仍不是完整层、完整token或端到端token/s。
+- 质量路线正式修正为 **Polaris Exact Cascade**：完整43层量化 DeepSeek-V4-Flash 的
+  `FullDepth43/native-top6` 是唯一允许提交 token 的裁决器；S14、v38、v47只作为多token草稿、
+  专项候选和专家预取来源。最终验证器不得自适应跳层，也不得把 v38/v47 hidden 直接注入
+  DeepSeek坐标；候选必须重编码后执行标准最长一致前缀接受/回退与完整状态提交。
+- 现有 Rust Runner 中的 `full_depth_top1` 只是历史容量备选且能力清单仍为 hard reject；它会丢弃
+  原生 top-6 中五路专家，不能作为 Exact Cascade 的质量路径。生产合同必须迁移为
+  `FullDepth43/native-top6`，在真实算子、K=1对齐和K=4/8状态等价完成前继续拒绝执行。
+- 纠正理由：S14固定跳过29/43层且没有跳层训练，attention、mHC、compressor、router和head的
+  输入分布均会漂移；`4.59B active`不能类比训练完善的4.59B模型。继续向S14堆器官不能可靠
+  把质量上限推到完整V4，更不能据此宣称追平Claude/GPT。
+- 下一硬门顺序：官方消息编码到任意 token 序列 forced-prefill；FullDepth43 K=1 对固定参考
+  逐token对齐；K=4/8 causal-block与K=1输出/回滚等价；S14 K=8相对FullDepth平均连续接受
+  至少4 token且aggregate agreement不低于85%；最终端到端p50不低于20 token/s、p95不低于
+  12 token/s、VRAM低于7.7GiB、RAM低于30GiB。所有门均为待验证，不能提前写成已完成。
