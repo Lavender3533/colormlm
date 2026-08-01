@@ -33,6 +33,12 @@ pub const S14_ROUTE_MIX_SPV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/s
 pub const S14_MOE_ACCUMULATE_SPV: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/s14_moe_accumulate.spv"));
 
+pub const S14_OFFICIAL_EXPERT_PREPARE_SPV: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/s14_official_expert_prepare.spv"));
+
+pub const S14_BF16_ACCUMULATE_SPV: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/s14_bf16_accumulate.spv"));
+
 const FP4_GROUP_SIZE: u32 = 32;
 const FP8_TILE: u32 = 128;
 
@@ -182,6 +188,17 @@ pub struct S14MoeAccumulateDispatch {
     pub weight: f32,
 }
 
+pub struct S14OfficialExpertPrepareDispatch {
+    pub binder: DescriptorBinder,
+    pub n: u32,
+    pub route_weight: f32,
+}
+
+pub struct S14Bf16AccumulateDispatch {
+    pub binder: DescriptorBinder,
+    pub n: u32,
+}
+
 /// Pipelines used by the native S14 graph. They are independent from the GGUF
 /// Q4_K pipelines because the Polaris checkpoint has a different byte ABI.
 pub struct S14NumericPipelines {
@@ -190,6 +207,8 @@ pub struct S14NumericPipelines {
     swiglu_limit: ComputePipeline,
     route_mix: ComputePipeline,
     moe_accumulate: ComputePipeline,
+    official_expert_prepare: ComputePipeline,
+    bf16_accumulate: ComputePipeline,
 }
 
 impl S14NumericPipelines {
@@ -200,6 +219,13 @@ impl S14NumericPipelines {
             swiglu_limit: ComputePipeline::new(ctx, S14_SWIGLU_LIMIT_SPV, 3, 4)?,
             route_mix: ComputePipeline::new(ctx, S14_ROUTE_MIX_SPV, 2, 8)?,
             moe_accumulate: ComputePipeline::new(ctx, S14_MOE_ACCUMULATE_SPV, 2, 8)?,
+            official_expert_prepare: ComputePipeline::new(
+                ctx,
+                S14_OFFICIAL_EXPERT_PREPARE_SPV,
+                3,
+                8,
+            )?,
+            bf16_accumulate: ComputePipeline::new(ctx, S14_BF16_ACCUMULATE_SPV, 2, 4)?,
         })
     }
 
@@ -333,6 +359,57 @@ impl S14NumericPipelines {
         Ok(S14MoeAccumulateDispatch { binder, n, weight })
     }
 
+    pub fn bind_official_expert_prepare(
+        &self,
+        ctx: &VulkanContext,
+        n: u32,
+        route_weight: f32,
+        gate: &GpuBuffer,
+        up: &GpuBuffer,
+        hidden: &GpuBuffer,
+    ) -> Result<S14OfficialExpertPrepareDispatch> {
+        if n == 0 || n % 128 != 0 || !route_weight.is_finite() || route_weight < 0.0 {
+            bail!(
+                "S14 official expert prepare requires positive 128-aligned length and finite non-negative route weight"
+            );
+        }
+        let bytes = checked_bytes(n as u64, 4, "S14 official expert prepare")?;
+        require_capacity(gate, bytes, "S14 official prepare gate")?;
+        require_capacity(up, bytes, "S14 official prepare up")?;
+        require_capacity(hidden, bytes, "S14 official prepare hidden")?;
+        let binder = DescriptorBinder::new(
+            ctx,
+            &self.official_expert_prepare,
+            &[(gate, bytes), (up, bytes), (hidden, bytes)],
+        )?;
+        Ok(S14OfficialExpertPrepareDispatch {
+            binder,
+            n,
+            route_weight,
+        })
+    }
+
+    pub fn bind_bf16_accumulate(
+        &self,
+        ctx: &VulkanContext,
+        n: u32,
+        expert: &GpuBuffer,
+        accumulator: &GpuBuffer,
+    ) -> Result<S14Bf16AccumulateDispatch> {
+        if n == 0 {
+            bail!("S14 BF16 accumulate requires non-zero length");
+        }
+        let bytes = checked_bytes(n as u64, 4, "S14 BF16 accumulate")?;
+        require_capacity(expert, bytes, "S14 BF16 accumulate expert")?;
+        require_capacity(accumulator, bytes, "S14 BF16 accumulate output")?;
+        let binder = DescriptorBinder::new(
+            ctx,
+            &self.bf16_accumulate,
+            &[(expert, bytes), (accumulator, bytes)],
+        )?;
+        Ok(S14Bf16AccumulateDispatch { binder, n })
+    }
+
     /// Record only the kernel dispatch. Upload, barriers, readback and fence
     /// ownership stay with the surrounding native forward command graph.
     pub unsafe fn cmd_mxfp4_matvec(
@@ -380,6 +457,7 @@ impl S14NumericPipelines {
             dispatch.binder.set,
             dispatch.n,
             None,
+            256,
         );
     }
 
@@ -396,6 +474,7 @@ impl S14NumericPipelines {
             dispatch.binder.set,
             dispatch.n,
             Some(dispatch.route_weight),
+            256,
         );
     }
 
@@ -412,10 +491,47 @@ impl S14NumericPipelines {
             dispatch.binder.set,
             dispatch.n,
             Some(dispatch.weight),
+            256,
+        );
+    }
+
+    pub unsafe fn cmd_official_expert_prepare(
+        &self,
+        ctx: &VulkanContext,
+        command_buffer: vk::CommandBuffer,
+        dispatch: &S14OfficialExpertPrepareDispatch,
+    ) {
+        record_elementwise(
+            ctx,
+            command_buffer,
+            &self.official_expert_prepare,
+            dispatch.binder.set,
+            dispatch.n,
+            Some(dispatch.route_weight),
+            128,
+        );
+    }
+
+    pub unsafe fn cmd_bf16_accumulate(
+        &self,
+        ctx: &VulkanContext,
+        command_buffer: vk::CommandBuffer,
+        dispatch: &S14Bf16AccumulateDispatch,
+    ) {
+        record_elementwise(
+            ctx,
+            command_buffer,
+            &self.bf16_accumulate,
+            dispatch.binder.set,
+            dispatch.n,
+            None,
+            256,
         );
     }
 
     pub fn destroy(&self, ctx: &VulkanContext) {
+        self.bf16_accumulate.destroy(ctx);
+        self.official_expert_prepare.destroy(ctx);
         self.moe_accumulate.destroy(ctx);
         self.route_mix.destroy(ctx);
         self.swiglu_limit.destroy(ctx);
@@ -431,6 +547,7 @@ unsafe fn record_elementwise(
     set: vk::DescriptorSet,
     n: u32,
     scalar: Option<f32>,
+    local_size: u32,
 ) {
     ctx.device.cmd_bind_pipeline(
         command_buffer,
@@ -461,7 +578,7 @@ unsafe fn record_elementwise(
         push_bytes,
     );
     ctx.device
-        .cmd_dispatch(command_buffer, n.div_ceil(256), 1, 1);
+        .cmd_dispatch(command_buffer, n.div_ceil(local_size), 1, 1);
 }
 
 unsafe fn record_matvec(

@@ -82,6 +82,23 @@ python -X utf8 -m fast16.research.polaris_meridian_v1.fulldepth43_native_top6.ex
   --vulkan-bridge-layer 42
 ```
 
-当前只允许单 token，capture 目录必须不存在。该入口不会改变 CPU correctness 计算；
-GPU 结果不会写回 token state。真实 RX 5700 XT 数值与速度记录见
+当前只允许单 token，capture 目录必须不存在。只指定 capture 时仍是旧的
+只读桥，不改变 CPU correctness 计算。
+
+2026-08-02 新增了可选的持久 worker 回写：
+
+```powershell
+python -X utf8 -m fast16.research.polaris_meridian_v1.fulldepth43_native_top6.executor run `
+  --vulkan-bridge-capture <fresh-dir> `
+  --vulkan-bridge-layer 42 `
+  --vulkan-writeback-worker scheduler/target/release/examples/s14_vulkan_numeric.exe
+```
+
+worker 在同一进程内复用 Vulkan device/pipeline，实现 `w1/w3 -> BF16`、
+`route-weight-before-w2`、每 128 元素 E4M3FN 重量化和 `w2 -> BF16`。executor
+仍计算一次 CPU 参考；只有 4096 个 BF16 逐位相等才使用 **GPU 返回的
+tensor** 重建 `hc_post` 并继续前向。任何协议、SHA、shape、非有限值或数值不等会
+poison worker 并在 token commit 前 fail closed。
+
+真实 RX 5700 XT 证据和声明边界见
 `scheduler/ssd_inference/FULLDEPTH43_VULKAN_BRIDGE.md`。

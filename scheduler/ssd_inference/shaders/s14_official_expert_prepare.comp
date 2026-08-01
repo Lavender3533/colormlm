@@ -1,0 +1,77 @@
+#version 450
+
+// DeepSeek V4 Expert.forward boundary before w2:
+//   gate/up -> BF16 -> limited SwiGLU -> route weight -> BF16
+//   -> per-128 E4M3FN activation quant-dequant.
+// One workgroup owns one 128-value quantization group.
+
+layout(local_size_x = 128) in;
+
+layout(set = 0, binding = 0) readonly buffer Gate { float gate[]; };
+layout(set = 0, binding = 1) readonly buffer Up { float up[]; };
+layout(set = 0, binding = 2) writeonly buffer Hidden { float hidden[]; };
+
+layout(push_constant) uniform Push {
+    uint n;
+    float route_weight;
+} push;
+
+shared float group_max[128];
+
+float round_bf16(float value) {
+    uint bits = floatBitsToUint(value);
+    uint exponent = bits & 0x7f800000u;
+    if (exponent == 0x7f800000u) {
+        return value;
+    }
+    uint rounded = bits + 0x00007fffu + ((bits >> 16u) & 1u);
+    return uintBitsToFloat(rounded & 0xffff0000u);
+}
+
+float quant_dequant_e4m3fn(float value) {
+    float magnitude = abs(value);
+    if (magnitude == 0.0) {
+        return value;
+    }
+    float quantized;
+    if (magnitude < exp2(-6.0)) {
+        float step = exp2(-9.0);
+        quantized = roundEven(magnitude / step) * step;
+    } else {
+        float exponent = floor(log2(magnitude));
+        float step = exp2(exponent - 3.0);
+        quantized = roundEven(magnitude / step) * step;
+    }
+    quantized = min(quantized, 448.0);
+    return value < 0.0 ? -quantized : quantized;
+}
+
+void main() {
+    uint local = gl_LocalInvocationID.x;
+    uint index = gl_WorkGroupID.x * 128u + local;
+    float weighted = 0.0;
+    if (index < push.n) {
+        float gate_bf16 = round_bf16(gate[index]);
+        float up_bf16 = round_bf16(up[index]);
+        float limited_gate = min(gate_bf16, 10.0);
+        float limited_up = clamp(up_bf16, -10.0, 10.0);
+        float activated = (limited_gate / (1.0 + exp(-limited_gate))) * limited_up;
+        weighted = round_bf16(activated * push.route_weight);
+    }
+    group_max[local] = abs(weighted);
+    barrier();
+
+    for (uint stride = 64u; stride > 0u; stride >>= 1u) {
+        if (local < stride) {
+            group_max[local] = max(group_max[local], group_max[local + stride]);
+        }
+        barrier();
+    }
+
+    if (index < push.n) {
+        float amax = max(group_max[0], 1.0e-4);
+        float scale = exp2(ceil(log2(amax / 448.0)));
+        float normalized = clamp(weighted / scale, -448.0, 448.0);
+        hidden[index] = quant_dequant_e4m3fn(normalized) * scale;
+    }
+}

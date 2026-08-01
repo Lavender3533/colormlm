@@ -106,6 +106,8 @@ class FullDepthContractTests(unittest.TestCase):
                 token_count=2,
                 vulkan_bridge_capture=Path("capture"),
             ).validate()
+        with self.assertRaises(FullDepthError):
+            ExecutionConfig(vulkan_writeback_worker=Path("missing.exe")).validate()
 
     def test_first_preview_forced_prefill_runs_five_inputs_before_argmax(self) -> None:
         queue = s14._load_forced_prefill(PREVIEW_FORCED_PREFILL)
