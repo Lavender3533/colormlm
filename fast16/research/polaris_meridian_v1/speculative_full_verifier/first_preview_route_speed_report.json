@@ -1,0 +1,118 @@
+{
+  "format": "polaris-route-speed-probe-v1",
+  "evidence_status": "complete_trace",
+  "source_status": "complete",
+  "sampled_positions": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "route_rows": 215,
+  "top1_mass": {
+    "mean": 0.4351289092038701,
+    "p10": 0.2431586234402383,
+    "minimum": 0.1817964712778727,
+    "layers_at_or_above_90pct": 26
+  },
+  "mass_adaptive_candidates": [
+    {
+      "threshold": 0.8,
+      "mean_selected_experts": 3.702325581395349,
+      "minimum_selected_experts": 1,
+      "maximum_selected_experts": 5,
+      "expert_io_fraction_vs_top6": 0.6170542635658914,
+      "projected_dynamic_bytes_per_token": 2128399565
+    },
+    {
+      "threshold": 0.9,
+      "mean_selected_experts": 4.618604651162791,
+      "minimum_selected_experts": 1,
+      "maximum_selected_experts": 6,
+      "expert_io_fraction_vs_top6": 0.7697674418604651,
+      "projected_dynamic_bytes_per_token": 2655151718
+    },
+    {
+      "threshold": 0.95,
+      "mean_selected_experts": 5.325581395348837,
+      "minimum_selected_experts": 1,
+      "maximum_selected_experts": 6,
+      "expert_io_fraction_vs_top6": 0.8875968992248061,
+      "projected_dynamic_bytes_per_token": 3061579776
+    },
+    {
+      "threshold": 0.99,
+      "mean_selected_experts": 5.78139534883721,
+      "minimum_selected_experts": 1,
+      "maximum_selected_experts": 6,
+      "expert_io_fraction_vs_top6": 0.9635658914728683,
+      "projected_dynamic_bytes_per_token": 3323618918
+    }
+  ],
+  "adjacent_route_reuse": {
+    "comparisons": 172,
+    "mean_overlap": 1.7034883720930232,
+    "mean_union": 10.296511627906977,
+    "expert_io_fraction_vs_serial": 0.8580426356589147,
+    "per_pair": [
+      {
+        "left_position": 0,
+        "right_position": 1,
+        "comparisons": 43,
+        "mean_overlap": 0.23255813953488372,
+        "mean_union": 11.767441860465116,
+        "expert_io_fraction_vs_serial": 0.9806201550387597
+      },
+      {
+        "left_position": 1,
+        "right_position": 2,
+        "comparisons": 43,
+        "mean_overlap": 2.0232558139534884,
+        "mean_union": 9.976744186046512,
+        "expert_io_fraction_vs_serial": 0.8313953488372093
+      },
+      {
+        "left_position": 2,
+        "right_position": 3,
+        "comparisons": 43,
+        "mean_overlap": 2.302325581395349,
+        "mean_union": 9.69767441860465,
+        "expert_io_fraction_vs_serial": 0.8081395348837209
+      },
+      {
+        "left_position": 3,
+        "right_position": 4,
+        "comparisons": 43,
+        "mean_overlap": 2.255813953488372,
+        "mean_union": 9.744186046511627,
+        "expert_io_fraction_vs_serial": 0.812015503875969
+      }
+    ],
+    "steady_state_excluding_bos_pair": {
+      "comparisons": 129,
+      "mean_overlap": 2.193798449612403,
+      "mean_union": 9.806201550387597,
+      "expert_io_fraction_vs_serial": 0.8171834625322997
+    }
+  },
+  "causal_block_route_reuse": [
+    {
+      "block_size": 4,
+      "start_position": 0,
+      "end_position": 3,
+      "layer_comparisons": 43,
+      "mean_unique_experts_per_layer": 18.25581395348837,
+      "expert_io_fraction_vs_serial": 0.7606589147286821
+    },
+    {
+      "block_size": 4,
+      "start_position": 1,
+      "end_position": 4,
+      "layer_comparisons": 43,
+      "mean_unique_experts_per_layer": 15.418604651162791,
+      "expert_io_fraction_vs_serial": 0.6424418604651163
+    }
+  ],
+  "claim_limit": "路由质量覆盖与专家字节投影；不证明截断路由的 NLL/生成质量，也不证明任何 token/s。"
+}

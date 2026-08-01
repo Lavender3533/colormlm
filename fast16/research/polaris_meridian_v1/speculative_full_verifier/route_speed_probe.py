@@ -169,6 +169,72 @@ def analyze_report(
             )
         coverage.append(item)
 
+    def reuse_summary(items: Sequence[Mapping[str, int]]) -> dict[str, Any]:
+        if not items:
+            return {
+                "comparisons": 0,
+                "mean_overlap": None,
+                "mean_union": None,
+                "expert_io_fraction_vs_serial": None,
+            }
+        return {
+            "comparisons": len(items),
+            "mean_overlap": fmean(item["overlap"] for item in items),
+            "mean_union": fmean(item["union"] for item in items),
+            "expert_io_fraction_vs_serial": (
+                fmean(item["union"] for item in items) / (2 * TOP_K)
+            ),
+        }
+
+    adjacent_by_pair: list[dict[str, Any]] = []
+    for left, right in zip(positions, positions[1:]):
+        pair = [
+            item
+            for item in adjacent
+            if item["left_position"] == left and item["right_position"] == right
+        ]
+        if pair:
+            adjacent_by_pair.append(
+                {
+                    "left_position": left,
+                    "right_position": right,
+                    **reuse_summary(pair),
+                }
+            )
+    steady_adjacent = [item for item in adjacent if item["left_position"] >= 1]
+
+    block_windows: list[dict[str, Any]] = []
+    for block_size in (4, 8):
+        for start_index in range(0, len(positions) - block_size + 1):
+            block_positions = positions[start_index : start_index + block_size]
+            if block_positions != list(
+                range(block_positions[0], block_positions[0] + block_size)
+            ):
+                continue
+            unions: list[int] = []
+            for layer_id in layers:
+                block_rows = [by_key.get((position, layer_id)) for position in block_positions]
+                if any(row is None for row in block_rows):
+                    continue
+                unique = set()
+                for row in block_rows:
+                    assert row is not None
+                    unique.update(row["expert_ids"])
+                unions.append(len(unique))
+            if unions:
+                mean_union = fmean(unions)
+                block_windows.append(
+                    {
+                        "block_size": block_size,
+                        "start_position": block_positions[0],
+                        "end_position": block_positions[-1],
+                        "layer_comparisons": len(unions),
+                        "mean_unique_experts_per_layer": mean_union,
+                        "expert_io_fraction_vs_serial": mean_union
+                        / (block_size * TOP_K),
+                    }
+                )
+
     source_status = report.get("status")
     complete = source_status == "complete"
     result: dict[str, Any] = {
@@ -185,15 +251,11 @@ def analyze_report(
         },
         "mass_adaptive_candidates": coverage,
         "adjacent_route_reuse": {
-            "comparisons": len(adjacent),
-            "mean_overlap": fmean(item["overlap"] for item in adjacent) if adjacent else None,
-            "mean_union": fmean(item["union"] for item in adjacent) if adjacent else None,
-            "expert_io_fraction_vs_serial": (
-                fmean(item["union"] for item in adjacent) / (2 * TOP_K)
-                if adjacent
-                else None
-            ),
+            **reuse_summary(adjacent),
+            "per_pair": adjacent_by_pair,
+            "steady_state_excluding_bos_pair": reuse_summary(steady_adjacent),
         },
+        "causal_block_route_reuse": block_windows,
         "claim_limit": (
             "路由质量覆盖与专家字节投影；不证明截断路由的 NLL/生成质量，"
             "也不证明任何 token/s。"

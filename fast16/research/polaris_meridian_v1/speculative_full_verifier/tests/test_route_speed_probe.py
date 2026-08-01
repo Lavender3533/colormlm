@@ -47,6 +47,15 @@ class RouteSpeedProbeTests(unittest.TestCase):
             result["adjacent_route_reuse"]["expert_io_fraction_vs_serial"],
             11 / 12,
         )
+        self.assertEqual(
+            result["adjacent_route_reuse"]["per_pair"][0]["left_position"], 0
+        )
+        self.assertEqual(
+            result["adjacent_route_reuse"]["steady_state_excluding_bos_pair"][
+                "comparisons"
+            ],
+            0,
+        )
         eighty, ninety = result["mass_adaptive_candidates"]
         self.assertEqual(eighty["mean_selected_experts"], 2)
         self.assertEqual(eighty["projected_dynamic_bytes_per_token"], 200)
@@ -70,6 +79,27 @@ class RouteSpeedProbeTests(unittest.TestCase):
         self.assertEqual(result["evidence_status"], "partial_live_trace")
         self.assertIn("incomplete_reason", result)
         self.assertIsNone(result["adjacent_route_reuse"]["mean_overlap"])
+
+    def test_k4_window_reports_union_fraction(self) -> None:
+        result = analyze_report(
+            {
+                "status": "complete",
+                "tokens": [
+                    {
+                        "position": position,
+                        "layers": [
+                            _layer(0, [0, 1, 2, 3, 4, 5], [1, 1, 1, 1, 1, 1])
+                        ],
+                    }
+                    for position in range(4)
+                ],
+            }
+        )
+        windows = result["causal_block_route_reuse"]
+        self.assertEqual(len(windows), 1)
+        self.assertEqual(windows[0]["block_size"], 4)
+        self.assertEqual(windows[0]["mean_unique_experts_per_layer"], 6)
+        self.assertEqual(windows[0]["expert_io_fraction_vs_serial"], 0.25)
 
     def test_rejects_non_native_or_invalid_routes(self) -> None:
         with self.assertRaises(RouteSpeedProbeError):

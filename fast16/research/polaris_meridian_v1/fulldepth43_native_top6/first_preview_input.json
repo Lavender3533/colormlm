@@ -1,0 +1,11 @@
+{
+  "format": "polaris-s14-forced-prefill-input-v1",
+  "messages": [
+    {
+      "role": "user",
+      "content": "你好"
+    }
+  ],
+  "reasoning_effort": "low",
+  "tools": []
+}

@@ -36,6 +36,21 @@ current cold upper bound               3,449,290,752 bytes
 HC/norm/BF16 head 提交了真实 `token_id=5`。机器可读证据在
 `first_real_token_report.json`；该结果只证明 correctness，不是速度或质量声明。
 
+同日首个官方聊天 forced-prefill 也已完成。严格输入为
+`[0,128803,30594,128804,128821]`，解码为
+`<｜begin▁of▁sentence｜><｜User｜>你好<｜Assistant｜><think>`；五个位置均完成
+43/43 层，forced cursor 最终为 5，最后原生 head 输出 `token_id=3648`，解码为
+`好的`。完整报告 `first_preview_real_report.json` 为 315,496 bytes，SHA-256
+`beaebe27d5a295d68bbf7b475841be428eca60504c792ac8d54b189e17f17908`，总 correctness
+墙钟 4,218.604 秒，其中包含大量首次 Range 下载。一个合理首 token 仍然不是质量晋级，
+但它证明了官方聊天编码、五位置 KV/compressor 状态和完整 43 层原生输出链闭环。
+
+该轨迹还提供了第一批真实速度结构证据。排除 BOS 特殊对后，相邻位置每层平均复用
+`2.1938/6` 个专家；正常位置 1--4 的 K=4 联合专家数平均为 `15.4186/24`，即仅看
+动态 routed expert 字节可少读约 35.76%。这证明 causal block 有实质空间，但不足以单独
+推出 token/s；完整数据见
+`../speculative_full_verifier/first_preview_route_speed_report.json`。
+
 重建 catalog 并跑离线 preflight（不下载权重）：
 
 ```powershell
@@ -102,3 +117,22 @@ poison worker 并在 token commit 前 fail closed。
 
 真实 RX 5700 XT 证据和声明边界见
 `scheduler/ssd_inference/FULLDEPTH43_VULKAN_BRIDGE.md`。
+
+## Vulkan 全层 A/B 门
+
+`run_vulkan_all_layer_ab.py` 把单层写回扩展为三个严格相邻阶段：43 层逐层
+CPU/GPU BF16 对齐、CPU warm baseline、关闭 CPU 专家双算的 43 层 Vulkan 候选。
+任一层不相等、发生 fallback、少跑一层或最终 token 漂移都会拒绝结果：
+
+```powershell
+cargo build --release --example s14_vulkan_numeric `
+  --manifest-path scheduler/ssd_inference/Cargo.toml
+
+python -X utf8 -m `
+  fast16.research.polaris_meridian_v1.fulldepth43_native_top6.run_vulkan_all_layer_ab `
+  --worker scheduler/target/release/examples/s14_vulkan_numeric.exe `
+  --output-root <fresh-output-dir>
+```
+
+即使通过，该门也只证明 43 个 MoE 分支来自 Vulkan；attention、HC、router 和 head
+仍在 CPU，不能写成完整 GPU token、20/50 token/s 或能力提升。
