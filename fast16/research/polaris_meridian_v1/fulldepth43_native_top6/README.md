@@ -10,8 +10,11 @@ correctness 入口，不是 S14 跳层模式，也不是 top-1 近似。
   真实 top-6 expert 页。
 - 每层都执行 top-6 routed experts + shared expert + mHC post。
 - 连续 token 保留全 43 层 window KV 和 ratio-4/128 compressor remainder。
+- forced-prefill 队列未耗尽时，下一个输入必须取官方 `token_ids[position]`；
+  队列耗尽后才改用原生 argmax。
 - 只有 43 层全部完成后，原生 HC/norm/BF16 head argmax 才能提交 token。
-- 任何缺页、顺序、状态或预算错误都 fail closed，不会伪造 token。
+- 任何缺页、顺序、状态或预算错误都 fail closed，token/cursor/43 层 state
+  一起原子回滚，不会伪造 token。
 
 ## 当前真实状态
 
@@ -47,6 +50,18 @@ python -X utf8 -m fast16.research.polaris_meridian_v1.fulldepth43_native_top6.pr
 ```powershell
 python -X utf8 -m fast16.research.polaris_meridian_v1.fulldepth43_native_top6.executor run
 ```
+
+首个官方聊天预览使用仓内 `first_preview_forced_prefill.json` 的 5 个 token：
+
+```powershell
+python -X utf8 -m fast16.research.polaris_meridian_v1.fulldepth43_native_top6.executor run `
+  --forced-prefill `
+  --token-count 5
+```
+
+`--forced-prefill` 不带路径时固定使用上述仓内产物，也可显式指定其他通过
+S14 format/revision/vocab/BOS/token-hash/decoder-consumption 验收的产物。中间四次
+argmax 只记录为反事实输出，不会覆盖 forced 队列的下一输入。
 
 新 token 若命中未缓存专家页，要允许补页，必须同时显式传入
 `--download-missing` 和不小于

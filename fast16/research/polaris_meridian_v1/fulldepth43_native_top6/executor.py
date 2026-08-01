@@ -30,6 +30,7 @@ from .profile import FULLDEPTH43_NATIVE_TOP6, ExecutionProfile
 
 REPORT_FORMAT = "polaris-fulldepth43-native-top6-reference-v1"
 DEFAULT_REPORT = Path(__file__).resolve().parent / "last_run_report.json"
+DEFAULT_FORCED_PREFILL = Path(__file__).resolve().parent / "first_preview_forced_prefill.json"
 
 
 class FullDepthError(RuntimeError):
@@ -235,14 +236,17 @@ class ExecutionConfig:
     head_chunk_size: int = 4096
     range_attempts: int = 4
     range_workers: int = 3
+    forced_prefill_path: Path | None = None
 
     def validate(self) -> None:
         if not self.endpoint.startswith("https://"):
             raise FullDepthError("endpoint 必须是 HTTPS")
         if self.allow_fetch != (self.download_budget_bytes > 0):
             raise FullDepthError("下载授权与正数 budget 必须同时存在或同时缺席")
-        if self.token_count not in {1, 2}:
-            raise FullDepthError("当前 correctness core 只支持连续 1 或 2 token")
+        if not 1 <= self.token_count <= s14.MAX_RUNTIME_POSITIONS:
+            raise FullDepthError(
+                f"token_count 必须在 1..{s14.MAX_RUNTIME_POSITIONS}"
+            )
         if self.head_chunk_size <= 0:
             raise FullDepthError("head_chunk_size 必须为正整数")
         if self.range_attempts <= 0 or not 1 <= self.range_workers <= 8:
@@ -254,7 +258,14 @@ class DecoderState:
     position: int = 0
     input_token_id: int = s14.BOS_TOKEN_ID
     layer_states: Mapping[int, s14.LayerRuntimeState] = field(default_factory=dict)
-    committed_tokens: list[dict[str, int]] = field(default_factory=list)
+    committed_tokens: list[dict[str, Any]] = field(default_factory=list)
+    forced_queue: s14.ForcedTokenQueue | None = None
+
+    def __post_init__(self) -> None:
+        if self.forced_queue is not None:
+            self.forced_queue.validate()
+            if self.forced_queue.active and self.input_token_id != self.forced_queue.current_token_id:
+                raise FullDepthError("decoder input_token_id 与 forced-prefill cursor 漂移")
 
     def previous_for(self, profile: ExecutionProfile) -> Mapping[int, s14.LayerRuntimeState]:
         if self.position == 0:
@@ -262,7 +273,10 @@ class DecoderState:
                 raise FullDepthError("position0 不得携带旧 KV/compressor state")
         elif set(self.layer_states) != set(profile.layers):
             raise FullDepthError("decode token 缺少 43 层 KV/compressor state")
-        return self.layer_states
+        return {
+            layer: s14._clone_layer_state(state)
+            for layer, state in self.layer_states.items()
+        }
 
     def commit(
         self,
@@ -275,16 +289,44 @@ class DecoderState:
             raise FullDepthError("禁止提交跳层 state")
         if isinstance(output_token_id, bool) or not 0 <= output_token_id < s14.VOCAB_SIZE:
             raise FullDepthError("禁止提交假 token/越界 token")
-        self.committed_tokens.append(
-            {
-                "position": self.position,
-                "input_token_id": self.input_token_id,
-                "output_token_id": output_token_id,
-            }
-        )
-        self.position += 1
-        self.input_token_id = output_token_id
-        self.layer_states = dict(next_states)
+        for layer in profile.layers:
+            state = next_states[layer]
+            if state.layer != layer or state.position != self.position:
+                raise FullDepthError(f"L{layer} runtime state 的 layer/position 漂移")
+
+        next_input_token_id = output_token_id
+        next_forced_queue = self.forced_queue
+        committed: dict[str, Any] = {
+            "position": self.position,
+            "input_token_id": self.input_token_id,
+            "output_token_id": output_token_id,
+        }
+        if self.forced_queue is not None and self.forced_queue.active:
+            next_forced_queue = s14.ForcedTokenQueue(
+                token_ids=self.forced_queue.token_ids,
+                cursor=self.forced_queue.cursor + 1,
+                artifact_sha256=self.forced_queue.artifact_sha256,
+            )
+            next_forced_queue.validate()
+            if next_forced_queue.active:
+                next_input_token_id = next_forced_queue.current_token_id
+            committed.update(
+                {
+                    "input_source": "forced_prefill",
+                    "forced_cursor": self.forced_queue.cursor,
+                    "next_input_token_id": next_input_token_id,
+                }
+            )
+
+        # 所有验证、cursor 推演和状态复制完成后，才一次替换整组提交字段。
+        next_values = {
+            "position": self.position + 1,
+            "input_token_id": next_input_token_id,
+            "layer_states": dict(next_states),
+            "committed_tokens": [*self.committed_tokens, committed],
+            "forced_queue": next_forced_queue,
+        }
+        self.__dict__.update(next_values)
 
 
 def _load_or_build_catalog(config: ExecutionConfig) -> dict[str, Any]:
@@ -322,6 +364,12 @@ def execute(
         "profile": profile.as_dict(),
         "download_authorized": config.allow_fetch,
         "download_budget_bytes": config.download_budget_bytes,
+        "forced_prefill_path": (
+            None
+            if config.forced_prefill_path is None
+            else str(config.forced_prefill_path.resolve())
+        ),
+        "forced_prefill": None,
         "preflight": preflight,
         "tokens": [],
         "committed_tokens": [],
@@ -348,7 +396,23 @@ def execute(
         download_budget_bytes=config.download_budget_bytes,
         timeout=300.0,
     )
-    decoder = DecoderState()
+    forced_queue = (
+        None
+        if config.forced_prefill_path is None
+        else s14._load_forced_prefill(config.forced_prefill_path)
+    )
+    decoder = DecoderState(
+        input_token_id=(
+            s14.BOS_TOKEN_ID if forced_queue is None else forced_queue.current_token_id
+        ),
+        forced_queue=forced_queue,
+    )
+    if forced_queue is not None:
+        report["forced_prefill"] = {
+            "artifact_sha256": forced_queue.artifact_sha256,
+            "token_count": len(forced_queue.token_ids),
+            "cursor": forced_queue.cursor,
+        }
     final_head: s14.FinalHeadReference | None = None
     current_layer: int | None = None
     stage = "bootstrap"
@@ -367,6 +431,11 @@ def execute(
             token_report: dict[str, Any] = {
                 "position": position,
                 "input_token_id": input_token_id,
+                "input_source": (
+                    "forced_prefill"
+                    if decoder.forced_queue is not None and decoder.forced_queue.active
+                    else "model_argmax"
+                ),
                 "completed_layers": [],
                 "layers": [],
                 "final": None,
@@ -441,6 +510,17 @@ def execute(
             token_report["final"] = final
             token_report["state_committed"] = True
             report["committed_tokens"] = decoder.committed_tokens
+            report["runtime"] = {
+                "next_position": decoder.position,
+                "next_input_token_id": decoder.input_token_id,
+                "committed_layer_states": sorted(decoder.layer_states),
+                "forced_prefill_cursor": (
+                    None if decoder.forced_queue is None else decoder.forced_queue.cursor
+                ),
+                "forced_prefill_exhausted": (
+                    None if decoder.forced_queue is None else not decoder.forced_queue.active
+                ),
+            }
             report["native_token_executed"] = True
             write_json(config.report_path, report)
 
@@ -452,6 +532,17 @@ def execute(
         report["status"] = "blocked"
         report["native_token_executed"] = bool(decoder.committed_tokens)
         report["committed_tokens"] = decoder.committed_tokens
+        report["runtime"] = {
+            "next_position": decoder.position,
+            "next_input_token_id": decoder.input_token_id,
+            "committed_layer_states": sorted(decoder.layer_states),
+            "forced_prefill_cursor": (
+                None if decoder.forced_queue is None else decoder.forced_queue.cursor
+            ),
+            "forced_prefill_exhausted": (
+                None if decoder.forced_queue is None else not decoder.forced_queue.active
+            ),
+        }
         report["error"] = {
             "stage": stage,
             "layer": current_layer,
@@ -475,7 +566,14 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--endpoint", default=os.environ.get("POLARIS_HF_ENDPOINT", "https://huggingface.co"))
     parser.add_argument("--download-missing", action="store_true")
     parser.add_argument("--download-budget-bytes", type=int, default=0)
-    parser.add_argument("--token-count", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--token-count", type=int, default=1)
+    parser.add_argument(
+        "--forced-prefill",
+        type=Path,
+        nargs="?",
+        const=DEFAULT_FORCED_PREFILL,
+        help="官方 token JSON；不带路径时使用 first_preview_forced_prefill.json",
+    )
     parser.add_argument("--head-chunk-size", type=int, default=4096)
     parser.add_argument("--range-attempts", type=int, default=4)
     parser.add_argument("--range-workers", type=int, choices=range(1, 9), default=3)
@@ -496,6 +594,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             head_chunk_size=args.head_chunk_size,
             range_attempts=args.range_attempts,
             range_workers=args.range_workers,
+            forced_prefill_path=args.forced_prefill,
         )
         if args.command == "preflight":
             catalog = _load_or_build_catalog(config)

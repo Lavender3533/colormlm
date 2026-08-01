@@ -5,6 +5,8 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
+import torch
+
 from fast16.research.polaris_meridian_v1.fulldepth43_native_top6.catalog import (
     CatalogError,
     read_json,
@@ -23,11 +25,27 @@ from fast16.research.polaris_meridian_v1.fulldepth43_native_top6.profile import 
     ProfileError,
 )
 from fast16.research.polaris_meridian_v1.s14_first_real_token.executor import TensorStore
+from fast16.research.polaris_meridian_v1.s14_first_real_token import executor as s14
 
 
 ASSET_ROOT = Path("D:/models/Polaris-S14")
 FULL_CATALOG = ASSET_ROOT / "fulldepth43_native_top6_catalog.json"
 S14_CATALOG = ASSET_ROOT / "route_first_catalog.json"
+PREVIEW_FORCED_PREFILL = Path(__file__).resolve().parents[1] / "first_preview_forced_prefill.json"
+
+
+def full_states(position: int) -> dict[int, s14.LayerRuntimeState]:
+    return {
+        layer: s14.LayerRuntimeState(
+            layer=layer,
+            position=position,
+            window_kv=torch.full(
+                (1, s14.WINDOW_SIZE, 512), float(position), dtype=torch.bfloat16
+            ),
+            compressor=None,
+        )
+        for layer in FULLDEPTH43_NATIVE_TOP6.layers
+    }
 
 
 class FullDepthContractTests(unittest.TestCase):
@@ -70,10 +88,104 @@ class FullDepthContractTests(unittest.TestCase):
 
     def test_download_gate_requires_explicit_matching_budget(self) -> None:
         ExecutionConfig().validate()
+        ExecutionConfig(token_count=5).validate()
         with self.assertRaises(FullDepthError):
             ExecutionConfig(allow_fetch=True, download_budget_bytes=0).validate()
         with self.assertRaises(FullDepthError):
             ExecutionConfig(allow_fetch=False, download_budget_bytes=1).validate()
+
+    def test_first_preview_forced_prefill_runs_five_inputs_before_argmax(self) -> None:
+        queue = s14._load_forced_prefill(PREVIEW_FORCED_PREFILL)
+        self.assertEqual(queue.token_ids, (0, 128803, 30594, 128804, 128821))
+        decoder = DecoderState(
+            input_token_id=queue.current_token_id,
+            forced_queue=queue,
+        )
+        argmax_outputs = (101, 102, 103, 104, 105)
+
+        for position, (forced_token, argmax_token) in enumerate(
+            zip(queue.token_ids, argmax_outputs, strict=True)
+        ):
+            self.assertEqual(decoder.position, position)
+            self.assertEqual(decoder.input_token_id, forced_token)
+            previous = decoder.previous_for(FULLDEPTH43_NATIVE_TOP6)
+            self.assertEqual(set(previous), set() if position == 0 else set(range(43)))
+            decoder.commit(
+                output_token_id=argmax_token,
+                next_states=full_states(position),
+                profile=FULLDEPTH43_NATIVE_TOP6,
+            )
+            self.assertEqual(set(decoder.layer_states), set(range(43)))
+
+        self.assertIsNotNone(decoder.forced_queue)
+        self.assertFalse(decoder.forced_queue.active)
+        self.assertEqual(decoder.forced_queue.cursor, 5)
+        self.assertEqual(decoder.input_token_id, argmax_outputs[-1])
+        self.assertEqual(
+            [item["input_token_id"] for item in decoder.committed_tokens],
+            list(queue.token_ids),
+        )
+        self.assertTrue(
+            all(item["input_source"] == "forced_prefill" for item in decoder.committed_tokens)
+        )
+
+    def test_exhausted_forced_prefill_switches_to_native_argmax_chain(self) -> None:
+        queue = s14._load_forced_prefill(PREVIEW_FORCED_PREFILL)
+        decoder = DecoderState(input_token_id=queue.current_token_id, forced_queue=queue)
+        for position in range(len(queue.token_ids)):
+            decoder.commit(
+                output_token_id=900 + position,
+                next_states=full_states(position),
+                profile=FULLDEPTH43_NATIVE_TOP6,
+            )
+        self.assertEqual(decoder.input_token_id, 904)
+
+        decoder.commit(
+            output_token_id=777,
+            next_states=full_states(5),
+            profile=FULLDEPTH43_NATIVE_TOP6,
+        )
+        self.assertEqual(decoder.position, 6)
+        self.assertEqual(decoder.input_token_id, 777)
+        self.assertEqual(
+            decoder.committed_tokens[-1],
+            {"position": 5, "input_token_id": 904, "output_token_id": 777},
+        )
+
+    def test_forced_prefill_failure_rolls_back_cursor_token_and_layer_state(self) -> None:
+        queue = s14._load_forced_prefill(PREVIEW_FORCED_PREFILL)
+        decoder = DecoderState(input_token_id=queue.current_token_id, forced_queue=queue)
+        decoder.commit(
+            output_token_id=999,
+            next_states=full_states(0),
+            profile=FULLDEPTH43_NATIVE_TOP6,
+        )
+        before_position = decoder.position
+        before_input = decoder.input_token_id
+        before_cursor = decoder.forced_queue.cursor
+        before_committed = list(decoder.committed_tokens)
+        before_window = decoder.layer_states[0].window_kv.clone()
+
+        private_previous = decoder.previous_for(FULLDEPTH43_NATIVE_TOP6)
+        private_previous[0].window_kv.fill_(7)
+        torch.testing.assert_close(
+            decoder.layer_states[0].window_kv, before_window, rtol=0, atol=0
+        )
+        invalid_states = full_states(1)
+        invalid_states[42].position = 0
+        with self.assertRaises(FullDepthError):
+            decoder.commit(
+                output_token_id=1000,
+                next_states=invalid_states,
+                profile=FULLDEPTH43_NATIVE_TOP6,
+            )
+        self.assertEqual(decoder.position, before_position)
+        self.assertEqual(decoder.input_token_id, before_input)
+        self.assertEqual(decoder.forced_queue.cursor, before_cursor)
+        self.assertEqual(decoder.committed_tokens, before_committed)
+        torch.testing.assert_close(
+            decoder.layer_states[0].window_kv, before_window, rtol=0, atol=0
+        )
 
     def test_real_local_catalog_preflight_is_machine_readable(self) -> None:
         if not FULL_CATALOG.is_file():
