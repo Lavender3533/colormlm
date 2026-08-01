@@ -1,0 +1,112 @@
+{
+  "format": "polaris-runtime-paging-selftest-v1",
+  "fixture": {
+    "pages": 32,
+    "page_mib": 2,
+    "payload_mib": 64,
+    "note": "合成 Safetensors；不启动模型、不下载权重。"
+  },
+  "catalog_summary": {
+    "pages": 32,
+    "payload_bytes": 67108864,
+    "source_files": 1,
+    "physical_spans": 32,
+    "coalesced_spans_saved": 64,
+    "component_signatures": {
+      "w1.weight_packed|w2.weight_packed|w3.weight_packed": 32
+    },
+    "uniform_components": true
+  },
+  "assertions": {
+    "page_count_exact": true,
+    "page_size_exact": true,
+    "one_contiguous_span_per_expert": true,
+    "raw_read_lengths_exact": true,
+    "prefetch_all_resident": true,
+    "cache_hit_returns_same_object": true,
+    "singleflight_one_physical_load": true,
+    "singleflight_payload_equal": true,
+    "lru_evicted": true,
+    "capacity_respected": true
+  },
+  "all_passed": true,
+  "benchmarks": {
+    "process_uncached_os_cache_uncontrolled": {
+      "elapsed_seconds": 0.04196609999962675,
+      "mib_per_second": 1525.0404493286062,
+      "physical_read_mib": 64
+    },
+    "four_worker_prefetch_os_cache_uncontrolled": {
+      "elapsed_seconds": 0.03684100000100443,
+      "wall_mib_per_second": 1737.1949729446842,
+      "cache_stats": {
+        "requests": 0,
+        "hits": 0,
+        "misses": 32,
+        "coalesced_waits": 0,
+        "prefetch_requests": 32,
+        "physical_loads": 32,
+        "bytes_read": 67108864,
+        "io_nanoseconds": 111615000,
+        "evictions": 0,
+        "oversize_bypass": 0,
+        "catalog_pages": 32,
+        "resident_pages": 32,
+        "resident_bytes": 67108864,
+        "capacity_bytes": 67108864,
+        "inflight": 0,
+        "hit_rate": 0.0,
+        "aggregate_io_mib_per_second": 573.3996326658603
+      }
+    },
+    "resident_hot_path": {
+      "iterations": 100000,
+      "nanoseconds_per_get": 548.111,
+      "gets_per_second": 1824447.9676561863,
+      "payload_copy": false
+    }
+  },
+  "singleflight_stats": {
+    "requests": 8,
+    "hits": 3,
+    "misses": 1,
+    "coalesced_waits": 4,
+    "prefetch_requests": 0,
+    "physical_loads": 1,
+    "bytes_read": 2097152,
+    "io_nanoseconds": 1790500,
+    "evictions": 0,
+    "oversize_bypass": 0,
+    "catalog_pages": 32,
+    "resident_pages": 1,
+    "resident_bytes": 2097152,
+    "capacity_bytes": 4194304,
+    "inflight": 0,
+    "hit_rate": 0.375,
+    "aggregate_io_mib_per_second": 1117.0064227869311
+  },
+  "eviction_stats": {
+    "requests": 4,
+    "hits": 0,
+    "misses": 4,
+    "coalesced_waits": 0,
+    "prefetch_requests": 0,
+    "physical_loads": 4,
+    "bytes_read": 8388608,
+    "io_nanoseconds": 5476100,
+    "evictions": 2,
+    "oversize_bypass": 0,
+    "catalog_pages": 32,
+    "resident_pages": 2,
+    "resident_bytes": 4194304,
+    "capacity_bytes": 4194304,
+    "inflight": 0,
+    "hit_rate": 0.0,
+    "aggregate_io_mib_per_second": 1460.8937017220285
+  },
+  "limitations": [
+    "Windows 用户态无法由本脚本可靠清空系统文件缓存，磁盘读吞吐必须标为 OS cache uncontrolled。",
+    "这是 SSD/RAM 页缓存原型，不包含 Vulkan 上传和 GGML 图内 remap。",
+    "合成页验证字节边界与缓存并发，不证明 300B+ donor 的能力。"
+  ]
+}

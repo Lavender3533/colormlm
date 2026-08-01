@@ -1,0 +1,72 @@
+{
+  "format": "polaris-meridian-speed-budget-v1",
+  "donor_case": {
+    "name": "Kimi K3 original routed path",
+    "moe_layers": 92,
+    "active_experts_per_layer": 16,
+    "expert_mib": 16.734375,
+    "expert_page_uses_per_token": 1472,
+    "routed_expert_payload_mib_per_token": 24633.0,
+    "reported_total_active_parameters": 104000000000.0
+  },
+  "ssd_miss_budget": {
+    "measured_source": "D:\\project\\大模型ssd化\\fast16\\research\\polaris_meridian_v0\\runtime_paging\\real_gguf_cache_report.json",
+    "measured_os_cache_state": "uncontrolled",
+    "measured_random_multispan": [
+      {
+        "target_tokens_per_second": 20.0,
+        "storage_mib_per_second": 207.3905515291289,
+        "allowed_miss_mib_per_token": 10.369527576456445,
+        "allowed_miss_pages_per_token": 0.6196543089572478,
+        "required_page_hit_rate": 0.9995790391922845
+      },
+      {
+        "target_tokens_per_second": 50.0,
+        "storage_mib_per_second": 207.3905515291289,
+        "allowed_miss_mib_per_token": 4.147811030582578,
+        "allowed_miss_pages_per_token": 0.24786172358289915,
+        "required_page_hit_rate": 0.9998316156769138
+      }
+    ],
+    "optimistic_3500_mib_s_sequential_ceiling": [
+      {
+        "target_tokens_per_second": 20.0,
+        "storage_mib_per_second": 3500.0,
+        "allowed_miss_mib_per_token": 175.0,
+        "allowed_miss_pages_per_token": 10.457516339869281,
+        "required_page_hit_rate": 0.992895709008241
+      },
+      {
+        "target_tokens_per_second": 50.0,
+        "storage_mib_per_second": 3500.0,
+        "allowed_miss_mib_per_token": 70.0,
+        "allowed_miss_pages_per_token": 4.183006535947713,
+        "required_page_hit_rate": 0.9971582836032964
+      }
+    ]
+  },
+  "vram_bandwidth_floor": {
+    "rx5700xt_nominal_gb_per_second": 448.0,
+    "q4_active_weight_gb_per_token": 52.0,
+    "original_path_theoretical_upper_tokens_per_second": 8.615384615384615,
+    "note": "只算每 token 扫描一次 Q4 权重；未计量化 scales、计算、attention、KV、同步，真实值只会更低。",
+    "active_parameter_caps": [
+      {
+        "target_tokens_per_second": 20.0,
+        "q4_active_parameters_b_theoretical_100pct_bandwidth": 44.8,
+        "q4_active_parameters_b_at_50pct_bandwidth": 22.4
+      },
+      {
+        "target_tokens_per_second": 50.0,
+        "q4_active_parameters_b_theoretical_100pct_bandwidth": 17.92,
+        "q4_active_parameters_b_at_50pct_bandwidth": 8.96
+      }
+    ]
+  },
+  "decision": {
+    "original_k3_path_can_reach_20_50_tps_on_rx5700xt": false,
+    "why": "104B 激活参数的 Q4 权重带宽下限已超过 RX 5700 XT；SSD miss 还要求接近 100% 页命中。",
+    "runtime_target": "总容量可为 300B+，但每 token 必须压到约 3--5B 活跃参数，并让绝大多数活跃页在 VRAM/RAM 热集。",
+    "research_risk": "未经训练把 K3 top-16 直接裁成 top-1/微块不会自动保留 K3 质量，必须用真实反事实 NLL/任务门证明。"
+  }
+}

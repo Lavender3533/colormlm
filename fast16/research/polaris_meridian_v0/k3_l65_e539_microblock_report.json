@@ -1,0 +1,519 @@
+{
+  "format": "polaris-k3-microblock-analysis-v1",
+  "inputs": {
+    "capsule": "D:\\project\\大模型ssd化\\fast16\\research\\neural_bus_capsules\\kimi_k3_l65_e539_real\\runtime_v2",
+    "hidden_states": "D:\\project\\大模型ssd化\\fast16\\research\\v14_live\\l12_feature.hidden.npz",
+    "hidden_key": "layer_28",
+    "samples": 72,
+    "source_repo": "moonshotai/Kimi-K3",
+    "source_revision": "master",
+    "source_layer": 65,
+    "source_expert": 539
+  },
+  "configuration": {
+    "block_size": 64,
+    "block_count": 48,
+    "proxy_rank": 4,
+    "seed": 20260801,
+    "activation": {
+      "name": "situ",
+      "beta": 4.0,
+      "linear_beta": 25.0
+    },
+    "rms_norm_eps": 1e-05
+  },
+  "folding_contract": {
+    "gate_eff": "gate_block @ b_in",
+    "up_eff": "up_block @ b_in",
+    "down_partial": "down_block @ activation_block，仅用于 RMS 分母",
+    "output_eff": "b_out @ diag(norm) @ down_block",
+    "exact_selected_output": "output_eff @ activation / sqrt(mean(down_partial^2)+eps)",
+    "training_required": false
+  },
+  "results": [
+    {
+      "selector": "activation_oracle",
+      "top_blocks": 1,
+      "activation_energy_coverage": 0.04771462082862854,
+      "fidelity": {
+        "cosine_mean": 0.21480542421340942,
+        "cosine_median": 0.21424660086631775,
+        "cosine_p10": 0.17505034804344177,
+        "nrmse_mean": 1.252400279045105,
+        "nrmse_median": 1.2517178058624268,
+        "norm_ratio_mean": 0.9990463256835938
+      },
+      "budget": {
+        "active_blocks": 1,
+        "active_neurons": 64,
+        "fraction_of_expert": 0.020833333333333332,
+        "folded_dynamic_parameters": 622592,
+        "folded_dynamic_f16_mib_per_token": 1.1875,
+        "analytic_router_parameters": 393216,
+        "analytic_router_f16_mib_resident": 0.75,
+        "bandwidth_mib_s_at_20_tps": 23.75,
+        "bandwidth_mib_s_at_50_tps": 59.375
+      },
+      "overlap_with_activation_oracle": 1.0,
+      "overlap_with_linear_oracle": 0.20833333333333334
+    },
+    {
+      "selector": "activation_oracle",
+      "top_blocks": 2,
+      "activation_energy_coverage": 0.08915014564990997,
+      "fidelity": {
+        "cosine_mean": 0.29768097400665283,
+        "cosine_median": 0.294822096824646,
+        "cosine_p10": 0.2611982822418213,
+        "nrmse_mean": 1.18463134765625,
+        "nrmse_median": 1.1844508647918701,
+        "norm_ratio_mean": 0.9994246363639832
+      },
+      "budget": {
+        "active_blocks": 2,
+        "active_neurons": 128,
+        "fraction_of_expert": 0.041666666666666664,
+        "folded_dynamic_parameters": 1245184,
+        "folded_dynamic_f16_mib_per_token": 2.375,
+        "analytic_router_parameters": 393216,
+        "analytic_router_f16_mib_resident": 0.75,
+        "bandwidth_mib_s_at_20_tps": 47.5,
+        "bandwidth_mib_s_at_50_tps": 118.75
+      },
+      "overlap_with_activation_oracle": 1.0,
+      "overlap_with_linear_oracle": 0.19444444444444445
+    },
+    {
+      "selector": "activation_oracle",
+      "top_blocks": 4,
+      "activation_energy_coverage": 0.16225886344909668,
+      "fidelity": {
+        "cosine_mean": 0.40027204155921936,
+        "cosine_median": 0.39542752504348755,
+        "cosine_p10": 0.3695325255393982,
+        "nrmse_mean": 1.095080018043518,
+        "nrmse_median": 1.0944335460662842,
+        "norm_ratio_mean": 1.0001181364059448
+      },
+      "budget": {
+        "active_blocks": 4,
+        "active_neurons": 256,
+        "fraction_of_expert": 0.08333333333333333,
+        "folded_dynamic_parameters": 2490368,
+        "folded_dynamic_f16_mib_per_token": 4.75,
+        "analytic_router_parameters": 393216,
+        "analytic_router_f16_mib_resident": 0.75,
+        "bandwidth_mib_s_at_20_tps": 95.0,
+        "bandwidth_mib_s_at_50_tps": 237.5
+      },
+      "overlap_with_activation_oracle": 1.0,
+      "overlap_with_linear_oracle": 0.2638888888888889
+    },
+    {
+      "selector": "activation_oracle",
+      "top_blocks": 8,
+      "activation_energy_coverage": 0.2899683713912964,
+      "fidelity": {
+        "cosine_mean": 0.5390904545783997,
+        "cosine_median": 0.5407830476760864,
+        "cosine_p10": 0.5098801255226135,
+        "nrmse_mean": 0.9595277309417725,
+        "nrmse_median": 0.9584013223648071,
+        "norm_ratio_mean": 0.9991744160652161
+      },
+      "budget": {
+        "active_blocks": 8,
+        "active_neurons": 512,
+        "fraction_of_expert": 0.16666666666666666,
+        "folded_dynamic_parameters": 4980736,
+        "folded_dynamic_f16_mib_per_token": 9.5,
+        "analytic_router_parameters": 393216,
+        "analytic_router_f16_mib_resident": 0.75,
+        "bandwidth_mib_s_at_20_tps": 190.0,
+        "bandwidth_mib_s_at_50_tps": 475.0
+      },
+      "overlap_with_activation_oracle": 1.0,
+      "overlap_with_linear_oracle": 0.4097222222222222
+    },
+    {
+      "selector": "activation_oracle",
+      "top_blocks": 16,
+      "activation_energy_coverage": 0.5006439685821533,
+      "fidelity": {
+        "cosine_mean": 0.7091673612594604,
+        "cosine_median": 0.7098398208618164,
+        "cosine_p10": 0.6819599866867065,
+        "nrmse_mean": 0.762233316898346,
+        "nrmse_median": 0.7606885433197021,
+        "norm_ratio_mean": 0.9995601177215576
+      },
+      "budget": {
+        "active_blocks": 16,
+        "active_neurons": 1024,
+        "fraction_of_expert": 0.3333333333333333,
+        "folded_dynamic_parameters": 9961472,
+        "folded_dynamic_f16_mib_per_token": 19.0,
+        "analytic_router_parameters": 393216,
+        "analytic_router_f16_mib_resident": 0.75,
+        "bandwidth_mib_s_at_20_tps": 380.0,
+        "bandwidth_mib_s_at_50_tps": 950.0
+      },
+      "overlap_with_activation_oracle": 1.0,
+      "overlap_with_linear_oracle": 0.5416666666666666
+    },
+    {
+      "selector": "activation_oracle",
+      "top_blocks": 48,
+      "activation_energy_coverage": 1.0,
+      "fidelity": {
+        "cosine_mean": 1.0,
+        "cosine_median": 1.0,
+        "cosine_p10": 0.9999998807907104,
+        "nrmse_mean": 0.0,
+        "nrmse_median": 0.0,
+        "norm_ratio_mean": 1.0
+      },
+      "budget": {
+        "active_blocks": 48,
+        "active_neurons": 3072,
+        "fraction_of_expert": 1.0,
+        "folded_dynamic_parameters": 29884416,
+        "folded_dynamic_f16_mib_per_token": 57.0,
+        "analytic_router_parameters": 393216,
+        "analytic_router_f16_mib_resident": 0.75,
+        "bandwidth_mib_s_at_20_tps": 1140.0,
+        "bandwidth_mib_s_at_50_tps": 2850.0
+      },
+      "overlap_with_activation_oracle": 1.0,
+      "overlap_with_linear_oracle": 1.0
+    },
+    {
+      "selector": "output_contribution_oracle",
+      "top_blocks": 1,
+      "activation_energy_coverage": 0.047565072774887085,
+      "fidelity": {
+        "cosine_mean": 0.21683567762374878,
+        "cosine_median": 0.21526937186717987,
+        "cosine_p10": 0.18485896289348602,
+        "nrmse_mean": 1.2517693042755127,
+        "nrmse_median": 1.2509827613830566,
+        "norm_ratio_mean": 1.0006321668624878
+      },
+      "budget": {
+        "active_blocks": 1,
+        "active_neurons": 64,
+        "fraction_of_expert": 0.020833333333333332,
+        "folded_dynamic_parameters": 622592,
+        "folded_dynamic_f16_mib_per_token": 1.1875,
+        "analytic_router_parameters": 393216,
+        "analytic_router_f16_mib_resident": 0.75,
+        "bandwidth_mib_s_at_20_tps": 23.75,
+        "bandwidth_mib_s_at_50_tps": 59.375
+      },
+      "overlap_with_activation_oracle": 0.9027777777777778,
+      "overlap_with_linear_oracle": 0.2222222222222222
+    },
+    {
+      "selector": "output_contribution_oracle",
+      "top_blocks": 2,
+      "activation_energy_coverage": 0.0890316441655159,
+      "fidelity": {
+        "cosine_mean": 0.29799264669418335,
+        "cosine_median": 0.2956013083457947,
+        "cosine_p10": 0.259875625371933,
+        "nrmse_mean": 1.1852078437805176,
+        "nrmse_median": 1.1844508647918701,
+        "norm_ratio_mean": 1.0008773803710938
+      },
+      "budget": {
+        "active_blocks": 2,
+        "active_neurons": 128,
+        "fraction_of_expert": 0.041666666666666664,
+        "folded_dynamic_parameters": 1245184,
+        "folded_dynamic_f16_mib_per_token": 2.375,
+        "analytic_router_parameters": 393216,
+        "analytic_router_f16_mib_resident": 0.75,
+        "bandwidth_mib_s_at_20_tps": 47.5,
+        "bandwidth_mib_s_at_50_tps": 118.75
+      },
+      "overlap_with_activation_oracle": 0.9513888888888888,
+      "overlap_with_linear_oracle": 0.20833333333333334
+    },
+    {
+      "selector": "output_contribution_oracle",
+      "top_blocks": 4,
+      "activation_energy_coverage": 0.1618252396583557,
+      "fidelity": {
+        "cosine_mean": 0.40345486998558044,
+        "cosine_median": 0.4009680151939392,
+        "cosine_p10": 0.37323012948036194,
+        "nrmse_mean": 1.0931731462478638,
+        "nrmse_median": 1.0946098566055298,
+        "norm_ratio_mean": 1.0019373893737793
+      },
+      "budget": {
+        "active_blocks": 4,
+        "active_neurons": 256,
+        "fraction_of_expert": 0.08333333333333333,
+        "folded_dynamic_parameters": 2490368,
+        "folded_dynamic_f16_mib_per_token": 4.75,
+        "analytic_router_parameters": 393216,
+        "analytic_router_f16_mib_resident": 0.75,
+        "bandwidth_mib_s_at_20_tps": 95.0,
+        "bandwidth_mib_s_at_50_tps": 237.5
+      },
+      "overlap_with_activation_oracle": 0.90625,
+      "overlap_with_linear_oracle": 0.2673611111111111
+    },
+    {
+      "selector": "output_contribution_oracle",
+      "top_blocks": 8,
+      "activation_energy_coverage": 0.2895229160785675,
+      "fidelity": {
+        "cosine_mean": 0.539496123790741,
+        "cosine_median": 0.5408439636230469,
+        "cosine_p10": 0.5107013583183289,
+        "nrmse_mean": 0.9595435261726379,
+        "nrmse_median": 0.9597506523132324,
+        "norm_ratio_mean": 1.0001142024993896
+      },
+      "budget": {
+        "active_blocks": 8,
+        "active_neurons": 512,
+        "fraction_of_expert": 0.16666666666666666,
+        "folded_dynamic_parameters": 4980736,
+        "folded_dynamic_f16_mib_per_token": 9.5,
+        "analytic_router_parameters": 393216,
+        "analytic_router_f16_mib_resident": 0.75,
+        "bandwidth_mib_s_at_20_tps": 190.0,
+        "bandwidth_mib_s_at_50_tps": 475.0
+      },
+      "overlap_with_activation_oracle": 0.9461805555555556,
+      "overlap_with_linear_oracle": 0.3975694444444444
+    },
+    {
+      "selector": "output_contribution_oracle",
+      "top_blocks": 16,
+      "activation_energy_coverage": 0.5001111626625061,
+      "fidelity": {
+        "cosine_mean": 0.7097703218460083,
+        "cosine_median": 0.7093782424926758,
+        "cosine_p10": 0.6833646893501282,
+        "nrmse_mean": 0.7617398500442505,
+        "nrmse_median": 0.7594366669654846,
+        "norm_ratio_mean": 1.0003033876419067
+      },
+      "budget": {
+        "active_blocks": 16,
+        "active_neurons": 1024,
+        "fraction_of_expert": 0.3333333333333333,
+        "folded_dynamic_parameters": 9961472,
+        "folded_dynamic_f16_mib_per_token": 19.0,
+        "analytic_router_parameters": 393216,
+        "analytic_router_f16_mib_resident": 0.75,
+        "bandwidth_mib_s_at_20_tps": 380.0,
+        "bandwidth_mib_s_at_50_tps": 950.0
+      },
+      "overlap_with_activation_oracle": 0.9583333333333334,
+      "overlap_with_linear_oracle": 0.5434027777777778
+    },
+    {
+      "selector": "output_contribution_oracle",
+      "top_blocks": 48,
+      "activation_energy_coverage": 1.0,
+      "fidelity": {
+        "cosine_mean": 1.0,
+        "cosine_median": 1.0,
+        "cosine_p10": 0.9999998807907104,
+        "nrmse_mean": 0.0,
+        "nrmse_median": 0.0,
+        "norm_ratio_mean": 1.0
+      },
+      "budget": {
+        "active_blocks": 48,
+        "active_neurons": 3072,
+        "fraction_of_expert": 1.0,
+        "folded_dynamic_parameters": 29884416,
+        "folded_dynamic_f16_mib_per_token": 57.0,
+        "analytic_router_parameters": 393216,
+        "analytic_router_f16_mib_resident": 0.75,
+        "bandwidth_mib_s_at_20_tps": 1140.0,
+        "bandwidth_mib_s_at_50_tps": 2850.0
+      },
+      "overlap_with_activation_oracle": 1.0,
+      "overlap_with_linear_oracle": 1.0
+    },
+    {
+      "selector": "analytic_proxy",
+      "top_blocks": 1,
+      "activation_energy_coverage": 0.02541644126176834,
+      "fidelity": {
+        "cosine_mean": 0.15892447531223297,
+        "cosine_median": 0.16091600060462952,
+        "cosine_p10": 0.11060694605112076,
+        "nrmse_mean": 1.2944395542144775,
+        "nrmse_median": 1.2951524257659912,
+        "norm_ratio_mean": 0.9964057207107544
+      },
+      "budget": {
+        "active_blocks": 1,
+        "active_neurons": 64,
+        "fraction_of_expert": 0.020833333333333332,
+        "folded_dynamic_parameters": 622592,
+        "folded_dynamic_f16_mib_per_token": 1.1875,
+        "analytic_router_parameters": 393216,
+        "analytic_router_f16_mib_resident": 0.75,
+        "bandwidth_mib_s_at_20_tps": 23.75,
+        "bandwidth_mib_s_at_50_tps": 59.375
+      },
+      "overlap_with_activation_oracle": 0.05555555555555555,
+      "overlap_with_linear_oracle": 0.1527777777777778
+    },
+    {
+      "selector": "analytic_proxy",
+      "top_blocks": 2,
+      "activation_energy_coverage": 0.04588214308023453,
+      "fidelity": {
+        "cosine_mean": 0.2162885069847107,
+        "cosine_median": 0.21352797746658325,
+        "cosine_p10": 0.1681443154811859,
+        "nrmse_mean": 1.249853491783142,
+        "nrmse_median": 1.2502427101135254,
+        "norm_ratio_mean": 0.9969327449798584
+      },
+      "budget": {
+        "active_blocks": 2,
+        "active_neurons": 128,
+        "fraction_of_expert": 0.041666666666666664,
+        "folded_dynamic_parameters": 1245184,
+        "folded_dynamic_f16_mib_per_token": 2.375,
+        "analytic_router_parameters": 393216,
+        "analytic_router_f16_mib_resident": 0.75,
+        "bandwidth_mib_s_at_20_tps": 47.5,
+        "bandwidth_mib_s_at_50_tps": 118.75
+      },
+      "overlap_with_activation_oracle": 0.09027777777777778,
+      "overlap_with_linear_oracle": 0.13194444444444445
+    },
+    {
+      "selector": "analytic_proxy",
+      "top_blocks": 4,
+      "activation_energy_coverage": 0.09171569347381592,
+      "fidelity": {
+        "cosine_mean": 0.30446311831474304,
+        "cosine_median": 0.30231958627700806,
+        "cosine_p10": 0.2492472529411316,
+        "nrmse_mean": 1.176999807357788,
+        "nrmse_median": 1.181556224822998,
+        "norm_ratio_mean": 0.9965468645095825
+      },
+      "budget": {
+        "active_blocks": 4,
+        "active_neurons": 256,
+        "fraction_of_expert": 0.08333333333333333,
+        "folded_dynamic_parameters": 2490368,
+        "folded_dynamic_f16_mib_per_token": 4.75,
+        "analytic_router_parameters": 393216,
+        "analytic_router_f16_mib_resident": 0.75,
+        "bandwidth_mib_s_at_20_tps": 95.0,
+        "bandwidth_mib_s_at_50_tps": 237.5
+      },
+      "overlap_with_activation_oracle": 0.10069444444444445,
+      "overlap_with_linear_oracle": 0.1875
+    },
+    {
+      "selector": "analytic_proxy",
+      "top_blocks": 8,
+      "activation_energy_coverage": 0.1768331229686737,
+      "fidelity": {
+        "cosine_mean": 0.42217087745666504,
+        "cosine_median": 0.42637553811073303,
+        "cosine_p10": 0.3780193328857422,
+        "nrmse_mean": 1.0732171535491943,
+        "nrmse_median": 1.0705533027648926,
+        "norm_ratio_mean": 0.9974668025970459
+      },
+      "budget": {
+        "active_blocks": 8,
+        "active_neurons": 512,
+        "fraction_of_expert": 0.16666666666666666,
+        "folded_dynamic_parameters": 4980736,
+        "folded_dynamic_f16_mib_per_token": 9.5,
+        "analytic_router_parameters": 393216,
+        "analytic_router_f16_mib_resident": 0.75,
+        "bandwidth_mib_s_at_20_tps": 190.0,
+        "bandwidth_mib_s_at_50_tps": 475.0
+      },
+      "overlap_with_activation_oracle": 0.1909722222222222,
+      "overlap_with_linear_oracle": 0.24131944444444445
+    },
+    {
+      "selector": "analytic_proxy",
+      "top_blocks": 16,
+      "activation_energy_coverage": 0.34859901666641235,
+      "fidelity": {
+        "cosine_mean": 0.5909379124641418,
+        "cosine_median": 0.5904983878135681,
+        "cosine_p10": 0.560756266117096,
+        "nrmse_mean": 0.9036903381347656,
+        "nrmse_median": 0.9060288667678833,
+        "norm_ratio_mean": 0.999332845211029
+      },
+      "budget": {
+        "active_blocks": 16,
+        "active_neurons": 1024,
+        "fraction_of_expert": 0.3333333333333333,
+        "folded_dynamic_parameters": 9961472,
+        "folded_dynamic_f16_mib_per_token": 19.0,
+        "analytic_router_parameters": 393216,
+        "analytic_router_f16_mib_resident": 0.75,
+        "bandwidth_mib_s_at_20_tps": 380.0,
+        "bandwidth_mib_s_at_50_tps": 950.0
+      },
+      "overlap_with_activation_oracle": 0.3767361111111111,
+      "overlap_with_linear_oracle": 0.4097222222222222
+    },
+    {
+      "selector": "analytic_proxy",
+      "top_blocks": 48,
+      "activation_energy_coverage": 1.0,
+      "fidelity": {
+        "cosine_mean": 1.0,
+        "cosine_median": 1.0,
+        "cosine_p10": 0.9999998807907104,
+        "nrmse_mean": 0.0,
+        "nrmse_median": 0.0,
+        "norm_ratio_mean": 1.0
+      },
+      "budget": {
+        "active_blocks": 48,
+        "active_neurons": 3072,
+        "fraction_of_expert": 1.0,
+        "folded_dynamic_parameters": 29884416,
+        "folded_dynamic_f16_mib_per_token": 57.0,
+        "analytic_router_parameters": 393216,
+        "analytic_router_f16_mib_resident": 0.75,
+        "bandwidth_mib_s_at_20_tps": 1140.0,
+        "bandwidth_mib_s_at_50_tps": 2850.0
+      },
+      "overlap_with_activation_oracle": 1.0,
+      "overlap_with_linear_oracle": 1.0
+    }
+  ],
+  "self_check": {
+    "all_blocks_activation_oracle": {
+      "cosine_mean": 1.0,
+      "cosine_median": 1.0,
+      "cosine_p10": 0.9999998807907104,
+      "nrmse_mean": 0.0,
+      "nrmse_median": 0.0,
+      "norm_ratio_mean": 1.0
+    }
+  },
+  "decision": {
+    "status": "停止 top-4，检查 top-8/16",
+    "reason": "即使激活神谕的 top-4 也无法稳定重构完整专家方向。"
+  },
+  "elapsed_seconds": 3.8238446000013937,
+  "scope_warning": "微块重构成功不等于模型能力提升，仍需短 NLL 与真实生成门。"
+}

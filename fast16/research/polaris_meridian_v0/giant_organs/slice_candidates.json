@@ -1,0 +1,421 @@
+{
+  "schema_version": "polaris.giant_organs.slice_candidates.v1",
+  "generated_at": "2026-08-01T00:00:00+09:00",
+  "execution_boundary": {
+    "weights_downloaded": false,
+    "training_performed": false,
+    "model_service_changed": false,
+    "cmake_run": false,
+    "project_state_modified": false
+  },
+  "local_contract": {
+    "base_model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+    "hidden_size": 2048,
+    "vocab_size": 248320,
+    "hardware": "AMD Radeon RX 5700 XT 8 GiB + 32 GiB RAM",
+    "observed_baseline_tokens_per_second_range": [26.832, 28.787],
+    "target_tokens_per_second_range": [20, 50],
+    "training_allowed_for_this_route": false
+  },
+  "classification_contract": {
+    "independent_usable": "The slice has a self-contained input/output contract and can add its stated function without an unverified donor-native path or learned cross-model bridge.",
+    "native_path_required": "The bytes can be sliced, but the trained function depends on donor-native hidden states, router, cache, residual topology, tokenizer or output head.",
+    "architecture_reference_only": "Reuse the topology or scheduling idea; do not transplant the original weights."
+  },
+  "independent_usable_for_v38": [],
+  "models": [
+    {
+      "model_id": "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+      "license": "MIT",
+      "checkpoint_parameters": 304180418494,
+      "official_core_parameters": 284000000000,
+      "official_active_parameters": 13000000000,
+      "checkpoint_payload_bytes": 166878536440,
+      "hidden_size": 4096,
+      "vocab_size": 129280,
+      "hidden_compatible_with_local_2048": false,
+      "slices": [
+        {
+          "candidate_id": "dsv4_0731_l42_expert_page",
+          "module_type": "routed_expert",
+          "classification": "native_path_required",
+          "range_extractable": true,
+          "source_files": ["model-00044-of-00048.safetensors"],
+          "source_file_union_bytes": 3590026352,
+          "payload_bytes": 13369344,
+          "payload_bytes_with_router_row_and_bias": 13377540,
+          "payload_precision": "packed FP4 plus UE8M0 scales; router row BF16; bias FP32",
+          "input_width": 4096,
+          "output_width": 4096,
+          "dependencies": [
+            "DeepSeek layer-42 native hidden distribution",
+            "layer-42 score router",
+            "shared expert",
+            "mHC four-stream residual contract",
+            "FP4 and scale ABI"
+          ],
+          "first_slice_decision": "P1_RUNTIME_ABI_ONLY",
+          "quality_claim_allowed": false,
+          "speed_20_50_tps": {
+            "isolated_kernel": "plausible_but_unmeasured",
+            "polaris_end_to_end": "not_functionally_compatible",
+            "reason": "A resident 13.38 MB page may compute quickly, but no valid 2048-to-4096 donor input exists under the no-training constraint."
+          }
+        },
+        {
+          "candidate_id": "dsv4_0731_l42_active_moe_set",
+          "module_type": "router_top6_shared_expert",
+          "classification": "native_path_required",
+          "range_extractable": true,
+          "source_files": ["model-00044-of-00048.safetensors"],
+          "source_file_union_bytes": 3590026352,
+          "payload_bytes_if_top6_known": 132645888,
+          "full_router_expert_bank_shared_bytes": 3474981888,
+          "selection_is_static": false,
+          "requires_native_route_trace_before_payload_selection": true,
+          "input_width": 4096,
+          "output_width": 4096,
+          "first_slice_decision": "HOLD_NO_NATIVE_ROUTE_TRACE",
+          "quality_claim_allowed": false,
+          "speed_20_50_tps": {
+            "isolated_activity_set": "plausible_if_resident",
+            "polaris_end_to_end": "unproven_and_blocked",
+            "reason": "The 132.65 MB set is known only after the donor router runs on a valid donor hidden state."
+          }
+        },
+        {
+          "candidate_id": "dsv4_0731_dspark_three_stage",
+          "module_type": "speculative_decoder",
+          "classification": "native_path_required",
+          "range_extractable": true,
+          "source_files": [
+            "model-00046-of-00048.safetensors",
+            "model-00047-of-00048.safetensors",
+            "model-00048-of-00048.safetensors"
+          ],
+          "source_file_union_bytes": 10863342388,
+          "tensor_count": 4705,
+          "input_width": 4096,
+          "output_vocab_size": 129280,
+          "dependencies": [
+            "native hidden states from layers 40, 41 and 42",
+            "three DSpark blocks with attention, MoE and mHC",
+            "DeepSeek embedding and untied output head",
+            "Markov and confidence heads",
+            "target-model token verification",
+            "DSpark KV and block lifecycle"
+          ],
+          "first_slice_decision": "HOLD_DO_NOT_DOWNLOAD",
+          "quality_claim_allowed": false,
+          "speed_20_50_tps": {
+            "polaris_end_to_end": "not_possible_as_plug_in",
+            "reason": "DSpark is an attached three-stage decoder for the same DeepSeek checkpoint, not an independent draft model."
+          }
+        },
+        {
+          "candidate_id": "dsv4_0731_dspark_topology",
+          "module_type": "multi_depth_draft_and_verify_topology",
+          "classification": "architecture_reference_only",
+          "range_extractable": false,
+          "payload_bytes": 0,
+          "borrow": [
+            "collect shallow/mid/deep base summaries",
+            "propose a short block",
+            "commit only target-verified tokens",
+            "use a confidence head for effort control"
+          ],
+          "training_or_calibration_needed_for_effective_native_head": true,
+          "first_slice_decision": "P0_DESIGN_ONLY"
+        },
+        {
+          "candidate_id": "dsv4_0731_embedding",
+          "module_type": "embedding",
+          "classification": "native_path_required",
+          "range_extractable": true,
+          "payload_bytes": 1059061760,
+          "input_vocab_size": 129280,
+          "output_width": 4096,
+          "local_compatibility": "incompatible_vocab_and_hidden",
+          "first_slice_decision": "HOLD"
+        },
+        {
+          "candidate_id": "dsv4_0731_lm_head",
+          "module_type": "output_head",
+          "classification": "native_path_required",
+          "range_extractable": true,
+          "payload_bytes": 1059061760,
+          "input_width": 4096,
+          "output_vocab_size": 129280,
+          "tied_to_embedding": false,
+          "local_compatibility": "incompatible_vocab_and_hidden",
+          "first_slice_decision": "HOLD"
+        },
+        {
+          "candidate_id": "dsv4_0731_attention_module",
+          "module_type": "attention_layer_or_head",
+          "classification": "native_path_required",
+          "range_extractable": true,
+          "individual_head_self_contained": false,
+          "input_width": 4096,
+          "dependencies": ["CSA/HCA compressor", "indexer", "KV cache", "mHC", "native preceding layers"],
+          "first_slice_decision": "HOLD"
+        }
+      ]
+    },
+    {
+      "model_id": "zai-org/GLM-5.2",
+      "revision": "b4734de4facf877f85769a911abafc5283eab3d9",
+      "license": "MIT",
+      "official_total_parameters": 744000000000,
+      "official_active_parameters": 40000000000,
+      "checkpoint_payload_bytes": 1506659919872,
+      "hidden_size": 6144,
+      "vocab_size": 154880,
+      "hidden_compatible_with_local_2048": false,
+      "slices": [
+        {
+          "candidate_id": "glm52_l77_expert_page",
+          "module_type": "routed_expert",
+          "classification": "native_path_required",
+          "range_extractable": true,
+          "source_files": ["model-00267-of-00282.safetensors"],
+          "minimum_source_file_bytes_for_e0": 5366406960,
+          "payload_bytes": 75497472,
+          "payload_bytes_with_router_row_and_bias": 75509764,
+          "payload_precision": "BF16 expert; BF16 router row; FP32 bias",
+          "input_width": 6144,
+          "output_width": 6144,
+          "dependencies": ["GLM layer-77 native hidden distribution", "layer router", "shared expert", "MLA/DSA path"],
+          "first_slice_decision": "HOLD_DEEPSEEK_PAGE_IS_SMALLER_ABI_PROBE",
+          "quality_claim_allowed": false,
+          "speed_20_50_tps": {
+            "isolated_kernel": "unmeasured",
+            "polaris_end_to_end": "not_functionally_compatible"
+          }
+        },
+        {
+          "candidate_id": "glm52_l77_active_moe_set",
+          "module_type": "router_top8_shared_expert",
+          "classification": "native_path_required",
+          "range_extractable": true,
+          "source_files": [
+            "model-00267-of-00282.safetensors",
+            "model-00268-of-00282.safetensors",
+            "model-00269-of-00282.safetensors",
+            "model-00270-of-00282.safetensors"
+          ],
+          "source_file_union_bytes": 21453532512,
+          "payload_bytes_if_top8_known": 682624000,
+          "routed_expert_bank_bytes": 19327352832,
+          "requires_native_route_trace_before_payload_selection": true,
+          "first_slice_decision": "HOLD",
+          "quality_claim_allowed": false
+        },
+        {
+          "candidate_id": "glm52_indexshare_indexer_weights",
+          "module_type": "dsa_indexer",
+          "classification": "native_path_required",
+          "range_extractable": true,
+          "payload_bytes_bf16_geometry": 18743808,
+          "runtime_bytes_with_weights_proj_fp32": 19137024,
+          "input_hidden_width": 6144,
+          "input_q_resid_width": 2048,
+          "output": "top-2048 token positions",
+          "full_indexer_layers": 21,
+          "shared_index_layers": 57,
+          "bf16_key_cache_bytes_per_full_indexer_at_1m": 268435456,
+          "bf16_key_cache_bytes_all_full_indexers_at_1m": 5637144576,
+          "dependencies": ["GLM hidden state", "GLM q_a residual", "per-layer DSA key cache", "MLA attention layers"],
+          "first_slice_decision": "HOLD_WEIGHTS",
+          "quality_claim_allowed": false
+        },
+        {
+          "candidate_id": "glm52_indexshare_topology",
+          "module_type": "cross_layer_sparse_index_reuse",
+          "classification": "architecture_reference_only",
+          "range_extractable": false,
+          "payload_bytes": 0,
+          "official_claim": "2.9x lower per-token FLOPs at 1M context",
+          "claim_is_not": "2.9x end-to-end token throughput",
+          "borrow": ["reuse one route/index decision across a 3-4 layer segment", "reroute only on hidden drift"],
+          "first_slice_decision": "P0_DESIGN_ONLY"
+        },
+        {
+          "candidate_id": "glm52_mtp_l78",
+          "module_type": "next_token_prediction_layer",
+          "classification": "native_path_required",
+          "range_extractable": true,
+          "source_files": [
+            "model-00270-of-00282.safetensors",
+            "model-00271-of-00282.safetensors",
+            "model-00272-of-00282.safetensors",
+            "model-00273-of-00282.safetensors",
+            "model-00274-of-00282.safetensors"
+          ],
+          "source_file_union_bytes": 26807470488,
+          "expert_bank_bytes": 19327352832,
+          "input_width": 6144,
+          "output_vocab_size": 154880,
+          "dependencies": ["GLM embedding", "GLM terminal hidden", "GLM lm head", "MTP MoE", "target verification", "IndexShare state"],
+          "official_claim": "up to 20 percent higher acceptance length",
+          "claim_is_not": "20 percent end-to-end throughput",
+          "first_slice_decision": "HOLD_DO_NOT_DOWNLOAD",
+          "quality_claim_allowed": false,
+          "speed_20_50_tps": {
+            "polaris_end_to_end": "unlikely_and_unproven",
+            "reason": "The extra 6144-wide top-8 MoE layer may cost more than accepted tokens save on a CPU/GPU mixed 8 GiB system."
+          }
+        },
+        {
+          "candidate_id": "glm52_embedding",
+          "module_type": "embedding",
+          "classification": "native_path_required",
+          "range_extractable": true,
+          "payload_bytes_bf16_geometry": 1903165440,
+          "input_vocab_size": 154880,
+          "output_width": 6144,
+          "local_compatibility": "incompatible_vocab_and_hidden",
+          "first_slice_decision": "HOLD"
+        },
+        {
+          "candidate_id": "glm52_lm_head",
+          "module_type": "output_head",
+          "classification": "native_path_required",
+          "range_extractable": true,
+          "payload_bytes_bf16_geometry": 1903165440,
+          "input_width": 6144,
+          "output_vocab_size": 154880,
+          "tied_to_embedding": false,
+          "local_compatibility": "incompatible_vocab_and_hidden",
+          "first_slice_decision": "HOLD"
+        },
+        {
+          "candidate_id": "glm52_attention_module",
+          "module_type": "attention_layer_or_head",
+          "classification": "native_path_required",
+          "range_extractable": true,
+          "individual_head_self_contained": false,
+          "input_width": 6144,
+          "dependencies": ["MLA q/kv projections", "DSA indexer or shared top-k", "per-layer KV cache", "native preceding layers"],
+          "first_slice_decision": "HOLD"
+        }
+      ]
+    },
+    {
+      "model_id": "moonshotai/Kimi-K3",
+      "revision": "9f62e4e9fffbd0a83ddd60e1c209d828994b3569",
+      "license": "Kimi K3 License",
+      "official_total_parameters": 2800000000000,
+      "official_active_parameters": 104000000000,
+      "hidden_size": 7168,
+      "latent_moe_hidden_size": 3584,
+      "vocab_size": 163840,
+      "hidden_compatible_with_local_2048": false,
+      "cross_reference": "../k3_audit/REPORT.md",
+      "slices": [
+        {
+          "candidate_id": "k3_moonvit_v2",
+          "module_type": "vision_encoder",
+          "classification": "independent_usable",
+          "independent_scope": "image_and_video_patch_encoding_only",
+          "range_extractable": true,
+          "independent_file": true,
+          "payload_bytes": 802428928,
+          "output_width": 1024,
+          "local_compatibility": "requires_a_new_1024_to_2048_consumption_interface",
+          "capabilities_not_contained": ["HTML/CSS generation", "browser action policy", "tool recovery", "Kimi text reasoning"],
+          "first_slice_decision": "HOLD_UNTIL_VISION_INTERFACE_APPROVED"
+        },
+        {
+          "candidate_id": "k3_mm_projector",
+          "module_type": "vision_to_text_projector",
+          "classification": "native_path_required",
+          "range_extractable": true,
+          "independent_file": true,
+          "payload_bytes": 92289024,
+          "output_width": 7168,
+          "local_compatibility": "incompatible_output_width",
+          "first_slice_decision": "HOLD"
+        },
+        {
+          "candidate_id": "k3_routed_expert_page",
+          "module_type": "routed_expert",
+          "classification": "native_path_required",
+          "range_extractable": true,
+          "payload_bytes": 17547264,
+          "input_width": 3584,
+          "output_width": 3584,
+          "local_compatibility": "requires_7168_to_3584_latent_path_and_native_router",
+          "first_slice_decision": "P1_RUNTIME_ABI_ALTERNATE"
+        },
+        {
+          "candidate_id": "k3_shared_experts_per_layer",
+          "module_type": "shared_experts",
+          "classification": "native_path_required",
+          "range_extractable": true,
+          "payload_bytes": 264241152,
+          "expert_count": 2,
+          "input_width": 7168,
+          "local_compatibility": "incompatible_hidden",
+          "first_slice_decision": "HOLD"
+        },
+        {
+          "candidate_id": "k3_router_per_layer",
+          "module_type": "router",
+          "classification": "native_path_required",
+          "range_extractable": true,
+          "payload_bytes": 12848640,
+          "input_width": 7168,
+          "expert_count": 896,
+          "local_compatibility": "incompatible_hidden_and_expert_id_space",
+          "first_slice_decision": "HOLD"
+        },
+        {
+          "candidate_id": "k3_embedding_or_lm_head",
+          "module_type": "embedding_or_output_head",
+          "classification": "native_path_required",
+          "range_extractable": true,
+          "payload_bytes_each": 2348810240,
+          "hidden_size": 7168,
+          "vocab_size": 163840,
+          "local_compatibility": "incompatible_vocab_and_hidden",
+          "first_slice_decision": "HOLD"
+        }
+      ]
+    }
+  ],
+  "architecture_only_watchlist": [
+    {
+      "model_id": "MiniMaxAI/MiniMax-M3",
+      "total_parameters": 428000000000,
+      "hidden_size": 6144,
+      "range_modules": ["routed_expert", "attention tensors", "vision tensors", "embedding", "output head"],
+      "verdict": "architecture_reference_only",
+      "reasons": ["hidden mismatch", "MSA state dependency", "custom license review required"]
+    },
+    {
+      "model_id": "XiaomiMiMo/MiMo-V2.5-Pro",
+      "total_parameters": 1020000000000,
+      "active_parameters": 42000000000,
+      "hidden_size": 6144,
+      "range_modules": ["approximately 38 MB expert per layer", "2463641280-byte MTP file", "router", "embedding", "output head"],
+      "verdict": "architecture_reference_only",
+      "reasons": ["hidden mismatch", "native SWA/global-attention state", "MTP is not an independent capability donor"]
+    }
+  ],
+  "first_payload_recommendation": {
+    "candidate_id": "dsv4_0731_l42_expert_page",
+    "payload_bytes": 13377540,
+    "approval_scope": "runtime ABI and Range integrity only",
+    "download_now": false,
+    "must_not_claim": ["DeepSeek capability acquired", "quality improvement", "20-50 tok/s achieved"]
+  },
+  "hold_file_unions": [
+    {"candidate_id": "dsv4_0731_l42_full_layer", "bytes": 3590026352},
+    {"candidate_id": "dsv4_0731_dspark_three_stage", "bytes": 10863342388},
+    {"candidate_id": "glm52_l77_full_layer_files", "bytes": 21453532512},
+    {"candidate_id": "glm52_mtp_l78_files", "bytes": 26807470488}
+  ],
+  "claim_boundary": "Range-extractable means bytes can be isolated. It does not prove that the trained capability survives outside the donor's native hidden, router, state, tokenizer and output path."
+}

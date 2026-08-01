@@ -1,0 +1,176 @@
+{
+  "schema_version": "polaris.k3_meridian_audit.v1",
+  "generated_at": "2026-08-01",
+  "encoding": "UTF-8",
+  "scope": "metadata_and_safetensors_headers_only",
+  "weights_downloaded": false,
+  "model_started": false,
+  "gpu_used": false,
+  "repo": "moonshotai/Kimi-K3",
+  "revision": "9f62e4e9fffbd0a83ddd60e1c209d828994b3569",
+  "sources": {
+    "model": "https://huggingface.co/moonshotai/Kimi-K3",
+    "config": "https://huggingface.co/moonshotai/Kimi-K3/blob/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/config.json",
+    "modeling": "https://huggingface.co/moonshotai/Kimi-K3/blob/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/modeling_kimi_linear.py",
+    "configuration": "https://huggingface.co/moonshotai/Kimi-K3/blob/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/configuration_kimi_k3.py",
+    "index": "https://huggingface.co/moonshotai/Kimi-K3/blob/9f62e4e9fffbd0a83ddd60e1c209d828994b3569/model.safetensors.index.json",
+    "hub_api": "https://huggingface.co/api/models/moonshotai/Kimi-K3?blobs=true"
+  },
+  "official_architecture": {
+    "total_parameters_reported": 2800000000000,
+    "active_parameters_reported": 104000000000,
+    "text_layers": 93,
+    "dense_layers": 1,
+    "moe_layers": 92,
+    "kda_layers_total": 69,
+    "kda_moe_layers": 68,
+    "gated_mla_layers": 24,
+    "hidden_size": 7168,
+    "routed_expert_hidden_size": 3584,
+    "moe_intermediate_size": 3072,
+    "routed_experts_per_moe_layer": 896,
+    "shared_experts_per_moe_layer": 2,
+    "experts_per_token": 16,
+    "max_position_embeddings": 1048576,
+    "expert_weight_format": "MXFP4 packed",
+    "expert_scale_dtype": "U8",
+    "expert_scale_group_size": 32
+  },
+  "index_audit": {
+    "index_bytes": 59764096,
+    "official_total_payload_bytes": 1560860324864,
+    "moe_layers_found": 92,
+    "expert_tensor_entries": 494592,
+    "expert_tensors_per_layer": 5376,
+    "experts_per_layer_found": 896,
+    "tensor_kinds_per_expert": [
+      "w1.weight_packed",
+      "w1.weight_scale",
+      "w2.weight_packed",
+      "w2.weight_scale",
+      "w3.weight_packed",
+      "w3.weight_scale"
+    ],
+    "all_92_layers_complete": true,
+    "one_shard_per_layer_expert_bank": true
+  },
+  "single_expert_page": {
+    "bytes": 17547264,
+    "mib": 16.734375,
+    "components": [
+      {"name": "w1.weight_packed", "dtype": "U8", "shape": [3072, 1792], "bytes": 5505024},
+      {"name": "w1.weight_scale", "dtype": "U8", "shape": [3072, 112], "bytes": 344064},
+      {"name": "w2.weight_packed", "dtype": "U8", "shape": [3584, 1536], "bytes": 5505024},
+      {"name": "w2.weight_scale", "dtype": "U8", "shape": [3584, 96], "bytes": 344064},
+      {"name": "w3.weight_packed", "dtype": "U8", "shape": [3072, 1792], "bytes": 5505024},
+      {"name": "w3.weight_scale", "dtype": "U8", "shape": [3072, 112], "bytes": 344064}
+    ],
+    "six_tensors_internally_contiguous": true,
+    "expert_spans_mutually_adjacent": true,
+    "physical_order": "lexicographic_tensor_name_order",
+    "physical_order_first_20_ids": [0, 1, 10, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 11, 110, 111, 112, 113, 114, 115],
+    "numerically_monotonic": false,
+    "range_formula_by_numeric_expert_id_valid": false,
+    "requires_header_offset_manifest": true
+  },
+  "l92_header_evidence": {
+    "file": "model-00093-of-000096.safetensors",
+    "file_bytes": 16567507176,
+    "lfs_sha256": "d31d58d1bd3fcb8c350ef497d2acd23e0fe768ab5c0621e60f20b03d611f64e6",
+    "accept_ranges": "bytes",
+    "header_length_bytes": 823008,
+    "data_start_file_offset": 823016,
+    "tensor_count": 5398,
+    "expert_tensor_count": 5376,
+    "expert_region_data_offset_start": 844335616,
+    "expert_region_data_offset_end_exclusive": 16566684160,
+    "expert_0_file_range_inclusive": [845158632, 862705895]
+  },
+  "text_non_routed_skeleton": {
+    "definition": "text checkpoint payload excluding all routed expert tensors and excluding vision tower/projector; includes routers, shared experts and latent projections",
+    "bytes": 113509540864,
+    "gb_decimal": 113.509540864,
+    "gib": 105.71399784088135,
+    "parts": {
+      "dense_layer_0_bytes": 2341213184,
+      "kda_moe_layer_count": 68,
+      "kda_moe_bone_each_bytes": 1267744256,
+      "kda_moe_bone_total_bytes": 86206609408,
+      "mla_moe_layer_count": 24,
+      "mla_moe_bone_each_bytes": 844335616,
+      "mla_moe_bone_total_bytes": 20264054784,
+      "embedding_lm_head_final_norms_bytes": 4697663488
+    },
+    "per_moe_layer_fixed_parts": {
+      "router_bytes": 12848640,
+      "latent_down_up_norm_bytes": 102767616,
+      "shared_experts_bytes": 264241152,
+      "kda_attention_attnres_norm_bytes": 887886848,
+      "mla_attention_attnres_norm_bytes": 464478208
+    },
+    "fits_in_70GB_unmodified": false
+  },
+  "expert_bank": {
+    "layer_expert_pages": 82432,
+    "bytes": 1446456066048,
+    "bytes_per_moe_layer": 15722348544
+  },
+  "top16_path": {
+    "moe_layers": 92,
+    "pages_per_layer": 16,
+    "pages_per_token": 1472,
+    "bytes_per_layer": 280756224,
+    "mib_per_layer": 267.75,
+    "bytes_per_token": 25829572608,
+    "gb_per_token": 25.829572608,
+    "gib_per_token": 24.0556640625,
+    "three_disjoint_tokens_pages": 4416,
+    "three_disjoint_tokens_bytes": 77488717824,
+    "expert_weight_bandwidth_lower_bound_gbps_at_20_tps": 516.59145216,
+    "expert_weight_bandwidth_lower_bound_gbps_at_50_tps": 1291.4786304
+  },
+  "cache_capacity": {
+    "decimal_70GB": {
+      "bytes": 70000000000,
+      "pages": 3989,
+      "average_pages_per_moe_layer": 43.358695652173914,
+      "percent_of_full_expert_bank": 4.839414182226332,
+      "fully_disjoint_token_paths": 2.710071942046746
+    },
+    "binary_70GiB": {
+      "bytes": 75161927680,
+      "pages": 4283,
+      "average_pages_per_moe_layer": 46.55434782608695,
+      "percent_of_full_expert_bank": 5.195806238342147,
+      "fully_disjoint_token_paths": 2.9099175902244956
+    },
+    "hypothetical_ideal_4bit_text_skeleton_in_70GB_total": {
+      "status": "lower_bound_only_not_an_available_checkpoint",
+      "ideal_skeleton_bytes": 28377385216,
+      "remaining_expert_cache_bytes": 41622614784,
+      "remaining_expert_pages": 2372,
+      "excludes": ["scale_overhead", "KV_cache", "runtime_buffers", "kernel_support", "quality_loss", "vision"]
+    }
+  },
+  "vision_vs_frontend": {
+    "vision_tower_payload_bytes": 802428928,
+    "mm_projector_payload_bytes": 92289024,
+    "combined_payload_bytes": 894717952,
+    "combined_files_with_headers_bytes": 894737680,
+    "vision_tower_role": "image/video patch perception encoder",
+    "mm_projector_role": "project vision features into 7168-dimensional text space",
+    "contains_frontend_code_policy": false,
+    "contains_html_css_js_generation_skill_by_itself": false,
+    "contains_browser_action_policy_by_itself": false,
+    "official_frontend_expert_ids_published": false,
+    "conclusion": "vision tower is a candidate eye, not a separable K3 frontend-programming factor"
+  },
+  "feasibility": {
+    "range_extract_individual_expert_page": "proven",
+    "all_layers_have_addressable_expert_pages": "proven_by_index",
+    "frontend_expert_concentration_under_70GB": "unverified_requires_native_route_traces",
+    "unmodified_native_text_skeleton_under_70GB": "contradicted",
+    "native_full_depth_k3_at_20_to_50_tps_on_current_local_machine": "contradicted_by_capacity_and_bandwidth_lower_bounds",
+    "recommended_role": "offline donor and route-trace source, not the online fast backbone"
+  }
+}
