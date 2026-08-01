@@ -6,6 +6,7 @@
 mod abi;
 mod capability;
 mod contract;
+mod executor_bridge;
 mod memory;
 mod metrics;
 mod range_bridge;
@@ -24,6 +25,9 @@ pub use contract::{
     is_selected_layer, router_kind_for_layer, ContractError, GraphProfile, RouterKind, S14Contract,
     COMPRESS_RATIOS, EXPERTS_PER_TOKEN, FULL_DEPTH_LAYERS, HC_STREAMS, HIDDEN_SIZE, MODEL_REPO,
     MODEL_REVISION, N_LAYERS, N_ROUTED_EXPERTS, SELECTED_LAYERS, VOCAB_SIZE,
+};
+pub use executor_bridge::{
+    BinaryTensorView, ExecutorBridgeConfig, SubprocessNativeExecutor, EXECUTOR_JSONL_PROTOCOL,
 };
 pub use memory::{BudgetKind, MemoryLedger, MemoryLine, EXPERT_PAGE_BYTES};
 pub use metrics::{CounterReport, RuntimeCounters, TransferObservation};
