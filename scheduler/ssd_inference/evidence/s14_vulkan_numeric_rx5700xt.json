@@ -1,5 +1,5 @@
 {
-  "format": "polaris-s14-vulkan-numeric-evidence-v2",
+  "format": "polaris-s14-vulkan-numeric-evidence-v3",
   "recorded_date": "2026-08-01",
   "master_base": "5c8756fa7e3daf5a57f0ab58987993c5b0c84b60",
   "model_revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
@@ -28,6 +28,35 @@
     "expert_126_w1_w3_input_sha256": "1a2006c1b79b31bc3db3540ef730b08547c6148e224074b0ba712e2c3b9d7c9f",
     "expert_126_official_w2_input_sha256": "7795b1df61092c44883579a0107d02e693303fd16e926fcbd1baa154b49a9a31",
     "wq_a_input_sha256": "47156935b19ca5483f0e92d2284eaa6a9417686978dc4b41ca893ee162f37577"
+  },
+  "top6_routed_plus_shared_moe_batch": {
+    "route_expert_ids": [126, 12, 205, 149, 227, 174],
+    "route_weights": [0.2747795581817627, 0.2491425722837448, 0.24045628309249878, 0.24615329504013062, 0.25386279821395874, 0.23560553789138794],
+    "route_weight_sum": 1.5,
+    "routed_payload_identity": {
+      "manifest_sha256": "feccc1b5dde256c9ad750985b4ab5446732a1f4deec796976198e95798c64b86",
+      "payloads_read_and_sha256_recomputed": 36,
+      "bytes": 80216064
+    },
+    "shared_payload_sha256": {
+      "w1_weight": "114dc8ea9a3510b944135bd01b11407a298d2af81a359f06c59a33d80f8e5694",
+      "w1_scale": "16be9dc81893b562a37b68bc9efb7eb5c07bcabf137a69c4ae67614a17b659f2",
+      "w3_weight": "09a987e93c5ce65a2ad07ccedcb8a34ebd46d39c4fbdf3691557d185f221cbee",
+      "w3_scale": "0d36460a439d8bf6f3abfd8e15dbe7071873d61326d9953a5509911365adef95",
+      "w2_weight": "f3db4b69404c7bb80afe15fa5d70cd3366c620ba95af5c1ea5561674252d59f8",
+      "w2_scale": "42b5eadc11e6c3b9aa637a3f9a7b3a8ddbcd71b504c44f75f9a3d3e948a4eee6"
+    },
+    "gpu_residency": "one real L42 input, all 42 routed/shared packed weight+scale payloads, reusable gate/up/hidden/down intermediates, and the zeroed MoE accumulator remain device-local for the batch",
+    "dispatch_sequence": "vkCmdFillBuffer(accumulator=0), then six sequential [w1_mxfp4,w3_mxfp4,clamp_swiglu_limit_10,w2_mxfp4,weighted_accumulate], then shared [w1_fp8,w3_fp8,clamp_swiglu_limit_10,w2_fp8,unweighted_accumulate] with Vulkan-valid barriers",
+    "dispatch_count": 35,
+    "timestamp_iterations": 1,
+    "gpu_fill_plus_dispatch_barriers_ms_mean": 1.3696,
+    "cpu_reference_ms": 147.3039,
+    "max_abs_error": 0.00001096725464,
+    "mean_abs_error": 0.0000009757682164,
+    "rmse": 0.000001426471034,
+    "max_rel_error_for_abs_reference_gt_1e_5": 0.01324503310,
+    "reference_semantics": "F32 CPU packed-weight decode/accumulate for the same minimal top-6+shared chain and the real captured post-activation-quant L42 input. Inter-matvec BF16 rounding and activation requantization are intentionally outside this bounded parity claim."
   },
   "mxfp4_expert_126_chain": {
     "route_expert_ids": [126, 12, 205, 149, 227, 174],
@@ -73,6 +102,7 @@
     "missing POLARIS_S14_L42_CAPTURE_DIR",
     "capture format/revision/layer/expert/frozen source SHA drift",
     "capture or manifest SHA drift",
+    "top-6 route ID/weight drift or shared manifest drift",
     "payload path outside D:/models/Polaris-S14/range_cache",
     "payload size or SHA drift",
     "UE8M0/E4M3FN NaN code",
@@ -83,5 +113,5 @@
   "network_accessed": false,
   "weights_downloaded": false,
   "model_service_changed": false,
-  "claim_limit": "Real L42 packed-kernel parity and one minimal GPU-resident E126 chain only. This is not the full official expert semantics, a full L42 layer, a full S14 token, or a token/s claim."
+  "claim_limit": "Real L42 packed-kernel parity, one minimal E126 chain, and one minimal GPU-resident top-6 routed + shared MoE batch. This is not the full official BF16/requantized expert semantics, a full L42 layer, a full S14 token, or a token/s claim."
 }

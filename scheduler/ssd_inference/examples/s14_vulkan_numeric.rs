@@ -17,20 +17,23 @@ use sha2::{Digest, Sha256};
 use ssd_inference::buffer::GpuBuffer;
 use ssd_inference::device::VulkanContext;
 use ssd_inference::s14_vulkan::{
-    validate_e4m3fn_codes, validate_ue8m0_codes, S14MatvecShape, S14Mxfp4Dispatch,
-    S14NumericPipelines, S14RouteMixDispatch, S14SwigluLimitDispatch,
+    validate_e4m3fn_codes, validate_ue8m0_codes, S14Fp8Dispatch, S14MatvecShape,
+    S14MoeAccumulateDispatch, S14Mxfp4Dispatch, S14NumericPipelines, S14RouteMixDispatch,
+    S14SwigluLimitDispatch,
 };
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 const MODEL_DIR: &str = "D:/models/Polaris-S14";
 const ROUTE_MANIFEST: &str = "D:/models/Polaris-S14/l42_real_layer_route_manifest.json";
+const S14_MANIFEST: &str = "D:/models/Polaris-S14/s14_base_cache_manifest.json";
 const CAPTURE_DIR_ENV: &str = "POLARIS_S14_L42_CAPTURE_DIR";
 const REVISION: &str = "7872f01b1d1fe23eabc4c98b48bffcef5a386062";
 const REAL_EXPERT_ID: u32 = 126;
 const AMD_VENDOR_ID: u32 = 0x1002;
 const NAVI10_DEVICE_ID: u32 = 0x731f;
 const ITERATIONS: u32 = 100;
+const MOE_BATCH_ITERATIONS: u32 = 1;
 
 struct DeviceBuffers {
     upload_x: GpuBuffer,
@@ -186,6 +189,7 @@ impl UploadedBuffer {
     }
 }
 
+#[allow(dead_code)]
 struct ExpertChainBuffers {
     x: UploadedBuffer,
     w1: UploadedBuffer,
@@ -202,6 +206,7 @@ struct ExpertChainBuffers {
     readback: GpuBuffer,
 }
 
+#[allow(dead_code)]
 impl ExpertChainBuffers {
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -312,6 +317,178 @@ impl ExpertChainBuffers {
     }
 }
 
+struct MoePayload {
+    expert_id: Option<u32>,
+    mix_weight: f32,
+    w1: Vec<u8>,
+    s1: Vec<u8>,
+    w3: Vec<u8>,
+    s3: Vec<u8>,
+    w2: Vec<u8>,
+    s2: Vec<u8>,
+}
+
+struct GpuMoeWeights {
+    w1: UploadedBuffer,
+    s1: UploadedBuffer,
+    w3: UploadedBuffer,
+    s3: UploadedBuffer,
+    w2: UploadedBuffer,
+    s2: UploadedBuffer,
+}
+
+impl GpuMoeWeights {
+    fn new(ctx: &VulkanContext, payload: &MoePayload) -> Result<Self> {
+        Ok(Self {
+            w1: UploadedBuffer::new(ctx, &payload.w1)?,
+            s1: UploadedBuffer::new(ctx, &payload.s1)?,
+            w3: UploadedBuffer::new(ctx, &payload.w3)?,
+            s3: UploadedBuffer::new(ctx, &payload.s3)?,
+            w2: UploadedBuffer::new(ctx, &payload.w2)?,
+            s2: UploadedBuffer::new(ctx, &payload.s2)?,
+        })
+    }
+
+    unsafe fn cmd_upload(&self, ctx: &VulkanContext, cb: vk::CommandBuffer) {
+        for buffer in [&self.w1, &self.s1, &self.w3, &self.s3, &self.w2, &self.s2] {
+            buffer.cmd_upload(ctx, cb);
+        }
+    }
+
+    fn destroy(&self, ctx: &VulkanContext) {
+        self.s2.destroy(ctx);
+        self.w2.destroy(ctx);
+        self.s3.destroy(ctx);
+        self.w3.destroy(ctx);
+        self.s1.destroy(ctx);
+        self.w1.destroy(ctx);
+    }
+}
+
+struct MoeBatchBuffers {
+    x: UploadedBuffer,
+    routed: Vec<GpuMoeWeights>,
+    shared: GpuMoeWeights,
+    gate: GpuBuffer,
+    up: GpuBuffer,
+    hidden: GpuBuffer,
+    down: GpuBuffer,
+    accumulator: GpuBuffer,
+    readback: GpuBuffer,
+}
+
+impl MoeBatchBuffers {
+    fn new(
+        ctx: &VulkanContext,
+        x: &[f32],
+        routed: &[MoePayload],
+        shared: &MoePayload,
+    ) -> Result<Self> {
+        let x = UploadedBuffer::new(ctx, bytemuck::cast_slice(x))?;
+        let routed = routed
+            .iter()
+            .map(|payload| GpuMoeWeights::new(ctx, payload))
+            .collect::<Result<Vec<_>>>()?;
+        let shared = GpuMoeWeights::new(ctx, shared)?;
+        let intermediate_bytes = 2048 * std::mem::size_of::<f32>() as u64;
+        let output_bytes = 4096 * std::mem::size_of::<f32>() as u64;
+        let storage = vk::BufferUsageFlags::STORAGE_BUFFER;
+        let gate = GpuBuffer::new_vram(ctx, intermediate_bytes, storage)?;
+        let up = GpuBuffer::new_vram(ctx, intermediate_bytes, storage)?;
+        let hidden = GpuBuffer::new_vram(ctx, intermediate_bytes, storage)?;
+        let down = GpuBuffer::new_vram(ctx, output_bytes, storage)?;
+        let accumulator = GpuBuffer::new_vram(
+            ctx,
+            output_bytes,
+            storage | vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::TRANSFER_SRC,
+        )?;
+        let readback = GpuBuffer::new(
+            ctx,
+            output_bytes,
+            vk::BufferUsageFlags::TRANSFER_DST,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            true,
+        )?;
+        Ok(Self {
+            x,
+            routed,
+            shared,
+            gate,
+            up,
+            hidden,
+            down,
+            accumulator,
+            readback,
+        })
+    }
+
+    fn upload(&self, ctx: &VulkanContext) -> Result<()> {
+        unsafe {
+            let pool = make_command_pool(ctx)?;
+            let cb = allocate_command_buffer(ctx, pool)?;
+            ctx.device.begin_command_buffer(
+                cb,
+                &vk::CommandBufferBeginInfo::default()
+                    .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+            )?;
+            self.x.cmd_upload(ctx, cb);
+            for weights in &self.routed {
+                weights.cmd_upload(ctx, cb);
+            }
+            self.shared.cmd_upload(ctx, cb);
+            let barrier = vk::MemoryBarrier::default()
+                .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[barrier],
+                &[],
+                &[],
+            );
+            ctx.device.end_command_buffer(cb)?;
+            submit_and_wait(ctx, cb)?;
+            ctx.device.destroy_command_pool(pool, None);
+        }
+        Ok(())
+    }
+
+    fn output(&self) -> Vec<f32> {
+        unsafe { std::slice::from_raw_parts(self.readback.mapped() as *const f32, 4096).to_vec() }
+    }
+
+    fn destroy(&self, ctx: &VulkanContext) {
+        self.readback.destroy(ctx);
+        self.accumulator.destroy(ctx);
+        self.down.destroy(ctx);
+        self.hidden.destroy(ctx);
+        self.up.destroy(ctx);
+        self.gate.destroy(ctx);
+        self.shared.destroy(ctx);
+        for weights in &self.routed {
+            weights.destroy(ctx);
+        }
+        self.x.destroy(ctx);
+    }
+}
+
+struct RoutedMoeDispatch {
+    w1: S14Mxfp4Dispatch,
+    w3: S14Mxfp4Dispatch,
+    w2: S14Mxfp4Dispatch,
+    accumulate: S14MoeAccumulateDispatch,
+}
+
+struct SharedMoeDispatch {
+    w1: S14Fp8Dispatch,
+    w3: S14Fp8Dispatch,
+    w2: S14Fp8Dispatch,
+    accumulate: S14MoeAccumulateDispatch,
+}
+
 struct Timing {
     iterations: u32,
     gpu_kernel_ms_mean: f64,
@@ -405,6 +582,15 @@ struct BaseEntry {
     sha256: String,
 }
 
+#[derive(Deserialize)]
+struct S14Manifest {
+    format: String,
+    revision: String,
+    entry_count: usize,
+    bytes: u64,
+    entries: Vec<BaseEntry>,
+}
+
 fn main() -> Result<()> {
     println!("Polaris S14 Vulkan numerical kernels (hash-verified real L42 payloads)");
     let capture_dir = std::env::var_os(CAPTURE_DIR_ENV)
@@ -453,7 +639,7 @@ fn main() -> Result<()> {
     );
 
     let pipelines = S14NumericPipelines::new(&ctx)?;
-    run_real_expert(
+    run_real_moe_batch(
         &ctx,
         &pipelines,
         timestamp_bits,
@@ -469,12 +655,12 @@ fn main() -> Result<()> {
     )?;
     pipelines.destroy(&ctx);
     println!(
-        "claim: real L42 packed-matvec and minimal GPU-resident E126 chain parity only; no full official expert/layer, token/s, or full S14 forward claim"
+        "claim: real L42 packed-matvec and minimal GPU-resident top-6 routed + shared MoE batch parity; no full official expert/layer, token/s, or full S14 forward claim"
     );
     Ok(())
 }
 
-fn run_real_expert(
+fn run_real_moe_batch(
     ctx: &VulkanContext,
     pipelines: &S14NumericPipelines,
     timestamp_bits: u32,
@@ -492,30 +678,63 @@ fn run_real_expert(
         manifest.entries.len()
     );
 
-    let route_index = manifest
+    let routed = manifest
         .expert_ids
         .iter()
-        .position(|&expert_id| expert_id == REAL_EXPERT_ID)
-        .ok_or_else(|| anyhow::anyhow!("real L42 route does not contain E{REAL_EXPERT_ID}"))?;
-    let route_weight = manifest.route_weights[route_index];
-    let (w1, s1) = load_route_pair(&manifest, REAL_EXPERT_ID, "w1")?;
-    let (w3, s3) = load_route_pair(&manifest, REAL_EXPERT_ID, "w3")?;
-    let (w2, s2) = load_route_pair(&manifest, REAL_EXPERT_ID, "w2")?;
-    run_mxfp4_expert_chain(
+        .zip(&manifest.route_weights)
+        .map(|(&expert_id, &mix_weight)| {
+            let (w1, s1) = load_route_pair(&manifest, expert_id, "w1")?;
+            let (w3, s3) = load_route_pair(&manifest, expert_id, "w3")?;
+            let (w2, s2) = load_route_pair(&manifest, expert_id, "w2")?;
+            Ok(MoePayload {
+                expert_id: Some(expert_id),
+                mix_weight,
+                w1,
+                s1,
+                w3,
+                s3,
+                w2,
+                s2,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let s14_manifest: S14Manifest = serde_json::from_slice(
+        &std::fs::read(S14_MANIFEST).context("read S14 base cache manifest")?,
+    )
+    .context("parse S14 base cache manifest")?;
+    if s14_manifest.format != "polaris-s14-base-cache-snapshot-v1"
+        || s14_manifest.revision != REVISION
+        || s14_manifest.entry_count != 503
+        || s14_manifest.entries.len() != 503
+        || s14_manifest.bytes != 2_194_713_552
+    {
+        bail!("S14 base cache manifest contract drift");
+    }
+    let (w1, s1) = load_shared_pair(&s14_manifest, "w1")?;
+    let (w3, s3) = load_shared_pair(&s14_manifest, "w3")?;
+    let (w2, s2) = load_shared_pair(&s14_manifest, "w2")?;
+    let shared = MoePayload {
+        expert_id: None,
+        mix_weight: 1.0,
+        w1,
+        s1,
+        w3,
+        s3,
+        w2,
+        s2,
+    };
+
+    run_top6_shared_moe_batch(
         ctx,
         pipelines,
         timestamp_bits,
         timestamp_period_ns,
-        route_weight,
         w1_w3_input,
-        &w1,
-        &s1,
-        &w3,
-        &s3,
-        &w2,
-        &s2,
+        &routed,
+        &shared,
     )
-    .context("real L42/E126 GPU-resident expert chain")?;
+    .context("real L42 top-6 routed + shared GPU-resident MoE batch")?;
     Ok(())
 }
 
@@ -622,6 +841,29 @@ fn load_route_pair(
     ))
 }
 
+fn load_shared_pair(manifest: &S14Manifest, component: &str) -> Result<(Vec<u8>, Vec<u8>)> {
+    let prefix = format!("layers.42.ffn.shared_experts.{component}");
+    let weight = s14_entry(manifest, &format!("{prefix}.weight"))?;
+    let scale = s14_entry(manifest, &format!("{prefix}.scale"))?;
+    if weight.bytes != 8_388_608 || scale.bytes != 512 {
+        bail!("shared/{component} byte contract drift");
+    }
+    Ok((
+        read_verified_payload(
+            &weight.path,
+            weight.bytes as usize,
+            &weight.sha256,
+            &weight.tensor,
+        )?,
+        read_verified_payload(
+            &scale.path,
+            scale.bytes as usize,
+            &scale.sha256,
+            &scale.tensor,
+        )?,
+    ))
+}
+
 fn route_entry<'a>(
     manifest: &'a RouteManifest,
     expert_id: u32,
@@ -642,7 +884,391 @@ fn base_entry<'a>(manifest: &'a BaseManifest, tensor: &str) -> Result<&'a BaseEn
         .ok_or_else(|| anyhow::anyhow!("base manifest missing {tensor}"))
 }
 
+fn s14_entry<'a>(manifest: &'a S14Manifest, tensor: &str) -> Result<&'a BaseEntry> {
+    manifest
+        .entries
+        .iter()
+        .find(|entry| entry.tensor == tensor)
+        .ok_or_else(|| anyhow::anyhow!("S14 manifest missing {tensor}"))
+}
+
+fn run_top6_shared_moe_batch(
+    ctx: &VulkanContext,
+    pipelines: &S14NumericPipelines,
+    timestamp_bits: u32,
+    timestamp_period_ns: f64,
+    x: &[f32],
+    routed: &[MoePayload],
+    shared: &MoePayload,
+) -> Result<()> {
+    if x.len() != 4096 || routed.len() != 6 || shared.expert_id.is_some() {
+        bail!("real L42 MoE batch shape/route contract drift");
+    }
+    let up_shape = S14MatvecShape::new(2048, 4096)?.validate_mxfp4()?;
+    let down_shape = S14MatvecShape::new(4096, 2048)?.validate_mxfp4()?;
+    let shared_up_shape = S14MatvecShape::new(2048, 4096)?.validate_fp8()?;
+    let shared_down_shape = S14MatvecShape::new(4096, 2048)?.validate_fp8()?;
+    for payload in routed {
+        if payload.expert_id.is_none()
+            || !payload.mix_weight.is_finite()
+            || payload.mix_weight < 0.0
+        {
+            bail!("routed MoE payload identity/weight contract drift");
+        }
+        for scale in [&payload.s1, &payload.s3, &payload.s2] {
+            validate_ue8m0_codes(scale)?;
+        }
+    }
+    for weight in [&shared.w1, &shared.w3, &shared.w2] {
+        validate_e4m3fn_codes(weight)?;
+    }
+    for scale in [&shared.s1, &shared.s3, &shared.s2] {
+        validate_ue8m0_codes(scale)?;
+    }
+
+    let cpu_start = Instant::now();
+    let mut expected = vec![0.0f32; 4096];
+    for payload in routed {
+        let gate = cpu_mxfp4_matvec(x, &payload.w1, &payload.s1, up_shape);
+        let up = cpu_mxfp4_matvec(x, &payload.w3, &payload.s3, up_shape);
+        let hidden = swiglu_limit(&gate, &up)?;
+        let down = cpu_mxfp4_matvec(&hidden, &payload.w2, &payload.s2, down_shape);
+        for (accumulator, value) in expected.iter_mut().zip(down) {
+            *accumulator += payload.mix_weight * value;
+        }
+    }
+    let shared_gate = cpu_fp8_matvec(x, &shared.w1, &shared.s1, shared_up_shape);
+    let shared_up = cpu_fp8_matvec(x, &shared.w3, &shared.s3, shared_up_shape);
+    let shared_hidden = swiglu_limit(&shared_gate, &shared_up)?;
+    let shared_down = cpu_fp8_matvec(&shared_hidden, &shared.w2, &shared.s2, shared_down_shape);
+    for (accumulator, value) in expected.iter_mut().zip(shared_down) {
+        *accumulator += value;
+    }
+    let cpu_ms = cpu_start.elapsed().as_secs_f64() * 1000.0;
+
+    let buffers = MoeBatchBuffers::new(ctx, x, routed, shared)?;
+    buffers.upload(ctx)?;
+    let swiglu =
+        pipelines.bind_swiglu_limit(ctx, 2048, &buffers.gate, &buffers.up, &buffers.hidden)?;
+    let routed_dispatches = buffers
+        .routed
+        .iter()
+        .zip(routed)
+        .map(|(weights, payload)| {
+            Ok(RoutedMoeDispatch {
+                w1: pipelines.bind_mxfp4(
+                    ctx,
+                    up_shape,
+                    &buffers.x.device,
+                    &weights.w1.device,
+                    &weights.s1.device,
+                    &buffers.gate,
+                )?,
+                w3: pipelines.bind_mxfp4(
+                    ctx,
+                    up_shape,
+                    &buffers.x.device,
+                    &weights.w3.device,
+                    &weights.s3.device,
+                    &buffers.up,
+                )?,
+                w2: pipelines.bind_mxfp4(
+                    ctx,
+                    down_shape,
+                    &buffers.hidden,
+                    &weights.w2.device,
+                    &weights.s2.device,
+                    &buffers.down,
+                )?,
+                accumulate: pipelines.bind_moe_accumulate(
+                    ctx,
+                    4096,
+                    payload.mix_weight,
+                    &buffers.down,
+                    &buffers.accumulator,
+                )?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let shared_dispatch = SharedMoeDispatch {
+        w1: pipelines.bind_fp8(
+            ctx,
+            shared_up_shape,
+            &buffers.x.device,
+            &buffers.shared.w1.device,
+            &buffers.shared.s1.device,
+            &buffers.gate,
+        )?,
+        w3: pipelines.bind_fp8(
+            ctx,
+            shared_up_shape,
+            &buffers.x.device,
+            &buffers.shared.w3.device,
+            &buffers.shared.s3.device,
+            &buffers.up,
+        )?,
+        w2: pipelines.bind_fp8(
+            ctx,
+            shared_down_shape,
+            &buffers.hidden,
+            &buffers.shared.w2.device,
+            &buffers.shared.s2.device,
+            &buffers.down,
+        )?,
+        accumulate: pipelines.bind_moe_accumulate(
+            ctx,
+            4096,
+            1.0,
+            &buffers.down,
+            &buffers.accumulator,
+        )?,
+    };
+
+    let timing = benchmark_top6_shared_moe_batch(
+        ctx,
+        pipelines,
+        &buffers,
+        timestamp_bits,
+        timestamp_period_ns,
+        &swiglu,
+        &routed_dispatches,
+        &shared_dispatch,
+    )?;
+    let actual = buffers.output();
+    let error = error_stats(&actual, &expected)?;
+    enforce_error(&error, 1.0e-3, 1.5e-4)?;
+    println!(
+        "GPU-resident real L42 top6+shared minimal MoE batch: ids={:?}, weights={:?}, cpu_ref_ms={cpu_ms:.6}, iterations={}, gpu_fill_plus_35_dispatch_barriers_ms_mean={:.7}, submit_readback_sync_ms={:.6}, max_abs={:.9e}, mean_abs={:.9e}, rmse={:.9e}, max_rel_abs_ref_gt_1e-5={:.9e}",
+        routed
+            .iter()
+            .map(|payload| payload.expert_id.unwrap())
+            .collect::<Vec<_>>(),
+        routed
+            .iter()
+            .map(|payload| payload.mix_weight)
+            .collect::<Vec<_>>(),
+        timing.iterations,
+        timing.gpu_kernel_ms_mean,
+        timing.submit_readback_sync_ms,
+        error.max_abs,
+        error.mean_abs,
+        error.rmse,
+        error.max_rel_for_abs_ref_gt_1e_5,
+    );
+
+    shared_dispatch.accumulate.binder.destroy(ctx);
+    shared_dispatch.w2.binder.destroy(ctx);
+    shared_dispatch.w3.binder.destroy(ctx);
+    shared_dispatch.w1.binder.destroy(ctx);
+    for dispatch in routed_dispatches.into_iter().rev() {
+        dispatch.accumulate.binder.destroy(ctx);
+        dispatch.w2.binder.destroy(ctx);
+        dispatch.w3.binder.destroy(ctx);
+        dispatch.w1.binder.destroy(ctx);
+    }
+    swiglu.binder.destroy(ctx);
+    buffers.destroy(ctx);
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
+fn benchmark_top6_shared_moe_batch(
+    ctx: &VulkanContext,
+    pipelines: &S14NumericPipelines,
+    buffers: &MoeBatchBuffers,
+    timestamp_bits: u32,
+    timestamp_period_ns: f64,
+    swiglu: &S14SwigluLimitDispatch,
+    routed: &[RoutedMoeDispatch],
+    shared: &SharedMoeDispatch,
+) -> Result<Timing> {
+    unsafe {
+        let pool = make_command_pool(ctx)?;
+        let cb = allocate_command_buffer(ctx, pool)?;
+        let queries = ctx.device.create_query_pool(
+            &vk::QueryPoolCreateInfo::default()
+                .query_type(vk::QueryType::TIMESTAMP)
+                .query_count(2),
+            None,
+        )?;
+        ctx.device.begin_command_buffer(
+            cb,
+            &vk::CommandBufferBeginInfo::default()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+        )?;
+        ctx.device.cmd_reset_query_pool(cb, queries, 0, 2);
+        ctx.device
+            .cmd_write_timestamp(cb, vk::PipelineStageFlags::TOP_OF_PIPE, queries, 0);
+        let shader_raw = vk::MemoryBarrier::default()
+            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ);
+        let shader_serial = vk::MemoryBarrier::default()
+            .src_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::SHADER_WRITE)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::SHADER_WRITE);
+        for iteration in 0..MOE_BATCH_ITERATIONS {
+            if iteration > 0 {
+                let compute_to_fill = vk::MemoryBarrier::default()
+                    .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+                    .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE);
+                ctx.device.cmd_pipeline_barrier(
+                    cb,
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
+                    vk::PipelineStageFlags::TRANSFER,
+                    vk::DependencyFlags::empty(),
+                    &[compute_to_fill],
+                    &[],
+                    &[],
+                );
+            }
+            ctx.device.cmd_fill_buffer(
+                cb,
+                buffers.accumulator.handle(),
+                0,
+                4096 * std::mem::size_of::<f32>() as u64,
+                0,
+            );
+            let fill_to_compute = vk::MemoryBarrier::default()
+                .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::SHADER_WRITE);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[fill_to_compute],
+                &[],
+                &[],
+            );
+
+            for dispatch in routed {
+                pipelines.cmd_mxfp4_matvec(ctx, cb, &dispatch.w1);
+                pipelines.cmd_mxfp4_matvec(ctx, cb, &dispatch.w3);
+                ctx.device.cmd_pipeline_barrier(
+                    cb,
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
+                    vk::DependencyFlags::empty(),
+                    &[shader_raw],
+                    &[],
+                    &[],
+                );
+                pipelines.cmd_swiglu_limit(ctx, cb, swiglu);
+                ctx.device.cmd_pipeline_barrier(
+                    cb,
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
+                    vk::DependencyFlags::empty(),
+                    &[shader_raw],
+                    &[],
+                    &[],
+                );
+                pipelines.cmd_mxfp4_matvec(ctx, cb, &dispatch.w2);
+                ctx.device.cmd_pipeline_barrier(
+                    cb,
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
+                    vk::DependencyFlags::empty(),
+                    &[shader_raw],
+                    &[],
+                    &[],
+                );
+                pipelines.cmd_moe_accumulate(ctx, cb, &dispatch.accumulate);
+                ctx.device.cmd_pipeline_barrier(
+                    cb,
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
+                    vk::DependencyFlags::empty(),
+                    &[shader_serial],
+                    &[],
+                    &[],
+                );
+            }
+
+            pipelines.cmd_fp8_matvec(ctx, cb, &shared.w1);
+            pipelines.cmd_fp8_matvec(ctx, cb, &shared.w3);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[shader_raw],
+                &[],
+                &[],
+            );
+            pipelines.cmd_swiglu_limit(ctx, cb, swiglu);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[shader_raw],
+                &[],
+                &[],
+            );
+            pipelines.cmd_fp8_matvec(ctx, cb, &shared.w2);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[shader_raw],
+                &[],
+                &[],
+            );
+            pipelines.cmd_moe_accumulate(ctx, cb, &shared.accumulate);
+        }
+        ctx.device
+            .cmd_write_timestamp(cb, vk::PipelineStageFlags::BOTTOM_OF_PIPE, queries, 1);
+        let readback_barrier = vk::MemoryBarrier::default()
+            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .dst_access_mask(vk::AccessFlags::TRANSFER_READ);
+        ctx.device.cmd_pipeline_barrier(
+            cb,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::PipelineStageFlags::TRANSFER,
+            vk::DependencyFlags::empty(),
+            &[readback_barrier],
+            &[],
+            &[],
+        );
+        copy(
+            ctx,
+            cb,
+            &buffers.accumulator,
+            &buffers.readback,
+            4096 * std::mem::size_of::<f32>() as u64,
+        );
+        ctx.device.end_command_buffer(cb)?;
+
+        let cpu_start = Instant::now();
+        submit_and_wait(ctx, cb)?;
+        let submit_readback_sync_ms = cpu_start.elapsed().as_secs_f64() * 1000.0;
+        let mut ticks = [0u64; 2];
+        ctx.device.get_query_pool_results(
+            queries,
+            0,
+            &mut ticks,
+            vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT,
+        )?;
+        let mask = if timestamp_bits >= 64 {
+            u64::MAX
+        } else {
+            (1u64 << timestamp_bits) - 1
+        };
+        let elapsed_ticks = ticks[1].wrapping_sub(ticks[0]) & mask;
+        let gpu_kernel_ms_mean =
+            elapsed_ticks as f64 * timestamp_period_ns / 1_000_000.0 / MOE_BATCH_ITERATIONS as f64;
+        ctx.device.destroy_query_pool(queries, None);
+        ctx.device.destroy_command_pool(pool, None);
+        Ok(Timing {
+            iterations: MOE_BATCH_ITERATIONS,
+            gpu_kernel_ms_mean,
+            submit_readback_sync_ms,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::too_many_arguments)]
 fn run_mxfp4_expert_chain(
     ctx: &VulkanContext,
     pipelines: &S14NumericPipelines,
@@ -739,7 +1365,7 @@ fn run_mxfp4_expert_chain(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(dead_code, clippy::too_many_arguments)]
 fn benchmark_expert_chain(
     ctx: &VulkanContext,
     pipelines: &S14NumericPipelines,

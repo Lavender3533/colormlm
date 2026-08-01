@@ -6,6 +6,9 @@
 DeepSeek-V4 L42 Range payload、真实 route `126,12,205,149,227,174` 与真实 L42
 前向导出的 kernel 输入，跑通了：
 
+- 真实 top-6 routed + shared 的 GPU-resident 最小 MoE batch：同一输入顺序执行六个
+  MXFP4 expert，清零 accumulator 后按真实 route weight 累加，再执行 shared FP8 expert
+  并无权重累加；
 - 真实 E126 packed MXFP4 的 GPU-resident 最小整链：
   `w1/w3 -> clamp-SwiGLU(limit=10) -> w2 -> route-weight mix`；
 - 真实 `layers.42.attn.wq_a` packed FP8 linear；
@@ -22,6 +25,7 @@ DeepSeek-V4 L42 Range payload、真实 route `126,12,205,149,227,174` 与真实 
 
 | 路径 | dispatch 范围 | 均值 | max abs | RMSE |
 |---|---|---:|---:|---:|
+| L42 top-6 routed + shared 最小 MoE batch | accumulator clear + 35 个顺序 dispatch 与合法 barrier，1 次；不含上传/回读 | 1.3696000 ms | 1.096725464e-5 | 1.426471034e-6 |
 | L42/E126 最小整链 | 5 个 dispatch + 合法 inter-dispatch barrier，100 次；不含上传/回读 | 0.1570380 ms | 1.072883606e-6 | 1.483723944e-7 |
 | L42 `attn.wq_a` FP8 | 单 dispatch + 重复写 barrier，100 次；不含上传/回读 | 0.0838004 ms | 5.960464478e-8 | 7.205182117e-9 |
 
@@ -42,6 +46,18 @@ L42 CPU capture 在执行前验证 76 个 payload、共 247,515,224 字节。关
 
 完整 weight/scale SHA 不截断地保存在 evidence JSON。runner 会重新计算，而不是只打印
 manifest 自报值。
+
+## RouteLoadBatch 缓存与 fence 合同
+
+- `VramPool` slot 带单调 generation 与 `pin_count`；S14 descriptor metadata 必须携带并
+  校验 generation，stale generation 会硬拒绝。
+- `Loading` 与 pinned `Ready` 均不可淘汰；compute lease 只能在覆盖 dispatch 的 fence
+  完成后释放，因此 fence 前 slot 不可复用。
+- 六个 routed 页与独立 shared FP8 页组成一个 `RouteLoadBatch`。两个 pool 全部通过
+  generation preflight 后才一次性 publish；容量、上传或 fence 失败会取消本批全部
+  reservation，并释放已取得的 cached pins。
+- routed slot 固定至少 `13,369,344 B`；shared slot 固定至少 `25,167,360 B`，二者使用
+  独立 pool，避免 shared 页挤占 routed cache。
 
 ## 资产审计与路径选择
 
@@ -71,11 +87,13 @@ Pop-Location
 
 runner 会拒绝：capture 环境变量缺失；capture/manifest revision、shape、SHA 漂移；
 payload 越出冻结 `range_cache`；payload 长度/SHA 漂移；量化 NaN code；设备 PCI ID
-不是 `0x1002:0x731f`；timestamp 不可用；或误差超过阈值。不存在合成输入回退。
+不是 `0x1002:0x731f`；top-6 ID/weight 或 shared manifest 漂移；timestamp 不可用；或
+误差超过阈值。不存在合成输入回退。
 
 ## 后续最短路径
 
-若要把“最小整链 parity”升级为“完整官方 E126 parity”，下一步应在 GPU 链中加入
+top-6 accumulation 与 FP8 shared expert 的最小 GPU batch 已完成。若要把“最小整链
+parity”升级为“完整官方 MoE parity”，下一步应在 GPU 链中加入
 BF16 boundary 与 activation requantization，并用 capture 中冻结的
-`expert_126_w2` 输入/输出作为中间指纹；之后再扩到 top-6 accumulation 与 FP8 shared
-expert。完整 L42/token 路径仍需 attention、HC 和 router 等未实现能力。
+`expert_126_w2` 输入/输出作为中间指纹。完整 L42/token 路径仍需 attention、HC 和
+router 等未实现能力。

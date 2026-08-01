@@ -11,7 +11,7 @@ use crate::buffer::GpuBuffer;
 use crate::device::VulkanContext;
 use anyhow::{anyhow, Result};
 use ash::vk;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct ExpertKey {
@@ -27,6 +27,38 @@ enum SlotState {
     Ready(ExpertKey),
 }
 
+/// Generation-stamped slot metadata suitable for descriptor validation.
+/// It remains valid only while its owning [`SlotLease`] is pinned.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct SlotBinding {
+    pub key: ExpertKey,
+    pub slot: u32,
+    pub generation: u64,
+}
+
+/// A compute-side page pin. The scheduler must consume it through
+/// `release_after_compute_fence` after the covering Vulkan fence completes.
+#[derive(Debug)]
+pub struct SlotLease {
+    binding: SlotBinding,
+}
+
+impl SlotLease {
+    pub fn binding(&self) -> SlotBinding {
+        self.binding
+    }
+}
+
+/// Hidden upload reservation. A late transfer callback cannot publish it
+/// after cancellation/reuse because both slot and generation are checked.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct LoadingReservation {
+    pub key: ExpertKey,
+    pub slot: u32,
+    pub generation: u64,
+    pub evicted: Option<ExpertKey>,
+}
+
 pub struct VramPool {
     pub buffer: GpuBuffer,
     slot_bytes: u64,
@@ -34,6 +66,8 @@ pub struct VramPool {
     /// slot_idx → transfer lifecycle. Only `Ready` slots are visible to lookup.
     states: Vec<SlotState>,
     last_access: Vec<u64>,
+    pin_count: Vec<u32>,
+    generations: Vec<u64>,
     /// expert_key → slot_idx
     index: HashMap<ExpertKey, u32>,
     clock: u64,
@@ -68,6 +102,8 @@ impl VramPool {
             n_slots,
             states: vec![SlotState::Empty; n_slots as usize],
             last_access: vec![0; n_slots as usize],
+            pin_count: vec![0; n_slots as usize],
+            generations: vec![0; n_slots as usize],
             index: HashMap::with_capacity(n_slots as usize),
             clock: 0,
             n_loaded: 0,
@@ -90,7 +126,7 @@ impl VramPool {
     /// Look up where an expert lives. Updates LRU clock if found.
     pub fn lookup(&mut self, key: ExpertKey) -> Option<u32> {
         if let Some(&idx) = self.index.get(&key) {
-            self.clock += 1;
+            self.clock = self.clock.saturating_add(1);
             self.last_access[idx as usize] = self.clock;
             Some(idx)
         } else {
@@ -98,10 +134,42 @@ impl VramPool {
         }
     }
 
+    /// Look up and pin a Ready page for a future compute submission.
+    pub fn lookup_and_pin(&mut self, key: ExpertKey) -> Result<Option<SlotLease>> {
+        let Some(&slot) = self.index.get(&key) else {
+            return Ok(None);
+        };
+        if self.states[slot as usize] != SlotState::Ready(key) {
+            return Err(anyhow!(
+                "VRAM index for {:?} points at non-ready slot {}",
+                key,
+                slot
+            ));
+        }
+        self.pin_count[slot as usize] = self.pin_count[slot as usize]
+            .checked_add(1)
+            .ok_or_else(|| anyhow!("VRAM slot {} pin count overflow", slot))?;
+        self.clock = self.clock.saturating_add(1);
+        self.last_access[slot as usize] = self.clock;
+        Ok(Some(SlotLease {
+            binding: SlotBinding {
+                key,
+                slot,
+                generation: self.generations[slot as usize],
+            },
+        }))
+    }
+
     /// Reserve a slot for an upload without publishing it to readers.
     /// Loading slots are never eviction candidates. The caller must invoke
     /// `mark_ready` only after the transfer fence has completed.
     pub fn reserve_loading(&mut self, key: ExpertKey) -> Result<(u32, Option<ExpertKey>)> {
+        let reservation = self.reserve_loading_generation(key)?;
+        Ok((reservation.slot, reservation.evicted))
+    }
+
+    /// Generation-aware reservation used by S14 transfer batches.
+    pub fn reserve_loading_generation(&mut self, key: ExpertKey) -> Result<LoadingReservation> {
         if self.index.contains_key(&key) {
             return Err(anyhow!("expert {:?} is already ready", key));
         }
@@ -124,12 +192,20 @@ impl VramPool {
                 .iter()
                 .enumerate()
                 .filter_map(|(idx, state)| match state {
-                    SlotState::Ready(_) => Some((idx, self.last_access[idx])),
+                    SlotState::Ready(_) if self.pin_count[idx] == 0 => {
+                        Some((idx, self.last_access[idx]))
+                    }
                     SlotState::Empty | SlotState::Loading(_) => None,
+                    SlotState::Ready(_) => None,
                 })
                 .min_by_key(|&(_, access)| access)
                 .map(|(idx, _)| idx as u32)
-                .ok_or_else(|| anyhow!("all {} VRAM slots are still loading", self.n_slots))?
+                .ok_or_else(|| {
+                    anyhow!(
+                        "all {} VRAM slots are Loading or pinned Ready",
+                        self.n_slots
+                    )
+                })?
         };
 
         let evicted = match self.states[slot_idx as usize] {
@@ -144,15 +220,25 @@ impl VramPool {
             SlotState::Loading(_) => unreachable!("loading slots are not reservation candidates"),
         };
 
+        let generation = self.generations[slot_idx as usize]
+            .checked_add(1)
+            .ok_or_else(|| anyhow!("VRAM slot {} generation overflow", slot_idx))?;
+        self.generations[slot_idx as usize] = generation;
+        self.pin_count[slot_idx as usize] = 0;
         self.states[slot_idx as usize] = SlotState::Loading(key);
-        Ok((slot_idx, evicted))
+        Ok(LoadingReservation {
+            key,
+            slot: slot_idx,
+            generation,
+            evicted,
+        })
     }
 
     /// Publish a completed upload. Before this call `lookup` must miss.
     pub fn mark_ready(&mut self, slot_idx: u32, key: ExpertKey) -> Result<()> {
         let state = self
             .states
-            .get_mut(slot_idx as usize)
+            .get(slot_idx as usize)
             .ok_or_else(|| anyhow!("invalid VRAM slot {}", slot_idx))?;
         if *state != SlotState::Loading(key) {
             return Err(anyhow!(
@@ -162,10 +248,120 @@ impl VramPool {
                 *state
             ));
         }
-        *state = SlotState::Ready(key);
-        self.index.insert(key, slot_idx);
-        self.clock += 1;
-        self.last_access[slot_idx as usize] = self.clock;
+        let reservation = LoadingReservation {
+            key,
+            slot: slot_idx,
+            generation: self.generations[slot_idx as usize],
+            evicted: None,
+        };
+        let lease = self.publish_batch_and_pin(&[reservation])?.remove(0);
+        self.release_after_compute_fence(lease)?;
+        Ok(())
+    }
+
+    /// Preflight an entire transfer batch without publishing any page.
+    pub fn validate_publish_batch(&self, reservations: &[LoadingReservation]) -> Result<()> {
+        if reservations.is_empty() {
+            return Err(anyhow!("cannot publish an empty VRAM batch"));
+        }
+        let mut slots = HashSet::with_capacity(reservations.len());
+        let mut keys = HashSet::with_capacity(reservations.len());
+        for reservation in reservations {
+            if !slots.insert(reservation.slot) || !keys.insert(reservation.key) {
+                return Err(anyhow!(
+                    "VRAM publish batch contains a duplicate slot or key"
+                ));
+            }
+            let state = self
+                .states
+                .get(reservation.slot as usize)
+                .ok_or_else(|| anyhow!("invalid VRAM slot {}", reservation.slot))?;
+            let current_generation = self.generations[reservation.slot as usize];
+            if *state != SlotState::Loading(reservation.key)
+                || current_generation != reservation.generation
+            {
+                return Err(anyhow!(
+                    "stale VRAM generation for {:?}: slot={} generation={} current_state={:?} current_generation={}",
+                    reservation.key,
+                    reservation.slot,
+                    reservation.generation,
+                    state,
+                    current_generation
+                ));
+            }
+            if self.pin_count[reservation.slot as usize] != 0 {
+                return Err(anyhow!(
+                    "Loading slot {} unexpectedly has compute pins",
+                    reservation.slot
+                ));
+            }
+            if self.index.contains_key(&reservation.key) {
+                return Err(anyhow!(
+                    "cannot publish {:?}: key is already visible",
+                    reservation.key
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Atomically publish a preflighted upload batch and pin every resulting
+    /// Ready page for the compute fence that will consume it.
+    pub fn publish_batch_and_pin(
+        &mut self,
+        reservations: &[LoadingReservation],
+    ) -> Result<Vec<SlotLease>> {
+        self.validate_publish_batch(reservations)?;
+        Ok(self.publish_prevalidated_batch_and_pin(reservations))
+    }
+
+    pub(crate) fn publish_prevalidated_batch_and_pin(
+        &mut self,
+        reservations: &[LoadingReservation],
+    ) -> Vec<SlotLease> {
+        debug_assert!(self.validate_publish_batch(reservations).is_ok());
+        let mut leases = Vec::with_capacity(reservations.len());
+        for reservation in reservations {
+            self.states[reservation.slot as usize] = SlotState::Ready(reservation.key);
+            self.index.insert(reservation.key, reservation.slot);
+            self.pin_count[reservation.slot as usize] = 1;
+            self.clock = self.clock.saturating_add(1);
+            self.last_access[reservation.slot as usize] = self.clock;
+            leases.push(SlotLease {
+                binding: SlotBinding {
+                    key: reservation.key,
+                    slot: reservation.slot,
+                    generation: reservation.generation,
+                },
+            });
+        }
+        leases
+    }
+
+    /// Reject descriptor metadata after an eviction/reuse generation change,
+    /// or if the compute pin has already been released.
+    pub fn validate_binding(&self, binding: SlotBinding) -> Result<()> {
+        let state = self
+            .states
+            .get(binding.slot as usize)
+            .ok_or_else(|| anyhow!("invalid VRAM slot {}", binding.slot))?;
+        if *state != SlotState::Ready(binding.key)
+            || self.generations[binding.slot as usize] != binding.generation
+            || self.pin_count[binding.slot as usize] == 0
+        {
+            return Err(anyhow!(
+                "stale or unpinned VRAM binding for {:?}: slot={} generation={}",
+                binding.key,
+                binding.slot,
+                binding.generation
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn release_after_compute_fence(&mut self, lease: SlotLease) -> Result<()> {
+        self.validate_binding(lease.binding)?;
+        self.pin_count[lease.binding.slot as usize] -= 1;
         Ok(())
     }
 
@@ -173,8 +369,30 @@ impl VramPool {
     pub fn cancel_loading(&mut self, slot_idx: u32, key: ExpertKey) {
         if self.states.get(slot_idx as usize) == Some(&SlotState::Loading(key)) {
             self.states[slot_idx as usize] = SlotState::Empty;
+            self.pin_count[slot_idx as usize] = 0;
             self.n_loaded = self.n_loaded.saturating_sub(1);
         }
+    }
+
+    pub fn cancel_reservation(&mut self, reservation: LoadingReservation) -> Result<()> {
+        let state = self
+            .states
+            .get(reservation.slot as usize)
+            .ok_or_else(|| anyhow!("invalid VRAM slot {}", reservation.slot))?;
+        if *state != SlotState::Loading(reservation.key)
+            || self.generations[reservation.slot as usize] != reservation.generation
+        {
+            return Err(anyhow!(
+                "stale VRAM cancellation for {:?}: slot={} generation={}",
+                reservation.key,
+                reservation.slot,
+                reservation.generation
+            ));
+        }
+        self.states[reservation.slot as usize] = SlotState::Empty;
+        self.pin_count[reservation.slot as usize] = 0;
+        self.n_loaded = self.n_loaded.saturating_sub(1);
+        Ok(())
     }
 
     /// Byte offset of slot in the underlying VRAM buffer.
@@ -184,6 +402,22 @@ impl VramPool {
 
     pub fn destroy(&self, ctx: &VulkanContext) {
         self.buffer.destroy(ctx);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_for_tests(n_slots: u32, slot_bytes: u64) -> Self {
+        Self {
+            buffer: unsafe { std::mem::zeroed() },
+            slot_bytes,
+            n_slots,
+            states: vec![SlotState::Empty; n_slots as usize],
+            last_access: vec![0; n_slots as usize],
+            pin_count: vec![0; n_slots as usize],
+            generations: vec![0; n_slots as usize],
+            index: HashMap::new(),
+            clock: 0,
+            n_loaded: 0,
+        }
     }
 }
 
@@ -209,6 +443,8 @@ mod tests {
             n_slots: 3,
             states: vec![SlotState::Empty; 3],
             last_access: vec![0; 3],
+            pin_count: vec![0; 3],
+            generations: vec![0; 3],
             index: HashMap::new(),
             clock: 0,
             n_loaded: 0,
@@ -262,6 +498,8 @@ mod tests {
             n_slots: 1,
             states: vec![SlotState::Empty; 1],
             last_access: vec![0; 1],
+            pin_count: vec![0; 1],
+            generations: vec![0; 1],
             index: HashMap::new(),
             clock: 0,
             n_loaded: 0,
@@ -278,6 +516,101 @@ mod tests {
         assert_eq!(replacement_slot, slot);
         p.mark_ready(replacement_slot, other).unwrap();
         assert_eq!(p.lookup(other), Some(slot));
+
+        std::mem::forget(p);
+    }
+
+    #[test]
+    fn pinned_ready_slot_cannot_be_evicted_until_compute_fence_release() {
+        let mut p = VramPool {
+            buffer: unsafe { std::mem::zeroed() }, // never used in this test
+            slot_bytes: 1024,
+            n_slots: 1,
+            states: vec![SlotState::Empty; 1],
+            last_access: vec![0; 1],
+            pin_count: vec![0; 1],
+            generations: vec![0; 1],
+            index: HashMap::new(),
+            clock: 0,
+            n_loaded: 0,
+        };
+        let resident = key(42, 0x53, 126);
+        let replacement = key(42, 0x53, 12);
+
+        let reservation = p.reserve_loading_generation(resident).unwrap();
+        let lease = p.publish_batch_and_pin(&[reservation]).unwrap().remove(0);
+        assert!(p.reserve_loading_generation(replacement).is_err());
+        p.release_after_compute_fence(lease).unwrap();
+        assert!(p.reserve_loading_generation(replacement).is_ok());
+
+        std::mem::forget(p);
+    }
+
+    #[test]
+    fn stale_generation_is_rejected_after_slot_reuse() {
+        let mut p = VramPool {
+            buffer: unsafe { std::mem::zeroed() }, // never used in this test
+            slot_bytes: 1024,
+            n_slots: 1,
+            states: vec![SlotState::Empty; 1],
+            last_access: vec![0; 1],
+            pin_count: vec![0; 1],
+            generations: vec![0; 1],
+            index: HashMap::new(),
+            clock: 0,
+            n_loaded: 0,
+        };
+        let first = key(42, 0x53, 126);
+        let second = key(42, 0x53, 12);
+
+        let first_reservation = p.reserve_loading_generation(first).unwrap();
+        let first_lease = p
+            .publish_batch_and_pin(&[first_reservation])
+            .unwrap()
+            .remove(0);
+        let stale_binding = first_lease.binding();
+        p.release_after_compute_fence(first_lease).unwrap();
+        let second_reservation = p.reserve_loading_generation(second).unwrap();
+        p.publish_batch_and_pin(&[second_reservation]).unwrap();
+
+        assert!(p.validate_binding(stale_binding).is_err());
+        assert!(p
+            .release_after_compute_fence(SlotLease {
+                binding: stale_binding,
+            })
+            .is_err());
+
+        std::mem::forget(p);
+    }
+
+    #[test]
+    fn batch_publish_preflight_prevents_partial_visibility() {
+        let mut p = VramPool {
+            buffer: unsafe { std::mem::zeroed() }, // never used in this test
+            slot_bytes: 1024,
+            n_slots: 2,
+            states: vec![SlotState::Empty; 2],
+            last_access: vec![0; 2],
+            pin_count: vec![0; 2],
+            generations: vec![0; 2],
+            index: HashMap::new(),
+            clock: 0,
+            n_loaded: 0,
+        };
+        let first = key(42, 0x53, 126);
+        let second = key(42, 0x53, 12);
+        let first_reservation = p.reserve_loading_generation(first).unwrap();
+        let second_reservation = p.reserve_loading_generation(second).unwrap();
+        let mut stale_second = second_reservation;
+        stale_second.generation += 1;
+
+        assert!(p
+            .publish_batch_and_pin(&[first_reservation, stale_second])
+            .is_err());
+        assert!(p.lookup(first).is_none());
+        assert!(p.lookup(second).is_none());
+        p.cancel_reservation(first_reservation).unwrap();
+        p.cancel_reservation(second_reservation).unwrap();
 
         std::mem::forget(p);
     }
