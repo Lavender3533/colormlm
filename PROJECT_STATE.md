@@ -1206,6 +1206,9 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
   K=1/4/8 Vulkan路径。K=1 CPU/GPU argmax一致且最大token logit绝对误差为0；热态中位数
   分别为`13.8504ms / 41.2493ms / 67.5480ms`，对应head-only等效
   `72.20 / 96.97 / 118.43 token/s`。这已拔掉原CPU头约0.305s的上限，但不是整模型速度声明。
+  持久JSONL worker也已完成：head只在启动时上传，生产请求用GPU top-1归约，不再回读
+  129,280个logit给CPU扫描。一次真实K=1无诊断请求为`13.9149ms` head+argmax内核、
+  `15.6822ms` worker总时间；同输入诊断路径确认GPU top-1与完整logit的CPU argmax一致。
 - 43层CPU/GPU BF16逐位门当前在fresh survey为39/43 exact；L5/L7/L9/L41各剩1个
   BF16边界元素，仍在用确定性accumulator/E4M3FN语义收敛。未放宽容差，在43/43通过前
   不启用无CPU verify的正式提交路径。

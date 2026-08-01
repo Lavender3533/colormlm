@@ -1,0 +1,67 @@
+#version 450
+
+// 全词表logits的GPU上top-1。每个batch row用一个256线程
+// workgroup，避免为argmax把129,280个F32全部拉回CPU。
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer Logits {
+    float values[];
+} logits;
+
+// 每行两个uint：[token_id, floatBitsToUint(max_logit)]。
+layout(set = 0, binding = 1, std430) writeonly buffer TopOne {
+    uint values[];
+} top_one;
+
+layout(push_constant) uniform Push {
+    uint vocab;
+    uint batch;
+} pc;
+
+shared float best_value[256];
+shared uint best_id[256];
+
+bool better(float candidate_value, uint candidate_id, float current_value, uint current_id) {
+    return candidate_value > current_value
+        || (candidate_value == current_value && candidate_id < current_id);
+}
+
+void main() {
+    uint row = gl_WorkGroupID.x;
+    uint lane = gl_LocalInvocationID.x;
+    if (row >= pc.batch) {
+        return;
+    }
+
+    float local_value = -3.402823466e+38;
+    uint local_id = 0xffffffffu;
+    uint row_base = row * pc.vocab;
+    for (uint token_id = lane; token_id < pc.vocab; token_id += 256u) {
+        float value = logits.values[row_base + token_id];
+        if (better(value, token_id, local_value, local_id)) {
+            local_value = value;
+            local_id = token_id;
+        }
+    }
+    best_value[lane] = local_value;
+    best_id[lane] = local_id;
+    barrier();
+
+    for (uint stride = 128u; stride > 0u; stride >>= 1u) {
+        if (lane < stride) {
+            float candidate_value = best_value[lane + stride];
+            uint candidate_id = best_id[lane + stride];
+            if (better(candidate_value, candidate_id, best_value[lane], best_id[lane])) {
+                best_value[lane] = candidate_value;
+                best_id[lane] = candidate_id;
+            }
+        }
+        barrier();
+    }
+
+    if (lane == 0u) {
+        top_one.values[row * 2u] = best_id[0];
+        top_one.values[row * 2u + 1u] = floatBitsToUint(best_value[0]);
+    }
+}
