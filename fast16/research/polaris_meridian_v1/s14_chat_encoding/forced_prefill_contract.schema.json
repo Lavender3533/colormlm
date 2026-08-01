@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "polaris-s14-forced-prefill-input-v1",
+  "title": "Polaris S14 forced-prefill input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "messages", "reasoning_effort", "tools"],
+  "properties": {
+    "format": {"const": "polaris-s14-forced-prefill-input-v1"},
+    "reasoning_effort": {"enum": ["low", "high", "max"]},
+    "messages": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1024,
+      "items": {"$ref": "#/$defs/message"}
+    },
+    "tools": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {"$ref": "#/$defs/tool"}
+    }
+  },
+  "$defs": {
+    "nonEmptyText": {"type": "string", "minLength": 1},
+    "plainMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "content"],
+      "properties": {
+        "role": {"enum": ["system", "user", "developer", "latest_reminder"]},
+        "content": {"$ref": "#/$defs/nonEmptyText"}
+      }
+    },
+    "assistantMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role"],
+      "properties": {
+        "role": {"const": "assistant"},
+        "content": {"type": "string"},
+        "reasoning_content": {"type": "string"},
+        "tool_calls": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/toolCall"}
+        }
+      },
+      "anyOf": [
+        {"required": ["content"]},
+        {"required": ["tool_calls"]}
+      ]
+    },
+    "toolMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "content"],
+      "properties": {
+        "role": {"const": "tool"},
+        "content": {"$ref": "#/$defs/nonEmptyText"},
+        "tool_call_id": {"$ref": "#/$defs/nonEmptyText"}
+      }
+    },
+    "message": {
+      "oneOf": [
+        {"$ref": "#/$defs/plainMessage"},
+        {"$ref": "#/$defs/assistantMessage"},
+        {"$ref": "#/$defs/toolMessage"}
+      ]
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "function"],
+      "properties": {
+        "type": {"const": "function"},
+        "function": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "parameters"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.:-]{0,127}$"
+            },
+            "description": {"type": "string"},
+            "parameters": {"type": "object"},
+            "strict": {"type": "boolean"}
+          }
+        }
+      }
+    },
+    "toolCall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "function"],
+      "properties": {
+        "id": {"$ref": "#/$defs/nonEmptyText"},
+        "type": {"const": "function"},
+        "function": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "arguments"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.:-]{0,127}$"
+            },
+            "arguments": {"$ref": "#/$defs/nonEmptyText"}
+          }
+        }
+      }
+    }
+  }
+}

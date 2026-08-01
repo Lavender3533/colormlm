@@ -1,0 +1,10 @@
+{
+  "format": "polaris-s14-forced-prefill-v1",
+  "input_sha256": "a9d4927bfaaa94b5e376ef88e8e7a9fbdb40397a7657916369fa7e476af3702c",
+  "prompt_utf8_sha256": "6a374de7ba6f8e23cba0068d7455b06c34271e045a26bf6f58ae2e0628292852",
+  "token_count": 1568,
+  "token_ids_sha256": "41ba206f9239e57905a454777b634a0e6d41921a9bf0f83d6f1e7c7bd07ca4d8",
+  "first_token_id": 0,
+  "last_token_id": 5,
+  "required_protocol_token_ids": [2, 3, 5, 7]
+}

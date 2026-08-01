@@ -1,0 +1,31 @@
+{
+  "format": "polaris-s14-forced-prefill-input-v1",
+  "messages": [
+    {
+      "role": "system",
+      "content": "你是严谨的助手。"
+    },
+    {
+      "role": "user",
+      "content": "请查询北京天气：UTF-8 ✓"
+    }
+  ],
+  "reasoning_effort": "high",
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "get_weather",
+        "description": "查询指定城市天气",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": {"type": "string"}
+          },
+          "required": ["city"],
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
+}
