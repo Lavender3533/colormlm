@@ -141,3 +141,31 @@ def test_materialized_fp8_cache_reuses_read_only_array(tmp_path: Path) -> None:
         assert cache.stats()["resident_bytes"] == first.nbytes
     finally:
         l42_reference._InlineForward = original_class
+
+
+def test_materialized_fp8_cache_resists_sequential_scan_pollution(tmp_path: Path) -> None:
+    cache = MaterializedFp8Cache(max_bytes=32)
+    owners = []
+    for index in range(2):
+        root = tmp_path / str(index)
+        root.mkdir()
+        owners.append(_FakeInline(root))
+
+    first = cache._get_or_compute(
+        owners[0], "x", False, lambda: np.arange(8, dtype=np.float32)
+    )
+    skipped = cache._get_or_compute(
+        owners[1], "x", False, lambda: np.arange(8, dtype=np.float32) + 10
+    )
+    hit = cache._get_or_compute(
+        owners[0], "x", False, lambda: np.full(8, -1, dtype=np.float32)
+    )
+
+    assert hit is first
+    assert skipped is not first
+    stats = cache.stats()
+    assert stats["resident_bytes"] == 32
+    assert stats["entries"] == 1
+    assert stats["hits"] == 1
+    assert stats["capacity_skips"] == 1
+    assert stats["evictions"] == 0

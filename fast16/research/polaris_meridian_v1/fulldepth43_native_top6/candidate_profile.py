@@ -426,9 +426,12 @@ def offline_profile(
 
 
 class MaterializedFp8Cache(AbstractContextManager["MaterializedFp8Cache"]):
-    """跨 token 复用只读 FP8 解量化权重的有界 host-RAM LRU。
+    """跨 token 复用只读 FP8 解量化权重的有界 host-RAM 固定集。
 
     默认不缓存 FP4 routed expert，避免与 Vulkan worker 的 payload LRU 重复占用。
+    FullDepth 会按相同的 43 层顺序反复扫描一个大于缓存的工作集；普通 LRU
+    会在下一 token 到达旧条目前先把它们全部逐出，形成零命中的循环扫描。
+    因此容量填满后保留已经驻留的静态 FP8 子集，不再用本轮尾部污染它。
     本基础件必须包住多个 token 才可能命中；单 token 不作速度声明。
     """
 
@@ -447,6 +450,7 @@ class MaterializedFp8Cache(AbstractContextManager["MaterializedFp8Cache"]):
         self.insertions = 0
         self.evictions = 0
         self.oversize_skips = 0
+        self.capacity_skips = 0
 
     @staticmethod
     def _key(owner: Any, prefix: str, bf16: bool) -> tuple[Any, ...]:
@@ -485,10 +489,9 @@ class MaterializedFp8Cache(AbstractContextManager["MaterializedFp8Cache"]):
                 self.hits += 1
                 self._values.move_to_end(key)
                 return raced
-            while self._values and self._resident_bytes + size > self.max_bytes:
-                _, evicted = self._values.popitem(last=False)
-                self._resident_bytes -= int(evicted.nbytes)
-                self.evictions += 1
+            if self._resident_bytes + size > self.max_bytes:
+                self.capacity_skips += 1
+                return value
             self._values[key] = value
             self._resident_bytes += size
             self.insertions += 1
@@ -546,6 +549,8 @@ class MaterializedFp8Cache(AbstractContextManager["MaterializedFp8Cache"]):
                 "insertions": self.insertions,
                 "evictions": self.evictions,
                 "oversize_skips": self.oversize_skips,
+                "capacity_skips": self.capacity_skips,
+                "policy": "scan_resistant_retain_resident_set",
                 "scope": "FP8 only; FP4 routed experts intentionally excluded",
             }
 
