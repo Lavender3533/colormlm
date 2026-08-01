@@ -7,7 +7,7 @@ import argparse
 import json
 from pathlib import Path
 
-from ir_core import read_utf8_no_bom, write_utf8_no_bom
+from ir_core import IRError, read_utf8_no_bom, validate_slots, write_utf8_no_bom
 
 
 ROOT = Path(__file__).resolve().parent
@@ -27,6 +27,9 @@ def main() -> int:
     args = parse_args()
     prompt = read_utf8_no_bom(args.prompt_file).strip()
     slot_payload = json.loads(read_utf8_no_bom(args.slots))
+    slot_errors = validate_slots(slot_payload, prompt)
+    if slot_errors:
+        raise IRError("\n".join(slot_errors))
     slot_lines = [f"slot {item['id']} ({item['kind']}) = {item['text']}" for item in slot_payload["slots"]]
     system = read_utf8_no_bom(ROOT / "CATALOG_PROMPT.md").strip() + "\n\n本请求 copy slots：\n" + "\n".join(slot_lines)
     request = {

@@ -261,7 +261,7 @@ button{{cursor:pointer;transition:transform .2s,background-color .2s,color .2s}}
 .toggles ul{{list-style:none;padding:0}}.toggles li{{border-top:1px solid var(--line)}}.toggles label{{display:flex;justify-content:space-between;gap:1rem;padding:1rem 0}}[role=switch]{{width:1.4rem;height:1.4rem;accent-color:var(--accent)}}.schedule-item{{border-top:1px solid var(--line);padding:.7rem 0}}.schedule-item summary{{cursor:pointer;font-weight:800}}.schedule-item>div{{display:flex;align-items:center;justify-content:space-between;gap:.7rem;flex-wrap:wrap}}.conflict{{border:2px solid #d97706;padding:.7rem;border-radius:var(--radius)}}[data-favorite][aria-pressed=true]{{background:var(--accent);color:#fff}}
 .chart svg{{display:block;width:100%;height:auto;max-width:45rem;margin:auto;overflow:visible}}.chart rect{{fill:var(--accent);transition:height .25s,y .25s}}.axis{{fill:var(--muted);font-size:12px}}.note{{border-left:5px solid var(--accent)}}.bag output{{display:inline-grid;place-items:center;min-width:2rem;height:2rem;border-radius:50%;background:var(--accent);color:#fff;font-weight:800}}
 .overlay{{position:fixed;inset:0;z-index:100;background:#020617b8;display:grid;place-items:center;padding:1rem}}.overlay-card{{width:min(32rem,100%);max-height:90vh;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 30px 90px #0008}}.drawer{{place-items:stretch end;padding:0}}.drawer .overlay-card{{height:100%;max-height:none;border-radius:0;width:min(28rem,100%)}}.overlay-card>header,.overlay-card>footer{{display:flex;align-items:center;justify-content:space-between;gap:.6rem;padding:1rem;border-bottom:1px solid var(--line)}}.overlay-card>footer{{border:0;border-top:1px solid var(--line);justify-content:flex-end}}.overlay-body{{padding:1rem}}.danger{{background:#b91c1c;color:#fff}}.site-footer{{padding:1.3rem 0;border-top:1px solid var(--line);color:var(--muted)}}
-@media(max-width:{middle}px){{.site-header{{align-items:start;flex-direction:column}}.page-shell,.hero{{grid-template-columns:1fr}}.sidebar{{position:static}}.booking form{{grid-template-columns:1fr}}.table-scroll{{display:none}}.mobile-list{{display:grid}}.drawer .overlay-card{{width:100%}}}}
+@media(max-width:{middle}px){{.site-header{{align-items:start;flex-direction:column}}.page-shell,.hero{{grid-template-columns:1fr}}.sidebar{{position:static}}.booking form{{grid-template-columns:1fr}}body[data-responsive~="table>cards"] .table-scroll{{display:none}}body[data-responsive~="table>cards"] .mobile-list{{display:grid}}body[data-responsive~="drawer>full"] .drawer .overlay-card{{width:100%}}body[data-responsive~="grid>stack"] .product-grid,body[data-responsive~="grid>stack"] .metric-grid{{grid-template-columns:1fr}}body[data-responsive~="chart>scroll"] .chart{{overflow-x:auto}}body[data-responsive~="chart>scroll"] .chart svg{{min-width:36rem}}body[data-responsive~="code>scroll"] pre{{overflow-x:auto;max-width:100%}}}}
 @media(max-width:{small}px){{.site-header,.site-footer,.page-shell{{width:min(100% - 1rem,{large}px)}}.panel{{padding:.8rem}}.control-row>*{{width:100%}}.mobile-card{{grid-template-columns:1fr}}.product-grid{{grid-template-columns:1fr}}}}
 @media(min-width:{large}px){{.page-shell{{gap:calc(var(--gap)*1.2)}}.panel{{padding:1.5rem}}}}
 @media(prefers-reduced-motion:reduce){{*,*::before,*::after{{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}}}
@@ -289,7 +289,7 @@ RUNTIME_JS = r"""
   }
   all('[data-component=filters]').forEach(root => {
     root.addEventListener('change', () => actions.has('filter') && applyFilters(root));
-    root.querySelector('[data-reset]').addEventListener('click', () => { all('select', root).forEach(x => x.selectedIndex = 0); applyFilters(root); });
+    root.querySelector('[data-reset]').addEventListener('click', () => { if (!actions.has('reset')) return; all('select', root).forEach(x => x.selectedIndex = 0); applyFilters(root); });
   });
   all('[data-sort]').forEach(button => button.addEventListener('click', () => {
     if (!actions.has('sort')) return;
@@ -310,7 +310,7 @@ RUNTIME_JS = r"""
   document.addEventListener('click', event => {
     const opener = event.target.closest('[data-open]'); if (opener && actions.has('open')) openOverlay(opener.dataset.open);
     const closer = event.target.closest('[data-close]'); if (closer) closeOverlay(closer.closest('.overlay'));
-    if (event.target.matches('[data-confirm]')) { say('操作已确认'); closeOverlay(event.target.closest('.overlay')); }
+    if (event.target.matches('[data-confirm]') && actions.has('confirm')) { say('操作已确认'); closeOverlay(event.target.closest('.overlay')); }
     if (event.target.matches('[data-add-bag]') && actions.has('count')) { const out = document.querySelector('[data-bag-count]'); out.value = Number(out.value || out.textContent) + 1; out.textContent = out.value; say(`购物袋现有 ${out.value} 件`); }
   });
   document.addEventListener('keydown', event => {
@@ -319,13 +319,15 @@ RUNTIME_JS = r"""
     if (event.key === 'Tab' && overlay) { const focusable = all('button,input,select,a[href],[tabindex]:not([tabindex="-1"])', overlay).filter(x => !x.disabled); if (!focusable.length) return; const first=focusable[0], last=focusable.at(-1); if (event.shiftKey && document.activeElement===first) {event.preventDefault();last.focus();} else if (!event.shiftKey && document.activeElement===last) {event.preventDefault();first.focus();} }
   });
   all('[data-compare]').forEach(input => input.addEventListener('input', () => { if (!actions.has('compare')) return; const section=input.closest('.compare'); section.querySelector('[data-after]').style.clipPath=`inset(0 ${100-input.value}% 0 0)`; section.querySelector('output').value=`${input.value}%`; }));
-  all('form[data-validate]').forEach(form => form.addEventListener('submit', event => { event.preventDefault(); let ok=true; all('[required]',form).forEach(field => { const invalid=!field.value; field.setAttribute('aria-invalid', String(invalid)); ok &&= !invalid; }); form.querySelector('[data-form-status]').textContent = ok ? '预约成功，已保存。' : '存在验证错误，请检查标记字段。'; say(ok ? '提交成功' : '表单验证失败'); }));
+  all('form[data-validate]').forEach(form => form.addEventListener('submit', event => { event.preventDefault(); if (!actions.has('validate')) return; let ok=true; all('[required]',form).forEach(field => { const invalid=!field.value; field.setAttribute('aria-invalid', String(invalid)); ok &&= !invalid; }); form.querySelector('[data-form-status]').textContent = ok ? '预约成功，已保存。' : '存在验证错误，请检查标记字段。'; say(ok ? '提交成功' : '表单验证失败'); }));
   all('[data-copy]').forEach(button => button.addEventListener('click', async () => { if (!actions.has('copy')) return; const text=document.getElementById(button.dataset.copy).textContent; try { await navigator.clipboard.writeText(text); } catch { /* 静态文件环境可能禁用剪贴板 */ } button.parentElement.querySelector('[data-copy-status]').textContent='代码已复制'; say('代码已复制'); }));
   all('[role=tab]').forEach(tab => tab.addEventListener('click', () => { if (!actions.has('tab')) return; const list=tab.closest('[role=tablist]'); all('[role=tab]',list).forEach(x => {x.setAttribute('aria-selected',String(x===tab)); document.getElementById(x.getAttribute('aria-controls')).hidden=x!==tab;}); tab.focus(); }));
-  all('[role=switch]').forEach(toggle => toggle.addEventListener('change', () => { toggle.setAttribute('aria-checked',String(toggle.checked)); const status=toggle.closest('.toggles').querySelector('[data-save-status]'); status.textContent='保存中…'; setTimeout(()=>{status.textContent='已保存';say('设置已保存');},180); }));
+  all('[role=switch]').forEach(toggle => toggle.addEventListener('change', () => { if (!actions.has('toggle')) return; toggle.setAttribute('aria-checked',String(toggle.checked)); const status=toggle.closest('.toggles').querySelector('[data-save-status]'); status.textContent='保存中…'; setTimeout(()=>{status.textContent='已保存';say('设置已保存');},180); }));
   all('[data-favorite]').forEach(button => button.addEventListener('click', () => { if (!actions.has('favorite')) return; const next=button.getAttribute('aria-pressed')!=='true'; button.setAttribute('aria-pressed',String(next)); button.textContent=next?'已收藏':'收藏'; say(button.textContent); }));
   all('[data-component=filters] select').forEach(select => select.addEventListener('change', () => { if (actions.has('year') && /年/.test(select.previousElementSibling?.textContent || '')) all('[data-bar]').forEach((bar,i)=>{const h=70+((i+select.selectedIndex)*29)%100;bar.setAttribute('height',h);bar.setAttribute('y',210-h);}); }));
   all('[data-inspect]').forEach(mark => { const inspect=()=>actions.has('inspect') && say(mark.getAttribute('aria-label')); mark.addEventListener('click',inspect); mark.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();inspect();}}); });
+  const responsive = new Set(document.body.dataset.responsive.split(' '));
+  if (responsive.has('schedule>accordion') && matchMedia('(max-width: 820px)').matches) all('.schedule-item').forEach((item,index)=>item.open=index===0);
 })();
 """.strip()
 
@@ -363,7 +365,7 @@ def compile_genome(ir: dict[str, Any], slots: dict[int, str]) -> tuple[str, dict
     page = f"""<!doctype html>
 <html lang="zh-CN">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{esc(title)}</title><style>{css_for(ir)}</style></head>
-<body data-layout="{esc(ir['l'][0])}" data-mobile="{esc(ir['l'][1])}" data-actions="{esc(','.join(ir['x']))}">
+<body data-layout="{esc(ir['l'][0])}" data-mobile="{esc(ir['l'][1])}" data-actions="{esc(','.join(ir['x']))}" data-responsive="{esc(' '.join(ir['r']))}">
 <a class="skip" href="#main">跳到主要内容</a>
 <header class="site-header"><div class="brand">{brand_svg}<div><h1>{esc(title)}</h1><p class="lede">{esc(lede)}</p></div></div><span aria-label="资产策略">离线自包含</span></header>
 <main class="page-shell" id="main">{''.join(fragments)}</main>

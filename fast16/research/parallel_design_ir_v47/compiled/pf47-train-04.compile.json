@@ -3,8 +3,8 @@
   "compiler": "parallel-design-genome-compiler-v1",
   "genome_bytes": 286,
   "copy_slot_bytes": 108,
-  "html_bytes": 18171,
-  "expansion_ratio_html_per_genome_byte": 63.535,
+  "html_bytes": 19016,
+  "expansion_ratio_html_per_genome_byte": 66.49,
   "component_genes": 5,
   "actions": [
     "filter",
