@@ -27,8 +27,8 @@ class RealAssetIntegrationTest(unittest.TestCase):
         self.assertEqual(self.audit.head_bytes, 1059061760)
         self.assertEqual(self.audit.expert_page_count, 43 * 256)
         self.assertEqual(self.audit.expert_page_bytes, 13369344)
-        self.assertEqual(self.audit.route_catalog_range_count, 22010)
-        self.assertEqual(self.audit.route_catalog_range_bytes, 52228574160)
+        self.assertEqual(self.audit.route_catalog_range_count, 22013)
+        self.assertEqual(self.audit.route_catalog_range_bytes, 52228836324)
         self.assertFalse(self.audit.weights_downloaded)
         self.assertTrue(self.audit.budget_vram_fit_nonrouted_head_one_layer_top6)
 

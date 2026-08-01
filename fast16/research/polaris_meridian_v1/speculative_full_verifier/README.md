@@ -37,7 +37,7 @@ python -m unittest discover `
 
 - `fulldepth_kadaptive_budget.json`；
 - base shard `00001..00045` 的 45 个 safetensors header；
-- `route_first_catalog.json` 内的 22,010 个 range；
+- `route_first_catalog.json` 内的 22,013 个 range（含最终 HC/norm/head 三段）；
 - `tokenizer.json` 指纹和 `config.json` 的 129,280 vocab 合同。
 
 已生成的 [analysis_report.json](analysis_report.json) 来自当前 `D:/models/Polaris-S14` 真实元数据：

@@ -7,7 +7,7 @@
   "asset_audit": {
     "asset_root": "D:\\models\\Polaris-S14",
     "budget_sha256": "26e79a5952cf8d37a83e97d8ac9edc2f3ebb11d8adaac05ce4832e2157b94453",
-    "route_catalog_sha256": "61a0ddd24a1f83f698049feff976f43ba4fc43b31b9513f937602132ad44bbb0",
+    "route_catalog_sha256": "d95192e3f3be4c39b79addeb9e7f6b2852f9f0be7e7fea0a55419b78e2853f48",
     "tokenizer_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
     "header_count": 45,
     "header_set_sha256": "30f75c059c90e566071f8124ff16501422d5b7c898988bdc2ba8c98da048ba02",
@@ -22,8 +22,8 @@
     "expert_page_bytes": 13369344,
     "expert_page_count": 11008,
     "expert_bank_bytes": 147169738752,
-    "route_catalog_range_count": 22010,
-    "route_catalog_range_bytes": 52228574160,
+    "route_catalog_range_count": 22013,
+    "route_catalog_range_bytes": 52228836324,
     "route_catalog_selected_layers": [
       0,
       1,
