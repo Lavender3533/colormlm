@@ -45,6 +45,12 @@ HC/norm/BF16 head 提交了真实 `token_id=5`。机器可读证据在
 墙钟 4,218.604 秒，其中包含大量首次 Range 下载。一个合理首 token 仍然不是质量晋级，
 但它证明了官方聊天编码、五位置 KV/compressor 状态和完整 43 层原生输出链闭环。
 
+需要严格区分“运行时曾拥有状态”与“状态已持久化”。这次已完成的
+`first_preview_real_report.json` 只包含 shape、摘要、route 和 ledger，不包含完整
+43 层 window KV/compressor tensor，因此 **不可恢复，也不能事后伪造成
+checkpoint**。要获得该前缀的首个可恢复状态，仍需在已有 Range cache 上执行
+一次带 `--checkpoint` 的五 token 前缀。
+
 该轨迹还提供了第一批真实速度结构证据。排除 BOS 特殊对后，相邻位置每层平均复用
 `2.1938/6` 个专家；正常位置 1--4 的 K=4 联合专家数平均为 `15.4186/24`，即仅看
 动态 routed expert 字节可少读约 35.76%。这证明 causal block 有实质空间，但不足以单独
@@ -77,6 +83,35 @@ python -X utf8 -m fast16.research.polaris_meridian_v1.fulldepth43_native_top6.ex
 `--forced-prefill` 不带路径时固定使用上述仓内产物，也可显式指定其他通过
 S14 format/revision/vocab/BOS/token-hash/decoder-consumption 验收的产物。中间四次
 argmax 只记录为反事实输出，不会覆盖 forced 队列的下一输入。
+
+## 连续生成 checkpoint/resume
+
+`checkpoint.py` 使用严格 UTF-8 JSON manifest + 原始 binary tensor payload，
+不使用 pickle。manifest 绑定固定 repo/revision/profile/tokenizer、position、
+committed ledger、forced cursor、43 层 KV/compressor 形状和每个 tensor/整体
+payload SHA-256。payload 先以内容寻址文件发布，manifest 最后原子替换。
+任一缺层、截断、位翻转、ledger 断链或模型/tokenizer 不匹配都会在前向前拒绝。
+
+首次生成可恢复的五 token 状态：
+
+```powershell
+python -X utf8 -m fast16.research.polaris_meridian_v1.fulldepth43_native_top6.executor run `
+  --forced-prefill `
+  --token-count 5 `
+  --checkpoint D:/models/Polaris-S14/checkpoints/first-chat-prefix.json
+```
+
+从 position 5 继续一个 token，并将新状态原子写回同一 checkpoint：
+
+```powershell
+python -X utf8 -m fast16.research.polaris_meridian_v1.fulldepth43_native_top6.executor run `
+  --resume-checkpoint D:/models/Polaris-S14/checkpoints/first-chat-prefix.json `
+  --checkpoint D:/models/Polaris-S14/checkpoints/first-chat-prefix.json `
+  --token-count 1
+```
+
+checkpoint 只消除已提交前缀的冷重放；新 token 本身仍需完整 FullDepth43
+计算，因此它是连续性/可用性基础设施，不是 token/s 证据。
 
 新 token 若命中未缓存专家页，要允许补页，必须同时显式传入
 `--download-missing` 和不小于

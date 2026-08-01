@@ -25,6 +25,7 @@ from fast16.research.polaris_meridian_v1.s14_first_real_token import executor as
 from fast16.research.polaris_meridian_v1.s14_range_pack import online_range
 
 from .catalog import build_catalog, read_json, validate_catalog, write_json
+from . import checkpoint as decoder_checkpoint
 from .preflight import DEFAULT_ASSET_ROOT, DEFAULT_CATALOG, run_preflight
 from .profile import FULLDEPTH43_NATIVE_TOP6, ExecutionProfile
 from .vulkan_writeback import (
@@ -248,6 +249,8 @@ class ExecutionConfig:
     vulkan_bridge_layer: int = 42
     vulkan_writeback_worker: Path | None = None
     vulkan_writeback_timeout_seconds: float = 30.0
+    checkpoint_path: Path | None = None
+    resume_checkpoint_path: Path | None = None
     vulkan_writeback_all_layers: bool = False
     vulkan_writeback_verify_cpu: bool = True
     vulkan_writeback_cpu_fallback: bool = True
@@ -280,6 +283,12 @@ class ExecutionConfig:
                 raise FullDepthError("Vulkan writeback worker 不存在")
         if self.vulkan_writeback_timeout_seconds <= 0:
             raise FullDepthError("Vulkan writeback timeout 必须为正数")
+        if self.resume_checkpoint_path is not None and self.forced_prefill_path is not None:
+            raise FullDepthError("resume checkpoint 已包含 forced cursor，禁止再注入 forced-prefill")
+        if self.resume_checkpoint_path is not None and self.vulkan_bridge_capture is not None:
+            raise FullDepthError("resume checkpoint 不能重放 position0 Vulkan capture")
+        if self.checkpoint_path is not None and self.checkpoint_path.resolve() == self.report_path.resolve():
+            raise FullDepthError("checkpoint manifest 不得覆盖 execution report")
         if self.vulkan_writeback_all_layers and self.vulkan_writeback_worker is None:
             raise FullDepthError("全层 Vulkan writeback 必须指定 worker")
 
@@ -428,6 +437,20 @@ class DecoderState:
             layer: s14._clone_layer_state(state)
             for layer, state in self.layer_states.items()
         }
+
+    def clone(self) -> "DecoderState":
+        """深拷贝可变 tensor/ledger，用于 checkpoint-before-commit。"""
+
+        return DecoderState(
+            position=self.position,
+            input_token_id=self.input_token_id,
+            layer_states={
+                layer: s14._clone_layer_state(layer_state)
+                for layer, layer_state in self.layer_states.items()
+            },
+            committed_tokens=[dict(row) for row in self.committed_tokens],
+            forced_queue=self.forced_queue,
+        )
 
     def commit(
         self,
@@ -826,6 +849,7 @@ def execute(
     config.validate()
     profile.validate()
     catalog = _load_or_build_catalog(config)
+    catalog_sha256 = decoder_checkpoint.catalog_fingerprint(catalog)
     preflight = run_preflight(asset_root=config.asset_root, catalog=catalog, profile=profile)
     cold_upper = int(preflight["cold_execution_upper_bound"]["total_bytes"])
     authorized_to_fill = (
@@ -847,6 +871,16 @@ def execute(
             else str(config.forced_prefill_path.resolve())
         ),
         "forced_prefill": None,
+        "checkpoint_path": (
+            None if config.checkpoint_path is None else str(config.checkpoint_path.resolve())
+        ),
+        "resume_checkpoint_path": (
+            None
+            if config.resume_checkpoint_path is None
+            else str(config.resume_checkpoint_path.resolve())
+        ),
+        "resume_checkpoint": None,
+        "checkpoint": None,
         "preflight": preflight,
         "tokens": [],
         "committed_tokens": [],
@@ -873,17 +907,42 @@ def execute(
         download_budget_bytes=config.download_budget_bytes,
         timeout=300.0,
     )
-    forced_queue = (
-        None
-        if config.forced_prefill_path is None
-        else s14._load_forced_prefill(config.forced_prefill_path)
-    )
-    decoder = DecoderState(
-        input_token_id=(
-            s14.BOS_TOKEN_ID if forced_queue is None else forced_queue.current_token_id
-        ),
-        forced_queue=forced_queue,
-    )
+    try:
+        if config.resume_checkpoint_path is not None:
+            decoder, resume_evidence = decoder_checkpoint.load_decoder_checkpoint(
+                config.resume_checkpoint_path,
+                profile=profile,
+            )
+            forced_queue = decoder.forced_queue
+            report["resume_checkpoint"] = resume_evidence
+            if resume_evidence["provenance"].get("catalog_sha256") != catalog_sha256:
+                raise decoder_checkpoint.CheckpointError(
+                    "checkpoint catalog provenance 与当前 FullDepth catalog 不匹配"
+                )
+            report["committed_tokens"] = decoder.committed_tokens
+        else:
+            forced_queue = (
+                None
+                if config.forced_prefill_path is None
+                else s14._load_forced_prefill(config.forced_prefill_path)
+            )
+            decoder = DecoderState(
+                input_token_id=(
+                    s14.BOS_TOKEN_ID if forced_queue is None else forced_queue.current_token_id
+                ),
+                forced_queue=forced_queue,
+            )
+    except Exception as error:
+        report["status"] = "blocked"
+        report["error"] = {
+            "stage": "checkpoint_restore",
+            "type": type(error).__name__,
+            "message": str(error),
+            "traceback": traceback.format_exc().splitlines(),
+        }
+        report["claim_limit"] = "checkpoint rejected before model forward; no state restored or token emitted"
+        write_json(config.report_path, report)
+        return report
     if forced_queue is not None:
         report["forced_prefill"] = {
             "artifact_sha256": forced_queue.artifact_sha256,
@@ -928,11 +987,39 @@ def execute(
             previous = decoder.previous_for(profile)
             computation = worker(position, input_token_id, previous)
             token_report = computation.value["token_report"]
-            decoder.commit(
-                output_token_id=computation.predicted_token_id,
-                next_states=computation.next_layer_states,
-                profile=profile,
-            )
+            if config.checkpoint_path is None:
+                decoder.commit(
+                    output_token_id=computation.predicted_token_id,
+                    next_states=computation.next_layer_states,
+                    profile=profile,
+                )
+            else:
+                # 先在私有 decoder 上完成全量验证与 checkpoint
+                # 原子发布；任一步失败都不修改运行中 decoder。
+                candidate = decoder.clone()
+                candidate.commit(
+                    output_token_id=computation.predicted_token_id,
+                    next_states=computation.next_layer_states,
+                    profile=profile,
+                )
+                checkpoint_evidence = decoder_checkpoint.save_decoder_checkpoint(
+                    candidate,
+                    config.checkpoint_path,
+                    profile=profile,
+                    provenance={
+                        "producer": "fulldepth43_native_top6.executor.execute",
+                        "execution_report": str(config.report_path.resolve()),
+                        "catalog_sha256": catalog_sha256,
+                        "resumed_from_checkpoint_sha256": (
+                            None
+                            if report["resume_checkpoint"] is None
+                            else report["resume_checkpoint"]["checkpoint_sha256"]
+                        ),
+                    },
+                )
+                decoder.__dict__.update(candidate.__dict__)
+                token_report["checkpoint"] = checkpoint_evidence
+                report["checkpoint"] = checkpoint_evidence
             token_report["state_committed"] = True
             report["committed_tokens"] = decoder.committed_tokens
             report["runtime"] = {
@@ -1037,6 +1124,16 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--vulkan-writeback-all-layers", action="store_true")
     parser.add_argument("--vulkan-writeback-no-cpu-verify", action="store_true")
     parser.add_argument("--vulkan-writeback-no-cpu-fallback", action="store_true")
+    parser.add_argument(
+        "--checkpoint",
+        type=Path,
+        help="每次 token 完整计算后原子替换的 DecoderState UTF-8 manifest",
+    )
+    parser.add_argument(
+        "--resume-checkpoint",
+        type=Path,
+        help="验证并恢复完整 43 层 KV/compressor 状态后继续生成",
+    )
     return parser
 
 
@@ -1062,6 +1159,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             vulkan_writeback_all_layers=args.vulkan_writeback_all_layers,
             vulkan_writeback_verify_cpu=not args.vulkan_writeback_no_cpu_verify,
             vulkan_writeback_cpu_fallback=not args.vulkan_writeback_no_cpu_fallback,
+            checkpoint_path=args.checkpoint,
+            resume_checkpoint_path=args.resume_checkpoint,
         )
         if args.command == "preflight":
             catalog = _load_or_build_catalog(config)
