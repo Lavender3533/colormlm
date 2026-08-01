@@ -9,6 +9,7 @@ mod cascade;
 mod causal_batch;
 mod contract;
 mod executor_bridge;
+mod expert_batch;
 mod memory;
 mod metrics;
 mod range_bridge;
@@ -40,6 +41,12 @@ pub use contract::{
 };
 pub use executor_bridge::{
     BinaryTensorView, ExecutorBridgeConfig, SubprocessNativeExecutor, EXECUTOR_JSONL_PROTOCOL,
+};
+pub use expert_batch::{
+    execute_materialized_layer_expert_batch, CpuBatchKernelCall, CpuDenseSwiGluBatchKernel,
+    DenseSwiGluExpert, ExpertBatchExecution, ExpertBatchExecutionError, ExpertBatchTelemetry,
+    ExpertPageProvider, ExpertPageShape, InMemoryDenseExpertProvider, LayerBatchReadiness,
+    MaterializedLayerBatch, MaterializedTokenSource, SwiGluExpertBatchKernel,
 };
 pub use memory::{
     BudgetKind, MemoryLedger, MemoryLine, EXPERT_PAGE_BYTES, FULL_DEPTH_NATIVE_STATE_4096_BYTES,
