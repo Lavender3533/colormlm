@@ -171,3 +171,25 @@ python -X utf8 -m `
 
 即使通过，该门也只证明 43 个 MoE 分支来自 Vulkan；attention、HC、router 和 head
 仍在 CPU，不能写成完整 GPU token、20/50 token/s 或能力提升。
+
+## 连续 token 剖析入口
+
+`run_candidate_profile.py` 支持一次严格执行 `1..16` 个连续 token，并记录每个 token 的
+精确 wall time、43层覆盖、committed ledger、FP8 materialization cache、Range proof cache
+与持久 Vulkan 边界。下面是当前两 token 技术门；它不下载缺失权重：
+
+```powershell
+python -X utf8 -m `
+  fast16.research.polaris_meridian_v1.fulldepth43_native_top6.run_candidate_profile `
+  --worker scheduler/target/release/examples/s14_vulkan_numeric.exe `
+  --vulkan-final-head-worker scheduler/target/release/examples/s14_bf16_head.exe `
+  --vulkan-final-head-scratch .tmp-polaris-runs/fd43-proof/head `
+  --output-root .tmp-polaris-runs/fd43-proof `
+  --token-count 2 `
+  --fp8-cache-gib 6
+```
+
+输出目录必须是新目录。生产 worker 默认禁用已被真实 A/B 否决的 GPU payload LRU；只有显式
+设置 `POLARIS_GPU_PAYLOAD_CACHE_GIB=1..7` 才会启用实验缓存。6GiB实验会在8GiB显卡上OOM，
+4GiB实验为0命中且回归约9.37%，不得用于正式入口。当前已知最快两 token 完整运行仍为
+`146.5560s`，所以这个入口是新架构连续性与剖析工具，不是可交互聊天服务。

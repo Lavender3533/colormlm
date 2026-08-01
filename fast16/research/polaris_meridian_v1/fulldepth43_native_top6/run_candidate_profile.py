@@ -159,6 +159,7 @@ def run_profiled_candidate(
         "gc_removed": runtime_profile["gc_status"]["gc_removed"],
         "vulkan_boundary": runtime_profile["vulkan_boundary"],
         "materialized_fp8_cache": runtime_profile["materialized_fp8_cache"],
+        "range_proof_cache": model_report.get("range_proof_cache"),
         "reports": {
             "model": str((output_root / "model_report.json").resolve()),
             "runtime_profile": str((output_root / "runtime_profile.json").resolve()),

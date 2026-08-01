@@ -1205,6 +1205,7 @@ def execute(
                 report["claim_limit"] = (
                     "Vulkan worker cleanup failed; execution report retained but run is not promotable"
                 )
+    report["range_proof_cache"] = getattr(cache, "proof_cache_telemetry", None)
     report["execution_seconds"] = time.perf_counter() - execution_started
     write_json(config.report_path, report)
     return report

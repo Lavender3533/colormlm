@@ -1229,6 +1229,12 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
   `0/602`；端到端耗时 `160.2900s`，比无该缓存基线慢约 `9.37%`。因此朴素 GPU payload
   LRU 不晋级，不能作为默认加速；后续只有在抗顺序扫描驻留或按层生命周期策略通过真实 A/B
   后才可重开。
+- 生产 worker 已恢复默认无 GPU payload cache 的原始临时上传路径；仅显式设置
+  `POLARIS_GPU_PAYLOAD_CACHE_GIB=1..7` 才进入隔离实验，未设置或设为`0`时 telemetry 明确
+  `enabled=false`。默认安全路径 Rust 单测 `6/6`、release编译均通过。
+- 主机 FP8 materialization cache 从6GiB增到8GiB后，命中率从约`18.01%`升到`22.67%`，
+  但第二 token 仅为`59.35s`，相对6GiB基线约`60.14s`没有脱离机器噪声；完整两 token
+  还因冷态波动为`171.7050s`。8GiB不晋级，生产研究默认继续使用6GiB，停止扫描更大容量。
 - 连续剖析 runner 已支持 `1..16` token、持久 GPU 词表头和逐 token 精确 wall time，并对
   position、43层覆盖、committed ledger 与 profiler 次数 fail-closed；FullDepth43 测试为
   `41 passed, 2 subtests passed`。
