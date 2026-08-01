@@ -306,6 +306,59 @@ class OnlineRangeTests(unittest.TestCase):
         self.assertFalse(result.proof["authoritative"])
         self.assertFalse(parts[0].exists())
 
+    def test_truncated_committed_payload_is_quarantined_and_refetched(self) -> None:
+        cache = self.cache("repair")
+        entry = self.catalog["layers"]["0"]["router"][0]
+        first = cache.fetch(entry)
+        first.path.write_bytes(first.path.read_bytes()[:2])
+        request_count = len(self.transport.requests)
+
+        repaired = cache.fetch(entry)
+
+        self.assertFalse(repaired.cache_hit)
+        self.assertEqual(repaired.path.stat().st_size, entry["bytes"])
+        self.assertEqual(len(self.transport.requests), request_count + 1)
+        quarantined = list((first.path.parent / "quarantine").iterdir())
+        self.assertEqual(len(quarantined), 2)
+        self.assertTrue(any(path.name.endswith(".bin") for path in quarantined))
+        self.assertTrue(any(path.name.endswith(".json") for path in quarantined))
+        self.assertEqual(list(first.path.parent.glob("*.bin.part")), [])
+
+    def test_zero_byte_stale_part_is_quarantined_not_treated_as_hit(self) -> None:
+        cache = self.cache("stale-part")
+        entry = self.catalog["layers"]["0"]["shared"][0]
+        identity = cache._identity(entry)
+        _, _, partial, _ = cache._paths(identity)
+        partial.touch()
+
+        result = cache.fetch(entry)
+
+        self.assertFalse(result.cache_hit)
+        self.assertEqual(self.transport.requests[-1][1:], (entry["start"], entry["end"]))
+        self.assertFalse(partial.exists())
+        quarantined = list((partial.parent / "quarantine").iterdir())
+        self.assertEqual(len(quarantined), 1)
+        self.assertEqual(quarantined[0].stat().st_size, 0)
+
+    def test_failed_refetch_does_not_replace_other_valid_cache_entry(self) -> None:
+        cache = self.cache("isolation")
+        valid_entry = self.catalog["layers"]["0"]["router"][0]
+        broken_entry = self.catalog["layers"]["0"]["shared"][0]
+        valid = cache.fetch(valid_entry)
+        valid_bytes = valid.path.read_bytes()
+        broken = cache.fetch(broken_entry)
+        broken.path.write_bytes(b"x")
+        key = (broken_entry["file"], broken_entry["start"], broken_entry["end"])
+        self.transport.eof_once[key] = 0
+
+        with self.assertRaises(online.RangePayloadTruncatedError):
+            cache.fetch(broken_entry)
+
+        self.assertEqual(valid.path.read_bytes(), valid_bytes)
+        self.assertTrue(valid.path.is_file())
+        self.assertFalse(broken.path.exists())
+        self.assertEqual(len(list((broken.path.parent / "quarantine").glob("*"))), 2)
+
     def test_budget_rejected_before_request_or_part(self) -> None:
         entry = self.catalog["layers"]["0"]["shared"][0]
         cache = self.cache("budget", budget=entry["bytes"] - 1)

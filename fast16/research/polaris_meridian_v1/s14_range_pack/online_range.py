@@ -10,13 +10,16 @@ Python 调用发生，便于 runtime 注入 executor 和预算。
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
 import re
 import threading
+import time
 import urllib.parse
 import urllib.request
+import uuid
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path, PurePosixPath
@@ -41,6 +44,10 @@ SHA256_RE = re.compile(r"[0-9a-f]{64}")
 
 class RangePayloadTruncatedError(ConnectionError):
     """远端在精确 Range 传输完成前 EOF；允许从已落盘前缀续传。"""
+
+
+class CacheEntryCorruption(rp.ContractError):
+    """单个已提交缓存条目的 payload/metadata 不再自洽。"""
 
 
 def _canonical_bytes(value: Any) -> bytes:
@@ -78,13 +85,18 @@ def _safe_local_path(root: Path, relative: str) -> Path:
 
 def _atomic_write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".part")
-    with temporary.open("w", encoding="utf-8", newline="\n") as sink:
-        json.dump(value, sink, ensure_ascii=False, indent=2)
-        sink.write("\n")
-        sink.flush()
-        os.fsync(sink.fileno())
-    os.replace(temporary, path)
+    temporary = path.with_name(
+        f".{path.name}.{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex}.part"
+    )
+    try:
+        with temporary.open("x", encoding="utf-8", newline="\n") as sink:
+            json.dump(value, sink, ensure_ascii=False, indent=2)
+            sink.write("\n")
+            sink.flush()
+            os.fsync(sink.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _header_set_identity(source_files: Mapping[str, Mapping[str, Any]]) -> str:
@@ -698,6 +710,45 @@ def _key_lock(cache_root: Path, key: str) -> threading.Lock:
         return _KEY_LOCKS.setdefault(identity, threading.Lock())
 
 
+@contextlib.contextmanager
+def _process_key_lock(cache_root: Path, key: str) -> Iterable[None]:
+    """跨进程串行化同一 cache key，避免多个 FullDepth 进程共写 ``.part``。"""
+
+    lock_path = (cache_root / f"{key}.lock").resolve()
+    try:
+        lock_path.relative_to(cache_root)
+    except ValueError as exc:
+        raise rp.ContractError("cache lock path 越过 cache root") from exc
+    with lock_path.open("a+b") as lock_file:
+        lock_file.seek(0, os.SEEK_END)
+        if lock_file.tell() == 0:
+            lock_file.write(b"\0")
+            lock_file.flush()
+        if os.name == "nt":
+            import msvcrt
+
+            while True:
+                try:
+                    lock_file.seek(0)
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+                    break
+                except OSError:
+                    time.sleep(0.05)
+            try:
+                yield
+            finally:
+                lock_file.seek(0)
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
 class RangeCache:
     """带 SHA proof、断点续传、预算和 keyed concurrency 的内容缓存。"""
 
@@ -843,6 +894,30 @@ class RangeCache:
             "verified_transport": "HTTPS/206/exact-Content-Range",
         }
 
+    def _quarantine(self, key: str, *paths: Path) -> tuple[Path, ...]:
+        quarantine = (self.root / "quarantine").resolve()
+        try:
+            quarantine.relative_to(self.root)
+        except ValueError as exc:
+            raise rp.ContractError("cache quarantine path 越过 cache root") from exc
+        quarantine.mkdir(parents=True, exist_ok=True)
+        nonce = f"{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex}"
+        moved: list[Path] = []
+        active_bytes = 0
+        for path in paths:
+            if not path.exists():
+                continue
+            if path.is_file() and (path.suffix == ".bin" or path.name.endswith(".bin.part")):
+                active_bytes += path.stat().st_size
+            suffix = path.name[len(key):].lstrip(".") or "entry"
+            target = quarantine / f"{key}.{nonce}.{suffix}"
+            os.replace(path, target)
+            moved.append(target)
+        if active_bytes:
+            with self._budget_lock:
+                self._cache_used = max(0, self._cache_used - active_bytes)
+        return tuple(moved)
+
     def _load_hit(
         self,
         *,
@@ -855,25 +930,28 @@ class RangeCache:
         if not payload.exists() and not meta_path.exists():
             return None
         if not payload.is_file():
-            raise rp.ContractError("cache metadata 存在但 payload 缺失")
+            raise CacheEntryCorruption("cache metadata 存在但 payload 缺失")
         size = int(identity["end"]) - int(identity["start"]) + 1
         if payload.stat().st_size != size:
-            raise rp.ContractError("cache payload 长度错误")
+            raise CacheEntryCorruption("cache payload 长度错误")
         observed = rp.sha256_file(payload)
         if meta_path.exists():
-            meta = rp.read_json(meta_path)
+            try:
+                meta = rp.read_json(meta_path)
+            except Exception as exc:
+                raise CacheEntryCorruption("cache metadata 无法解析") from exc
             if meta.get("format") != CACHE_META_FORMAT or meta.get("cache_key") != key:
-                raise rp.ContractError("cache metadata format/key 错误")
+                raise CacheEntryCorruption("cache metadata format/key 错误")
             if meta.get("identity") != dict(identity) or int(meta.get("bytes", -1)) != size:
-                raise rp.ContractError("cache metadata 身份漂移")
+                raise CacheEntryCorruption("cache metadata 身份漂移")
             if meta.get("observed_sha256") != observed:
-                raise rp.ContractError("cache payload SHA-256 与 metadata 不一致")
+                raise CacheEntryCorruption("cache payload SHA-256 与 metadata 不一致")
             authoritative = meta.get("authoritative") is True
             if authoritative:
                 if meta.get("hash_authority") != "official_lock" or meta.get("expected_sha256") != observed:
-                    raise rp.ContractError("cache authoritative proof 自相矛盾")
+                    raise CacheEntryCorruption("cache authoritative proof 自相矛盾")
             elif meta.get("hash_authority") != "tofu" or meta.get("expected_sha256") is not None:
-                raise rp.ContractError("cache TOFU proof 试图冒充权威")
+                raise CacheEntryCorruption("cache TOFU proof 试图冒充权威")
         else:
             # 崩溃可能发生在 payload 原子 rename 后、metadata rename 前；本地重哈希即可恢复，
             # 但没有 external lock 时仍只能是 TOFU。
@@ -881,7 +959,7 @@ class RangeCache:
             _atomic_write_json(meta_path, meta)
         if expected is not None:
             if observed != expected:
-                raise rp.ContractError("cache payload 与 authoritative hash lock 不匹配")
+                raise CacheEntryCorruption("cache payload 与 authoritative hash lock 不匹配")
             if meta.get("authoritative") is not True:
                 meta = self._proof(key=key, identity=identity, digest=observed, expected=expected)
                 _atomic_write_json(meta_path, meta)
@@ -895,22 +973,31 @@ class RangeCache:
         expected = self.authoritative_hashes.get(str(entry["range_key"]))
         if self.require_authoritative and expected is None:
             raise rp.ContractError(f"正式复现缺少 authoritative range lock：{entry['range_key']}")
-        with _key_lock(self.root, key):
-            hit = self._load_hit(
-                key=key,
-                identity=identity,
-                payload=payload,
-                meta_path=meta_path,
-                expected=expected,
-            )
+        with _key_lock(self.root, key), _process_key_lock(self.root, key):
+            try:
+                hit = self._load_hit(
+                    key=key,
+                    identity=identity,
+                    payload=payload,
+                    meta_path=meta_path,
+                    expected=expected,
+                )
+            except CacheEntryCorruption:
+                self._quarantine(key, payload, meta_path, partial)
+                if not self.allow_fetch:
+                    raise
+                hit = None
             if hit is not None:
                 return CachedRange(entry=dict(entry), path=hit.path, proof=hit.proof, cache_hit=True)
             if not self.allow_fetch:
                 raise rp.ContractError("cache miss；必须显式 allow_fetch=True 才能发起 Range")
             size = int(entry["bytes"])
             done = partial.stat().st_size if partial.exists() else 0
-            if not 0 <= done <= size:
-                raise rp.ContractError("cache .part 长度越界")
+            if done == 0 and partial.exists():
+                self._quarantine(key, partial)
+            elif not 0 <= done <= size:
+                self._quarantine(key, partial)
+                done = 0
             if done < size:
                 remaining = size - done
                 self._reserve(remaining, remaining)
