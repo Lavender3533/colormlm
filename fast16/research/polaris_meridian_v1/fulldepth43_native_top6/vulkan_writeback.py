@@ -74,6 +74,8 @@ class PersistentVulkanWriteback:
         self._stderr: deque[str] = deque(maxlen=64)
         self._threads: list[threading.Thread] = []
         self.hello: dict[str, Any] | None = None
+        self._last_position: int | None = None
+        self._last_layer: int | None = None
         self._start()
 
     def _start(self) -> None:
@@ -172,6 +174,31 @@ class PersistentVulkanWriteback:
             self._fail("Vulkan manifest 文件名漂移")
         capture_root = manifest_path.parent.resolve(strict=True)
         expected_manifest_sha = _sha256(manifest_path)
+        manifest = _strict_json(manifest_path.read_text(encoding="utf-8", errors="strict"))
+        manifest_position = manifest.get("position")
+        manifest_layer = manifest.get("layer")
+        manifest_input_token_id = manifest.get("input_token_id")
+        if (
+            isinstance(manifest_position, bool)
+            or not isinstance(manifest_position, int)
+            or manifest_position < 0
+            or isinstance(manifest_layer, bool)
+            or not isinstance(manifest_layer, int)
+            or not 0 <= manifest_layer <= 42
+            or isinstance(manifest_input_token_id, bool)
+            or not isinstance(manifest_input_token_id, int)
+            or manifest_input_token_id < 0
+        ):
+            self._fail("Vulkan manifest position/layer/token 合同漂移")
+        if self._last_position is not None and self._last_layer is not None:
+            expected_position = self._last_position + (1 if self._last_layer == 42 else 0)
+            expected_layer = 0 if self._last_layer == 42 else self._last_layer + 1
+            if (manifest_position, manifest_layer) != (expected_position, expected_layer):
+                self._fail(
+                    "Vulkan manifest 请求序列漂移: "
+                    f"expected position={expected_position}/layer={expected_layer}, "
+                    f"got position={manifest_position}/layer={manifest_layer}"
+                )
         self.counter += 1
         request_id = f"py-{os.getpid()}-{self.counter}"
         request = {
@@ -196,6 +223,9 @@ class PersistentVulkanWriteback:
             response.get("protocol") != PROTOCOL
             or response.get("request_id") != request_id
             or response.get("manifest_sha256") != expected_manifest_sha
+            or response.get("position") != manifest_position
+            or response.get("layer") != manifest_layer
+            or response.get("input_token_id") != manifest_input_token_id
             or response.get("expansion_status") != "single_real_layer_writeback_only"
         ):
             self._fail("Vulkan worker response 身份/SHA 漂移")
@@ -235,6 +265,8 @@ class PersistentVulkanWriteback:
             "boundaries": response.get("boundaries"),
             "persistent_context": True,
         }
+        self._last_position = manifest_position
+        self._last_layer = manifest_layer
         return tensor, evidence
 
     def close(self) -> None:

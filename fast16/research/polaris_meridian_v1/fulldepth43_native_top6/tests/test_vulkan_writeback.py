@@ -33,6 +33,7 @@ print(json.dumps({
 for line in sys.stdin:
     request = json.loads(line)
     manifest = Path(request["manifest"]).resolve()
+    manifest_document = json.loads(manifest.read_text(encoding="utf-8"))
     output = manifest.parent / "vulkan_moe_branch.bf16le.bin"
     payload = bytes(8192)
     output.write_bytes(payload)
@@ -42,9 +43,9 @@ for line in sys.stdin:
         "ok": True,
         "device": "fixture",
         "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
-        "layer": 42,
-        "position": 0,
-        "input_token_id": 0,
+        "layer": manifest_document["layer"],
+        "position": manifest_document["position"],
+        "input_token_id": manifest_document["input_token_id"],
         "output": {
             "path": str(output),
             "dtype": "bf16_le",
@@ -62,13 +63,24 @@ for line in sys.stdin:
 
 
 class VulkanWritebackTests(unittest.TestCase):
+    @staticmethod
+    def _write_manifest(root: Path, *, position: int, layer: int, token_id: int) -> Path:
+        root.mkdir(parents=True, exist_ok=True)
+        manifest = root / "bridge_manifest.json"
+        manifest.write_text(
+            '{"position":%d,"layer":%d,"input_token_id":%d}\n'
+            % (position, layer, token_id),
+            encoding="utf-8",
+            newline="\n",
+        )
+        return manifest
+
     def test_persistent_protocol_reads_hash_verified_bf16(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             script = root / "fake_worker.py"
             script.write_text(textwrap.dedent(FAKE_WORKER), encoding="utf-8", newline="\n")
-            manifest = root / "bridge_manifest.json"
-            manifest.write_text("{}\n", encoding="utf-8", newline="\n")
+            manifest = self._write_manifest(root, position=0, layer=42, token_id=0)
             with PersistentVulkanWriteback(
                 (sys.executable, "-X", "utf8", str(script)),
                 timeout_seconds=5,
@@ -79,6 +91,44 @@ class VulkanWritebackTests(unittest.TestCase):
                 self.assertTrue(torch.equal(tensor, torch.zeros_like(tensor)))
                 self.assertEqual(worker.counter, 1)
                 self.assertTrue(evidence["persistent_context"])
+
+    def test_persistent_protocol_accepts_next_token_after_layer_42(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script = root / "fake_worker.py"
+            script.write_text(textwrap.dedent(FAKE_WORKER), encoding="utf-8", newline="\n")
+            first = self._write_manifest(
+                root / "position-000000" / "layer-42",
+                position=0,
+                layer=42,
+                token_id=0,
+            )
+            second = self._write_manifest(
+                root / "position-000001" / "layer-00",
+                position=1,
+                layer=0,
+                token_id=5,
+            )
+            with PersistentVulkanWriteback(
+                (sys.executable, "-X", "utf8", str(script)), timeout_seconds=5
+            ) as worker:
+                worker.execute(first)
+                worker.execute(second)
+                self.assertEqual(worker.counter, 2)
+
+    def test_persistent_protocol_rejects_position_skip(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script = root / "fake_worker.py"
+            script.write_text(textwrap.dedent(FAKE_WORKER), encoding="utf-8", newline="\n")
+            first = self._write_manifest(root / "first", position=0, layer=42, token_id=0)
+            skipped = self._write_manifest(root / "skipped", position=2, layer=0, token_id=5)
+            with PersistentVulkanWriteback(
+                (sys.executable, "-X", "utf8", str(script)), timeout_seconds=5
+            ) as worker:
+                worker.execute(first)
+                with self.assertRaisesRegex(VulkanWritebackError, "请求序列漂移"):
+                    worker.execute(skipped)
 
     def test_exact_comparison_rejects_one_bf16_bit(self) -> None:
         cpu = torch.zeros((1, 1, 4096), dtype=torch.bfloat16)

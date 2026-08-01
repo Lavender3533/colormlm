@@ -1246,7 +1246,6 @@ fn validate_writeback_manifest(manifest: &FullDepthBridgeManifest) -> Result<()>
         || manifest.revision != REVISION
         || manifest.profile != "fulldepth43_native_top6"
         || manifest.layer > 42
-        || manifest.position != 0
         || manifest.completed_layers_before_capture != expected_prefix
         || manifest.route_source.is_empty()
         || manifest.expert_ids.len() != 6
