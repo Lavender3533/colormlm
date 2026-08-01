@@ -1057,3 +1057,25 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
   `fast16/research/polaris_meridian_v1/deepseek_stream/README.md`、
   `fast16/research/polaris_meridian_v1/ascend_s14/README.md`、
   `fast16/research/polaris_meridian_v1/k3_frontend_community/README.md`。
+
+### 2026-08-01 北极星 S14 全本地执行链第一波落地
+
+- 主线已合入三项实现提交：`38df410` 本地 S14 数值参考内核、`4422329` route-first 动态
+  Range 状态机、`936ad78` capability-gated Rust Runner 与 Vulkan 分页接线。它们把
+  `header/catalog → 当前层 router → top-k → 精确专家 Range → Loading/Ready → layer commit`
+  的安全边界落成了代码，但当前 capability gate 仍会拒绝真实 native forward，不会吐假 token。
+- CPU/PyTorch 参考语义覆盖 packed I8(E2M1×2)、UE8M0、FP4 分块 linear、FP8 E4M3+E8M0、
+  mHC/Sinkhorn 与 sparse attention。针对性测试 `15/15` 通过，并实际读取本机 L42/E0 与
+  L42 FP8/HC ABI 样本复核；这些结果证明真实字节格式和参考数值路径，不证明完整 S14 质量。
+- 动态 Range 状态机的离线 fake HTTPS 测试 `6/6` 通过，旧静态 Range 回归仍为 `6/6`。
+  已从固定 revision 的全部45个 base shard header（67,612 tensors）生成真实只读 catalog：
+  `D:/models/Polaris-S14/route_first_catalog.json`，14,547,734 B，22,010条 Range，SHA-256
+  `61a0ddd24a1f83f698049feff976f43ba4fc43b31b9513f937602132ad44bbb0`；其中506条为 S14
+  prerequisite Range。`download_authorized=false`，本轮没有下载大权重。
+- Rust Runner 冻结且只允许两套预注册图：首测 `S14/top-6`，质量失败备选
+  `FullDepth43/top-1`。Rust状态机测试 `14/14`、Python互操作自检通过，`ssd_inference --lib`
+  编译通过；Runner明确记录4路HC、KV/compressor/indexer状态、29个identity层、贪心head契约
+  与真实测速计数器，缺少原生算子或实机数值证据时硬拒绝。
+- 第二波已并行启动：RX 5700 XT packed FP4/FP8 Vulkan 数值核、Python Range→Rust Runner
+  运行时桥、hash/score router + compressor/indexer/head 原生参考算子。下一真实里程碑仍是
+  “单层真实 weight forward”，不是继续写架构文档，也不是先下载完整4.0GiB S14骨架。
