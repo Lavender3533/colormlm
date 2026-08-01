@@ -58,6 +58,23 @@ L0--L2 使用 checkpoint 的 `tid2eid[token_id]` hash route；后续层使用原
 
 ## 已验证的里程碑
 
+### 0. FullDepth43 连续真实 token 与首轮加速
+
+固定 revision 的 DeepSeek-V4 FullDepth43/native-top6 已在本机连续提交两个真实 token：
+
+| 证据 | 结果 |
+|---|---|
+| 输出 | `[5, 223]` |
+| 模型深度 | 两个 position 均为 `43 / 43` |
+| 原生路由 | 每层 top-6，86 次 Vulkan 层写回 |
+| fallback / error | `0 / null` |
+| 最早两-token耗时 | `146.5560s` |
+| 当前两-token耗时 | `93.7806s`，累计 `-36.01%` |
+
+当前路径仍由 CPU 执行 attention、HC、router/compressor 和 FP8 权重物化，不能称为完整 GPU 模型，
+也尚未达到可交互速度或 Claude/GPT 综合质量。最新 A/B 见
+[`fast16/research/polaris_meridian_v1/fulldepth43_native_top6/FP8_MATERIALIZATION_AB.md`](fast16/research/polaris_meridian_v1/fulldepth43_native_top6/FP8_MATERIALIZATION_AB.md)。
+
 ### 1. 首个真实 S14 token
 
 固定 BOS token 已通过全部 14 层、84 个真实 routed expert、14 个 shared expert 和真实全词表
@@ -124,8 +141,8 @@ GPU-resident、F32 中间语义。孤立层时间不能换算为整模型 token/
   FullDepth43/top-1 reduction 只保留为不可进入生产图的负向合同。
 - Exact Cascade 已实现 K=1/4/8 请求/响应、43层逐位置证明、最长一致前缀、首个不一致位置的
   FullDepth 原生 fallback，以及 KV/mHC/compressor/indexer checkpoint 的原子提交/失败回滚。
-- 真实 FullDepth 权重与算子后端仍未齐，因此 capability gate 会在产生任何 token 前硬拒绝；
-  合同通过不等于模型已经运行。
+- FullDepth43/native-top6 已可通过 CPU参考语义 + Vulkan MoE/词表头连续提交真实 token；但完整
+  packed-FP8 attention、HC、router/compressor 尚未并入持久 GPU 图，当前速度仍不可交互。
 - Range 状态机必须先得到真实路由，再允许读取恰好命中的专家页。
 - Python executor JSONL 只传控制信息，hidden/state/logits 使用二进制 arena。
 - SHA、dtype、shape、position、epoch、descriptor 或超时漂移会终止并 poison 会话。
@@ -143,8 +160,8 @@ GPU-resident、F32 中间语义。孤立层时间不能换算为整模型 token/
 
 1. **运行时 prompt prefill：** 官方消息到 token 序列已经完成；仍需让同一状态运行时正确消费
    position2+、ratio4/128 首次压缩边界和完整 forced 队列。裸 BOS 连续两 token 不能用于质量门。
-2. **FullDepth43 精确裁决：** 先证明 K=1 对固定参考逐 token 对齐，再证明 K=4/8 causal block
-   与 K=1 输出及失败回滚等价。
+2. **FullDepth43 精确裁决：** K=1连续两-token已真实闭环；仍需证明官方聊天前缀逐 token质量，
+   再证明 K=4/8 causal block 与 K=1 输出及失败回滚等价。
 3. **完整 GPU 图：** attention、HC、router、top-6、shared、BF16/requant、norm/head 仍需合成
    常驻图，并测量 SSD→RAM→VRAM 实际字节。
 4. **质量门：** FullDepth 输出先跑冻结4题早停门，再跑八维16题；S14/v38/v47 只按草稿
@@ -159,7 +176,8 @@ GPU-resident、F32 中间语义。孤立层时间不能换算为整模型 token/
 - `v38` 是目前仍可使用的正式本地主干，也是 Exact Cascade 的低成本草稿候选。
 - `v47` 的 Parallel Genome Head、结构编译器和多 token 草稿研究保留为网页/设计专项器官与加速器。
 - `S14` 使用 DeepSeek 原生 4096 维坐标，作为最接近主脑坐标的草稿器和路由预取器。
-- `FullDepth43` 是唯一允许最终提交 token 的质量裁决器；其真实运行与速度仍未完成。
+- `FullDepth43` 是唯一允许最终提交 token 的质量裁决器；K=1连续运行已完成，但官方聊天质量门、
+  causal-block验证和可交互速度仍未完成。
 - v38/v47 的 hidden 不直接注入 DeepSeek；它们输出文本或结构候选，重编码后再由主脑验证。
 - 旧 Colab、FSQ 和 Block-8bit 文件保留为历史实验，不代表当前架构。
 

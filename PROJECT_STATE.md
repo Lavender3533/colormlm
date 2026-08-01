@@ -1259,3 +1259,16 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
   worker non-kernel只少`0.1034s`；数值与连续性虽保持，但收益不足以承担生命周期复杂度，代码已
   撤回。当前最大独占瓶颈已量化为387次CPU FP8 materialization的`64.3112s`；下一主线改为让
   attention等投影直接消费packed FP8+UE8M0，不再继续抠descriptor小对象。
+- FP8 E4M3 + UE8M0物化已先完成两个同语义CPU拔钉：`128x128`分块view原位广播代替两次
+  `np.repeat`，再用绝对路径、size、`mtime_ns`缓存只读文件的NaN编码扫描；文件变化时强制
+  重新校验。真实L42 `wq_b [32768,1024]`微基准逐位一致，`max_abs=0`、`rmse=0`；测试为
+  `45 passed, 2 subtests passed`。
+- 同一连续两-token正式门先由分块广播把`117.9932s`降至`108.6968s`，加入验证缓存后再降至
+  `93.7806s`；相对固定槽基线累计缩短`20.52%`、有效TPS提高约`25.82%`，相对最早
+  `146.5560s`连续基线累计缩短`36.01%`。输出仍为`[5,223]`，43/43x2、86/86 Vulkan写回、
+  两个GPU worker均无CPU fallback且`error=null`。`materialize_fp8`从`64.3112s`降至
+  `41.5184s`，仍是下一主线；完整证据见
+  `fast16/research/polaris_meridian_v1/fulldepth43_native_top6/FP8_MATERIALIZATION_AB.md`。
+- 下一硬门冻结为packed-FP8原生Vulkan attention：先做L42 `wq_a` worker/arena exact SHA闭环，
+  再扩展`wkv/wq_b/indexer/wo_b`，最后实现`wo_a` grouped BF16-weight专用内核并推广43层。
+  合理首版目标约`27--33s/token`，不是`20--50 token/s`承诺；完整GPU边界和长序列质量门仍未完成。

@@ -13,6 +13,7 @@ import json
 import math
 import os
 import sys
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -54,6 +55,9 @@ _FP4_LUT = np.asarray(
     [0, 0.5, 1, 1.5, 2, 3, 4, 6, 0, -0.5, -1, -1.5, -2, -3, -4, -6],
     dtype=np.float32,
 )
+
+_FP8_VALIDATION_LOCK = threading.Lock()
+_FP8_VALIDATION_CACHE: set[tuple[tuple[str, int, int], tuple[str, int, int]]] = set()
 
 
 def _fp8_lut() -> np.ndarray:
@@ -362,12 +366,40 @@ class _InlineForward:
         scale_name = prefix + ".scale"
         weight_shape = self.bundle.specs[weight_name][1]
         scale_shape = self.bundle.specs[scale_name][1]
-        packed = np.memmap(self._path(weight_name), dtype=np.uint8, mode="r", shape=weight_shape)
-        scales = np.memmap(self._path(scale_name), dtype=np.uint8, mode="r", shape=scale_shape)
-        if np.any((packed == 127) | (packed == 255)) or np.any(scales == 255):
-            raise ValueError(f"{prefix} 含 FP8/UE8M0 NaN 编码")
-        expanded = np.repeat(np.repeat(np.exp2(scales.astype(np.float32) - 127), 128, 0), 128, 1)
-        weight = _FP8_LUT[packed] * expanded[: packed.shape[0], : packed.shape[1]]
+        weight_path = self._path(weight_name).resolve(strict=True)
+        scale_path = self._path(scale_name).resolve(strict=True)
+        packed = np.memmap(weight_path, dtype=np.uint8, mode="r", shape=weight_shape)
+        scales = np.memmap(scale_path, dtype=np.uint8, mode="r", shape=scale_shape)
+        weight_stat = weight_path.stat()
+        scale_stat = scale_path.stat()
+        validation_key = (
+            (str(weight_path), weight_stat.st_size, weight_stat.st_mtime_ns),
+            (str(scale_path), scale_stat.st_size, scale_stat.st_mtime_ns),
+        )
+        with _FP8_VALIDATION_LOCK:
+            already_validated = validation_key in _FP8_VALIDATION_CACHE
+        if not already_validated:
+            if np.any((packed == 127) | (packed == 255)) or np.any(scales == 255):
+                raise ValueError(f"{prefix} 含 FP8/UE8M0 NaN 编码")
+            # Range cache 同样以绝对路径、size、mtime_ns作为进程内proof key。
+            # tensor文件若改变，下一次会得到新key并重新扫描；未改变的只读页
+            # 不必在每个token重复遍历几十MB寻找NaN code。
+            with _FP8_VALIDATION_LOCK:
+                _FP8_VALIDATION_CACHE.add(validation_key)
+        scale_values = np.exp2(scales.astype(np.float32) - 127)
+        weight = _FP8_LUT[packed]
+        # S14 的 UE8M0 scale 每个值覆盖一个 128x128 权重块。真实投影
+        # 都完整按块对齐；直接把解码后的权重 view 成块并原位广播，避免
+        # ``repeat`` 额外物化一张与 F32 权重同尺寸的 scale 矩阵。
+        expected_shape = (scales.shape[0] * 128, scales.shape[1] * 128)
+        if packed.shape == expected_shape:
+            weight = weight.reshape(scales.shape[0], 128, scales.shape[1], 128)
+            weight *= scale_values[:, None, :, None]
+            weight = weight.reshape(packed.shape)
+        else:
+            # 保留非整块 fixture/未来张量的旧语义；生产 S14 不走此分支。
+            expanded = np.repeat(np.repeat(scale_values, 128, 0), 128, 1)
+            weight *= expanded[: packed.shape[0], : packed.shape[1]]
         return self._bf16_numpy(weight) if bf16 else weight
 
     def _weight_fp4(self, prefix: str) -> np.ndarray:
