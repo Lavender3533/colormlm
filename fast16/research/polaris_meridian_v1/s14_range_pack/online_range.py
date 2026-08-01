@@ -700,6 +700,15 @@ class CachedRange:
     cache_hit: bool
 
 
+@dataclass(frozen=True)
+class _VerifiedProof:
+    content_key: str
+    absolute_path: str
+    size: int
+    mtime_ns: int
+    observed_sha256: str
+
+
 _KEY_LOCKS_GUARD = threading.Lock()
 _KEY_LOCKS: dict[tuple[str, str], threading.Lock] = {}
 
@@ -795,11 +804,119 @@ class RangeCache:
             if path.is_file() and (path.suffix == ".bin" or path.suffix == ".part" and path.name.endswith(".bin.part"))
         )
         self._cache_reserved = 0
+        # 只在当前 RangeCache/进程生命周期内有效。首次仍完整 SHA-256；后续只有
+        # content key、绝对路径、size 与 mtime_ns 全相等时才复用 observed proof。
+        self._proof_cache_lock = threading.Lock()
+        self._verified_proofs: dict[str, _VerifiedProof] = {}
+        self._proof_seen_keys: set[str] = set()
+        self._proof_hits = 0
+        self._proof_misses = 0
+        self._proof_rehashes = 0
+        self._proof_full_hashes = 0
+        self._proof_bytes_saved = 0
+        self._proof_bytes_hashed = 0
 
     @property
     def downloaded_bytes(self) -> int:
         with self._budget_lock:
             return self._download_used
+
+    @property
+    def proof_cache_telemetry(self) -> dict[str, Any]:
+        with self._proof_cache_lock:
+            return {
+                "hits": self._proof_hits,
+                "misses": self._proof_misses,
+                "rehashes": self._proof_rehashes,
+                "full_hashes": self._proof_full_hashes,
+                "bytes_saved": self._proof_bytes_saved,
+                "bytes_hashed": self._proof_bytes_hashed,
+                "entries": len(self._verified_proofs),
+                "scope": "current RangeCache process lifetime only",
+                "identity_fields": ["content_key", "absolute_path", "size", "mtime_ns"],
+            }
+
+    @staticmethod
+    def _proof_fingerprint(content_key: str, payload: Path) -> _VerifiedProof:
+        absolute = payload.resolve(strict=True)
+        stat = absolute.stat()
+        return _VerifiedProof(
+            content_key=content_key,
+            absolute_path=str(absolute),
+            size=stat.st_size,
+            mtime_ns=stat.st_mtime_ns,
+            observed_sha256="",
+        )
+
+    def _full_hash(
+        self,
+        *,
+        key: str,
+        payload: Path,
+        expected_size: int,
+    ) -> tuple[str, _VerifiedProof]:
+        before = self._proof_fingerprint(key, payload)
+        with self._proof_cache_lock:
+            if key in self._proof_seen_keys:
+                self._proof_rehashes += 1
+            else:
+                self._proof_misses += 1
+                self._proof_seen_keys.add(key)
+            self._proof_full_hashes += 1
+            self._proof_bytes_hashed += before.size
+        observed = rp.sha256_file(payload)
+        after = self._proof_fingerprint(key, payload)
+        if before != after:
+            raise CacheEntryCorruption("cache payload 在 SHA-256 期间身份变化")
+        if after.size != expected_size:
+            raise CacheEntryCorruption("cache payload 长度错误")
+        return observed, _VerifiedProof(
+            content_key=after.content_key,
+            absolute_path=after.absolute_path,
+            size=after.size,
+            mtime_ns=after.mtime_ns,
+            observed_sha256=observed,
+        )
+
+    def _verified_digest(
+        self,
+        *,
+        key: str,
+        payload: Path,
+        expected_size: int,
+    ) -> tuple[str, _VerifiedProof]:
+        fingerprint = self._proof_fingerprint(key, payload)
+        if fingerprint.size != expected_size:
+            return self._full_hash(key=key, payload=payload, expected_size=expected_size)
+        with self._proof_cache_lock:
+            cached = self._verified_proofs.get(key)
+            if cached is not None and (
+                cached.content_key == fingerprint.content_key
+                and cached.absolute_path == fingerprint.absolute_path
+                and cached.size == fingerprint.size
+                and cached.mtime_ns == fingerprint.mtime_ns
+            ):
+                self._proof_hits += 1
+                self._proof_bytes_saved += fingerprint.size
+                return cached.observed_sha256, cached
+        return self._full_hash(key=key, payload=payload, expected_size=expected_size)
+
+    def _remember_verified(self, proof: _VerifiedProof) -> None:
+        current = self._proof_fingerprint(proof.content_key, Path(proof.absolute_path))
+        if (
+            current.content_key != proof.content_key
+            or current.absolute_path != proof.absolute_path
+            or current.size != proof.size
+            or current.mtime_ns != proof.mtime_ns
+        ):
+            raise CacheEntryCorruption("cache payload 在 proof 发布前身份变化")
+        with self._proof_cache_lock:
+            self._verified_proofs[proof.content_key] = proof
+            self._proof_seen_keys.add(proof.content_key)
+
+    def _forget_verified(self, key: str) -> None:
+        with self._proof_cache_lock:
+            self._verified_proofs.pop(key, None)
 
     def _identity(self, entry: Mapping[str, Any]) -> dict[str, Any]:
         filename = _safe_source_file(str(entry["file"]))
@@ -895,6 +1012,7 @@ class RangeCache:
         }
 
     def _quarantine(self, key: str, *paths: Path) -> tuple[Path, ...]:
+        self._forget_verified(key)
         quarantine = (self.root / "quarantine").resolve()
         try:
             quarantine.relative_to(self.root)
@@ -932,9 +1050,11 @@ class RangeCache:
         if not payload.is_file():
             raise CacheEntryCorruption("cache metadata 存在但 payload 缺失")
         size = int(identity["end"]) - int(identity["start"]) + 1
-        if payload.stat().st_size != size:
-            raise CacheEntryCorruption("cache payload 长度错误")
-        observed = rp.sha256_file(payload)
+        observed, verified = self._verified_digest(
+            key=key,
+            payload=payload,
+            expected_size=size,
+        )
         if meta_path.exists():
             try:
                 meta = rp.read_json(meta_path)
@@ -965,6 +1085,7 @@ class RangeCache:
                 _atomic_write_json(meta_path, meta)
         elif self.require_authoritative and meta.get("authoritative") is not True:
             raise rp.ContractError("正式复现模式拒绝 TOFU cache entry")
+        self._remember_verified(verified)
         return CachedRange(entry={}, path=payload, proof=meta, cache_hit=True)
 
     def fetch(self, entry: Mapping[str, Any]) -> CachedRange:
@@ -1061,13 +1182,32 @@ class RangeCache:
                     self._settle(remaining, received, cache_written)
             if not partial.is_file() or partial.stat().st_size != size:
                 raise rp.ContractError("Range .part 完成长度错误")
-            observed = rp.sha256_file(partial)
+            observed, partial_proof = self._full_hash(
+                key=key,
+                payload=partial,
+                expected_size=size,
+            )
             if expected is not None and observed != expected:
                 partial.unlink()
                 raise rp.ContractError("Range SHA-256 与 authoritative lock 不匹配")
             proof = self._proof(key=key, identity=identity, digest=observed, expected=expected)
             os.replace(partial, payload)
             _atomic_write_json(meta_path, proof)
+            payload_fingerprint = self._proof_fingerprint(key, payload)
+            if (
+                payload_fingerprint.size != partial_proof.size
+                or payload_fingerprint.mtime_ns != partial_proof.mtime_ns
+            ):
+                raise CacheEntryCorruption("Range 原子提交后 payload 身份漂移")
+            self._remember_verified(
+                _VerifiedProof(
+                    content_key=key,
+                    absolute_path=payload_fingerprint.absolute_path,
+                    size=payload_fingerprint.size,
+                    mtime_ns=payload_fingerprint.mtime_ns,
+                    observed_sha256=observed,
+                )
+            )
             return CachedRange(entry=dict(entry), path=payload, proof=proof, cache_hit=False)
 
 

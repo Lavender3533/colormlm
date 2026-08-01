@@ -4,12 +4,14 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import tempfile
 import threading
 import unittest
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest import mock
 
 import online_range as online
 import range_pack as rp
@@ -274,6 +276,87 @@ class OnlineRangeTests(unittest.TestCase):
         hit = cache.fetch(entry)
         self.assertTrue(hit.cache_hit)
         self.assertEqual(len(self.transport.requests), request_count)
+
+    def test_process_proof_cache_skips_unchanged_payload_sha(self) -> None:
+        cache = self.cache("proof-hit")
+        entry = self.catalog["layers"]["0"]["non_expert"][0]
+        original = online.rp.sha256_file
+        calls: list[Path] = []
+
+        def counted(path: Path) -> str:
+            calls.append(Path(path))
+            return original(path)
+
+        with mock.patch.object(online.rp, "sha256_file", side_effect=counted):
+            first = cache.fetch(entry)
+            second = cache.fetch(entry)
+
+        self.assertFalse(first.cache_hit)
+        self.assertTrue(second.cache_hit)
+        self.assertEqual(len(calls), 1)
+        telemetry = cache.proof_cache_telemetry
+        self.assertEqual(telemetry["hits"], 1)
+        self.assertEqual(telemetry["misses"], 1)
+        self.assertEqual(telemetry["rehashes"], 0)
+        self.assertEqual(telemetry["full_hashes"], 1)
+        self.assertEqual(telemetry["bytes_saved"], entry["bytes"])
+        self.assertEqual(telemetry["bytes_hashed"], entry["bytes"])
+        self.assertEqual(telemetry["entries"], 1)
+
+    def test_process_proof_cache_mtime_change_forces_rehash(self) -> None:
+        cache = self.cache("proof-rehash")
+        entry = self.catalog["layers"]["0"]["router"][0]
+        first = cache.fetch(entry)
+        before = first.path.stat()
+        changed_mtime = before.st_mtime_ns + 1_000_000_000
+        os.utime(first.path, ns=(before.st_atime_ns, changed_mtime))
+        original = online.rp.sha256_file
+        calls: list[Path] = []
+
+        def counted(path: Path) -> str:
+            calls.append(Path(path))
+            return original(path)
+
+        request_count = len(self.transport.requests)
+        with mock.patch.object(online.rp, "sha256_file", side_effect=counted):
+            reverified = cache.fetch(entry)
+            reused = cache.fetch(entry)
+
+        self.assertTrue(reverified.cache_hit)
+        self.assertTrue(reused.cache_hit)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(self.transport.requests), request_count)
+        telemetry = cache.proof_cache_telemetry
+        self.assertEqual(telemetry["hits"], 1)
+        self.assertEqual(telemetry["misses"], 1)
+        self.assertEqual(telemetry["rehashes"], 1)
+        self.assertEqual(telemetry["full_hashes"], 2)
+        self.assertEqual(telemetry["bytes_saved"], entry["bytes"])
+
+    def test_process_proof_cache_same_size_mutation_never_reuses_digest(self) -> None:
+        cache = self.cache("proof-mutation")
+        entry = self.catalog["layers"]["0"]["shared"][0]
+        first = cache.fetch(entry)
+        before = first.path.stat()
+        first.path.write_bytes(b"xxxx")
+        os.utime(
+            first.path,
+            ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000_000),
+        )
+        request_count = len(self.transport.requests)
+
+        repaired = cache.fetch(entry)
+
+        self.assertFalse(repaired.cache_hit)
+        self.assertEqual(
+            repaired.path.read_bytes(),
+            FakeHttpsTransport.payload(entry["start"], entry["end"]),
+        )
+        self.assertEqual(len(self.transport.requests), request_count + 1)
+        telemetry = cache.proof_cache_telemetry
+        self.assertEqual(telemetry["rehashes"], 2)
+        self.assertEqual(telemetry["full_hashes"], 3)
+        self.assertEqual(telemetry["hits"], 0)
 
     def test_interrupted_part_resumes_from_exact_offset(self) -> None:
         cache = self.cache("resume")
