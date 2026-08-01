@@ -21,8 +21,10 @@ use ssd_inference::s14_vulkan::{
     S14MatvecShape, S14MoeAccumulateDispatch, S14Mxfp4Dispatch, S14NumericPipelines,
     S14OfficialExpertPrepareDispatch, S14RouteMixDispatch, S14SwigluLimitDispatch,
 };
+use ssd_inference::{VerifiedPayloadCache, VerifiedPayloadCacheStats};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Instant;
 
 const MODEL_DIR: &str = "D:/models/Polaris-S14";
@@ -41,6 +43,10 @@ const FULLDEPTH_BRIDGE_ITERATIONS: u32 = 20;
 const WRITEBACK_WORKER_ARG: &str = "--fulldepth43-writeback-worker";
 const WRITEBACK_PROTOCOL: &str = "polaris-fulldepth43-vulkan-writeback-v1";
 const WRITEBACK_OUTPUT_FILE: &str = "vulkan_moe_branch.bf16le.bin";
+const PAYLOAD_CACHE_GIB_ENV: &str = "POLARIS_VERIFIED_PAYLOAD_CACHE_GIB";
+const DEFAULT_PAYLOAD_CACHE_GIB: usize = 10;
+const MIN_PAYLOAD_CACHE_GIB: usize = 8;
+const MAX_PAYLOAD_CACHE_GIB: usize = 12;
 
 struct DeviceBuffers {
     upload_x: GpuBuffer,
@@ -327,12 +333,12 @@ impl ExpertChainBuffers {
 struct MoePayload {
     expert_id: Option<u32>,
     mix_weight: f32,
-    w1: Vec<u8>,
-    s1: Vec<u8>,
-    w3: Vec<u8>,
-    s3: Vec<u8>,
-    w2: Vec<u8>,
-    s2: Vec<u8>,
+    w1: Arc<[u8]>,
+    s1: Arc<[u8]>,
+    w3: Arc<[u8]>,
+    s3: Arc<[u8]>,
+    w2: Arc<[u8]>,
+    s2: Arc<[u8]>,
 }
 
 struct GpuMoeWeights {
@@ -676,9 +682,67 @@ struct WritebackResponse {
     output: WritebackOutput,
     gpu_kernel_ms: f64,
     wall_ms: f64,
+    payload_cache: WritebackPayloadCacheTelemetry,
     boundaries: [&'static str; 5],
     expansion_status: &'static str,
     claim_limit: &'static str,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+struct WritebackPayloadCacheTelemetry {
+    capacity_bytes: u64,
+    entries: usize,
+    current_bytes: u64,
+    peak_bytes: u64,
+    request_hits: u64,
+    request_misses: u64,
+    request_disk_bytes_read: u64,
+    request_bytes_served: u64,
+    total_hits: u64,
+    total_misses: u64,
+    total_evictions: u64,
+    total_disk_bytes_read: u64,
+    total_bytes_served: u64,
+    total_hit_rate: f64,
+}
+
+impl WritebackPayloadCacheTelemetry {
+    fn between(
+        cache: &VerifiedPayloadCache,
+        before: VerifiedPayloadCacheStats,
+        after: VerifiedPayloadCacheStats,
+    ) -> Result<Self> {
+        Ok(Self {
+            capacity_bytes: cache.capacity_bytes() as u64,
+            entries: cache.len(),
+            current_bytes: after.current_bytes,
+            peak_bytes: after.peak_bytes,
+            request_hits: monotonic_delta(after.hits, before.hits, "hits")?,
+            request_misses: monotonic_delta(after.misses, before.misses, "misses")?,
+            request_disk_bytes_read: monotonic_delta(
+                after.disk_bytes_read,
+                before.disk_bytes_read,
+                "disk_bytes_read",
+            )?,
+            request_bytes_served: monotonic_delta(
+                after.bytes_served,
+                before.bytes_served,
+                "bytes_served",
+            )?,
+            total_hits: after.hits,
+            total_misses: after.misses,
+            total_evictions: after.evictions,
+            total_disk_bytes_read: after.disk_bytes_read,
+            total_bytes_served: after.bytes_served,
+            total_hit_rate: after.hit_rate(),
+        })
+    }
+}
+
+fn monotonic_delta(after: u64, before: u64, name: &str) -> Result<u64> {
+    after
+        .checked_sub(before)
+        .ok_or_else(|| anyhow::anyhow!("verified payload cache {name} counter regressed"))
 }
 
 #[derive(Serialize)]
@@ -848,6 +912,8 @@ fn run_fulldepth_writeback_worker() -> Result<()> {
     }
     let timestamp_period_ns = properties.limits.timestamp_period as f64;
     let pipelines = S14NumericPipelines::new(&ctx)?;
+    let payload_cache_capacity = payload_cache_capacity_bytes()?;
+    let mut payload_cache = VerifiedPayloadCache::new(payload_cache_capacity)?;
     let mut stdout = std::io::stdout().lock();
     serde_json::to_writer(
         &mut stdout,
@@ -860,6 +926,8 @@ fn run_fulldepth_writeback_worker() -> Result<()> {
             "device_id": format!("0x{:04x}", properties.device_id),
             "persistent_context": true,
             "official_boundary_graph": true,
+            "verified_payload_cache": true,
+            "payload_cache_capacity_bytes": payload_cache_capacity,
         }),
     )?;
     stdout.write_all(b"\n")?;
@@ -923,6 +991,7 @@ fn run_fulldepth_writeback_worker() -> Result<()> {
             &pipelines,
             timestamp_bits,
             timestamp_period_ns,
+            &mut payload_cache,
             request,
         ) {
             Ok(response) => {
@@ -957,9 +1026,11 @@ fn execute_writeback_request(
     pipelines: &S14NumericPipelines,
     timestamp_bits: u32,
     timestamp_period_ns: f64,
+    payload_cache: &mut VerifiedPayloadCache,
     request: WritebackRequest,
 ) -> Result<WritebackResponse> {
     let started = Instant::now();
+    let cache_before = payload_cache.stats();
     let manifest_path = request
         .manifest
         .canonicalize()
@@ -982,9 +1053,12 @@ fn execute_writeback_request(
         .iter()
         .zip(&manifest.route_weights)
         .map(|(&expert_id, &mix_weight)| {
-            let (w1, s1) = load_fulldepth_bridge_pair(&manifest, expert_id, "w1")?;
-            let (w3, s3) = load_fulldepth_bridge_pair(&manifest, expert_id, "w3")?;
-            let (w2, s2) = load_fulldepth_bridge_pair(&manifest, expert_id, "w2")?;
+            let (w1, s1) =
+                load_fulldepth_bridge_pair_cached(&manifest, expert_id, "w1", payload_cache)?;
+            let (w3, s3) =
+                load_fulldepth_bridge_pair_cached(&manifest, expert_id, "w3", payload_cache)?;
+            let (w2, s2) =
+                load_fulldepth_bridge_pair_cached(&manifest, expert_id, "w2", payload_cache)?;
             Ok(MoePayload {
                 expert_id: Some(expert_id),
                 mix_weight,
@@ -997,9 +1071,9 @@ fn execute_writeback_request(
             })
         })
         .collect::<Result<Vec<_>>>()?;
-    let (w1, s1) = load_fulldepth_bridge_shared_pair(&manifest, "w1")?;
-    let (w3, s3) = load_fulldepth_bridge_shared_pair(&manifest, "w3")?;
-    let (w2, s2) = load_fulldepth_bridge_shared_pair(&manifest, "w2")?;
+    let (w1, s1) = load_fulldepth_bridge_shared_pair_cached(&manifest, "w1", payload_cache)?;
+    let (w3, s3) = load_fulldepth_bridge_shared_pair_cached(&manifest, "w3", payload_cache)?;
+    let (w2, s2) = load_fulldepth_bridge_shared_pair_cached(&manifest, "w2", payload_cache)?;
     let shared = MoePayload {
         expert_id: None,
         mix_weight: 1.0,
@@ -1047,6 +1121,9 @@ fn execute_writeback_request(
     if !output_path.starts_with(&capture_root) {
         bail!("writeback output escaped capture directory");
     }
+    let cache_after = payload_cache.stats();
+    let payload_cache_telemetry =
+        WritebackPayloadCacheTelemetry::between(payload_cache, cache_before, cache_after)?;
     Ok(WritebackResponse {
         protocol: WRITEBACK_PROTOCOL,
         request_id: request.request_id,
@@ -1065,6 +1142,7 @@ fn execute_writeback_request(
         },
         gpu_kernel_ms: result.gpu_kernel_ms,
         wall_ms: started.elapsed().as_secs_f64() * 1000.0,
+        payload_cache: payload_cache_telemetry,
         boundaries: [
             "w1_w3_output_round_to_bf16",
             "limited_swiglu_f32",
@@ -1075,6 +1153,23 @@ fn execute_writeback_request(
         expansion_status: "single_real_layer_writeback_only",
         claim_limit: "One FullDepth43 MoE branch computed by the official-boundary Vulkan graph; no full-layer, full-token, speed, or quality claim.",
     })
+}
+
+fn payload_cache_capacity_bytes() -> Result<usize> {
+    let gib = match std::env::var(PAYLOAD_CACHE_GIB_ENV) {
+        Ok(value) => value
+            .parse::<usize>()
+            .with_context(|| format!("parse {PAYLOAD_CACHE_GIB_ENV}={value:?}"))?,
+        Err(std::env::VarError::NotPresent) => DEFAULT_PAYLOAD_CACHE_GIB,
+        Err(error) => return Err(error).context(PAYLOAD_CACHE_GIB_ENV),
+    };
+    if !(MIN_PAYLOAD_CACHE_GIB..=MAX_PAYLOAD_CACHE_GIB).contains(&gib) {
+        bail!(
+            "{PAYLOAD_CACHE_GIB_ENV} must be between {MIN_PAYLOAD_CACHE_GIB} and {MAX_PAYLOAD_CACHE_GIB} GiB"
+        );
+    }
+    gib.checked_mul(1024 * 1024 * 1024)
+        .ok_or_else(|| anyhow::anyhow!("verified payload cache byte capacity overflow"))
 }
 
 fn validate_writeback_manifest(manifest: &FullDepthBridgeManifest) -> Result<()> {
@@ -1697,7 +1792,54 @@ fn load_fulldepth_bridge_pair(
     manifest: &FullDepthBridgeManifest,
     expert_id: u32,
     component: &str,
-) -> Result<(Vec<u8>, Vec<u8>)> {
+) -> Result<(Arc<[u8]>, Arc<[u8]>)> {
+    let (weight, scale) = fulldepth_bridge_pair_entries(manifest, expert_id, component)?;
+    Ok((
+        read_verified_payload(
+            &weight.path,
+            weight.bytes as usize,
+            &weight.sha256,
+            &weight.tensor,
+        )?,
+        read_verified_payload(
+            &scale.path,
+            scale.bytes as usize,
+            &scale.sha256,
+            &scale.tensor,
+        )?,
+    ))
+}
+
+fn load_fulldepth_bridge_pair_cached(
+    manifest: &FullDepthBridgeManifest,
+    expert_id: u32,
+    component: &str,
+    cache: &mut VerifiedPayloadCache,
+) -> Result<(Arc<[u8]>, Arc<[u8]>)> {
+    let (weight, scale) = fulldepth_bridge_pair_entries(manifest, expert_id, component)?;
+    Ok((
+        read_verified_payload_cached(
+            cache,
+            &weight.path,
+            weight.bytes as usize,
+            &weight.sha256,
+            &weight.tensor,
+        )?,
+        read_verified_payload_cached(
+            cache,
+            &scale.path,
+            scale.bytes as usize,
+            &scale.sha256,
+            &scale.tensor,
+        )?,
+    ))
+}
+
+fn fulldepth_bridge_pair_entries<'a>(
+    manifest: &'a FullDepthBridgeManifest,
+    expert_id: u32,
+    component: &str,
+) -> Result<(&'a FullDepthBridgePayload, &'a FullDepthBridgePayload)> {
     let prefix = format!(
         "layers.{}.ffn.experts.{expert_id}.{component}",
         manifest.layer
@@ -1723,6 +1865,14 @@ fn load_fulldepth_bridge_pair(
     {
         bail!("FullDepth43 bridge E{expert_id}/{component} physical ABI drift");
     }
+    Ok((weight, scale))
+}
+
+fn load_fulldepth_bridge_shared_pair(
+    manifest: &FullDepthBridgeManifest,
+    component: &str,
+) -> Result<(Arc<[u8]>, Arc<[u8]>)> {
+    let (weight, scale) = fulldepth_bridge_shared_pair_entries(manifest, component)?;
     Ok((
         read_verified_payload(
             &weight.path,
@@ -1739,10 +1889,34 @@ fn load_fulldepth_bridge_pair(
     ))
 }
 
-fn load_fulldepth_bridge_shared_pair(
+fn load_fulldepth_bridge_shared_pair_cached(
     manifest: &FullDepthBridgeManifest,
     component: &str,
-) -> Result<(Vec<u8>, Vec<u8>)> {
+    cache: &mut VerifiedPayloadCache,
+) -> Result<(Arc<[u8]>, Arc<[u8]>)> {
+    let (weight, scale) = fulldepth_bridge_shared_pair_entries(manifest, component)?;
+    Ok((
+        read_verified_payload_cached(
+            cache,
+            &weight.path,
+            weight.bytes as usize,
+            &weight.sha256,
+            &weight.tensor,
+        )?,
+        read_verified_payload_cached(
+            cache,
+            &scale.path,
+            scale.bytes as usize,
+            &scale.sha256,
+            &scale.tensor,
+        )?,
+    ))
+}
+
+fn fulldepth_bridge_shared_pair_entries<'a>(
+    manifest: &'a FullDepthBridgeManifest,
+    component: &str,
+) -> Result<(&'a FullDepthBridgePayload, &'a FullDepthBridgePayload)> {
     let prefix = format!("layers.{}.ffn.shared_experts.{component}", manifest.layer);
     let weight = fulldepth_bridge_payload(manifest, &format!("{prefix}.weight"), "shared", None)?;
     let scale = fulldepth_bridge_payload(manifest, &format!("{prefix}.scale"), "shared", None)?;
@@ -1755,20 +1929,7 @@ fn load_fulldepth_bridge_shared_pair(
     {
         bail!("FullDepth43 bridge shared/{component} physical ABI drift");
     }
-    Ok((
-        read_verified_payload(
-            &weight.path,
-            weight.bytes as usize,
-            &weight.sha256,
-            &weight.tensor,
-        )?,
-        read_verified_payload(
-            &scale.path,
-            scale.bytes as usize,
-            &scale.sha256,
-            &scale.tensor,
-        )?,
-    ))
+    Ok((weight, scale))
 }
 
 fn run_real_moe_batch(
@@ -1930,7 +2091,7 @@ fn load_route_pair(
     manifest: &RouteManifest,
     expert_id: u32,
     component: &str,
-) -> Result<(Vec<u8>, Vec<u8>)> {
+) -> Result<(Arc<[u8]>, Arc<[u8]>)> {
     let prefix = format!("layers.42.ffn.experts.{expert_id}.{component}");
     let weight = route_entry(manifest, expert_id, &format!("{prefix}.weight"))?;
     let scale = route_entry(manifest, expert_id, &format!("{prefix}.scale"))?;
@@ -1953,7 +2114,7 @@ fn load_route_pair(
     ))
 }
 
-fn load_shared_pair(manifest: &S14Manifest, component: &str) -> Result<(Vec<u8>, Vec<u8>)> {
+fn load_shared_pair(manifest: &S14Manifest, component: &str) -> Result<(Arc<[u8]>, Arc<[u8]>)> {
     let prefix = format!("layers.42.ffn.shared_experts.{component}");
     let weight = s14_entry(manifest, &format!("{prefix}.weight"))?;
     let scale = s14_entry(manifest, &format!("{prefix}.scale"))?;
@@ -3038,7 +3199,7 @@ fn read_verified_payload(
     expected_bytes: usize,
     expected_sha256: &str,
     tensor: &str,
-) -> Result<Vec<u8>> {
+) -> Result<Arc<[u8]>> {
     if expected_sha256.len() != 64
         || !expected_sha256
             .bytes()
@@ -3047,21 +3208,58 @@ fn read_verified_payload(
         bail!("{tensor} has invalid manifest SHA-256");
     }
     let cache_root = Path::new(MODEL_DIR).join("range_cache").canonicalize()?;
-    let resolved = path
-        .canonicalize()
-        .with_context(|| format!("resolve real payload {}", path.display()))?;
-    if resolved.extension().and_then(|value| value.to_str()) != Some("bin")
-        || !resolved.starts_with(&cache_root)
-    {
-        bail!("{tensor} payload escapes frozen range_cache");
-    }
+    let resolved = resolve_verified_payload_path(path, &cache_root, tensor)?;
     let bytes = std::fs::read(&resolved).with_context(|| format!("read {tensor}"))?;
     let actual_sha256 = sha256_bytes(&bytes);
     if bytes.len() != expected_bytes || actual_sha256 != expected_sha256 {
         bail!("{tensor} payload size/SHA-256 drift");
     }
     eprintln!("real payload {tensor} sha256={actual_sha256}");
-    Ok(bytes)
+    Ok(bytes.into())
+}
+
+fn read_verified_payload_cached(
+    cache: &mut VerifiedPayloadCache,
+    path: &Path,
+    expected_bytes: usize,
+    expected_sha256: &str,
+    tensor: &str,
+) -> Result<Arc<[u8]>> {
+    let cache_root = Path::new(MODEL_DIR).join("range_cache").canonicalize()?;
+    read_verified_payload_cached_with_root(
+        cache,
+        &cache_root,
+        path,
+        expected_bytes,
+        expected_sha256,
+        tensor,
+    )
+}
+
+fn read_verified_payload_cached_with_root(
+    cache: &mut VerifiedPayloadCache,
+    cache_root: &Path,
+    path: &Path,
+    expected_bytes: usize,
+    expected_sha256: &str,
+    tensor: &str,
+) -> Result<Arc<[u8]>> {
+    let resolved = resolve_verified_payload_path(path, cache_root, tensor)?;
+    cache
+        .load_verified(&resolved, expected_bytes, expected_sha256)
+        .with_context(|| format!("load cached verified payload {tensor}"))
+}
+
+fn resolve_verified_payload_path(path: &Path, cache_root: &Path, tensor: &str) -> Result<PathBuf> {
+    let resolved = path
+        .canonicalize()
+        .with_context(|| format!("resolve real payload {}", path.display()))?;
+    if resolved.extension().and_then(|value| value.to_str()) != Some("bin")
+        || !resolved.starts_with(cache_root)
+    {
+        bail!("{tensor} payload escapes frozen range_cache");
+    }
+    Ok(resolved)
 }
 
 fn sha256_file(path: &Path) -> Result<String> {
@@ -3131,4 +3329,112 @@ unsafe fn submit_and_wait(ctx: &VulkanContext, cb: vk::CommandBuffer) -> Result<
     ctx.device.wait_for_fences(&[fence], true, u64::MAX)?;
     ctx.device.destroy_fence(fence, None);
     Ok(())
+}
+
+#[cfg(test)]
+mod writeback_payload_cache_tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    struct FixtureDir(PathBuf);
+
+    impl FixtureDir {
+        fn new() -> Self {
+            let stamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!(
+                "polaris-writeback-payload-cache-{}-{stamp}",
+                std::process::id()
+            ));
+            std::fs::create_dir(&path).unwrap();
+            Self(path)
+        }
+    }
+
+    impl Drop for FixtureDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn worker_payload_reader_hits_arc_cache_without_second_read_or_hash() {
+        let fixture = FixtureDir::new();
+        let range_cache = fixture.0.join("range_cache");
+        std::fs::create_dir(&range_cache).unwrap();
+        let range_cache = range_cache.canonicalize().unwrap();
+        let payload_path = range_cache.join("expert.bin");
+        std::fs::write(&payload_path, b"frozen").unwrap();
+        let expected_sha256 = sha256_bytes(b"frozen");
+        let mut cache = VerifiedPayloadCache::new(64).unwrap();
+
+        let before_first = cache.stats();
+        let first = read_verified_payload_cached_with_root(
+            &mut cache,
+            &range_cache,
+            &payload_path,
+            6,
+            &expected_sha256,
+            "layers.0.ffn.experts.0.w1.weight",
+        )
+        .unwrap();
+        let after_first = cache.stats();
+        let first_telemetry =
+            WritebackPayloadCacheTelemetry::between(&cache, before_first, after_first).unwrap();
+        assert_eq!(first_telemetry.request_hits, 0);
+        assert_eq!(first_telemetry.request_misses, 1);
+        assert_eq!(first_telemetry.request_disk_bytes_read, 6);
+        assert_eq!(first_telemetry.request_bytes_served, 6);
+
+        // 同一路径被外部改写后，当前 worker 的已验证不可变副本仍然可信；
+        // 第二次请求必须命中 Arc，不能再次读盘或重新哈希损坏内容。
+        std::fs::write(&payload_path, b"damage").unwrap();
+        let before_second = cache.stats();
+        let second = read_verified_payload_cached_with_root(
+            &mut cache,
+            &range_cache,
+            &payload_path,
+            6,
+            &expected_sha256,
+            "layers.0.ffn.experts.0.w1.weight",
+        )
+        .unwrap();
+        let after_second = cache.stats();
+        let second_telemetry =
+            WritebackPayloadCacheTelemetry::between(&cache, before_second, after_second).unwrap();
+        assert!(Arc::ptr_eq(&first, &second));
+        assert_eq!(&*second, b"frozen");
+        assert_eq!(second_telemetry.request_hits, 1);
+        assert_eq!(second_telemetry.request_misses, 0);
+        assert_eq!(second_telemetry.request_disk_bytes_read, 0);
+        assert_eq!(second_telemetry.request_bytes_served, 6);
+        assert_eq!(second_telemetry.total_hits, 1);
+        assert_eq!(second_telemetry.total_misses, 1);
+        assert_eq!(second_telemetry.total_disk_bytes_read, 6);
+        assert_eq!(second_telemetry.total_hit_rate, 0.5);
+    }
+
+    #[test]
+    fn worker_payload_reader_rejects_files_outside_frozen_range_cache() {
+        let fixture = FixtureDir::new();
+        let range_cache = fixture.0.join("range_cache");
+        std::fs::create_dir(&range_cache).unwrap();
+        let range_cache = range_cache.canonicalize().unwrap();
+        let outside = fixture.0.join("outside.bin");
+        std::fs::write(&outside, b"outside").unwrap();
+        let mut cache = VerifiedPayloadCache::new(64).unwrap();
+        let error = read_verified_payload_cached_with_root(
+            &mut cache,
+            &range_cache,
+            &outside,
+            7,
+            &sha256_bytes(b"outside"),
+            "escape",
+        )
+        .unwrap_err();
+        assert!(format!("{error:#}").contains("escapes frozen range_cache"));
+        assert_eq!(cache.stats().requests, 0);
+    }
 }
