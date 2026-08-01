@@ -157,9 +157,8 @@ def load_real_anchors(
 ) -> StageAnchors:
     """Load real reports and enumerate the S14 route catalog.
 
-    The delegated 1.3696 ms top-6 measurement is frozen in the tracked contract
-    because its v3 evidence was concurrent work at task start.  The committed
-    v2 file is still verified for the 0.157038/0.0838004 ms anchors.
+    The committed evidence file is hashed as one authority for the 0.157038 ms
+    expert chain, 0.0838004 ms wq_a and 1.3696 ms top-6+shared anchors.
     """
 
     package_dir = Path(__file__).resolve().parent
@@ -219,16 +218,25 @@ def load_real_anchors(
     _expect(gpu_report.get("device", {}).get("name") == gpu_contract["device"], "GPU 型号漂移")
     expert = gpu_report.get("mxfp4_expert_126_chain", {})
     wq_a = gpu_report.get("fp8_wq_a_linear", {})
+    top6 = gpu_report.get("top6_routed_plus_shared_moe_batch", {})
     _expect(expert.get("gpu_chain_dispatch_plus_barriers_ms_mean") == gpu_contract["single_expert_chain_ms"], "single expert timing 漂移")
     _expect(len(expert.get("dispatch_sequence", ())) == gpu_contract["single_expert_dispatches"], "single expert dispatch 漂移")
     _expect(expert.get("timestamp_iterations") == gpu_contract["single_expert_iterations"], "single expert iterations 漂移")
     _expect(wq_a.get("gpu_kernel_plus_serial_barrier_ms_mean") == gpu_contract["wq_a_linear_ms"], "wq_a timing 漂移")
     _expect(wq_a.get("timestamp_iterations") == gpu_contract["wq_a_iterations"], "wq_a iterations 漂移")
-
-    top6 = contract["delegated_current_top6_shared_evidence"]
-    _expect(top6["dispatches"] == 35, "top6+shared dispatch 必须是 35")
-    _expect(top6["timestamp_iterations"] == 1, "top6+shared 当前应标记为单次 timestamp")
-    _expect(top6["routed_payload_bytes"] > 0, "top6 routed bytes 非法")
+    _expect(
+        top6.get("gpu_fill_plus_dispatch_barriers_ms_mean") == gpu_contract["top6_routed_plus_shared_ms"],
+        "top6+shared timing 漂移",
+    )
+    _expect(top6.get("dispatch_count") == gpu_contract["top6_dispatches"], "top6+shared dispatch 漂移")
+    _expect(
+        top6.get("timestamp_iterations") == gpu_contract["top6_timestamp_iterations"],
+        "top6+shared timestamp iterations 漂移",
+    )
+    _expect(
+        top6.get("routed_payload_identity", {}).get("bytes") == gpu_contract["routed_payload_bytes"],
+        "top6 routed bytes 漂移",
+    )
 
     catalog_path = root / "route_first_catalog.json"
     catalog = _read_json(catalog_path)
@@ -251,7 +259,7 @@ def load_real_anchors(
     _expect(len(expert_page_sizes) == 1, "S14 专家页字节不统一")
     page_bytes = next(iter(expert_page_sizes))
     routed_bytes = 6 * page_bytes
-    _expect(routed_bytes == top6["routed_payload_bytes"], "delegated top6 bytes 与 route catalog 不符")
+    _expect(routed_bytes == gpu_contract["routed_payload_bytes"], "committed top6 bytes 与 route catalog 不符")
     shared_per_layer = shared_bytes // len(layers)
     _expect(shared_per_layer * len(layers) == shared_bytes, "shared bytes 每层不一致")
 
@@ -272,14 +280,14 @@ def load_real_anchors(
         two_token_report_sha256=two_contract["sha256"],
         route_catalog_sha256=_sha256(catalog_path),
         gpu_evidence_sha256=gpu_contract["sha256"],
-        top6_evidence_sha256=top6["concurrent_v3_evidence_sha256"],
+        top6_evidence_sha256=gpu_contract["sha256"],
         device=gpu_contract["device"],
         single_expert_chain_ms=float(gpu_contract["single_expert_chain_ms"]),
         single_expert_dispatches=int(gpu_contract["single_expert_dispatches"]),
         single_expert_iterations=int(gpu_contract["single_expert_iterations"]),
-        top6_routed_plus_shared_ms=float(top6["top6_routed_plus_shared_ms"]),
-        top6_dispatches=int(top6["dispatches"]),
-        top6_iterations=int(top6["timestamp_iterations"]),
+        top6_routed_plus_shared_ms=float(gpu_contract["top6_routed_plus_shared_ms"]),
+        top6_dispatches=int(gpu_contract["top6_dispatches"]),
+        top6_iterations=int(gpu_contract["top6_timestamp_iterations"]),
         wq_a_linear_ms=float(gpu_contract["wq_a_linear_ms"]),
         wq_a_dispatches=int(gpu_contract["wq_a_dispatches"]),
         wq_a_iterations=int(gpu_contract["wq_a_iterations"]),

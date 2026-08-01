@@ -1,6 +1,6 @@
-# Polaris S14 GPU 阶段级 roofline
+# Polaris 草稿 + FullDepth43 GPU 阶段级 roofline
 
-这是一个不加载模型、不下载权重的离线调度与成本原型。它把已提供的 GPU 计时锚点、真实 S14 路由字节和两 token 冷缓存反例拼成可运行、可证伪的阶段时间线。输出是乐观 roofline，不是完整 GPU token 实测。
+这是一个不加载模型、不下载权重的离线调度与成本原型。它把已提供的 GPU 计时锚点、真实字节和两 token 冷缓存反例拼成可运行、可证伪的阶段时间线。S14/v38/v47 只做草稿；最终提交 token 必须由 FullDepth43/native-top6 exact causal verifier 完整执行 43 层后给出，不允许跳层。输出是乐观 roofline，不是完整 GPU token 实测。
 
 ## 运行
 
@@ -59,3 +59,13 @@ python -m unittest discover `
 - 8/84 仅是两个 token、仅保留上一 token 专家的真实反例，不能泛化成任何长序列稳态接受率或命中率。
 
 报告同时列出 8 GiB VRAM、32 GiB RAM、118 GiB SSD 和 22.03 GB/s PCIe 的容量/带宽上界。容量没有扣除 KV cache、activation、workspace 和 runtime；“装得下多少页”不等于“路由会命中多少页”。
+
+## FullDepth43 K=1/4/8
+
+同一份 `roofline_report.json` 的 `full_depth43_exact_verifier` 同时包含 K=1、K=4、K=8 在 20/50 tok/s 下的完整接受前沿。每个前沿逐项枚举接受前缀 `0..K`；一次 causal block 总会先让全部 K 个位置走完 43 层，之后才接受最长一致前缀。遇到首个不一致时提交前缀和一个 FullDepth 原生 fallback；全一致时保守地只提交 K 个草稿 token。
+
+45 个真实 header 证明 43 层 `wq_a`、43×256 routed experts 和 shared experts 的 packed shape 完整且同构，并严格确认 native router 的真实结构（43 个 gate weight，L3..L42 共 40 个 gate bias）。因此报告可以把 L42 的 GPU 锚点投影为每个 FullDepth verified position 62.4962172 ms 的“当前已知子操作工作”，但它仍不是 FullDepth token 实测，并遗漏完整 attention、HC、router、norm/head、BF16/requant 和 runtime 开销。全接受时，仅让这部分投影达到 20/50 tok/s 就分别需要至少 1.2499243×/3.1248109× 吞吐提升；K>1 的行会给出相对于理想 K-way batch 的最低效率，绝不假设已经获得线性收益。
+
+真实 `fulldepth_kadaptive_budget.json` 和 45 headers 给出非路由+BF16 head 为 7,786,627,272 B，在 22.03 GB/s 下每块冷扫描至少 353.455618 ms。因此 fixed 每块流式扫描时，K=1/K=4 的 20 tok/s 以及 K≤8 的 50 tok/s 都被固定字节直接否决；K=8、20 tok/s 仍需视块内专家页复用程度达到 70.2729% 至 96.2841% 的设备页命中。若固定权重常驻，8 GiB 理论上只剩 60 个专家页，而每个位置至少涉及 258 个逐层专家页；报告同时列出 resident-fixed 和任意最优 fixed/expert 驻留两种容量前沿。
+
+45 个 base shard 合计 156,023,192,948 B，超过 118 GiB SSD；因此该 SSD 不能无外部后备地完整自包含 FullDepth43。所有 FullDepth 结论都是必要条件或不可能性证明，不代表 20/50 tok/s 已达成，也不宣称质量已达到 DeepSeek。

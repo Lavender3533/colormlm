@@ -39,21 +39,17 @@
   },
   "committed_rx5700xt_evidence": {
     "file": "scheduler/ssd_inference/evidence/s14_vulkan_numeric_rx5700xt.json",
-    "sha256": "cbb6f8c47e65fb32d5e84576a95a2d8e54336695855407ae97eb78f9e45de87c",
+    "sha256": "2041d50886ae9183e134524c3208bb4692f6ab703753719aea7f3606779cc766",
     "device": "AMD Radeon RX 5700 XT",
     "single_expert_chain_ms": 0.157038,
     "single_expert_dispatches": 5,
     "single_expert_iterations": 100,
     "wq_a_linear_ms": 0.0838004,
     "wq_a_dispatches": 1,
-    "wq_a_iterations": 100
-  },
-  "delegated_current_top6_shared_evidence": {
-    "source": "delegated real RX 5700 XT L42 measurement supplied with this task",
-    "concurrent_v3_evidence_sha256": "d4f14ebb3efc071df931fbced94781c104e89d300688196e0132699787b74790",
+    "wq_a_iterations": 100,
     "top6_routed_plus_shared_ms": 1.3696,
-    "dispatches": 35,
-    "timestamp_iterations": 1,
+    "top6_dispatches": 35,
+    "top6_timestamp_iterations": 1,
     "routed_payload_bytes": 80216064,
     "semantic_limit": "minimal GPU-resident top-6 routed plus shared batch; excludes official inter-matvec BF16/requant boundaries and is not a full layer/token benchmark"
   }

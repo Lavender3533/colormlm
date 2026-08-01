@@ -13,7 +13,7 @@ from .model import CommandBufferMode, SimulationConfig, build_roofline_report, s
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Polaris S14 GPU 阶段级 roofline/流水调度模拟器（不加载模型权重）"
+        description="Polaris 草稿 + FullDepth43 exact verifier 阶段级 roofline（不加载模型权重）"
     )
     commands = parser.add_subparsers(dest="command", required=True)
 

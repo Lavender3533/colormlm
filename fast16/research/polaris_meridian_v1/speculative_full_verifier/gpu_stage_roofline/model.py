@@ -383,13 +383,18 @@ def build_roofline_report(
     repo_root: str | Path | None = None,
 ) -> dict[str, Any]:
     anchors = load_real_anchors(asset_root, repo_root)
+    # Local import avoids a module cycle: full_depth reuses the hardware constants
+    # and the measured StageAnchors type defined by this package.
+    from .full_depth import build_full_depth_report
+
     target20 = _target_report(anchors, 20.0)
     target50 = _target_report(anchors, 50.0)
     required_hit_20 = target20["required_expert_cache_hit_rate_current_kernels"]
     cpu_tps = 1000.0 / anchors.cpu_warm_token_ms
     return {
-        "format": "polaris-s14-stage-roofline-v1",
+        "format": "polaris-draft-and-fulldepth-stage-roofline-v2",
         "profile": "S14/top6 draft GPU token only; not final quality authority",
+        "quality_authority": "FullDepth43/native-top6 exact causal verifier",
         "anchors": anchors.to_dict(),
         "cpu_observation": {
             "warm_cache_ms_per_token": anchors.cpu_warm_token_ms,
@@ -420,11 +425,12 @@ def build_roofline_report(
         "targets": {"20_tps": target20, "50_tps": target50},
         "two_token_cold_cache_counterexample": _cold_counterexample(anchors, required_hit_20),
         "shortest_exact_kernel_order": shortest_kernel_order(),
+        "full_depth43_exact_verifier": build_full_depth_report(asset_root, anchors),
         "hard_conclusions": [
             "当前 RX5700XT MoE+WQ_A 必要子操作锚点为 20.3476056 ms/token；尚未包含完整 attention、HC、router、norm/head 和 host 开销。",
             "20 tok/s 只在乐观 shared/DMA 重叠、其他未测阶段为 0 时存在条件可行性；所需专家命中率由报告前沿给出。",
             "50 tok/s 在当前单 token 锚点下即使 100% 专家命中也超出 20 ms；必须先有 batch/kernel fusion 加速，然后才有非零的未测阶段预算。",
             "真实 token0->token1 仅复用 8/84 专家页；仅保留上一 token top-6 不足以满足 20 tok/s 的理论命中门，需要更大历史工作集或成功的预测预取。",
         ],
-        "claim_limit": "阶段 roofline/调度条件，不是完整 GPU token 实测，不证明 20/50 tok/s，不证明质量。",
+        "claim_limit": "阶段 roofline/调度条件，不是完整 GPU token 实测，不证明 20/50 tok/s，不证明已达到 DeepSeek 质量。",
     }

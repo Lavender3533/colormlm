@@ -63,7 +63,14 @@ class RealAssetTests(unittest.TestCase):
             raw = output.read_bytes()
             self.assertFalse(raw.startswith(b"\xef\xbb\xbf"))
             parsed = json.loads(raw.decode("utf-8"))
-            self.assertEqual(parsed["format"], "polaris-s14-stage-roofline-v1")
+            self.assertEqual(parsed["format"], "polaris-draft-and-fulldepth-stage-roofline-v2")
+
+    def test_current_committed_gpu_evidence_is_the_only_authority(self) -> None:
+        expected = "2041d50886ae9183e134524c3208bb4692f6ab703753719aea7f3606779cc766"
+        self.assertEqual(self.anchors.gpu_evidence_sha256, expected)
+        self.assertEqual(self.anchors.top6_evidence_sha256, expected)
+        self.assertEqual(self.anchors.top6_dispatches, 35)
+        self.assertEqual(self.anchors.top6_iterations, 1)
 
 
 if __name__ == "__main__":
