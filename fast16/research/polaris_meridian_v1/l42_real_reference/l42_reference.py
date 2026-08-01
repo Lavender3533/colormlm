@@ -407,7 +407,11 @@ class _InlineForward:
         weight = self._weight_fp8(prefix)
         output = activation.reshape(-1, activation.shape[-1]) @ weight.T
         del weight
-        gc.collect()
+        # ``weight`` is a plain NumPy array, so CPython releases it
+        # immediately through reference counting.  A full cyclic-GC scan here
+        # does not reclaim the matrix and used to run after every projection
+        # (hundreds of times per FullDepth token).  Keep cyclic collection at
+        # the outer token boundary instead of taxing every matvec.
         return self._bf16_numpy(output.reshape(*array.shape[:-1], output.shape[-1]))
 
     def _linear_fp4(self, array: np.ndarray, prefix: str) -> np.ndarray:
@@ -415,7 +419,6 @@ class _InlineForward:
         weight = self._weight_fp4(prefix)
         output = activation.reshape(-1, activation.shape[-1]) @ weight.T
         del weight
-        gc.collect()
         return self._bf16_numpy(output.reshape(*array.shape[:-1], output.shape[-1]))
 
     @staticmethod
