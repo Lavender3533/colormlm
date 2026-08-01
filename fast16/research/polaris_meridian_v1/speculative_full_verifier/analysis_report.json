@@ -1,0 +1,1274 @@
+{
+  "format": "polaris-speculative-full-verifier-analysis-v1",
+  "profiles": {
+    "draft": "S14/top6 + DeepSeek tokenizer",
+    "verifier": "FullDepth43/native-top6 greedy causal block"
+  },
+  "asset_audit": {
+    "asset_root": "D:\\models\\Polaris-S14",
+    "budget_sha256": "26e79a5952cf8d37a83e97d8ac9edc2f3ebb11d8adaac05ce4832e2157b94453",
+    "route_catalog_sha256": "61a0ddd24a1f83f698049feff976f43ba4fc43b31b9513f937602132ad44bbb0",
+    "tokenizer_sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
+    "header_count": 45,
+    "header_set_sha256": "30f75c059c90e566071f8124ff16501422d5b7c898988bdc2ba8c98da048ba02",
+    "tensor_count": 67612,
+    "full_base_shard_bytes": 156023192948,
+    "full_base_payload_bytes": 156015698140,
+    "shard_container_overhead_bytes": 7494808,
+    "full_non_routed_bytes": 6727565512,
+    "head_bytes": 1059061760,
+    "embedding_bytes": 1059061760,
+    "other_boundary_bytes": 270356,
+    "expert_page_bytes": 13369344,
+    "expert_page_count": 11008,
+    "expert_bank_bytes": 147169738752,
+    "route_catalog_range_count": 22010,
+    "route_catalog_range_bytes": 52228574160,
+    "route_catalog_selected_layers": [
+      0,
+      1,
+      2,
+      6,
+      7,
+      14,
+      15,
+      22,
+      23,
+      30,
+      31,
+      40,
+      41,
+      42
+    ],
+    "weights_downloaded": false,
+    "budget_vram_fit_nonrouted_head_one_layer_top6": true,
+    "fixed_decode_scan_bytes": 7786627272,
+    "non_expert_base_payload_bytes": 8845959388,
+    "non_expert_packed_storage_bytes": 8853454196
+  },
+  "hardware": {
+    "vram_bytes": 8589934592,
+    "ram_bytes": 34359738368,
+    "ssd_bytes": 126701535232,
+    "pcie_bytes_per_second": 22030000000.0
+  },
+  "capacity": {
+    "full_base_shard_bytes": 156023192948,
+    "full_base_shard_gib": 145.30792175605893,
+    "full_base_tensor_payload_bytes": 156015698140,
+    "shard_container_overhead_bytes": 7494808,
+    "ssd_shortfall_bytes": 29321657716,
+    "ssd_shortfall_gib": 27.30792175605893,
+    "full_base_fits_ssd": false,
+    "vram_after_non_routed_plus_head_bytes": 803307320,
+    "vram_expert_pages_after_non_routed_plus_head": 60,
+    "ram_expert_pages_if_dedicated": 2570,
+    "ram_expert_pages_after_fixed_mirror": 1987,
+    "ssd_expert_pages_if_dedicated": 9477,
+    "ssd_expert_pages_after_non_expert_payload_and_shard_overhead": 8814,
+    "ssd_expert_page_coverage_after_non_expert_payload_and_shard_overhead": 0.8006904069767442,
+    "capacity_caveat": "VRAM 页数未扣 KV cache、activation、workspace 和 runtime，只是物理上限。容量覆盖率不是路由命中率。"
+  },
+  "block_estimates": [
+    {
+      "block_size": 1,
+      "causal_full_depth_passes": 1,
+      "non_routed_scan_bytes_per_block": 6727565512,
+      "head_scan_bytes_per_block": 1059061760,
+      "fixed_scan_bytes_per_block": 7786627272,
+      "non_routed_amortized_bytes_per_draft_position": 6727565512.0,
+      "head_amortized_bytes_per_draft_position": 1059061760.0,
+      "unique_expert_pages": {
+        "perfect_cross_token_reuse": 258,
+        "no_cross_token_reuse": 258
+      },
+      "expert_bytes_after_block_dedup": {
+        "perfect_cross_token_reuse": 3449290752,
+        "no_cross_token_reuse": 3449290752
+      },
+      "cold_pcie_latency_lower_bound_seconds": {
+        "perfect_cross_token_reuse": 0.5100280537448934,
+        "no_cross_token_reuse": 0.5100280537448934
+      },
+      "full_accept_throughput_ceiling_tps": {
+        "stream_each_block_all_expert_pages_device_resident": 2.829209519148023,
+        "stream_each_block_cold_perfect_cross_token_reuse": 1.960676462122967,
+        "stream_each_block_cold_no_cross_token_reuse": 1.960676462122967,
+        "resident_after_warmup_cold_perfect_cross_token_reuse": 6.386820243328678,
+        "resident_after_warmup_cold_no_cross_token_reuse": 6.386820243328678
+      }
+    },
+    {
+      "block_size": 2,
+      "causal_full_depth_passes": 1,
+      "non_routed_scan_bytes_per_block": 6727565512,
+      "head_scan_bytes_per_block": 1059061760,
+      "fixed_scan_bytes_per_block": 7786627272,
+      "non_routed_amortized_bytes_per_draft_position": 3363782756.0,
+      "head_amortized_bytes_per_draft_position": 529530880.0,
+      "unique_expert_pages": {
+        "perfect_cross_token_reuse": 258,
+        "no_cross_token_reuse": 516
+      },
+      "expert_bytes_after_block_dedup": {
+        "perfect_cross_token_reuse": 3449290752,
+        "no_cross_token_reuse": 6898581504
+      },
+      "cold_pcie_latency_lower_bound_seconds": {
+        "perfect_cross_token_reuse": 0.5100280537448934,
+        "no_cross_token_reuse": 0.6666004891511575
+      },
+      "full_accept_throughput_ceiling_tps": {
+        "stream_each_block_all_expert_pages_device_resident": 5.658419038296046,
+        "stream_each_block_cold_perfect_cross_token_reuse": 3.921352924245934,
+        "stream_each_block_cold_no_cross_token_reuse": 3.000297828384105,
+        "resident_after_warmup_cold_perfect_cross_token_reuse": 12.773640486657357,
+        "resident_after_warmup_cold_no_cross_token_reuse": 6.386820243328678
+      }
+    },
+    {
+      "block_size": 4,
+      "causal_full_depth_passes": 1,
+      "non_routed_scan_bytes_per_block": 6727565512,
+      "head_scan_bytes_per_block": 1059061760,
+      "fixed_scan_bytes_per_block": 7786627272,
+      "non_routed_amortized_bytes_per_draft_position": 1681891378.0,
+      "head_amortized_bytes_per_draft_position": 264765440.0,
+      "unique_expert_pages": {
+        "perfect_cross_token_reuse": 258,
+        "no_cross_token_reuse": 1032
+      },
+      "expert_bytes_after_block_dedup": {
+        "perfect_cross_token_reuse": 3449290752,
+        "no_cross_token_reuse": 13797163008
+      },
+      "cold_pcie_latency_lower_bound_seconds": {
+        "perfect_cross_token_reuse": 0.5100280537448934,
+        "no_cross_token_reuse": 0.9797453599636858
+      },
+      "full_accept_throughput_ceiling_tps": {
+        "stream_each_block_all_expert_pages_device_resident": 11.316838076592092,
+        "stream_each_block_cold_perfect_cross_token_reuse": 7.842705848491868,
+        "stream_each_block_cold_no_cross_token_reuse": 4.0826934869569165,
+        "resident_after_warmup_cold_perfect_cross_token_reuse": 25.547280973314713,
+        "resident_after_warmup_cold_no_cross_token_reuse": 6.386820243328678
+      }
+    },
+    {
+      "block_size": 8,
+      "causal_full_depth_passes": 1,
+      "non_routed_scan_bytes_per_block": 6727565512,
+      "head_scan_bytes_per_block": 1059061760,
+      "fixed_scan_bytes_per_block": 7786627272,
+      "non_routed_amortized_bytes_per_draft_position": 840945689.0,
+      "head_amortized_bytes_per_draft_position": 132382720.0,
+      "unique_expert_pages": {
+        "perfect_cross_token_reuse": 258,
+        "no_cross_token_reuse": 2064
+      },
+      "expert_bytes_after_block_dedup": {
+        "perfect_cross_token_reuse": 3449290752,
+        "no_cross_token_reuse": 27594326016
+      },
+      "cold_pcie_latency_lower_bound_seconds": {
+        "perfect_cross_token_reuse": 0.5100280537448934,
+        "no_cross_token_reuse": 1.6060351015887426
+      },
+      "full_accept_throughput_ceiling_tps": {
+        "stream_each_block_all_expert_pages_device_resident": 22.633676153184183,
+        "stream_each_block_cold_perfect_cross_token_reuse": 15.685411696983737,
+        "stream_each_block_cold_no_cross_token_reuse": 4.981211177816809,
+        "resident_after_warmup_cold_perfect_cross_token_reuse": 51.094561946629426,
+        "resident_after_warmup_cold_no_cross_token_reuse": 6.386820243328678
+      }
+    },
+    {
+      "block_size": 16,
+      "causal_full_depth_passes": 1,
+      "non_routed_scan_bytes_per_block": 6727565512,
+      "head_scan_bytes_per_block": 1059061760,
+      "fixed_scan_bytes_per_block": 7786627272,
+      "non_routed_amortized_bytes_per_draft_position": 420472844.5,
+      "head_amortized_bytes_per_draft_position": 66191360.0,
+      "unique_expert_pages": {
+        "perfect_cross_token_reuse": 258,
+        "no_cross_token_reuse": 4128
+      },
+      "expert_bytes_after_block_dedup": {
+        "perfect_cross_token_reuse": 3449290752,
+        "no_cross_token_reuse": 55188652032
+      },
+      "cold_pcie_latency_lower_bound_seconds": {
+        "perfect_cross_token_reuse": 0.5100280537448934,
+        "no_cross_token_reuse": 2.858614584838856
+      },
+      "full_accept_throughput_ceiling_tps": {
+        "stream_each_block_all_expert_pages_device_resident": 45.267352306368366,
+        "stream_each_block_cold_perfect_cross_token_reuse": 31.370823393967473,
+        "stream_each_block_cold_no_cross_token_reuse": 5.597116898814795,
+        "resident_after_warmup_cold_perfect_cross_token_reuse": 102.18912389325885,
+        "resident_after_warmup_cold_no_cross_token_reuse": 6.386820243328678
+      }
+    }
+  ],
+  "throughput_requirements": {
+    "stream_each_block": [
+      {
+        "target_tps": 20.0,
+        "block_size": 1,
+        "fixed_scan_policy": "stream_each_block",
+        "possible_under_pcie_bound": false,
+        "minimum_committed_tokens_with_perfect_expert_cache": null,
+        "minimum_accepted_prefix_with_perfect_expert_cache": null,
+        "minimum_acceptance_note": "即使专家页 100% 设备驻留且草稿全接受，固定扫描仍超过 PCIe 预算",
+        "frontier": [],
+        "minimum_accepted_prefix_with_zero_device_expert_cache": {}
+      },
+      {
+        "target_tps": 50.0,
+        "block_size": 1,
+        "fixed_scan_policy": "stream_each_block",
+        "possible_under_pcie_bound": false,
+        "minimum_committed_tokens_with_perfect_expert_cache": null,
+        "minimum_accepted_prefix_with_perfect_expert_cache": null,
+        "minimum_acceptance_note": "即使专家页 100% 设备驻留且草稿全接受，固定扫描仍超过 PCIe 预算",
+        "frontier": [],
+        "minimum_accepted_prefix_with_zero_device_expert_cache": {}
+      },
+      {
+        "target_tps": 20.0,
+        "block_size": 2,
+        "fixed_scan_policy": "stream_each_block",
+        "possible_under_pcie_bound": false,
+        "minimum_committed_tokens_with_perfect_expert_cache": null,
+        "minimum_accepted_prefix_with_perfect_expert_cache": null,
+        "minimum_acceptance_note": "即使专家页 100% 设备驻留且草稿全接受，固定扫描仍超过 PCIe 预算",
+        "frontier": [],
+        "minimum_accepted_prefix_with_zero_device_expert_cache": {}
+      },
+      {
+        "target_tps": 50.0,
+        "block_size": 2,
+        "fixed_scan_policy": "stream_each_block",
+        "possible_under_pcie_bound": false,
+        "minimum_committed_tokens_with_perfect_expert_cache": null,
+        "minimum_accepted_prefix_with_perfect_expert_cache": null,
+        "minimum_acceptance_note": "即使专家页 100% 设备驻留且草稿全接受，固定扫描仍超过 PCIe 预算",
+        "frontier": [],
+        "minimum_accepted_prefix_with_zero_device_expert_cache": {}
+      },
+      {
+        "target_tps": 20.0,
+        "block_size": 4,
+        "fixed_scan_policy": "stream_each_block",
+        "possible_under_pcie_bound": false,
+        "minimum_committed_tokens_with_perfect_expert_cache": null,
+        "minimum_accepted_prefix_with_perfect_expert_cache": null,
+        "minimum_acceptance_note": "即使专家页 100% 设备驻留且草稿全接受，固定扫描仍超过 PCIe 预算",
+        "frontier": [],
+        "minimum_accepted_prefix_with_zero_device_expert_cache": {}
+      },
+      {
+        "target_tps": 50.0,
+        "block_size": 4,
+        "fixed_scan_policy": "stream_each_block",
+        "possible_under_pcie_bound": false,
+        "minimum_committed_tokens_with_perfect_expert_cache": null,
+        "minimum_accepted_prefix_with_perfect_expert_cache": null,
+        "minimum_acceptance_note": "即使专家页 100% 设备驻留且草稿全接受，固定扫描仍超过 PCIe 预算",
+        "frontier": [],
+        "minimum_accepted_prefix_with_zero_device_expert_cache": {}
+      },
+      {
+        "target_tps": 20.0,
+        "block_size": 8,
+        "fixed_scan_policy": "stream_each_block",
+        "possible_under_pcie_bound": true,
+        "minimum_committed_tokens_with_perfect_expert_cache": 8,
+        "minimum_accepted_prefix_with_perfect_expert_cache": 7,
+        "minimum_acceptance_note": "prefix 之后的 1 个 FullDepth43 fallback 也是已提交 token",
+        "frontier": [
+          {
+            "accepted_prefix_length": 7,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 8,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.7027294009919405,
+              "no_cross_token_reuse": 0.9628411751239926
+            }
+          },
+          {
+            "accepted_prefix_length": 8,
+            "outcome": "full_match",
+            "committed_tokens": 8,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.7027294009919405,
+              "no_cross_token_reuse": 0.9628411751239926
+            }
+          }
+        ],
+        "minimum_accepted_prefix_with_zero_device_expert_cache": {
+          "perfect_cross_token_reuse": null,
+          "no_cross_token_reuse": null
+        }
+      },
+      {
+        "target_tps": 50.0,
+        "block_size": 8,
+        "fixed_scan_policy": "stream_each_block",
+        "possible_under_pcie_bound": false,
+        "minimum_committed_tokens_with_perfect_expert_cache": null,
+        "minimum_accepted_prefix_with_perfect_expert_cache": null,
+        "minimum_acceptance_note": "即使专家页 100% 设备驻留且草稿全接受，固定扫描仍超过 PCIe 预算",
+        "frontier": [],
+        "minimum_accepted_prefix_with_zero_device_expert_cache": {}
+      },
+      {
+        "target_tps": 20.0,
+        "block_size": 16,
+        "fixed_scan_policy": "stream_each_block",
+        "possible_under_pcie_bound": true,
+        "minimum_committed_tokens_with_perfect_expert_cache": 8,
+        "minimum_accepted_prefix_with_perfect_expert_cache": 7,
+        "minimum_acceptance_note": "prefix 之后的 1 个 FullDepth43 fallback 也是已提交 token",
+        "frontier": [
+          {
+            "accepted_prefix_length": 7,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 8,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.7027294009919405,
+              "no_cross_token_reuse": 0.9814205875619962
+            }
+          },
+          {
+            "accepted_prefix_length": 8,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 9,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.38338838882550663,
+              "no_cross_token_reuse": 0.9614617743015942
+            }
+          },
+          {
+            "accepted_prefix_length": 9,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 10,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.06404737665907267,
+              "no_cross_token_reuse": 0.941502961041192
+            }
+          },
+          {
+            "accepted_prefix_length": 10,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 11,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.92154414778079
+            }
+          },
+          {
+            "accepted_prefix_length": 11,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 12,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.9015853345203878
+            }
+          },
+          {
+            "accepted_prefix_length": 12,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 13,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.8816265212599856
+            }
+          },
+          {
+            "accepted_prefix_length": 13,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 14,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.8616677079995836
+            }
+          },
+          {
+            "accepted_prefix_length": 14,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 15,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.8417088947391814
+            }
+          },
+          {
+            "accepted_prefix_length": 15,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 16,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.8217500814787793
+            }
+          },
+          {
+            "accepted_prefix_length": 16,
+            "outcome": "full_match",
+            "committed_tokens": 16,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.8217500814787793
+            }
+          }
+        ],
+        "minimum_accepted_prefix_with_zero_device_expert_cache": {
+          "perfect_cross_token_reuse": 10,
+          "no_cross_token_reuse": null
+        }
+      },
+      {
+        "target_tps": 50.0,
+        "block_size": 16,
+        "fixed_scan_policy": "stream_each_block",
+        "possible_under_pcie_bound": false,
+        "minimum_committed_tokens_with_perfect_expert_cache": null,
+        "minimum_accepted_prefix_with_perfect_expert_cache": null,
+        "minimum_acceptance_note": "即使专家页 100% 设备驻留且草稿全接受，固定扫描仍超过 PCIe 预算",
+        "frontier": [],
+        "minimum_accepted_prefix_with_zero_device_expert_cache": {}
+      }
+    ],
+    "resident_after_warmup": [
+      {
+        "target_tps": 20.0,
+        "block_size": 1,
+        "fixed_scan_policy": "resident_after_warmup",
+        "possible_under_pcie_bound": true,
+        "minimum_committed_tokens_with_perfect_expert_cache": 1,
+        "minimum_accepted_prefix_with_perfect_expert_cache": 0,
+        "minimum_acceptance_note": "prefix 之后的 1 个 FullDepth43 fallback 也是已提交 token",
+        "frontier": [
+          {
+            "accepted_prefix_length": 0,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 1,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.680658987833566,
+              "no_cross_token_reuse": 0.680658987833566
+            }
+          },
+          {
+            "accepted_prefix_length": 1,
+            "outcome": "full_match",
+            "committed_tokens": 1,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.680658987833566,
+              "no_cross_token_reuse": 0.680658987833566
+            }
+          }
+        ],
+        "minimum_accepted_prefix_with_zero_device_expert_cache": {
+          "perfect_cross_token_reuse": null,
+          "no_cross_token_reuse": null
+        }
+      },
+      {
+        "target_tps": 50.0,
+        "block_size": 1,
+        "fixed_scan_policy": "resident_after_warmup",
+        "possible_under_pcie_bound": true,
+        "minimum_committed_tokens_with_perfect_expert_cache": 1,
+        "minimum_accepted_prefix_with_perfect_expert_cache": 0,
+        "minimum_acceptance_note": "prefix 之后的 1 个 FullDepth43 fallback 也是已提交 token",
+        "frontier": [
+          {
+            "accepted_prefix_length": 0,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 1,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.8722635951334264,
+              "no_cross_token_reuse": 0.8722635951334264
+            }
+          },
+          {
+            "accepted_prefix_length": 1,
+            "outcome": "full_match",
+            "committed_tokens": 1,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.8722635951334264,
+              "no_cross_token_reuse": 0.8722635951334264
+            }
+          }
+        ],
+        "minimum_accepted_prefix_with_zero_device_expert_cache": {
+          "perfect_cross_token_reuse": null,
+          "no_cross_token_reuse": null
+        }
+      },
+      {
+        "target_tps": 20.0,
+        "block_size": 2,
+        "fixed_scan_policy": "resident_after_warmup",
+        "possible_under_pcie_bound": true,
+        "minimum_committed_tokens_with_perfect_expert_cache": 1,
+        "minimum_accepted_prefix_with_perfect_expert_cache": 0,
+        "minimum_acceptance_note": "prefix 之后的 1 个 FullDepth43 fallback 也是已提交 token",
+        "frontier": [
+          {
+            "accepted_prefix_length": 0,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 1,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.680658987833566,
+              "no_cross_token_reuse": 0.840329493916783
+            }
+          },
+          {
+            "accepted_prefix_length": 1,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 2,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.3613179756671322,
+              "no_cross_token_reuse": 0.680658987833566
+            }
+          },
+          {
+            "accepted_prefix_length": 2,
+            "outcome": "full_match",
+            "committed_tokens": 2,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.3613179756671322,
+              "no_cross_token_reuse": 0.680658987833566
+            }
+          }
+        ],
+        "minimum_accepted_prefix_with_zero_device_expert_cache": {
+          "perfect_cross_token_reuse": null,
+          "no_cross_token_reuse": null
+        }
+      },
+      {
+        "target_tps": 50.0,
+        "block_size": 2,
+        "fixed_scan_policy": "resident_after_warmup",
+        "possible_under_pcie_bound": true,
+        "minimum_committed_tokens_with_perfect_expert_cache": 1,
+        "minimum_accepted_prefix_with_perfect_expert_cache": 0,
+        "minimum_acceptance_note": "prefix 之后的 1 个 FullDepth43 fallback 也是已提交 token",
+        "frontier": [
+          {
+            "accepted_prefix_length": 0,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 1,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.8722635951334264,
+              "no_cross_token_reuse": 0.9361317975667132
+            }
+          },
+          {
+            "accepted_prefix_length": 1,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 2,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.7445271902668529,
+              "no_cross_token_reuse": 0.8722635951334264
+            }
+          },
+          {
+            "accepted_prefix_length": 2,
+            "outcome": "full_match",
+            "committed_tokens": 2,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.7445271902668529,
+              "no_cross_token_reuse": 0.8722635951334264
+            }
+          }
+        ],
+        "minimum_accepted_prefix_with_zero_device_expert_cache": {
+          "perfect_cross_token_reuse": null,
+          "no_cross_token_reuse": null
+        }
+      },
+      {
+        "target_tps": 20.0,
+        "block_size": 4,
+        "fixed_scan_policy": "resident_after_warmup",
+        "possible_under_pcie_bound": true,
+        "minimum_committed_tokens_with_perfect_expert_cache": 1,
+        "minimum_accepted_prefix_with_perfect_expert_cache": 0,
+        "minimum_acceptance_note": "prefix 之后的 1 个 FullDepth43 fallback 也是已提交 token",
+        "frontier": [
+          {
+            "accepted_prefix_length": 0,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 1,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.680658987833566,
+              "no_cross_token_reuse": 0.9201647469583916
+            }
+          },
+          {
+            "accepted_prefix_length": 1,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 2,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.3613179756671322,
+              "no_cross_token_reuse": 0.840329493916783
+            }
+          },
+          {
+            "accepted_prefix_length": 2,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 3,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.04197696350069824,
+              "no_cross_token_reuse": 0.7604942408751746
+            }
+          },
+          {
+            "accepted_prefix_length": 3,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 4,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.680658987833566
+            }
+          },
+          {
+            "accepted_prefix_length": 4,
+            "outcome": "full_match",
+            "committed_tokens": 4,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.680658987833566
+            }
+          }
+        ],
+        "minimum_accepted_prefix_with_zero_device_expert_cache": {
+          "perfect_cross_token_reuse": 3,
+          "no_cross_token_reuse": null
+        }
+      },
+      {
+        "target_tps": 50.0,
+        "block_size": 4,
+        "fixed_scan_policy": "resident_after_warmup",
+        "possible_under_pcie_bound": true,
+        "minimum_committed_tokens_with_perfect_expert_cache": 1,
+        "minimum_accepted_prefix_with_perfect_expert_cache": 0,
+        "minimum_acceptance_note": "prefix 之后的 1 个 FullDepth43 fallback 也是已提交 token",
+        "frontier": [
+          {
+            "accepted_prefix_length": 0,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 1,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.8722635951334264,
+              "no_cross_token_reuse": 0.9680658987833566
+            }
+          },
+          {
+            "accepted_prefix_length": 1,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 2,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.7445271902668529,
+              "no_cross_token_reuse": 0.9361317975667132
+            }
+          },
+          {
+            "accepted_prefix_length": 2,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 3,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.6167907854002793,
+              "no_cross_token_reuse": 0.9041976963500699
+            }
+          },
+          {
+            "accepted_prefix_length": 3,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 4,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.48905438053370576,
+              "no_cross_token_reuse": 0.8722635951334264
+            }
+          },
+          {
+            "accepted_prefix_length": 4,
+            "outcome": "full_match",
+            "committed_tokens": 4,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.48905438053370576,
+              "no_cross_token_reuse": 0.8722635951334264
+            }
+          }
+        ],
+        "minimum_accepted_prefix_with_zero_device_expert_cache": {
+          "perfect_cross_token_reuse": null,
+          "no_cross_token_reuse": null
+        }
+      },
+      {
+        "target_tps": 20.0,
+        "block_size": 8,
+        "fixed_scan_policy": "resident_after_warmup",
+        "possible_under_pcie_bound": true,
+        "minimum_committed_tokens_with_perfect_expert_cache": 1,
+        "minimum_accepted_prefix_with_perfect_expert_cache": 0,
+        "minimum_acceptance_note": "prefix 之后的 1 个 FullDepth43 fallback 也是已提交 token",
+        "frontier": [
+          {
+            "accepted_prefix_length": 0,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 1,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.680658987833566,
+              "no_cross_token_reuse": 0.9600823734791958
+            }
+          },
+          {
+            "accepted_prefix_length": 1,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 2,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.3613179756671322,
+              "no_cross_token_reuse": 0.9201647469583916
+            }
+          },
+          {
+            "accepted_prefix_length": 2,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 3,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.04197696350069824,
+              "no_cross_token_reuse": 0.8802471204375872
+            }
+          },
+          {
+            "accepted_prefix_length": 3,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 4,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.840329493916783
+            }
+          },
+          {
+            "accepted_prefix_length": 4,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 5,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.8004118673959788
+            }
+          },
+          {
+            "accepted_prefix_length": 5,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 6,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.7604942408751746
+            }
+          },
+          {
+            "accepted_prefix_length": 6,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 7,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.7205766143543704
+            }
+          },
+          {
+            "accepted_prefix_length": 7,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 8,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.680658987833566
+            }
+          },
+          {
+            "accepted_prefix_length": 8,
+            "outcome": "full_match",
+            "committed_tokens": 8,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.680658987833566
+            }
+          }
+        ],
+        "minimum_accepted_prefix_with_zero_device_expert_cache": {
+          "perfect_cross_token_reuse": 3,
+          "no_cross_token_reuse": null
+        }
+      },
+      {
+        "target_tps": 50.0,
+        "block_size": 8,
+        "fixed_scan_policy": "resident_after_warmup",
+        "possible_under_pcie_bound": true,
+        "minimum_committed_tokens_with_perfect_expert_cache": 1,
+        "minimum_accepted_prefix_with_perfect_expert_cache": 0,
+        "minimum_acceptance_note": "prefix 之后的 1 个 FullDepth43 fallback 也是已提交 token",
+        "frontier": [
+          {
+            "accepted_prefix_length": 0,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 1,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.8722635951334264,
+              "no_cross_token_reuse": 0.9840329493916783
+            }
+          },
+          {
+            "accepted_prefix_length": 1,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 2,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.7445271902668529,
+              "no_cross_token_reuse": 0.9680658987833566
+            }
+          },
+          {
+            "accepted_prefix_length": 2,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 3,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.6167907854002793,
+              "no_cross_token_reuse": 0.9520988481750349
+            }
+          },
+          {
+            "accepted_prefix_length": 3,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 4,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.48905438053370576,
+              "no_cross_token_reuse": 0.9361317975667132
+            }
+          },
+          {
+            "accepted_prefix_length": 4,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 5,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.3613179756671322,
+              "no_cross_token_reuse": 0.9201647469583916
+            }
+          },
+          {
+            "accepted_prefix_length": 5,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 6,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.23358157080055864,
+              "no_cross_token_reuse": 0.9041976963500699
+            }
+          },
+          {
+            "accepted_prefix_length": 6,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 7,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.10584516593398507,
+              "no_cross_token_reuse": 0.8882306457417481
+            }
+          },
+          {
+            "accepted_prefix_length": 7,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 8,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.8722635951334264
+            }
+          },
+          {
+            "accepted_prefix_length": 8,
+            "outcome": "full_match",
+            "committed_tokens": 8,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.8722635951334264
+            }
+          }
+        ],
+        "minimum_accepted_prefix_with_zero_device_expert_cache": {
+          "perfect_cross_token_reuse": 7,
+          "no_cross_token_reuse": null
+        }
+      },
+      {
+        "target_tps": 20.0,
+        "block_size": 16,
+        "fixed_scan_policy": "resident_after_warmup",
+        "possible_under_pcie_bound": true,
+        "minimum_committed_tokens_with_perfect_expert_cache": 1,
+        "minimum_accepted_prefix_with_perfect_expert_cache": 0,
+        "minimum_acceptance_note": "prefix 之后的 1 个 FullDepth43 fallback 也是已提交 token",
+        "frontier": [
+          {
+            "accepted_prefix_length": 0,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 1,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.680658987833566,
+              "no_cross_token_reuse": 0.9800411867395978
+            }
+          },
+          {
+            "accepted_prefix_length": 1,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 2,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.3613179756671322,
+              "no_cross_token_reuse": 0.9600823734791958
+            }
+          },
+          {
+            "accepted_prefix_length": 2,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 3,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.04197696350069824,
+              "no_cross_token_reuse": 0.9401235602187936
+            }
+          },
+          {
+            "accepted_prefix_length": 3,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 4,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.9201647469583916
+            }
+          },
+          {
+            "accepted_prefix_length": 4,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 5,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.9002059336979894
+            }
+          },
+          {
+            "accepted_prefix_length": 5,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 6,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.8802471204375872
+            }
+          },
+          {
+            "accepted_prefix_length": 6,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 7,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.8602883071771852
+            }
+          },
+          {
+            "accepted_prefix_length": 7,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 8,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.840329493916783
+            }
+          },
+          {
+            "accepted_prefix_length": 8,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 9,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.8203706806563809
+            }
+          },
+          {
+            "accepted_prefix_length": 9,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 10,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.8004118673959788
+            }
+          },
+          {
+            "accepted_prefix_length": 10,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 11,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.7804530541355766
+            }
+          },
+          {
+            "accepted_prefix_length": 11,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 12,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.7604942408751746
+            }
+          },
+          {
+            "accepted_prefix_length": 12,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 13,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.7405354276147724
+            }
+          },
+          {
+            "accepted_prefix_length": 13,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 14,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.7205766143543704
+            }
+          },
+          {
+            "accepted_prefix_length": 14,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 15,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.7006178010939682
+            }
+          },
+          {
+            "accepted_prefix_length": 15,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 16,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.680658987833566
+            }
+          },
+          {
+            "accepted_prefix_length": 16,
+            "outcome": "full_match",
+            "committed_tokens": 16,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.680658987833566
+            }
+          }
+        ],
+        "minimum_accepted_prefix_with_zero_device_expert_cache": {
+          "perfect_cross_token_reuse": 3,
+          "no_cross_token_reuse": null
+        }
+      },
+      {
+        "target_tps": 50.0,
+        "block_size": 16,
+        "fixed_scan_policy": "resident_after_warmup",
+        "possible_under_pcie_bound": true,
+        "minimum_committed_tokens_with_perfect_expert_cache": 1,
+        "minimum_accepted_prefix_with_perfect_expert_cache": 0,
+        "minimum_acceptance_note": "prefix 之后的 1 个 FullDepth43 fallback 也是已提交 token",
+        "frontier": [
+          {
+            "accepted_prefix_length": 0,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 1,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.8722635951334264,
+              "no_cross_token_reuse": 0.9920164746958392
+            }
+          },
+          {
+            "accepted_prefix_length": 1,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 2,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.7445271902668529,
+              "no_cross_token_reuse": 0.9840329493916783
+            }
+          },
+          {
+            "accepted_prefix_length": 2,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 3,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.6167907854002793,
+              "no_cross_token_reuse": 0.9760494240875175
+            }
+          },
+          {
+            "accepted_prefix_length": 3,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 4,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.48905438053370576,
+              "no_cross_token_reuse": 0.9680658987833566
+            }
+          },
+          {
+            "accepted_prefix_length": 4,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 5,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.3613179756671322,
+              "no_cross_token_reuse": 0.9600823734791958
+            }
+          },
+          {
+            "accepted_prefix_length": 5,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 6,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.23358157080055864,
+              "no_cross_token_reuse": 0.9520988481750349
+            }
+          },
+          {
+            "accepted_prefix_length": 6,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 7,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.10584516593398507,
+              "no_cross_token_reuse": 0.9441153228708741
+            }
+          },
+          {
+            "accepted_prefix_length": 7,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 8,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.9361317975667132
+            }
+          },
+          {
+            "accepted_prefix_length": 8,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 9,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.9281482722625524
+            }
+          },
+          {
+            "accepted_prefix_length": 9,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 10,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.9201647469583916
+            }
+          },
+          {
+            "accepted_prefix_length": 10,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 11,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.9121812216542307
+            }
+          },
+          {
+            "accepted_prefix_length": 11,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 12,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.9041976963500699
+            }
+          },
+          {
+            "accepted_prefix_length": 12,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 13,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.896214171045909
+            }
+          },
+          {
+            "accepted_prefix_length": 13,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 14,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.8882306457417481
+            }
+          },
+          {
+            "accepted_prefix_length": 14,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 15,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.8802471204375872
+            }
+          },
+          {
+            "accepted_prefix_length": 15,
+            "outcome": "mismatch_then_native_fallback",
+            "committed_tokens": 16,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.8722635951334264
+            }
+          },
+          {
+            "accepted_prefix_length": 16,
+            "outcome": "full_match",
+            "committed_tokens": 16,
+            "required_device_expert_cache_hit_rate": {
+              "perfect_cross_token_reuse": 0.0,
+              "no_cross_token_reuse": 0.8722635951334264
+            }
+          }
+        ],
+        "minimum_accepted_prefix_with_zero_device_expert_cache": {
+          "perfect_cross_token_reuse": 7,
+          "no_cross_token_reuse": null
+        }
+      }
+    ]
+  },
+  "assumptions": [
+    "每个 causal block 将 43 层非路由权重与 BF16 head 各扫描一次，因而可在 block 位置之间摊销。",
+    "每层每 token 的 native router 返回 6 个不同专家；块内相同 (layer, expert) 页只读一次。",
+    "device expert cache hit 表示页在验证前已驻留 VRAM，不占用本轮 PCIe；RAM/SSD 命中仍需 PCIe 传至 GPU。",
+    "在首个不一致位置提交 FullDepth43 原生 fallback；草稿全一致时不额外提交 bonus token。",
+    "只计 PCIe 字节下界，忽略计算、SSD 读、KV/activation、调度和内核开销；所以 token/s 是乐观上界，不是实测。",
+    "resident_after_warmup 是额外乐观分支：按 budget 字节可将非路由+head 固定在 8GiB，但未计 runtime 后仅剩 60 个专家页。"
+  ],
+  "hard_conclusions": [
+    {
+      "id": "metadata_cross_check",
+      "conclusion": "45 个 base header 共 67612 个张量；budget 与 header/catalog 字节逐项一致。"
+    },
+    {
+      "id": "ssd_capacity",
+      "conclusion": "FullDepth43 的 45 个 base shard 为 145.307922 GiB，超出 118 GiB SSD 27.307922 GiB；不能在该 SSD 上无外部后备地完整自包含。"
+    },
+    {
+      "id": "vram_upper_bound",
+      "conclusion": "8 GiB 中放入非路由+head 后理论上仅余 60 个专家页，且尚未扣 runtime 内存。"
+    },
+    {
+      "id": "50_tps_pcie_bound",
+      "conclusion": "在 stream_each_block 分支，最大 block=16、100% 设备专家命中、全接受且忽略所有计算开销时，PCIe 上界仍只有 45.267352 tok/s；50 tok/s 在 block<=16 下不可达。"
+    },
+    {
+      "id": "quality_not_measured",
+      "conclusion": "未提供真实 FullDepth43 route/acceptance trace，因而不假设接受率、命中率或 DeepSeek 质量。"
+    }
+  ]
+}

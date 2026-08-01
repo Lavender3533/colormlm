@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "polaris-full-depth-native-top6-route-block-v1",
+  "title": "Polaris FullDepth43 native top-6 causal block route",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["block_id", "block_size", "routes"],
+  "properties": {
+    "block_id": {"type": "string", "minLength": 1},
+    "block_size": {"type": "integer", "minimum": 1},
+    "accepted_prefix_length": {"type": "integer", "minimum": 0},
+    "routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["token_offset", "layer", "expert_ids"],
+        "properties": {
+          "token_offset": {"type": "integer", "minimum": 0},
+          "layer": {"type": "integer", "minimum": 0, "maximum": 42},
+          "expert_ids": {
+            "type": "array",
+            "minItems": 6,
+            "maxItems": 6,
+            "uniqueItems": true,
+            "items": {"type": "integer", "minimum": 0, "maximum": 255}
+          }
+        }
+      }
+    }
+  }
+}
