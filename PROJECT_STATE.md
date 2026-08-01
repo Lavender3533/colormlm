@@ -1255,3 +1255,7 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
   `error=null`。worker non-kernel从`19.8029s`降到`11.7180s`（`-40.83%`），证明主要收益来自
   消除每层Vulkan buffer/memory反复创建销毁；完整证据见
   `fast16/research/polaris_meridian_v1/fulldepth43_native_top6/REUSABLE_GPU_SLOT_AB.md`。
+- 固定槽之上再常驻35组descriptor的负对照仅把`117.9932s`变为`117.4504s`（约`0.46%`），
+  worker non-kernel只少`0.1034s`；数值与连续性虽保持，但收益不足以承担生命周期复杂度，代码已
+  撤回。当前最大独占瓶颈已量化为387次CPU FP8 materialization的`64.3112s`；下一主线改为让
+  attention等投影直接消费packed FP8+UE8M0，不再继续抠descriptor小对象。

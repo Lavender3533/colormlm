@@ -44,3 +44,14 @@ payload 身份，也不启用已经被否决的 GPU resident LRU。
 100.5 MiB 上传，以及 descriptor、command buffer、query/fence 的逐请求创建。它把当前真实
 速度推进到约 59 秒/token，仍远未达到可交互速度；后续应继续持久化 Vulkan 调度对象，并把
 attention/router/compressor 与 FP8 materialization 移入长寿命 GPU 执行链。
+
+## 后续负对照与下一主瓶颈
+
+在固定 buffer 槽之上继续把35组 descriptor/binder改为启动时一次绑定，真实两-token结果仍为
+`[5,223]`、43/43×2、零fallback，但仅从`117.9932s`降到`117.4504s`（约`0.46%`），
+worker non-kernel仅从`11.7180s`降到`11.6146s`。该幅度不足以承担额外资源生命周期复杂度，
+实现已撤回，不进入生产路径。
+
+同次 profiler 显示当前最大独占耗时是387次CPU FP8 materialization，共`64.3112s`；其次才是
+Range fetch `16.0991s`、Python→Rust Vulkan `12.2578s`和Range prepare `9.5231s`。下一主线
+应让attention等投影直接消费packed FP8+UE8M0，避免在CPU展开整张F32矩阵。
