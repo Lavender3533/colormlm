@@ -134,6 +134,9 @@ def make_catalog() -> dict:
         "final": [
             entry("norm.weight", "boundary", final_file, 96, 4),
             entry("head.weight", "boundary", final_file, 100, 4),
+            entry("hc_head_base", "boundary", final_file, 104, 4),
+            entry("hc_head_fn", "boundary", final_file, 108, 4),
+            entry("hc_head_scale", "boundary", final_file, 112, 4),
         ],
     }
     layers = {}

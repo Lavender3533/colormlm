@@ -8,7 +8,14 @@
     "sha256": "98efab455cf08dfbbbaaba6f570e1bf10bf927d2b4c3c453a59c2f6f0e3be92b"
   },
   "selected_layers": [0, 1, 2, 6, 7, 14, 15, 22, 23, 30, 31, 40, 41, 42],
-  "boundary_tensors": ["embed.weight", "norm.weight", "head.weight"],
+  "boundary_tensors": [
+    "embed.weight",
+    "hc_head_base",
+    "hc_head_fn",
+    "hc_head_scale",
+    "norm.weight",
+    "head.weight"
+  ],
   "tokenizer_required": [
     "tokenizer.json",
     "tokenizer_config.json"
@@ -31,6 +38,9 @@
   },
   "boundary_shards": {
     "embed.weight": {"file": "model-00001-of-00048.safetensors", "bytes": 1059061856, "sha256": "f3668ba4cccf1ca6a7eb84e888fb92c1cdc7204d472ba9db771e6fd3abf6b874"},
+    "hc_head_base": {"file": "model-00045-of-00048.safetensors", "bytes": 1059332516, "sha256": "a5be6aed7b84fc87ec42b5d24ba0b0d67f253a3906fcd99c13f4f7be5958fc00"},
+    "hc_head_fn": {"file": "model-00045-of-00048.safetensors", "bytes": 1059332516, "sha256": "a5be6aed7b84fc87ec42b5d24ba0b0d67f253a3906fcd99c13f4f7be5958fc00"},
+    "hc_head_scale": {"file": "model-00045-of-00048.safetensors", "bytes": 1059332516, "sha256": "a5be6aed7b84fc87ec42b5d24ba0b0d67f253a3906fcd99c13f4f7be5958fc00"},
     "norm.weight": {"file": "model-00045-of-00048.safetensors", "bytes": 1059332516, "sha256": "a5be6aed7b84fc87ec42b5d24ba0b0d67f253a3906fcd99c13f4f7be5958fc00"},
     "head.weight": {"file": "model-00045-of-00048.safetensors", "bytes": 1059332516, "sha256": "a5be6aed7b84fc87ec42b5d24ba0b0d67f253a3906fcd99c13f4f7be5958fc00"}
   },

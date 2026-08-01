@@ -185,7 +185,7 @@ def _flatten_prerequisites(catalog: Mapping[str, Any]) -> list[dict[str, Any]]:
 
 
 def validate_skeleton_manifest(path: Path, catalog: Mapping[str, Any]) -> dict[str, Any]:
-    """验证已有 506-range skeleton 与新 catalog 的先路由所需集合完全一致。
+    """验证已有 509-range skeleton 与新 catalog 的先路由所需集合完全一致。
 
     skeleton 的 null ``expected_range_sha256`` 只表示尚未观测；本函数绝不把它升级成
     authoritative lock。
@@ -337,8 +337,15 @@ def build_catalog(
 
     if [row["tensor"] for row in boundary["embedding"]] != ["embed.weight"]:
         raise rp.ContractError("catalog 必须且只能有原生 embed.weight")
-    if {row["tensor"] for row in boundary["final"]} != {"norm.weight", "head.weight"}:
-        raise rp.ContractError("catalog 缺少原生 norm/head")
+    required_final = {
+        "hc_head_base",
+        "hc_head_fn",
+        "hc_head_scale",
+        "norm.weight",
+        "head.weight",
+    }
+    if {row["tensor"] for row in boundary["final"]} != required_final:
+        raise rp.ContractError("catalog 缺少原生 HC head/norm/head")
     for layer in selected_layers:
         row = layers[str(layer)]
         if not row["non_expert"] or not row["router"] or not row["shared"]:
@@ -466,8 +473,15 @@ def validate_catalog(catalog: Mapping[str, Any], source: Mapping[str, Any] | Non
         raise rp.ContractError("catalog layers 集合不完整")
     if [row.get("tensor") for row in boundary.get("embedding", [])] != ["embed.weight"]:
         raise rp.ContractError("catalog embedding 边界错误")
-    if {row.get("tensor") for row in boundary.get("final", [])} != {"norm.weight", "head.weight"}:
-        raise rp.ContractError("catalog final 边界错误")
+    required_final = {
+        "hc_head_base",
+        "hc_head_fn",
+        "hc_head_scale",
+        "norm.weight",
+        "head.weight",
+    }
+    if {row.get("tensor") for row in boundary.get("final", [])} != required_final:
+        raise rp.ContractError("catalog final HC 边界错误")
     seen_tensors: set[str] = set()
     range_count = 0
     range_bytes = 0

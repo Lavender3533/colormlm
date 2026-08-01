@@ -46,6 +46,9 @@ def synthetic_metadata(source: dict) -> tuple[dict[str, str], dict[str, dict], d
     add("embed.weight", source["boundary_shards"]["embed.weight"]["file"], 0, 130)
     add("norm.weight", source["boundary_shards"]["norm.weight"]["file"], 0, 18)
     add("head.weight", source["boundary_shards"]["head.weight"]["file"], 64, 194)
+    add("hc_head_base", source["boundary_shards"]["hc_head_base"]["file"], 320, 16)
+    add("hc_head_fn", source["boundary_shards"]["hc_head_fn"]["file"], 384, 128)
+    add("hc_head_scale", source["boundary_shards"]["hc_head_scale"]["file"], 576, 4)
     for layer in source["selected_layers"]:
         filename = source["layer_shards"][str(layer)]["file"]
         add(f"layers.{layer}.attn.q_proj.weight", filename, 0, 66)
@@ -100,7 +103,14 @@ def main() -> int:
     tensors = {row["tensor"] for row in plan["entries"]}
     assert all(f"layers.{layer}.ffn.experts.1.w1.weight" in tensors for layer in source["selected_layers"])
     assert all(f"layers.{layer}.ffn.experts.0.w1.weight" not in tensors for layer in source["selected_layers"])
-    assert {"embed.weight", "norm.weight", "head.weight"} <= tensors
+    assert {
+        "embed.weight",
+        "hc_head_base",
+        "hc_head_fn",
+        "hc_head_scale",
+        "norm.weight",
+        "head.weight",
+    } <= tensors
     assert plan["status"] == "blocked_missing_integrity_locks"
     assert plan["layout"]["binary_bytes"] == plan["layout"]["payload_bytes"] + plan["layout"]["padding_bytes"]
     checks.append({"id": "exact_tensor_selection_and_layout", "status": "pass"})
