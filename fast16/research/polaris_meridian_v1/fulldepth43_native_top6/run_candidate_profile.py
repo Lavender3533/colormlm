@@ -24,12 +24,19 @@ def run_profiled_candidate(
     catalog_path: Path = DEFAULT_CATALOG,
     timeout_seconds: float = 30.0,
     fp8_cache_bytes: int = 0,
+    download_budget_bytes: int = 0,
 ) -> dict[str, Any]:
     worker = worker.resolve(strict=True)
     output_root = output_root.resolve()
     output_root.mkdir(parents=True, exist_ok=False)
     if isinstance(fp8_cache_bytes, bool) or not isinstance(fp8_cache_bytes, int) or fp8_cache_bytes < 0:
         raise ValueError("fp8_cache_bytes 必须为非负整数")
+    if (
+        isinstance(download_budget_bytes, bool)
+        or not isinstance(download_budget_bytes, int)
+        or download_budget_bytes < 0
+    ):
+        raise ValueError("download_budget_bytes 必须为非负整数")
 
     profiler = CandidateProfiler()
     cache = MaterializedFp8Cache(fp8_cache_bytes) if fp8_cache_bytes else None
@@ -42,6 +49,8 @@ def run_profiled_candidate(
                     catalog_path=catalog_path,
                     report_path=output_root / "model_report.json",
                     token_count=1,
+                    allow_fetch=download_budget_bytes > 0,
+                    download_budget_bytes=download_budget_bytes,
                     vulkan_bridge_capture=output_root / "captures",
                     vulkan_writeback_worker=worker,
                     vulkan_writeback_timeout_seconds=timeout_seconds,
@@ -100,9 +109,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG)
     parser.add_argument("--timeout-seconds", type=float, default=30.0)
     parser.add_argument("--fp8-cache-gib", type=float, default=0.0)
+    parser.add_argument("--download-budget-gib", type=float, default=0.0)
     args = parser.parse_args(argv)
     if not 0.0 <= args.fp8_cache_gib <= 12.0:
         parser.error("--fp8-cache-gib 必须在 0..12")
+    if not 0.0 <= args.download_budget_gib <= 8.0:
+        parser.error("--download-budget-gib 必须在 0..8")
     result = run_profiled_candidate(
         worker=args.worker,
         output_root=args.output_root,
@@ -110,6 +122,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         catalog_path=args.catalog,
         timeout_seconds=args.timeout_seconds,
         fp8_cache_bytes=int(args.fp8_cache_gib * 1024**3),
+        download_budget_bytes=int(args.download_budget_gib * 1024**3),
     )
     print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
     return 0
