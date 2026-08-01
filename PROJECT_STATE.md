@@ -1286,3 +1286,7 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
   不外推为完整token速度。
 - 这只证明首条attention投影不再需要CPU展开完整F32权重；尚未接入完整token热路径，BF16 RNE
   仍在CPU。下一步已推进到L42其余标准投影，再单独处理`wo_a` grouped BF16-weight语义。
+- L42其余标准packed-FP8投影的真实fixture已经冻结并可从76个SHA校验资产重复生成：`wkv`
+  输出SHA为`3cc7f8f4...dd541`，`wq_b`为`284391a5...fb43c04`，`indexer.wq_b`为
+  `d9adda76...331501`，`wo_b`为`84ce63ca...db10`；采集后完整L42输出仍为
+  `853b8b94...88895`。该步消除了多投影worker的输入/裁决歧义，但尚不算GPU投影已通过。

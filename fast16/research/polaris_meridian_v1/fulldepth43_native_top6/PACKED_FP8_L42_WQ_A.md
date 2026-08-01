@@ -63,3 +63,18 @@ CPU F32 activation [1,1,4096]
 ## 边界与下一步
 
 当前仅闭合 L42 `wq_a`，而且最终 BF16 RNE 仍在 CPU 完成；不能据此宣称完整 attention、完整 GPU token 或端到端加速已经完成。下一步按冻结顺序扩展 L42 `wkv/wq_b/indexer.wq_b/wo_b`，再为 `wo_a [8,1024,4096]` 实现 grouped BF16-weight 专用内核；完整 L42 对齐后才推广到 43 层并跑一次两-token A/B。
+
+## 后续标准投影 fixture
+
+现已用同一完整 L42 CPU参考运行一次性冻结其余标准 packed-FP8 投影，且完整层输出仍命中
+`853b8b947a3f7a275cf748d7e97a311ebb22323cd0c2f3e5e973f27b04388895`：
+
+| 投影 | N×K | 输入 SHA-256 | BF16输出 SHA-256 |
+|---|---:|---|---|
+| `wkv` | `512×4096` | `47156935b19ca5483f0e92d2284eaa6a9417686978dc4b41ca893ee162f37577` | `3cc7f8f4264c6448dd32f9044c0d001107f06d57209a91a80fa56bdda59dd541` |
+| `wq_b` | `32768×1024` | `4ceb243521589b40b930c63b03da362163dfdc7fe12c0b76397100ec4b4c58e1` | `284391a5a45d6a5367060ecd444a21770e69fa7949455bea6823317f4fb43c04` |
+| `indexer.wq_b` | `8192×1024` | `4ceb243521589b40b930c63b03da362163dfdc7fe12c0b76397100ec4b4c58e1` | `d9adda7639665267be4fac36e2a74755bb5d730a4a2a8734695198fc4f331501` |
+| `wo_b` | `4096×8192` | `94b3f7fd24ee36b8553ed513d1986ef49162c053bd6dbf62f98b9579e20ea3f0` | `84ce63ca9233b07bea99741f9982accac17bc65025b0098b7017acd7dab6db10` |
+
+`capture_l42_fp8_projections.py` 会从76个SHA校验后的本地资产重新生成五条投影的输入/输出
+二进制和严格manifest；目标目录必须不存在，fixture不作为模型权重提交。
