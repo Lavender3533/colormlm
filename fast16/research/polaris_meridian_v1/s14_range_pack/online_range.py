@@ -22,7 +22,10 @@ from enum import Enum
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Protocol
 
-import range_pack as rp
+try:
+    from . import range_pack as rp
+except ImportError:  # 兼容直接执行 online_range.py 的 CLI 入口。
+    import range_pack as rp
 
 
 CATALOG_FORMAT = "polaris-s14-route-first-catalog-v1"
