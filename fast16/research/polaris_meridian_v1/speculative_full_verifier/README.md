@@ -10,6 +10,12 @@
 - `K=4/8` 草稿/target 双 runtime 使用两阶段原子提交，任一失败双边恢复轮次前 snapshot；
 - 串行 target 桥仅供正确性对接；只有一次 `batched_causal` target forward 才有加速资格。
 - `s14_runtime_bridge.py` 已把现有 `DecoderRuntime` snapshot/token report 转成真实 S14 草稿边界，不做 token 映射。
+- `fulldepth_runtime_bridge.py` 直接复用 FullDepth43 的 `DecoderState`/
+  `LayerRuntimeState`，保留真实 window KV 与 compressor remainder；
+- `cpu_causal_block.py` 提供一次 `begin_causal_block` 正确性 API，
+  保存 `K×43×6` route 和 K 个完整 checkpoint，mismatch 只提交
+  到 fallback 位置。它内部仍是 K 次 CPU token forward，会报告
+  `mode=cpu_causal_block_reference, forward_calls=K`，不可通过速度门。
 
 完整资产审计、原子状态语义和下一内核边界见
 [`SPECULATIVE_RUNTIME_AUDIT.md`](SPECULATIVE_RUNTIME_AUDIT.md)。
@@ -86,3 +92,9 @@ python -m fast16.research.polaris_meridian_v1.speculative_full_verifier `
 ## 证据边界
 
 当前没有真实 FullDepth43 route trace、草稿接受 trace、内核计算耗时或权重 payload。因此本目录只证明接受/回退合同、字节审计和条件方程可运行；不证明 S14 或 FullDepth43 已运行，不证明 20/50 tok/s 已达到，也不宣称质量达到 DeepSeek。
+
+CPU causal-block 的离线 fixture 已覆盖 K=1 对一次串行、K=4
+对串行 K 的整状态等价，以及 K=8 的完整 route/checkpoint 覆盖；
+但这是状态机与真实 `DecoderState` 张量桥的正确性证据，不是大模型
+数值或速度证据。下一步仍需把 `execute()` 内的单 token worker 提升为
+可复用 callback，再用真实 K=1/串行 K 金标对齐。

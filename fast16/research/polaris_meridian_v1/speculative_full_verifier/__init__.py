@@ -13,6 +13,17 @@ from .runtime_controller import (
     SerialSnapshotVerifierBackend,
     SpeculativeRoundResult,
 )
+from .cpu_causal_block import (
+    CPU_CAUSAL_BLOCK_REFERENCE_MODE,
+    REFERENCE_BLOCK_SIZES,
+    CpuCausalBlockReferenceBackend,
+    CpuCausalBlockTransaction,
+    ReferenceBlockAudit,
+)
+from .fulldepth_runtime_bridge import (
+    FullDepthDecoderStateBridge,
+    FullDepthTokenComputation,
+)
 from .speed_gate import RoundTiming, evaluate_speed_gate
 from .verifier import (
     DeepSeekTokenizer,
@@ -38,6 +49,13 @@ __all__ = [
     "SessionState",
     "SerialSnapshotDraftBackend",
     "SerialSnapshotVerifierBackend",
+    "CPU_CAUSAL_BLOCK_REFERENCE_MODE",
+    "REFERENCE_BLOCK_SIZES",
+    "CpuCausalBlockReferenceBackend",
+    "CpuCausalBlockTransaction",
+    "ReferenceBlockAudit",
+    "FullDepthDecoderStateBridge",
+    "FullDepthTokenComputation",
     "SpeculativeRoundResult",
     "SpeculativeSession",
     "VerificationResult",

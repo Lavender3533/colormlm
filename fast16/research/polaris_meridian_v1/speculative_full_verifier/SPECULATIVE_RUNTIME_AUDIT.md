@@ -73,6 +73,32 @@ FullDepth43 CPU/PyTorch 参考路径仍然是逐 token 循环。因此：
 8. 生产边界拒绝伪装成 batch 的串行响应：必须是
    `mode=batched_causal, forward_calls=1`。
 
+## CPU causal-block 正确性边界
+
+`cpu_causal_block.py` 现在把 K=1/4/8 收口到一次
+`begin_causal_block()` API，并且：
+
+1. 每个位置用上一位的 teacher-forced 草稿作为严格自回归前缀；
+2. 保存 K 个完整 snapshot 和 `K×43×6` 原生 route；
+3. 在 mismatch j 只选中 checkpoint[j]，替换 pending fallback，
+   后续 KV/compressor append delta 无引用地被裁掉；
+4. begin 返回前恢复 base snapshot，只有 two-phase commit 才可替换已提交状态；
+5. 任何不完整 route、非自回归 context、越界 token 或中途 worker
+   失败都恢复 base snapshot；
+6. 后端用 owner + generation + base context 拒绝过期 commit/rollback，
+   不允许旧事务覆盖外部推进或更新事务的状态。
+
+`fulldepth_runtime_bridge.py` 使用真实 `DecoderState` 和
+`LayerRuntimeState`，因此裁切对象就是 executor 的 window KV/compressor
+张量，不是另一套抽象状态。离线 fixture 已验证 K=1/串行 K
+等价和 mismatch 裁切。桥接时还会逐条核对 committed ledger：
+`position/input_token_id/next_input_token_id` 必须与完整 context 一致，
+且 43 层 state 必须位于 `decoder.position - 1`；仅伪造 context 尾 token
+不再能进入 verifier。
+
+该 reference 仍诚实报告 `forward_calls=K`，且 mode 不是
+`batched_causal`；它只是下一个 GPU 块内核的金标，不是加速成果。
+
 ## 速度门
 
 `speed_gate.py` 用实际提交 token 数计算：
