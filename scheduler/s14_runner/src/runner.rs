@@ -6,6 +6,18 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RangeArtifact {
+    pub tensor: String,
+    pub kind: String,
+    pub expert_id: Option<u16>,
+    pub path: String,
+    pub bytes: u64,
+    pub cache_hit: bool,
+    pub observed_sha256: String,
+    pub authoritative: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RunnerMode {
@@ -19,10 +31,13 @@ pub struct BaseLoadTicket {
     pub ticket_id: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReadyBaseLease {
     pub layer: u8,
     pub lease_id: u64,
+    /// Python Range 状态机已完成 SHA 校验的只读页面。executor 只能消费这些句柄，
+    /// 不能据此改变官方 router 的决策。
+    pub artifacts: Vec<RangeArtifact>,
     pub observation: TransferObservation,
 }
 
@@ -38,13 +53,18 @@ pub struct ReadyRoutedLease {
     pub layer: u8,
     pub lease_id: u64,
     pub expert_ids: Vec<u16>,
+    pub artifacts: Vec<RangeArtifact>,
     pub observation: TransferObservation,
 }
 
 /// Provider 必须分两阶段发布：base 先 Ready，官方 router 真正运行后，才允许
 /// 请求 routed expert。`wait_*_ready` 只能在 Vulkan fence 完成后返回。
 pub trait RouteFirstProvider {
-    fn begin_base_load(&mut self, layer: u8) -> Result<BaseLoadTicket, ProviderError>;
+    fn begin_base_load(
+        &mut self,
+        layer: u8,
+        input_token_id: u32,
+    ) -> Result<BaseLoadTicket, ProviderError>;
     fn wait_base_ready(&mut self, ticket: BaseLoadTicket) -> Result<ReadyBaseLease, ProviderError>;
     fn begin_routed_load(
         &mut self,
@@ -57,12 +77,19 @@ pub trait RouteFirstProvider {
     ) -> Result<ReadyRoutedLease, ProviderError>;
     /// 成功、算子失败和传输失败都必须释放当前逻辑层租约。
     fn release_layer(&mut self, layer: u8) -> Result<(), ProviderError>;
+    /// 最后一层释放后返回已经校验的 HC/norm/lm-head 页面；其他时刻必须为空。
+    fn take_final_artifacts(&mut self) -> Result<Vec<RangeArtifact>, ProviderError>;
 }
 
 /// 官方 block 被拆在 router 边界：attention+HC-pre/FFN-norm 先运行并产出
 /// route，provider 再装 Top-6，随后执行 routed+shared MoE 和 HC-post。
 pub trait NativeS14Executor {
-    fn embed_row(&mut self, token_id: u32, state: &mut NativeState) -> Result<(), String>;
+    fn embed_row(
+        &mut self,
+        token_id: u32,
+        base: &ReadyBaseLease,
+        state: &mut NativeState,
+    ) -> Result<(), String>;
 
     fn attention_then_route(
         &mut self,
@@ -83,7 +110,11 @@ pub trait NativeS14Executor {
 
     /// 必须返回完整 129,280 维 logits。runner 自己执行稳定的最低 ID tie-break
     /// argmax；executor 无权直接返回 token ID。
-    fn hc_head_norm_full_logits(&mut self, state: &NativeState) -> Result<Vec<f32>, String>;
+    fn hc_head_norm_full_logits(
+        &mut self,
+        final_artifacts: &[RangeArtifact],
+        state: &NativeState,
+    ) -> Result<Vec<f32>, String>;
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -299,9 +330,6 @@ impl<P: RouteFirstProvider, E: NativeS14Executor> LocalS14Runner<P, E> {
     }
 
     fn step_inner(&mut self, input_token_id: u32) -> Result<GreedyToken, RunnerError> {
-        self.executor
-            .embed_row(input_token_id, &mut self.state)
-            .map_err(RunnerError::Executor)?;
         for layer in 0..N_LAYERS {
             if self.profile.layers().binary_search(&layer).is_ok() {
                 self.execute_selected_layer(layer, input_token_id)?;
@@ -313,9 +341,10 @@ impl<P: RouteFirstProvider, E: NativeS14Executor> LocalS14Runner<P, E> {
                 });
             }
         }
+        let final_artifacts = self.provider.take_final_artifacts()?;
         let logits = self
             .executor
-            .hc_head_norm_full_logits(&self.state)
+            .hc_head_norm_full_logits(&final_artifacts, &self.state)
             .map_err(RunnerError::Executor)?;
         let (token_id, max_logit) = greedy_full_vocab_argmax(&logits)?;
         self.state.position += 1;
@@ -336,7 +365,7 @@ impl<P: RouteFirstProvider, E: NativeS14Executor> LocalS14Runner<P, E> {
         let mut lifecycle = LayerLifecycle::new(layer);
         let mut layer_started = false;
         let execution = (|| {
-            let ticket = self.provider.begin_base_load(layer)?;
+            let ticket = self.provider.begin_base_load(layer, input_token_id)?;
             layer_started = true;
             if ticket.layer != layer {
                 return Err(RunnerError::Contract("base ticket layer 漂移".into()));
@@ -349,6 +378,11 @@ impl<P: RouteFirstProvider, E: NativeS14Executor> LocalS14Runner<P, E> {
             }
             self.counters.observe_transfer(base.observation);
             transition_event(&mut lifecycle, LayerPhase::BaseReady, &mut self.events)?;
+            if layer == self.profile.layers()[0] {
+                self.executor
+                    .embed_row(input_token_id, &base, &mut self.state)
+                    .map_err(RunnerError::Executor)?;
+            }
             transition_event(&mut lifecycle, LayerPhase::Routing, &mut self.events)?;
 
             let route = self
@@ -533,6 +567,19 @@ mod tests {
     use crate::SELECTED_LAYERS;
     use std::collections::BTreeSet;
 
+    fn artifact(tensor: &str, kind: &str) -> RangeArtifact {
+        RangeArtifact {
+            tensor: tensor.into(),
+            kind: kind.into(),
+            expert_id: None,
+            path: format!("fixture/{tensor}"),
+            bytes: 2,
+            cache_hit: true,
+            observed_sha256: "0".repeat(64),
+            authoritative: false,
+        }
+    }
+
     #[derive(Default)]
     struct MockProvider {
         live: Option<u8>,
@@ -542,7 +589,11 @@ mod tests {
     }
 
     impl RouteFirstProvider for MockProvider {
-        fn begin_base_load(&mut self, layer: u8) -> Result<BaseLoadTicket, ProviderError> {
+        fn begin_base_load(
+            &mut self,
+            layer: u8,
+            _input_token_id: u32,
+        ) -> Result<BaseLoadTicket, ProviderError> {
             if self.live.replace(layer).is_some() {
                 return Err(ProviderError("more than one live layer".into()));
             }
@@ -561,6 +612,11 @@ mod tests {
             Ok(ReadyBaseLease {
                 layer: ticket.layer,
                 lease_id: ticket.ticket_id,
+                artifacts: if ticket.layer == 0 {
+                    vec![artifact("embed.weight[123:124]", "embedding_row")]
+                } else {
+                    Vec::new()
+                },
                 observation: TransferObservation::default(),
             })
         }
@@ -596,6 +652,7 @@ mod tests {
                 layer: ticket.layer,
                 lease_id: ticket.ticket_id,
                 expert_ids: ticket.expert_ids,
+                artifacts: Vec::new(),
                 observation: TransferObservation {
                     expert_cache_hits: 6,
                     ..TransferObservation::default()
@@ -611,6 +668,10 @@ mod tests {
             self.log.push(format!("L{layer}:released"));
             Ok(())
         }
+
+        fn take_final_artifacts(&mut self) -> Result<Vec<RangeArtifact>, ProviderError> {
+            Ok(vec![artifact("head.weight", "boundary")])
+        }
     }
 
     struct MockExecutor {
@@ -619,7 +680,19 @@ mod tests {
     }
 
     impl NativeS14Executor for MockExecutor {
-        fn embed_row(&mut self, _token_id: u32, _state: &mut NativeState) -> Result<(), String> {
+        fn embed_row(
+            &mut self,
+            _token_id: u32,
+            _base: &ReadyBaseLease,
+            _state: &mut NativeState,
+        ) -> Result<(), String> {
+            if !_base
+                .artifacts
+                .iter()
+                .any(|item| item.kind == "embedding_row")
+            {
+                return Err("missing verified embedding row".into());
+            }
             Ok(())
         }
 
@@ -658,7 +731,17 @@ mod tests {
             Ok(())
         }
 
-        fn hc_head_norm_full_logits(&mut self, _state: &NativeState) -> Result<Vec<f32>, String> {
+        fn hc_head_norm_full_logits(
+            &mut self,
+            _final_artifacts: &[RangeArtifact],
+            _state: &NativeState,
+        ) -> Result<Vec<f32>, String> {
+            if !_final_artifacts
+                .iter()
+                .any(|item| item.tensor == "head.weight")
+            {
+                return Err("missing verified final head".into());
+            }
             let mut logits = vec![-1.0; VOCAB_SIZE as usize];
             logits[7] = 2.0;
             logits[9] = 2.0;

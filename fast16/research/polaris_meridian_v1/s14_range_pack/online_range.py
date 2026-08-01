@@ -184,6 +184,67 @@ def _flatten_prerequisites(catalog: Mapping[str, Any]) -> list[dict[str, Any]]:
     return entries
 
 
+def _matrix_row_range(
+    entry: Mapping[str, Any],
+    *,
+    row_start: int,
+    row_count: int,
+    kind: str,
+) -> dict[str, Any]:
+    """从固定 header 的连续 BF16 矩阵安全派生精确行 Range。"""
+
+    if any(isinstance(value, bool) or not isinstance(value, int) for value in (row_start, row_count)):
+        raise rp.ContractError("matrix row_start/row_count 必须是 integer")
+    shape = entry.get("shape")
+    if entry.get("dtype") != "BF16" or not isinstance(shape, list) or len(shape) != 2:
+        raise rp.ContractError("row Range 只接受 header 已验证的二维 BF16 tensor")
+    rows, hidden = shape
+    if any(isinstance(value, bool) or not isinstance(value, int) or value <= 0 for value in (rows, hidden)):
+        raise rp.ContractError("matrix shape 必须是两个正整数")
+    if row_start < 0 or row_count <= 0 or row_start + row_count > rows:
+        raise rp.ContractError("matrix row Range 越界")
+    row_bytes = hidden * 2
+    if int(entry.get("bytes", -1)) != rows * row_bytes:
+        raise rp.ContractError("matrix header bytes 与 BF16 shape 不一致")
+    start = int(entry["start"]) + row_start * row_bytes
+    end = start + row_count * row_bytes - 1
+    result = dict(entry)
+    result.update({
+        "tensor": f"{entry['tensor']}[{row_start}:{row_start + row_count}]",
+        "parent_tensor": entry["tensor"],
+        "kind": kind,
+        "shape": [row_count, hidden],
+        "start": start,
+        "end": end,
+        "bytes": row_count * row_bytes,
+        "range_key": f"{entry['file']}:{start}-{end}",
+        "row_start": row_start,
+        "row_end_exclusive": row_start + row_count,
+    })
+    return result
+
+
+def embedding_row_entry(catalog: Mapping[str, Any], token_id: int) -> dict[str, Any]:
+    """派生一个 token 的原生 embedding 行，避免每 token 读取完整 1.06GB 矩阵。"""
+
+    if isinstance(token_id, bool) or not isinstance(token_id, int):
+        raise rp.ContractError("embedding token_id 必须是 integer")
+    entries = catalog.get("boundary", {}).get("embedding", [])
+    if not isinstance(entries, list) or len(entries) != 1 or entries[0].get("tensor") != "embed.weight":
+        raise rp.ContractError("catalog 原生 embedding 边界错误")
+    return _matrix_row_range(entries[0], row_start=token_id, row_count=1, kind="embedding_row")
+
+
+def head_rows_entry(catalog: Mapping[str, Any], row_start: int, row_count: int) -> dict[str, Any]:
+    """派生原生 lm head 的连续词表行块，供流式全词表 argmax 使用。"""
+
+    entries = catalog.get("boundary", {}).get("final", [])
+    matches = [row for row in entries if row.get("tensor") == "head.weight"]
+    if len(matches) != 1:
+        raise rp.ContractError("catalog 原生 head.weight 边界错误")
+    return _matrix_row_range(matches[0], row_start=row_start, row_count=row_count, kind="head_rows")
+
+
 def validate_skeleton_manifest(path: Path, catalog: Mapping[str, Any]) -> dict[str, Any]:
     """验证已有 509-range skeleton 与新 catalog 的先路由所需集合完全一致。
 
@@ -976,6 +1037,13 @@ class RouteFirstSession:
         if self.phase is not SessionPhase.INIT:
             raise rp.ContractError(f"embedding 只能在 init 获取；当前={self.phase.value}")
         result = self._fetch_all(self.catalog["boundary"]["embedding"])
+        self.phase = SessionPhase.AWAITING_LAYER
+        return result
+
+    def prepare_embedding_row(self, token_id: int) -> CachedRange:
+        if self.phase is not SessionPhase.INIT:
+            raise rp.ContractError(f"embedding row 只能在 init 获取；当前={self.phase.value}")
+        result = self.cache.fetch(embedding_row_entry(self.catalog, token_id))
         self.phase = SessionPhase.AWAITING_LAYER
         return result
 

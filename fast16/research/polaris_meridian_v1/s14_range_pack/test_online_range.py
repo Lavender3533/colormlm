@@ -129,8 +129,10 @@ def make_catalog() -> dict:
 
     embed_file = source["boundary_shards"]["embed.weight"]["file"]
     final_file = source["boundary_shards"]["norm.weight"]["file"]
+    embed_entry = entry("embed.weight", "boundary", embed_file, 96, 4)
+    embed_entry.update(dtype="BF16", shape=[2, 1])
     boundary = {
-        "embedding": [entry("embed.weight", "boundary", embed_file, 96, 4)],
+        "embedding": [embed_entry],
         "final": [
             entry("norm.weight", "boundary", final_file, 96, 4),
             entry("head.weight", "boundary", final_file, 100, 4),
@@ -241,6 +243,18 @@ class OnlineRangeTests(unittest.TestCase):
         starts = {start for filename, start, end in self.transport.requests if filename.endswith("00002-of-00048.safetensors")}
         self.assertIn(104, starts)  # shared 只在 route 后出现
         self.assertNotIn(200, starts)  # 未选择 E0，绝不猜 0..5
+
+    def test_embedding_row_uses_exact_two_byte_subrange(self) -> None:
+        session = online.RouteFirstSession(self.catalog, self.cache("embedding-row"))
+        row = session.prepare_embedding_row(1)
+        self.assertEqual(row.entry["parent_tensor"], "embed.weight")
+        self.assertEqual(row.entry["shape"], [1, 1])
+        self.assertEqual(row.entry["bytes"], 2)
+        self.assertEqual(self.transport.requests[-1][1:], (98, 99))
+        with self.assertRaisesRegex(rp.ContractError, "init"):
+            session.prepare_embedding_row(0)
+        with self.assertRaisesRegex(rp.ContractError, "越界"):
+            online.embedding_row_entry(self.catalog, 2)
 
     def test_duplicate_concurrency_and_cache_hit_only_one_get(self) -> None:
         cache = self.cache("concurrent")

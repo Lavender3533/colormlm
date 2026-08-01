@@ -8,6 +8,7 @@ mod capability;
 mod contract;
 mod memory;
 mod metrics;
+mod range_bridge;
 mod runner;
 mod state;
 
@@ -26,10 +27,11 @@ pub use contract::{
 };
 pub use memory::{BudgetKind, MemoryLedger, MemoryLine, EXPERT_PAGE_BYTES};
 pub use metrics::{CounterReport, RuntimeCounters, TransferObservation};
+pub use range_bridge::{RangeBridgeConfig, SubprocessRangeProvider, RANGE_JSONL_PROTOCOL};
 pub use runner::{
     BaseLoadTicket, GreedyToken, LayerEvent, LayerEventKind, LayerLifecycle, LayerPhase,
-    LocalS14Runner, NativeS14Executor, ProviderError, ReadyBaseLease, ReadyRoutedLease,
-    RouteDecision, RouteFirstProvider, RoutedLoadTicket, RunnerError, RunnerMode,
+    LocalS14Runner, NativeS14Executor, ProviderError, RangeArtifact, ReadyBaseLease,
+    ReadyRoutedLease, RouteDecision, RouteFirstProvider, RoutedLoadTicket, RunnerError, RunnerMode,
 };
 pub use state::{
     BufferSlice, CompressorState, DType, HcState, IndexerState, KvState, NativeState,
