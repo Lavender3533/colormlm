@@ -120,17 +120,29 @@ GPU-resident、F32 中间语义。孤立层时间不能换算为整模型 token/
 
 ### 4. Fail-closed 本地执行合同
 
-- Rust Runner 当前可运行入口只允许预注册 S14/top-6；历史 FullDepth43/top-1 reduction 保持
-  hard reject，不能用于 Exact Cascade。新的 FullDepth43/native-top6 causal-block 合同正在迁移。
+- Rust Runner 已迁移到 `S14/top-6` 与 `FullDepth43/native-top6` 两套生产图合同；历史
+  FullDepth43/top-1 reduction 只保留为不可进入生产图的负向合同。
+- Exact Cascade 已实现 K=1/4/8 请求/响应、43层逐位置证明、最长一致前缀、首个不一致位置的
+  FullDepth 原生 fallback，以及 KV/mHC/compressor/indexer checkpoint 的原子提交/失败回滚。
+- 真实 FullDepth 权重与算子后端仍未齐，因此 capability gate 会在产生任何 token 前硬拒绝；
+  合同通过不等于模型已经运行。
 - Range 状态机必须先得到真实路由，再允许读取恰好命中的专家页。
 - Python executor JSONL 只传控制信息，hidden/state/logits 使用二进制 arena。
 - SHA、dtype、shape、position、epoch、descriptor 或超时漂移会终止并 poison 会话。
 - 合成 fixture 永远不能通过生产 capability gate，也不能冒充模型 token。
 
+### 5. 官方聊天协议与 forced-prefill
+
+- 固定 DeepSeek-V4 revision 的官方消息、reasoning effort 与 DSML 工具协议已随仓保存。
+- 本机正式 tokenizer 已锁定 SHA-256、129,280 词表、BOS 0 及关键协议 token ID；只匹配词表
+  大小的错误 tokenizer 不能再被标记为 S14 兼容。
+- 当前冻结工具输入可重复编译为 370 个 position 对齐 token，7 项测试、11 个子测试和4个官方
+  fixture 均通过。该步骤尚未执行模型；下一步是让同一 `DecoderRuntime` 消费完整 forced 队列。
+
 ## 现在还缺什么
 
-1. **官方 prompt prefill：** 把官方消息编码得到的任意 token 序列送进同一状态运行时；当前裸
-   BOS 连续两 token 不能用于质量门。
+1. **运行时 prompt prefill：** 官方消息到 token 序列已经完成；仍需让同一状态运行时正确消费
+   position2+、ratio4/128 首次压缩边界和完整 forced 队列。裸 BOS 连续两 token 不能用于质量门。
 2. **FullDepth43 精确裁决：** 先证明 K=1 对固定参考逐 token 对齐，再证明 K=4/8 causal block
    与 K=1 输出及失败回滚等价。
 3. **完整 GPU 图：** attention、HC、router、top-6、shared、BF16/requant、norm/head 仍需合成

@@ -1161,3 +1161,24 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
   逐token对齐；K=4/8 causal-block与K=1输出/回滚等价；S14 K=8相对FullDepth平均连续接受
   至少4 token且aggregate agreement不低于85%；最终端到端p50不低于20 token/s、p95不低于
   12 token/s、VRAM低于7.7GiB、RAM低于30GiB。所有门均为待验证，不能提前写成已完成。
+
+### 2026-08-01 官方 forced-prefill、FullDepth43 合同与速度硬边界
+
+- 官方 DeepSeek-V4 消息、reasoning effort 与 DSML 工具协议已经编译为确定 token 队列。正式
+  tokenizer 固定 SHA-256
+  `8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf`、词表129,280、BOS 0
+  和8个关键协议token ID；冻结工具输入产生370个token。forced-prefill测试7/7、11个子测试、
+  官方编码fixture 4/4和Windows CRLF语义自检通过。当前只完成编码，没有执行这370个模型位置。
+- Rust Runner 已把历史 FullDepth/top1 从生产图枚举移除，新增
+  `FullDepth43/native-top6` Exact Cascade 合同：K只允许1/4/8，每个位置必须给出43层、每层6个
+  不同 routed expert 及attention/shared/mHC/KV/compressor/indexer状态证明；最长一致前缀、
+  原生fallback、checkpoint原子提交和失败回滚均有测试。当前 capability 仍因真实后端缺失而
+  在产生token前硬拒绝，不能把合同测试写成FullDepth已运行。
+- 合并后 Rust 单元测试30/30、Range桥集成7/7、Clippy `-D warnings`、Python共享合同自检以及
+  FullDepth/roofline Python测试39/39均通过。
+- RX 5700 XT 已知S14必要GPU包络为20.3476056ms/token（仍遗漏多个阶段）。20 token/s在此
+  乐观下界下至少需要30.0948%专家页命中；50 token/s即使100%命中也已被当前单token内核
+  否决。FullDepth43按同一L42锚点投影，每个verified position已有62.4962172ms已知工作；全接受
+  达20/50 token/s仍分别至少需要1.2499243x/3.1248109x吞吐提升，并且不能依靠K值本身自动获得。
+- 下一实现断点：position2+与ratio4/128首次压缩边界、forced token队列原子消费、真实
+  FullDepth43 K=1算子/权重入口和固定参考逐token对齐。K=1未运行前没有追上Claude/GPT的质量证据。
