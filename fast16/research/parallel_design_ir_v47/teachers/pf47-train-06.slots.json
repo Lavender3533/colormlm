@@ -1,0 +1,1 @@
+{"schema_version":"design-copy-slots-v1","task_id":"pf47-train-06","prompt_sha256":"4dadb37c414b34735a2a32c5dd35216a9bbc42d16e7910a76a1dbf22373f5e3f","slots":[{"id":0,"kind":"title","text":"隐私设置中心"},{"id":1,"kind":"lede","text":"开关、会话设备表、危险操作确认对话框、保存中/成功状态"}]}

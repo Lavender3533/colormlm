@@ -1,0 +1,369 @@
+{
+  "format": "colorlm-deep-activation-bridge-v1",
+  "pairing": {
+    "base": {
+      "receipt": "D:\\project\\大模型ssd化\\fast16\\research\\v18_activation_bridge\\captures\\run-20260731\\base.receipt.json",
+      "model": "ColorLM-v18-Bridge-Base",
+      "layer": 35,
+      "stage": "attn_residual"
+    },
+    "donor": {
+      "receipt": "D:\\project\\大模型ssd化\\fast16\\research\\v18_activation_bridge\\captures\\run-20260731b\\donor.receipt.json",
+      "model": "Qwen3-Coder-Next-IQ3S",
+      "layer": 43,
+      "stage": "l_out"
+    },
+    "common_prompts": 12,
+    "paired_prompts": 12,
+    "total_base_tokens": 815,
+    "total_donor_tokens": 778,
+    "total_matched_tokens": 772,
+    "mean_match_coverage": 0.9506079064643398,
+    "prompt_alignment": [
+      {
+        "prompt_id": "agent-tool",
+        "prompt_utf8_bytes": 276,
+        "base_tokens": 57,
+        "donor_tokens": 57,
+        "base_mappable_tokens": 57,
+        "donor_mappable_tokens": 57,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 57,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 276,
+        "paired": true
+      },
+      {
+        "prompt_id": "chinese-code-spec",
+        "prompt_utf8_bytes": 318,
+        "base_tokens": 62,
+        "donor_tokens": 66,
+        "base_mappable_tokens": 62,
+        "donor_mappable_tokens": 66,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 62,
+        "match_coverage": 0.9393939393939394,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 0.9393939393939394,
+        "last_matched_end_byte": 318,
+        "paired": true
+      },
+      {
+        "prompt_id": "cpp-lifetime",
+        "prompt_utf8_bytes": 287,
+        "base_tokens": 66,
+        "donor_tokens": 61,
+        "base_mappable_tokens": 66,
+        "donor_mappable_tokens": 61,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 60,
+        "match_coverage": 0.9090909090909091,
+        "base_match_coverage": 0.9090909090909091,
+        "donor_match_coverage": 0.9836065573770492,
+        "last_matched_end_byte": 287,
+        "paired": true
+      },
+      {
+        "prompt_id": "debug-stack",
+        "prompt_utf8_bytes": 296,
+        "base_tokens": 69,
+        "donor_tokens": 69,
+        "base_mappable_tokens": 69,
+        "donor_mappable_tokens": 69,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 69,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 296,
+        "paired": true
+      },
+      {
+        "prompt_id": "go-context",
+        "prompt_utf8_bytes": 329,
+        "base_tokens": 86,
+        "donor_tokens": 77,
+        "base_mappable_tokens": 86,
+        "donor_mappable_tokens": 77,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 77,
+        "match_coverage": 0.8953488372093024,
+        "base_match_coverage": 0.8953488372093024,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 329,
+        "paired": true
+      },
+      {
+        "prompt_id": "java-race",
+        "prompt_utf8_bytes": 325,
+        "base_tokens": 80,
+        "donor_tokens": 73,
+        "base_mappable_tokens": 80,
+        "donor_mappable_tokens": 73,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 73,
+        "match_coverage": 0.9125,
+        "base_match_coverage": 0.9125,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 325,
+        "paired": true
+      },
+      {
+        "prompt_id": "json-contract",
+        "prompt_utf8_bytes": 301,
+        "base_tokens": 57,
+        "donor_tokens": 57,
+        "base_mappable_tokens": 57,
+        "donor_mappable_tokens": 57,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 57,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 301,
+        "paired": true
+      },
+      {
+        "prompt_id": "python-async",
+        "prompt_utf8_bytes": 371,
+        "base_tokens": 84,
+        "donor_tokens": 79,
+        "base_mappable_tokens": 84,
+        "donor_mappable_tokens": 79,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 79,
+        "match_coverage": 0.9404761904761905,
+        "base_match_coverage": 0.9404761904761905,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 371,
+        "paired": true
+      },
+      {
+        "prompt_id": "react-state",
+        "prompt_utf8_bytes": 255,
+        "base_tokens": 43,
+        "donor_tokens": 43,
+        "base_mappable_tokens": 43,
+        "donor_mappable_tokens": 43,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 43,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 255,
+        "paired": true
+      },
+      {
+        "prompt_id": "rust-borrow",
+        "prompt_utf8_bytes": 306,
+        "base_tokens": 82,
+        "donor_tokens": 75,
+        "base_mappable_tokens": 82,
+        "donor_mappable_tokens": 75,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 74,
+        "match_coverage": 0.9024390243902439,
+        "base_match_coverage": 0.9024390243902439,
+        "donor_match_coverage": 0.9866666666666667,
+        "last_matched_end_byte": 306,
+        "paired": true
+      },
+      {
+        "prompt_id": "sql-transaction",
+        "prompt_utf8_bytes": 231,
+        "base_tokens": 42,
+        "donor_tokens": 42,
+        "base_mappable_tokens": 42,
+        "donor_mappable_tokens": 42,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 42,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 231,
+        "paired": true
+      },
+      {
+        "prompt_id": "typescript-types",
+        "prompt_utf8_bytes": 333,
+        "base_tokens": 87,
+        "donor_tokens": 79,
+        "base_mappable_tokens": 87,
+        "donor_mappable_tokens": 79,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 79,
+        "match_coverage": 0.9080459770114943,
+        "base_match_coverage": 0.9080459770114943,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 333,
+        "paired": true
+      }
+    ],
+    "skipped": []
+  },
+  "method": {
+    "name": "prior-anchored scaled orthogonal Procrustes",
+    "fit_direction": "ColorLM-L35-attn-residual rows -> Coder-L44-input rows",
+    "prior": "D:\\project\\大模型ssd化\\fast16\\research\\coder_next_to_colorlm_orthogonal_f32.npy",
+    "prior_sha256": "7209781fa72220c337314e8456497c83cf1b51798d2b4321414200a98de04d12",
+    "prior_equivalent_samples": 256.0,
+    "train_split_unit": "whole prompt",
+    "seed": 18
+  },
+  "samples": {
+    "paired_prompts": 12,
+    "paired_tokens": 772,
+    "train_prompts": 9,
+    "heldout_prompts": 3,
+    "train_tokens_used": 600,
+    "heldout_tokens_used": 172
+  },
+  "fit": {
+    "seconds": 1.4802119999949355,
+    "scale": 2.379991292953491,
+    "raw_median_scale": 2.379991292953491,
+    "singular_value_min": 210.1033477783203,
+    "singular_value_median": 256.0,
+    "singular_value_max": 397.5282897949219,
+    "orthogonality_rmse": 4.736547509764932e-08,
+    "cycle_rmse": 4.733385239319432e-08
+  },
+  "heldout": {
+    "identity": {
+      "cosine": {
+        "mean": 0.0056071835570037365,
+        "median": 0.006893677171319723,
+        "p05": -0.027712225914001465,
+        "p95": 0.036273714154958725,
+        "min": -0.05067615211009979,
+        "max": 0.05807102099061012
+      },
+      "relative_rmse": 0.9999843654870207,
+      "scale": 0.01358482261703247
+    },
+    "embedding_bridge": {
+      "cosine": {
+        "mean": 0.19035662710666656,
+        "median": 0.19512979686260223,
+        "p05": 0.0953591912984848,
+        "p95": 0.2677890956401825,
+        "min": -0.04634010046720505,
+        "max": 0.3097286522388458
+      },
+      "relative_rmse": 0.9815922555284573,
+      "scale": 0.46398714607344377
+    },
+    "activation_bridge": {
+      "cosine": {
+        "mean": 0.2669419050216675,
+        "median": 0.2796725630760193,
+        "p05": 0.14859279990196228,
+        "p95": 0.3578914999961853,
+        "min": -0.02060168795287609,
+        "max": 0.39658910036087036
+      },
+      "relative_rmse": 1.1979889101920964,
+      "scale": 2.379991292953491
+    },
+    "median_cosine_lift_vs_embedding": 0.08454276621341705,
+    "nrmse_ratio_vs_embedding": 1.2204547289822882,
+    "positive_prompt_rate": 1.0,
+    "per_prompt": [
+      {
+        "prompt_id": "agent-tool",
+        "tokens": 57,
+        "baseline_median_cosine": 0.192464679479599,
+        "activation_median_cosine": 0.27937307953834534,
+        "lift": 0.08690840005874634
+      },
+      {
+        "prompt_id": "java-race",
+        "tokens": 73,
+        "baseline_median_cosine": 0.21318098902702332,
+        "activation_median_cosine": 0.29404106736183167,
+        "lift": 0.08086007833480835
+      },
+      {
+        "prompt_id": "sql-transaction",
+        "tokens": 42,
+        "baseline_median_cosine": 0.17923018336296082,
+        "activation_median_cosine": 0.2538699805736542,
+        "lift": 0.07463979721069336
+      }
+    ]
+  },
+  "runtime": {
+    "input_weight": {
+      "file": "coder_activation_input_weight_f32.npy",
+      "sha256": "9ad8000da269c4656784887df0da407a852f77bc45af289d894f218177f86732",
+      "contract": "donor_column = W_in @ colorlm_column"
+    },
+    "output_weight": {
+      "file": "coder_activation_output_weight_f32.npy",
+      "sha256": "bdb15bdc0fcea56268ab723202ab07e07476aaebd179172c23a63e2866358146",
+      "contract": "colorlm_delta_column = W_out @ donor_delta_column"
+    },
+    "orthogonal_compatibility": {
+      "file": "coder_to_colorlm_activation_orthogonal_f32.npy",
+      "sha256": "dd81a6228148dd6359789316d6a60f74ea090ba2389d455e387f5474ada4eae8",
+      "contract": "donor_row @ T = colorlm_row; legacy compiler uses T/T.T"
+    }
+  },
+  "promotion": {
+    "gates": {
+      "enough_prompts": true,
+      "enough_tokens": true,
+      "heldout_cosine_lift": true,
+      "heldout_nrmse_ratio": false,
+      "positive_prompt_rate": true,
+      "reversible": true,
+      "scale_in_contract": true
+    },
+    "decision": "reject",
+    "thresholds": {
+      "min_prompts": 6,
+      "min_tokens": 512,
+      "min_cosine_lift": 0.03,
+      "max_nrmse_ratio": 0.95,
+      "min_positive_prompt_rate": 0.67
+    }
+  }
+}

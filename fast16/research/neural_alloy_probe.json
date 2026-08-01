@@ -1,0 +1,126 @@
+{
+  "model_a": "ColorLM-v4-SMoE.gguf",
+  "model_b": "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
+  "architecture_a": {
+    "architecture": "colorlmv4",
+    "block_count": 40,
+    "embedding_length": 2048,
+    "expert_count": 256,
+    "expert_used_count": 8,
+    "tensor_count": 733
+  },
+  "architecture_b": {
+    "architecture": "qwen35moe",
+    "block_count": 40,
+    "embedding_length": 2048,
+    "expert_count": 256,
+    "expert_used_count": 8,
+    "tensor_count": 733
+  },
+  "compatibility": {
+    "common_tensor_count": 733,
+    "only_a_count": 0,
+    "only_b_count": 0,
+    "shape_mismatch_count": 0,
+    "only_a_preview": [],
+    "only_b_preview": [],
+    "shape_mismatch_preview": []
+  },
+  "f32_changes": {
+    "shared_f32_tensor_count": 301,
+    "exact_f32_tensor_count": 9,
+    "changed_f32_tensor_count": 292,
+    "global_relative_delta_l2": 0.01840871977210324
+  },
+  "router_atom_probe": {
+    "router_tensor_count": 40,
+    "router_shape": [
+      256,
+      2048
+    ],
+    "layer_delta_l2_min": 0.8803761601448059,
+    "layer_delta_l2_mean": 1.5045171812176705,
+    "layer_delta_l2_max": 2.5391085147857666,
+    "cross_layer_atom_energy": {
+      "1": 0.06775624701322103,
+      "2": 0.11154394327323294,
+      "4": 0.19349001103224728,
+      "8": 0.34102130419877796,
+      "16": 0.6080984432866244,
+      "24": 0.800680761205633,
+      "32": 0.9194002764854271
+    },
+    "cross_layer_atoms_for_90pct": 31,
+    "cross_layer_atoms_for_95pct": 35,
+    "cross_layer_atoms_for_99pct": 39,
+    "first_layer_matrix_rank_probe": {
+      "1": {
+        "energy": 0.029456369794306363,
+        "compression_ratio_vs_full_delta": 227.55555555555554
+      },
+      "2": {
+        "energy": 0.05250724869744377,
+        "compression_ratio_vs_full_delta": 113.77777777777777
+      },
+      "4": {
+        "energy": 0.09261776081647898,
+        "compression_ratio_vs_full_delta": 56.888888888888886
+      },
+      "8": {
+        "energy": 0.15377034384613378,
+        "compression_ratio_vs_full_delta": 28.444444444444443
+      },
+      "16": {
+        "energy": 0.2424069928255198,
+        "compression_ratio_vs_full_delta": 14.222222222222221
+      },
+      "32": {
+        "energy": 0.36862870407028053,
+        "compression_ratio_vs_full_delta": 7.111111111111111
+      },
+      "64": {
+        "energy": 0.5426778854639656,
+        "compression_ratio_vs_full_delta": 3.5555555555555554
+      },
+      "128": {
+        "energy": 0.7677287320815789,
+        "compression_ratio_vs_full_delta": 1.7777777777777777
+      }
+    }
+  },
+  "sampled_tensors": [
+    {
+      "name": "blk.0.attn_gate.weight",
+      "shape": [
+        2048,
+        4096
+      ],
+      "a_quantization": "Q6_K",
+      "b_quantization": "Q8_0",
+      "cosine_similarity": 0.9859236955757132,
+      "relative_delta_l2_vs_b": 0.17017877298550474
+    },
+    {
+      "name": "blk.0.ffn_gate_shexp.weight",
+      "shape": [
+        2048,
+        512
+      ],
+      "a_quantization": "Q6_K",
+      "b_quantization": "Q8_0",
+      "cosine_similarity": 0.9679469333967798,
+      "relative_delta_l2_vs_b": 0.2560062957648117
+    },
+    {
+      "name": "blk.0.ssm_out.weight",
+      "shape": [
+        4096,
+        2048
+      ],
+      "a_quantization": "Q6_K",
+      "b_quantization": "Q8_0",
+      "cosine_similarity": 0.9859628831144427,
+      "relative_delta_l2_vs_b": 0.17063997826610391
+    }
+  ]
+}

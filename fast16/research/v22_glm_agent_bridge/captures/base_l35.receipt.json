@@ -1,0 +1,5265 @@
+{
+  "format": "colorlm-activation-capture-v2",
+  "endpoint": "http://127.0.0.1:8123",
+  "model": "ColorLM-v22-Base-Capture",
+  "dump": "D:\\project\\大模型ssd化\\fast16\\research\\v22_glm_agent_bridge\\captures\\base_l35.bin",
+  "dump_prefix_bytes": 10150840,
+  "dump_prefix_sha256": "50f3e9c1d9c8620057f78e5c1ba30e355d4bc973d13004faba77e711014edde7",
+  "layer": 35,
+  "stage": "attn_residual",
+  "capture_count": 16,
+  "captures": [
+    {
+      "prompt_id": "repo-build-failure",
+      "prompt": "You are repairing an unfamiliar repository. The only evidence is: CI fails on Linux with `ModuleNotFoundError: app.config`, local Windows tests pass, and the package contains `src/app/config.py`. Describe the exact inspection and tool sequence you would use before editing, the smallest likely classes of root cause, and the evidence required before declaring the fix complete. Preserve the original error output and do not invent file names beyond those given.",
+      "prompt_utf8_bytes": 461,
+      "prompt_sha256": "a255bd6dc56bb7795da0b2346bc37858e9d3c9af77d9ac96770c8fb74f35a15f",
+      "token_count": 85,
+      "tokens": [
+        {
+          "id": 2523,
+          "piece": "You"
+        },
+        {
+          "id": 513,
+          "piece": " are"
+        },
+        {
+          "id": 64969,
+          "piece": " repairing"
+        },
+        {
+          "id": 449,
+          "piece": " an"
+        },
+        {
+          "id": 47625,
+          "piece": " unfamiliar"
+        },
+        {
+          "id": 12182,
+          "piece": " repository"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 561,
+          "piece": " The"
+        },
+        {
+          "id": 1132,
+          "piece": " only"
+        },
+        {
+          "id": 5721,
+          "piece": " evidence"
+        },
+        {
+          "id": 369,
+          "piece": " is"
+        },
+        {
+          "id": 25,
+          "piece": ":"
+        },
+        {
+          "id": 20068,
+          "piece": " CI"
+        },
+        {
+          "id": 14107,
+          "piece": " fails"
+        },
+        {
+          "id": 383,
+          "piece": " on"
+        },
+        {
+          "id": 13928,
+          "piece": " Linux"
+        },
+        {
+          "id": 440,
+          "piece": " with"
+        },
+        {
+          "id": 1510,
+          "piece": " `"
+        },
+        {
+          "id": 3223,
+          "piece": "Module"
+        },
+        {
+          "id": 65618,
+          "piece": "NotFoundError"
+        },
+        {
+          "id": 25,
+          "piece": ":"
+        },
+        {
+          "id": 878,
+          "piece": " app"
+        },
+        {
+          "id": 5254,
+          "piece": ".config"
+        },
+        {
+          "id": 7561,
+          "piece": "`,"
+        },
+        {
+          "id": 2136,
+          "piece": " local"
+        },
+        {
+          "id": 5342,
+          "piece": " Windows"
+        },
+        {
+          "id": 6813,
+          "piece": " tests"
+        },
+        {
+          "id": 1440,
+          "piece": " pass"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 6129,
+          "piece": " package"
+        },
+        {
+          "id": 5435,
+          "piece": " contains"
+        },
+        {
+          "id": 1510,
+          "piece": " `"
+        },
+        {
+          "id": 3431,
+          "piece": "src"
+        },
+        {
+          "id": 10325,
+          "piece": "/app"
+        },
+        {
+          "id": 14304,
+          "piece": "/config"
+        },
+        {
+          "id": 6971,
+          "piece": ".py"
+        },
+        {
+          "id": 27653,
+          "piece": "`."
+        },
+        {
+          "id": 58737,
+          "piece": " Describe"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 4581,
+          "piece": " exact"
+        },
+        {
+          "id": 24865,
+          "piece": " inspection"
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 5224,
+          "piece": " tool"
+        },
+        {
+          "id": 8240,
+          "piece": " sequence"
+        },
+        {
+          "id": 488,
+          "piece": " you"
+        },
+        {
+          "id": 1000,
+          "piece": " would"
+        },
+        {
+          "id": 958,
+          "piece": " use"
+        },
+        {
+          "id": 1518,
+          "piece": " before"
+        },
+        {
+          "id": 15205,
+          "piece": " editing"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 23856,
+          "piece": " smallest"
+        },
+        {
+          "id": 4222,
+          "piece": " likely"
+        },
+        {
+          "id": 6632,
+          "piece": " classes"
+        },
+        {
+          "id": 314,
+          "piece": " of"
+        },
+        {
+          "id": 3578,
+          "piece": " root"
+        },
+        {
+          "id": 5073,
+          "piece": " cause"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 5721,
+          "piece": " evidence"
+        },
+        {
+          "id": 2483,
+          "piece": " required"
+        },
+        {
+          "id": 1518,
+          "piece": " before"
+        },
+        {
+          "id": 35325,
+          "piece": " declaring"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 4884,
+          "piece": " fix"
+        },
+        {
+          "id": 4434,
+          "piece": " complete"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 78503,
+          "piece": " Preserve"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 3889,
+          "piece": " original"
+        },
+        {
+          "id": 1412,
+          "piece": " error"
+        },
+        {
+          "id": 2468,
+          "piece": " output"
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 635,
+          "piece": " do"
+        },
+        {
+          "id": 524,
+          "piece": " not"
+        },
+        {
+          "id": 16525,
+          "piece": " invent"
+        },
+        {
+          "id": 999,
+          "piece": " file"
+        },
+        {
+          "id": 4874,
+          "piece": " names"
+        },
+        {
+          "id": 7551,
+          "piece": " beyond"
+        },
+        {
+          "id": 1782,
+          "piece": " those"
+        },
+        {
+          "id": 2574,
+          "piece": " given"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        }
+      ],
+      "request_dump_start": 16440,
+      "request_dump_end": 712816,
+      "record_offset": 16440,
+      "record_end_offset": 712816,
+      "shape": [
+        2048,
+        85,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "tool-result-recovery",
+      "prompt": "Design the state transition for a coding agent that calls `read_file`, receives a transient timeout, retries once, then receives valid UTF-8 content. Specify the states, persisted fields, retry idempotency rule, how the second result is correlated to the original call, and the exact condition that permits the agent to proceed to `apply_patch`. The design must prevent both duplicate edits and silently treating the timeout as empty file content.",
+      "prompt_utf8_bytes": 447,
+      "prompt_sha256": "364f3c570fdf2ac3edf76722f9aa1dea969da71b66669f9e9e58784059fa15be",
+      "token_count": 87,
+      "tokens": [
+        {
+          "id": 19846,
+          "piece": "Design"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 1528,
+          "piece": " state"
+        },
+        {
+          "id": 8869,
+          "piece": " transition"
+        },
+        {
+          "id": 364,
+          "piece": " for"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 10505,
+          "piece": " coding"
+        },
+        {
+          "id": 8057,
+          "piece": " agent"
+        },
+        {
+          "id": 421,
+          "piece": " that"
+        },
+        {
+          "id": 6526,
+          "piece": " calls"
+        },
+        {
+          "id": 1510,
+          "piece": " `"
+        },
+        {
+          "id": 851,
+          "piece": "read"
+        },
+        {
+          "id": 2378,
+          "piece": "_file"
+        },
+        {
+          "id": 7561,
+          "piece": "`,"
+        },
+        {
+          "id": 20539,
+          "piece": " receives"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 39219,
+          "piece": " transient"
+        },
+        {
+          "id": 9345,
+          "piece": " timeout"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 58558,
+          "piece": " retries"
+        },
+        {
+          "id": 2957,
+          "piece": " once"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 1179,
+          "piece": " then"
+        },
+        {
+          "id": 20539,
+          "piece": " receives"
+        },
+        {
+          "id": 2610,
+          "piece": " valid"
+        },
+        {
+          "id": 19464,
+          "piece": " UTF"
+        },
+        {
+          "id": 12,
+          "piece": "-"
+        },
+        {
+          "id": 23,
+          "piece": "8"
+        },
+        {
+          "id": 2144,
+          "piece": " content"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 45816,
+          "piece": " Specify"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 5134,
+          "piece": " states"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 51216,
+          "piece": " persisted"
+        },
+        {
+          "id": 4881,
+          "piece": " fields"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 21979,
+          "piece": " retry"
+        },
+        {
+          "id": 850,
+          "piece": " id"
+        },
+        {
+          "id": 3157,
+          "piece": "emp"
+        },
+        {
+          "id": 349,
+          "piece": "ot"
+        },
+        {
+          "id": 2179,
+          "piece": "ency"
+        },
+        {
+          "id": 5728,
+          "piece": " rule"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 1204,
+          "piece": " how"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 2018,
+          "piece": " second"
+        },
+        {
+          "id": 1067,
+          "piece": " result"
+        },
+        {
+          "id": 369,
+          "piece": " is"
+        },
+        {
+          "id": 46683,
+          "piece": " correlated"
+        },
+        {
+          "id": 310,
+          "piece": " to"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 3889,
+          "piece": " original"
+        },
+        {
+          "id": 1562,
+          "piece": " call"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 4581,
+          "piece": " exact"
+        },
+        {
+          "id": 2876,
+          "piece": " condition"
+        },
+        {
+          "id": 421,
+          "piece": " that"
+        },
+        {
+          "id": 27751,
+          "piece": " permits"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 8057,
+          "piece": " agent"
+        },
+        {
+          "id": 310,
+          "piece": " to"
+        },
+        {
+          "id": 10046,
+          "piece": " proceed"
+        },
+        {
+          "id": 310,
+          "piece": " to"
+        },
+        {
+          "id": 1510,
+          "piece": " `"
+        },
+        {
+          "id": 9974,
+          "piece": "apply"
+        },
+        {
+          "id": 38331,
+          "piece": "_patch"
+        },
+        {
+          "id": 27653,
+          "piece": "`."
+        },
+        {
+          "id": 561,
+          "piece": " The"
+        },
+        {
+          "id": 2790,
+          "piece": " design"
+        },
+        {
+          "id": 1902,
+          "piece": " must"
+        },
+        {
+          "id": 5190,
+          "piece": " prevent"
+        },
+        {
+          "id": 2107,
+          "piece": " both"
+        },
+        {
+          "id": 21814,
+          "piece": " duplicate"
+        },
+        {
+          "id": 49133,
+          "piece": " edits"
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 47733,
+          "piece": " silently"
+        },
+        {
+          "id": 25773,
+          "piece": " treating"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 9345,
+          "piece": " timeout"
+        },
+        {
+          "id": 430,
+          "piece": " as"
+        },
+        {
+          "id": 4147,
+          "piece": " empty"
+        },
+        {
+          "id": 999,
+          "piece": " file"
+        },
+        {
+          "id": 2144,
+          "piece": " content"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        }
+      ],
+      "request_dump_start": 712816,
+      "request_dump_end": 1425576,
+      "record_offset": 712816,
+      "record_end_offset": 1425576,
+      "shape": [
+        2048,
+        87,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "patch-scope-control",
+      "prompt": "A user asks to rename a public function in a large TypeScript monorepo. Give a compact execution plan using search, symbol references, targeted edits, and relevant tests. Include gates for generated files, API compatibility, unrelated dirty worktree changes, and rollback after a failed test. The agent may not run the full test suite and may not overwrite changes it did not create.",
+      "prompt_utf8_bytes": 383,
+      "prompt_sha256": "e39ae9fdbe4ddc04de96a477f4deee1798969342e978711e96470aac0fafab7d",
+      "token_count": 75,
+      "tokens": [
+        {
+          "id": 32,
+          "piece": "A"
+        },
+        {
+          "id": 1156,
+          "piece": " user"
+        },
+        {
+          "id": 16561,
+          "piece": " asks"
+        },
+        {
+          "id": 310,
+          "piece": " to"
+        },
+        {
+          "id": 28125,
+          "piece": " rename"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 569,
+          "piece": " public"
+        },
+        {
+          "id": 709,
+          "piece": " function"
+        },
+        {
+          "id": 303,
+          "piece": " in"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 3349,
+          "piece": " large"
+        },
+        {
+          "id": 84441,
+          "piece": " TypeScript"
+        },
+        {
+          "id": 1559,
+          "piece": " mon"
+        },
+        {
+          "id": 451,
+          "piece": "ore"
+        },
+        {
+          "id": 5200,
+          "piece": "po"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 20052,
+          "piece": " Give"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 16338,
+          "piece": " compact"
+        },
+        {
+          "id": 10993,
+          "piece": " execution"
+        },
+        {
+          "id": 3019,
+          "piece": " plan"
+        },
+        {
+          "id": 1608,
+          "piece": " using"
+        },
+        {
+          "id": 2624,
+          "piece": " search"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 7489,
+          "piece": " symbol"
+        },
+        {
+          "id": 14619,
+          "piece": " references"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 16609,
+          "piece": " targeted"
+        },
+        {
+          "id": 49133,
+          "piece": " edits"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 9468,
+          "piece": " relevant"
+        },
+        {
+          "id": 6813,
+          "piece": " tests"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 28763,
+          "piece": " Include"
+        },
+        {
+          "id": 33389,
+          "piece": " gates"
+        },
+        {
+          "id": 364,
+          "piece": " for"
+        },
+        {
+          "id": 7658,
+          "piece": " generated"
+        },
+        {
+          "id": 3425,
+          "piece": " files"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 5165,
+          "piece": " API"
+        },
+        {
+          "id": 23967,
+          "piece": " compatibility"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 43697,
+          "piece": " unrelated"
+        },
+        {
+          "id": 18035,
+          "piece": " dirty"
+        },
+        {
+          "id": 944,
+          "piece": " work"
+        },
+        {
+          "id": 9066,
+          "piece": "tree"
+        },
+        {
+          "id": 4203,
+          "piece": " changes"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 58377,
+          "piece": " rollback"
+        },
+        {
+          "id": 1238,
+          "piece": " after"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 4490,
+          "piece": " failed"
+        },
+        {
+          "id": 1228,
+          "piece": " test"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 561,
+          "piece": " The"
+        },
+        {
+          "id": 8057,
+          "piece": " agent"
+        },
+        {
+          "id": 1189,
+          "piece": " may"
+        },
+        {
+          "id": 524,
+          "piece": " not"
+        },
+        {
+          "id": 1542,
+          "piece": " run"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 2400,
+          "piece": " full"
+        },
+        {
+          "id": 1228,
+          "piece": " test"
+        },
+        {
+          "id": 15705,
+          "piece": " suite"
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 1189,
+          "piece": " may"
+        },
+        {
+          "id": 524,
+          "piece": " not"
+        },
+        {
+          "id": 31153,
+          "piece": " overwrite"
+        },
+        {
+          "id": 4203,
+          "piece": " changes"
+        },
+        {
+          "id": 424,
+          "piece": " it"
+        },
+        {
+          "id": 1467,
+          "piece": " did"
+        },
+        {
+          "id": 524,
+          "piece": " not"
+        },
+        {
+          "id": 1791,
+          "piece": " create"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        }
+      ],
+      "request_dump_start": 1425576,
+      "request_dump_end": 2040032,
+      "record_offset": 1425576,
+      "record_end_offset": 2040032,
+      "shape": [
+        2048,
+        75,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "powershell-safety",
+      "prompt": "Review this proposed Windows automation: it lists matching directories in PowerShell, concatenates their names into a `cmd /c rmdir /s /q` string, and executes it. Explain the safety and quoting failures, then give a safe PowerShell-native procedure that verifies every resolved path stays under `D:\\project\\scratch` before deletion. Include handling for spaces, junctions, empty matches, and partial failure.",
+      "prompt_utf8_bytes": 409,
+      "prompt_sha256": "736ac607f51084d673f4dafa1d054ddb9a76b54f696dc31f4748057ee7368837",
+      "token_count": 82,
+      "tokens": [
+        {
+          "id": 18842,
+          "piece": "Review"
+        },
+        {
+          "id": 411,
+          "piece": " this"
+        },
+        {
+          "id": 10660,
+          "piece": " proposed"
+        },
+        {
+          "id": 5342,
+          "piece": " Windows"
+        },
+        {
+          "id": 31579,
+          "piece": " automation"
+        },
+        {
+          "id": 25,
+          "piece": ":"
+        },
+        {
+          "id": 424,
+          "piece": " it"
+        },
+        {
+          "id": 11140,
+          "piece": " lists"
+        },
+        {
+          "id": 12219,
+          "piece": " matching"
+        },
+        {
+          "id": 27690,
+          "piece": " directories"
+        },
+        {
+          "id": 303,
+          "piece": " in"
+        },
+        {
+          "id": 71446,
+          "piece": " PowerShell"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 38645,
+          "piece": " concaten"
+        },
+        {
+          "id": 942,
+          "piece": "ates"
+        },
+        {
+          "id": 836,
+          "piece": " their"
+        },
+        {
+          "id": 4874,
+          "piece": " names"
+        },
+        {
+          "id": 1083,
+          "piece": " into"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 1510,
+          "piece": " `"
+        },
+        {
+          "id": 8445,
+          "piece": "cmd"
+        },
+        {
+          "id": 593,
+          "piece": " /"
+        },
+        {
+          "id": 66,
+          "piece": "c"
+        },
+        {
+          "id": 427,
+          "piece": " r"
+        },
+        {
+          "id": 67334,
+          "piece": "mdir"
+        },
+        {
+          "id": 593,
+          "piece": " /"
+        },
+        {
+          "id": 82,
+          "piece": "s"
+        },
+        {
+          "id": 593,
+          "piece": " /"
+        },
+        {
+          "id": 80,
+          "piece": "q"
+        },
+        {
+          "id": 63,
+          "piece": "`"
+        },
+        {
+          "id": 886,
+          "piece": " string"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 49703,
+          "piece": " executes"
+        },
+        {
+          "id": 424,
+          "piece": " it"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 79091,
+          "piece": " Explain"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 6925,
+          "piece": " safety"
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 54624,
+          "piece": " quoting"
+        },
+        {
+          "id": 26946,
+          "piece": " failures"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 1179,
+          "piece": " then"
+        },
+        {
+          "id": 2873,
+          "piece": " give"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 5902,
+          "piece": " safe"
+        },
+        {
+          "id": 71446,
+          "piece": " PowerShell"
+        },
+        {
+          "id": 15141,
+          "piece": "-native"
+        },
+        {
+          "id": 10018,
+          "piece": " procedure"
+        },
+        {
+          "id": 421,
+          "piece": " that"
+        },
+        {
+          "id": 84828,
+          "piece": " verifies"
+        },
+        {
+          "id": 1396,
+          "piece": " every"
+        },
+        {
+          "id": 19072,
+          "piece": " resolved"
+        },
+        {
+          "id": 1752,
+          "piece": " path"
+        },
+        {
+          "id": 25710,
+          "piece": " stays"
+        },
+        {
+          "id": 1172,
+          "piece": " under"
+        },
+        {
+          "id": 1510,
+          "piece": " `"
+        },
+        {
+          "id": 35,
+          "piece": "D"
+        },
+        {
+          "id": 6964,
+          "piece": ":\\"
+        },
+        {
+          "id": 4826,
+          "piece": "project"
+        },
+        {
+          "id": 59,
+          "piece": "\\"
+        },
+        {
+          "id": 52240,
+          "piece": "scratch"
+        },
+        {
+          "id": 63,
+          "piece": "`"
+        },
+        {
+          "id": 1518,
+          "piece": " before"
+        },
+        {
+          "id": 34872,
+          "piece": " deletion"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 28763,
+          "piece": " Include"
+        },
+        {
+          "id": 11256,
+          "piece": " handling"
+        },
+        {
+          "id": 364,
+          "piece": " for"
+        },
+        {
+          "id": 12258,
+          "piece": " spaces"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 46633,
+          "piece": " junction"
+        },
+        {
+          "id": 82,
+          "piece": "s"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 4147,
+          "piece": " empty"
+        },
+        {
+          "id": 8798,
+          "piece": " matches"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 6907,
+          "piece": " partial"
+        },
+        {
+          "id": 7652,
+          "piece": " failure"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        }
+      ],
+      "request_dump_start": 2040032,
+      "request_dump_end": 2711832,
+      "record_offset": 2040032,
+      "record_end_offset": 2711832,
+      "shape": [
+        2048,
+        82,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "database-migration-agent",
+      "prompt": "Plan a zero-downtime migration from a nullable string `status` column to a constrained enum-like representation while old and new application versions overlap. Give the ordered expand-migrate-contract steps, compatibility invariants, observation queries, rollback points, and the single condition that allows destructive cleanup. Assume PostgreSQL and a deployment tool that may retry the same step.",
+      "prompt_utf8_bytes": 399,
+      "prompt_sha256": "38984ac127a8eef16415ac6c31063d04f274e0ac880ad20befe4c44ab3ef6c06",
+      "token_count": 71,
+      "tokens": [
+        {
+          "id": 19860,
+          "piece": "Plan"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 6942,
+          "piece": " zero"
+        },
+        {
+          "id": 1676,
+          "piece": "-d"
+        },
+        {
+          "id": 12531,
+          "piece": "ownt"
+        },
+        {
+          "id": 531,
+          "piece": "ime"
+        },
+        {
+          "id": 11567,
+          "piece": " migration"
+        },
+        {
+          "id": 494,
+          "piece": " from"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 12873,
+          "piece": " nullable"
+        },
+        {
+          "id": 886,
+          "piece": " string"
+        },
+        {
+          "id": 1510,
+          "piece": " `"
+        },
+        {
+          "id": 2738,
+          "piece": "status"
+        },
+        {
+          "id": 63,
+          "piece": "`"
+        },
+        {
+          "id": 3145,
+          "piece": " column"
+        },
+        {
+          "id": 310,
+          "piece": " to"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 51948,
+          "piece": " constrained"
+        },
+        {
+          "id": 7376,
+          "piece": " enum"
+        },
+        {
+          "id": 12317,
+          "piece": "-like"
+        },
+        {
+          "id": 12669,
+          "piece": " representation"
+        },
+        {
+          "id": 1345,
+          "piece": " while"
+        },
+        {
+          "id": 2235,
+          "piece": " old"
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 491,
+          "piece": " new"
+        },
+        {
+          "id": 3638,
+          "piece": " application"
+        },
+        {
+          "id": 10478,
+          "piece": " versions"
+        },
+        {
+          "id": 26370,
+          "piece": " overlap"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 20052,
+          "piece": " Give"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 11128,
+          "piece": " ordered"
+        },
+        {
+          "id": 8952,
+          "piece": " expand"
+        },
+        {
+          "id": 1395,
+          "piece": "-m"
+        },
+        {
+          "id": 33335,
+          "piece": "igrate"
+        },
+        {
+          "id": 14429,
+          "piece": "-con"
+        },
+        {
+          "id": 2076,
+          "piece": "tract"
+        },
+        {
+          "id": 7123,
+          "piece": " steps"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 23967,
+          "piece": " compatibility"
+        },
+        {
+          "id": 303,
+          "piece": " in"
+        },
+        {
+          "id": 52778,
+          "piece": "variants"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 21254,
+          "piece": " observation"
+        },
+        {
+          "id": 18959,
+          "piece": " queries"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 58377,
+          "piece": " rollback"
+        },
+        {
+          "id": 3387,
+          "piece": " points"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 3074,
+          "piece": " single"
+        },
+        {
+          "id": 2876,
+          "piece": " condition"
+        },
+        {
+          "id": 421,
+          "piece": " that"
+        },
+        {
+          "id": 5954,
+          "piece": " allows"
+        },
+        {
+          "id": 38243,
+          "piece": " destructive"
+        },
+        {
+          "id": 20635,
+          "piece": " cleanup"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 60101,
+          "piece": " Assume"
+        },
+        {
+          "id": 71100,
+          "piece": " PostgreSQL"
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 22449,
+          "piece": " deployment"
+        },
+        {
+          "id": 5224,
+          "piece": " tool"
+        },
+        {
+          "id": 421,
+          "piece": " that"
+        },
+        {
+          "id": 1189,
+          "piece": " may"
+        },
+        {
+          "id": 21979,
+          "piece": " retry"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 1788,
+          "piece": " same"
+        },
+        {
+          "id": 2923,
+          "piece": " step"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        }
+      ],
+      "request_dump_start": 2711832,
+      "request_dump_end": 3293520,
+      "record_offset": 2711832,
+      "record_end_offset": 3293520,
+      "shape": [
+        2048,
+        71,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "browser-form-state",
+      "prompt": "A browser agent must save a form containing an unsaved title and three tags. After clicking Save, a validation banner says the second tag is invalid, while the title remains in the DOM. Define a robust observation-action loop that corrects only the invalid tag, proves the form really saved, and avoids clicking based on stale element coordinates. Include what should be re-read after every UI transition.",
+      "prompt_utf8_bytes": 405,
+      "prompt_sha256": "11b50b24aba5667e07d4cdb46347348304a83261749ed7a121a6a7ecf8e6c429",
+      "token_count": 78,
+      "tokens": [
+        {
+          "id": 32,
+          "piece": "A"
+        },
+        {
+          "id": 6713,
+          "piece": " browser"
+        },
+        {
+          "id": 8057,
+          "piece": " agent"
+        },
+        {
+          "id": 1902,
+          "piece": " must"
+        },
+        {
+          "id": 3462,
+          "piece": " save"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 1304,
+          "piece": " form"
+        },
+        {
+          "id": 8222,
+          "piece": " containing"
+        },
+        {
+          "id": 449,
+          "piece": " an"
+        },
+        {
+          "id": 6758,
+          "piece": " uns"
+        },
+        {
+          "id": 4005,
+          "piece": "aved"
+        },
+        {
+          "id": 2192,
+          "piece": " title"
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 2250,
+          "piece": " three"
+        },
+        {
+          "id": 9212,
+          "piece": " tags"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 4486,
+          "piece": " After"
+        },
+        {
+          "id": 17908,
+          "piece": " clicking"
+        },
+        {
+          "id": 9949,
+          "piece": " Save"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 10206,
+          "piece": " validation"
+        },
+        {
+          "id": 22598,
+          "piece": " banner"
+        },
+        {
+          "id": 2640,
+          "piece": " says"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 2018,
+          "piece": " second"
+        },
+        {
+          "id": 4619,
+          "piece": " tag"
+        },
+        {
+          "id": 369,
+          "piece": " is"
+        },
+        {
+          "id": 8060,
+          "piece": " invalid"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 1345,
+          "piece": " while"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 2192,
+          "piece": " title"
+        },
+        {
+          "id": 8198,
+          "piece": " remains"
+        },
+        {
+          "id": 303,
+          "piece": " in"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 17512,
+          "piece": " DOM"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 18053,
+          "piece": " Define"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 21094,
+          "piece": " robust"
+        },
+        {
+          "id": 21254,
+          "piece": " observation"
+        },
+        {
+          "id": 24265,
+          "piece": "-action"
+        },
+        {
+          "id": 6136,
+          "piece": " loop"
+        },
+        {
+          "id": 421,
+          "piece": " that"
+        },
+        {
+          "id": 4252,
+          "piece": " correct"
+        },
+        {
+          "id": 82,
+          "piece": "s"
+        },
+        {
+          "id": 1132,
+          "piece": " only"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 8060,
+          "piece": " invalid"
+        },
+        {
+          "id": 4619,
+          "piece": " tag"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 34577,
+          "piece": " proves"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 1304,
+          "piece": " form"
+        },
+        {
+          "id": 2098,
+          "piece": " really"
+        },
+        {
+          "id": 6568,
+          "piece": " saved"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 53007,
+          "piece": " avoids"
+        },
+        {
+          "id": 17908,
+          "piece": " clicking"
+        },
+        {
+          "id": 3018,
+          "piece": " based"
+        },
+        {
+          "id": 383,
+          "piece": " on"
+        },
+        {
+          "id": 48659,
+          "piece": " stale"
+        },
+        {
+          "id": 2315,
+          "piece": " element"
+        },
+        {
+          "id": 13534,
+          "piece": " coordinates"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 28763,
+          "piece": " Include"
+        },
+        {
+          "id": 1092,
+          "piece": " what"
+        },
+        {
+          "id": 1220,
+          "piece": " should"
+        },
+        {
+          "id": 381,
+          "piece": " be"
+        },
+        {
+          "id": 311,
+          "piece": " re"
+        },
+        {
+          "id": 27864,
+          "piece": "-read"
+        },
+        {
+          "id": 1238,
+          "piece": " after"
+        },
+        {
+          "id": 1396,
+          "piece": " every"
+        },
+        {
+          "id": 3563,
+          "piece": " UI"
+        },
+        {
+          "id": 8869,
+          "piece": " transition"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        }
+      ],
+      "request_dump_start": 3293520,
+      "request_dump_end": 3932552,
+      "record_offset": 3293520,
+      "record_end_offset": 3932552,
+      "shape": [
+        2048,
+        78,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "log-root-cause",
+      "prompt": "An API deployment shows p95 latency rising from 120 ms to 4.8 s. CPU is 35%, database query time is unchanged, outbound connection count is pinned at 100, and logs show bursts of `pool acquire timeout`. Produce a falsifiable diagnosis plan, identify the most likely bottleneck, and name the narrowest immediate mitigation plus one longer-term fix. Do not claim certainty from correlation alone.",
+      "prompt_utf8_bytes": 394,
+      "prompt_sha256": "b76b21e507bbb7630b3fcf25ba4ee1fc0f65e6cffb28308b3abcd347413ef4c3",
+      "token_count": 89,
+      "tokens": [
+        {
+          "id": 2014,
+          "piece": "An"
+        },
+        {
+          "id": 5165,
+          "piece": " API"
+        },
+        {
+          "id": 22449,
+          "piece": " deployment"
+        },
+        {
+          "id": 4774,
+          "piece": " shows"
+        },
+        {
+          "id": 280,
+          "piece": " p"
+        },
+        {
+          "id": 24,
+          "piece": "9"
+        },
+        {
+          "id": 20,
+          "piece": "5"
+        },
+        {
+          "id": 37972,
+          "piece": " latency"
+        },
+        {
+          "id": 15589,
+          "piece": " rising"
+        },
+        {
+          "id": 494,
+          "piece": " from"
+        },
+        {
+          "id": 220,
+          "piece": " "
+        },
+        {
+          "id": 16,
+          "piece": "1"
+        },
+        {
+          "id": 17,
+          "piece": "2"
+        },
+        {
+          "id": 15,
+          "piece": "0"
+        },
+        {
+          "id": 9537,
+          "piece": " ms"
+        },
+        {
+          "id": 310,
+          "piece": " to"
+        },
+        {
+          "id": 220,
+          "piece": " "
+        },
+        {
+          "id": 19,
+          "piece": "4"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 23,
+          "piece": "8"
+        },
+        {
+          "id": 274,
+          "piece": " s"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 13540,
+          "piece": " CPU"
+        },
+        {
+          "id": 369,
+          "piece": " is"
+        },
+        {
+          "id": 220,
+          "piece": " "
+        },
+        {
+          "id": 18,
+          "piece": "3"
+        },
+        {
+          "id": 20,
+          "piece": "5"
+        },
+        {
+          "id": 12997,
+          "piece": "%,"
+        },
+        {
+          "id": 4475,
+          "piece": " database"
+        },
+        {
+          "id": 3134,
+          "piece": " query"
+        },
+        {
+          "id": 854,
+          "piece": " time"
+        },
+        {
+          "id": 369,
+          "piece": " is"
+        },
+        {
+          "id": 33702,
+          "piece": " unchanged"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 71287,
+          "piece": " outbound"
+        },
+        {
+          "id": 3511,
+          "piece": " connection"
+        },
+        {
+          "id": 1698,
+          "piece": " count"
+        },
+        {
+          "id": 369,
+          "piece": " is"
+        },
+        {
+          "id": 46120,
+          "piece": " pinned"
+        },
+        {
+          "id": 506,
+          "piece": " at"
+        },
+        {
+          "id": 220,
+          "piece": " "
+        },
+        {
+          "id": 16,
+          "piece": "1"
+        },
+        {
+          "id": 15,
+          "piece": "0"
+        },
+        {
+          "id": 15,
+          "piece": "0"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 17872,
+          "piece": " logs"
+        },
+        {
+          "id": 1420,
+          "piece": " show"
+        },
+        {
+          "id": 63486,
+          "piece": " bursts"
+        },
+        {
+          "id": 314,
+          "piece": " of"
+        },
+        {
+          "id": 1510,
+          "piece": " `"
+        },
+        {
+          "id": 9979,
+          "piece": "pool"
+        },
+        {
+          "id": 20604,
+          "piece": " acquire"
+        },
+        {
+          "id": 9345,
+          "piece": " timeout"
+        },
+        {
+          "id": 27653,
+          "piece": "`."
+        },
+        {
+          "id": 83889,
+          "piece": " Produce"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 30882,
+          "piece": " fals"
+        },
+        {
+          "id": 21916,
+          "piece": "ifiable"
+        },
+        {
+          "id": 22267,
+          "piece": " diagnosis"
+        },
+        {
+          "id": 3019,
+          "piece": " plan"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 10229,
+          "piece": " identify"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 1379,
+          "piece": " most"
+        },
+        {
+          "id": 4222,
+          "piece": " likely"
+        },
+        {
+          "id": 84810,
+          "piece": " bottleneck"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 803,
+          "piece": " name"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 14590,
+          "piece": " narrow"
+        },
+        {
+          "id": 467,
+          "piece": "est"
+        },
+        {
+          "id": 13522,
+          "piece": " immediate"
+        },
+        {
+          "id": 63544,
+          "piece": " mitigation"
+        },
+        {
+          "id": 5346,
+          "piece": " plus"
+        },
+        {
+          "id": 799,
+          "piece": " one"
+        },
+        {
+          "id": 4860,
+          "piece": " longer"
+        },
+        {
+          "id": 9375,
+          "piece": "-term"
+        },
+        {
+          "id": 4884,
+          "piece": " fix"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 3054,
+          "piece": " Do"
+        },
+        {
+          "id": 524,
+          "piece": " not"
+        },
+        {
+          "id": 3591,
+          "piece": " claim"
+        },
+        {
+          "id": 42197,
+          "piece": " certainty"
+        },
+        {
+          "id": 494,
+          "piece": " from"
+        },
+        {
+          "id": 24773,
+          "piece": " correlation"
+        },
+        {
+          "id": 7249,
+          "piece": " alone"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        }
+      ],
+      "request_dump_start": 3932552,
+      "request_dump_end": 4661696,
+      "record_offset": 3932552,
+      "record_end_offset": 4661696,
+      "shape": [
+        2048,
+        89,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "multi-file-consistency",
+      "prompt": "A code generator must add a new REST endpoint across router, handler, schema, OpenAPI, and tests. Specify an invariant table tying route name, HTTP method, request fields, response fields, and generated client name together. Then describe a tool workflow that checks these invariants after each edit rather than writing all files first. Include what to do if OpenAPI generation changes unrelated files.",
+      "prompt_utf8_bytes": 402,
+      "prompt_sha256": "b2e4a8f974d9be420e54ed7e411e92da8f1366167d5250ede5efe18e3ed47dd6",
+      "token_count": 77,
+      "tokens": [
+        {
+          "id": 32,
+          "piece": "A"
+        },
+        {
+          "id": 1970,
+          "piece": " code"
+        },
+        {
+          "id": 13427,
+          "piece": " generator"
+        },
+        {
+          "id": 1902,
+          "piece": " must"
+        },
+        {
+          "id": 884,
+          "piece": " add"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 491,
+          "piece": " new"
+        },
+        {
+          "id": 24609,
+          "piece": " REST"
+        },
+        {
+          "id": 14456,
+          "piece": " endpoint"
+        },
+        {
+          "id": 3808,
+          "piece": " across"
+        },
+        {
+          "id": 8997,
+          "piece": " router"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 6795,
+          "piece": " handler"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 10485,
+          "piece": " schema"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 5097,
+          "piece": " Open"
+        },
+        {
+          "id": 6862,
+          "piece": "API"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 6813,
+          "piece": " tests"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 45816,
+          "piece": " Specify"
+        },
+        {
+          "id": 449,
+          "piece": " an"
+        },
+        {
+          "id": 55687,
+          "piece": " invariant"
+        },
+        {
+          "id": 1898,
+          "piece": " table"
+        },
+        {
+          "id": 59951,
+          "piece": " tying"
+        },
+        {
+          "id": 5832,
+          "piece": " route"
+        },
+        {
+          "id": 803,
+          "piece": " name"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 9830,
+          "piece": " HTTP"
+        },
+        {
+          "id": 1654,
+          "piece": " method"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 1622,
+          "piece": " request"
+        },
+        {
+          "id": 4881,
+          "piece": " fields"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 1965,
+          "piece": " response"
+        },
+        {
+          "id": 4881,
+          "piece": " fields"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 7658,
+          "piece": " generated"
+        },
+        {
+          "id": 2849,
+          "piece": " client"
+        },
+        {
+          "id": 803,
+          "piece": " name"
+        },
+        {
+          "id": 3658,
+          "piece": " together"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 4844,
+          "piece": " Then"
+        },
+        {
+          "id": 7276,
+          "piece": " describe"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 5224,
+          "piece": " tool"
+        },
+        {
+          "id": 27370,
+          "piece": " workflow"
+        },
+        {
+          "id": 421,
+          "piece": " that"
+        },
+        {
+          "id": 11988,
+          "piece": " checks"
+        },
+        {
+          "id": 1439,
+          "piece": " these"
+        },
+        {
+          "id": 303,
+          "piece": " in"
+        },
+        {
+          "id": 52778,
+          "piece": "variants"
+        },
+        {
+          "id": 1238,
+          "piece": " after"
+        },
+        {
+          "id": 1754,
+          "piece": " each"
+        },
+        {
+          "id": 4351,
+          "piece": " edit"
+        },
+        {
+          "id": 4598,
+          "piece": " rather"
+        },
+        {
+          "id": 1056,
+          "piece": " than"
+        },
+        {
+          "id": 4237,
+          "piece": " writing"
+        },
+        {
+          "id": 660,
+          "piece": " all"
+        },
+        {
+          "id": 3425,
+          "piece": " files"
+        },
+        {
+          "id": 1118,
+          "piece": " first"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 28763,
+          "piece": " Include"
+        },
+        {
+          "id": 1092,
+          "piece": " what"
+        },
+        {
+          "id": 310,
+          "piece": " to"
+        },
+        {
+          "id": 635,
+          "piece": " do"
+        },
+        {
+          "id": 413,
+          "piece": " if"
+        },
+        {
+          "id": 5097,
+          "piece": " Open"
+        },
+        {
+          "id": 6862,
+          "piece": "API"
+        },
+        {
+          "id": 9191,
+          "piece": " generation"
+        },
+        {
+          "id": 4203,
+          "piece": " changes"
+        },
+        {
+          "id": 43697,
+          "piece": " unrelated"
+        },
+        {
+          "id": 3425,
+          "piece": " files"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        }
+      ],
+      "request_dump_start": 4661696,
+      "request_dump_end": 5292536,
+      "record_offset": 4661696,
+      "record_end_offset": 5292536,
+      "shape": [
+        2048,
+        77,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "git-conflict-preservation",
+      "prompt": "You find a dirty worktree where the user changed `parser.rs` and the requested bug fix also touches the same function. Explain how an autonomous coding agent should inspect the diff, separate user intent from the defect, make a minimal non-destructive patch, and verify that no user hunk was lost. Prohibit reset, checkout, stash, and whole-file replacement.",
+      "prompt_utf8_bytes": 358,
+      "prompt_sha256": "f2fffc8b4504dc51c3ec29260c4b895e942322e391b18861f04e5d2758b14554",
+      "token_count": 74,
+      "tokens": [
+        {
+          "id": 2523,
+          "piece": "You"
+        },
+        {
+          "id": 1423,
+          "piece": " find"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 18035,
+          "piece": " dirty"
+        },
+        {
+          "id": 944,
+          "piece": " work"
+        },
+        {
+          "id": 9066,
+          "piece": "tree"
+        },
+        {
+          "id": 1332,
+          "piece": " where"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 1156,
+          "piece": " user"
+        },
+        {
+          "id": 5324,
+          "piece": " changed"
+        },
+        {
+          "id": 1510,
+          "piece": " `"
+        },
+        {
+          "id": 9369,
+          "piece": "parser"
+        },
+        {
+          "id": 24822,
+          "piece": ".rs"
+        },
+        {
+          "id": 63,
+          "piece": "`"
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 10897,
+          "piece": " requested"
+        },
+        {
+          "id": 9584,
+          "piece": " bug"
+        },
+        {
+          "id": 4884,
+          "piece": " fix"
+        },
+        {
+          "id": 1048,
+          "piece": " also"
+        },
+        {
+          "id": 27692,
+          "piece": " touches"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 1788,
+          "piece": " same"
+        },
+        {
+          "id": 709,
+          "piece": " function"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 79091,
+          "piece": " Explain"
+        },
+        {
+          "id": 1204,
+          "piece": " how"
+        },
+        {
+          "id": 449,
+          "piece": " an"
+        },
+        {
+          "id": 36928,
+          "piece": " autonomous"
+        },
+        {
+          "id": 10505,
+          "piece": " coding"
+        },
+        {
+          "id": 8057,
+          "piece": " agent"
+        },
+        {
+          "id": 1220,
+          "piece": " should"
+        },
+        {
+          "id": 23331,
+          "piece": " inspect"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 3515,
+          "piece": " diff"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 8387,
+          "piece": " separate"
+        },
+        {
+          "id": 1156,
+          "piece": " user"
+        },
+        {
+          "id": 7151,
+          "piece": " intent"
+        },
+        {
+          "id": 494,
+          "piece": " from"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 21531,
+          "piece": " defect"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 1236,
+          "piece": " make"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 16866,
+          "piece": " minimal"
+        },
+        {
+          "id": 2397,
+          "piece": " non"
+        },
+        {
+          "id": 92895,
+          "piece": "-destruct"
+        },
+        {
+          "id": 520,
+          "piece": "ive"
+        },
+        {
+          "id": 10582,
+          "piece": " patch"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 9845,
+          "piece": " verify"
+        },
+        {
+          "id": 421,
+          "piece": " that"
+        },
+        {
+          "id": 874,
+          "piece": " no"
+        },
+        {
+          "id": 1156,
+          "piece": " user"
+        },
+        {
+          "id": 304,
+          "piece": " h"
+        },
+        {
+          "id": 3022,
+          "piece": "unk"
+        },
+        {
+          "id": 557,
+          "piece": " was"
+        },
+        {
+          "id": 5384,
+          "piece": " lost"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 1253,
+          "piece": " Pro"
+        },
+        {
+          "id": 63596,
+          "piece": "hibit"
+        },
+        {
+          "id": 7345,
+          "piece": " reset"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 26384,
+          "piece": " checkout"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 61878,
+          "piece": " stash"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 4220,
+          "piece": " whole"
+        },
+        {
+          "id": 13797,
+          "piece": "-file"
+        },
+        {
+          "id": 13329,
+          "piece": " replacement"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        }
+      ],
+      "request_dump_start": 5292536,
+      "request_dump_end": 5898800,
+      "record_offset": 5292536,
+      "record_end_offset": 5898800,
+      "shape": [
+        2048,
+        74,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "async-shutdown",
+      "prompt": "A Python service launches three background workers and currently exits by cancelling tasks without awaiting them. Design a bounded graceful shutdown protocol covering stop admission, cancellation propagation, queue draining policy, timeout escalation, exception collection, and resource closure. State the invariants that make a second shutdown signal safe and prevent a worker from acknowledging work that was not committed.",
+      "prompt_utf8_bytes": 425,
+      "prompt_sha256": "8c313e9b8213fcc8bf0d4a77c50c94dcec130ba1f318ed8636dc2c2e620d6c83",
+      "token_count": 67,
+      "tokens": [
+        {
+          "id": 32,
+          "piece": "A"
+        },
+        {
+          "id": 12654,
+          "piece": " Python"
+        },
+        {
+          "id": 2393,
+          "piece": " service"
+        },
+        {
+          "id": 35845,
+          "piece": " launches"
+        },
+        {
+          "id": 2250,
+          "piece": " three"
+        },
+        {
+          "id": 3870,
+          "piece": " background"
+        },
+        {
+          "id": 7106,
+          "piece": " workers"
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 4862,
+          "piece": " currently"
+        },
+        {
+          "id": 40693,
+          "piece": " exits"
+        },
+        {
+          "id": 539,
+          "piece": " by"
+        },
+        {
+          "id": 93571,
+          "piece": " cancelling"
+        },
+        {
+          "id": 8806,
+          "piece": " tasks"
+        },
+        {
+          "id": 1973,
+          "piece": " without"
+        },
+        {
+          "id": 42532,
+          "piece": " awaiting"
+        },
+        {
+          "id": 1070,
+          "piece": " them"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 6765,
+          "piece": " Design"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 59056,
+          "piece": " bounded"
+        },
+        {
+          "id": 74715,
+          "piece": " graceful"
+        },
+        {
+          "id": 23022,
+          "piece": " shutdown"
+        },
+        {
+          "id": 11176,
+          "piece": " protocol"
+        },
+        {
+          "id": 17661,
+          "piece": " covering"
+        },
+        {
+          "id": 2842,
+          "piece": " stop"
+        },
+        {
+          "id": 24490,
+          "piece": " admission"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 34647,
+          "piece": " cancellation"
+        },
+        {
+          "id": 51842,
+          "piece": " propagation"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 6951,
+          "piece": " queue"
+        },
+        {
+          "id": 70527,
+          "piece": " draining"
+        },
+        {
+          "id": 4687,
+          "piece": " policy"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 9345,
+          "piece": " timeout"
+        },
+        {
+          "id": 67909,
+          "piece": " escalation"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 4531,
+          "piece": " exception"
+        },
+        {
+          "id": 4281,
+          "piece": " collection"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 4939,
+          "piece": " resource"
+        },
+        {
+          "id": 21278,
+          "piece": " closure"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 3130,
+          "piece": " State"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 303,
+          "piece": " in"
+        },
+        {
+          "id": 52778,
+          "piece": "variants"
+        },
+        {
+          "id": 421,
+          "piece": " that"
+        },
+        {
+          "id": 1236,
+          "piece": " make"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 2018,
+          "piece": " second"
+        },
+        {
+          "id": 23022,
+          "piece": " shutdown"
+        },
+        {
+          "id": 8028,
+          "piece": " signal"
+        },
+        {
+          "id": 5902,
+          "piece": " safe"
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 5190,
+          "piece": " prevent"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 11525,
+          "piece": " worker"
+        },
+        {
+          "id": 494,
+          "piece": " from"
+        },
+        {
+          "id": 58565,
+          "piece": " acknowledging"
+        },
+        {
+          "id": 944,
+          "piece": " work"
+        },
+        {
+          "id": 421,
+          "piece": " that"
+        },
+        {
+          "id": 557,
+          "piece": " was"
+        },
+        {
+          "id": 524,
+          "piece": " not"
+        },
+        {
+          "id": 10839,
+          "piece": " committed"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        }
+      ],
+      "request_dump_start": 5898800,
+      "request_dump_end": 6447720,
+      "record_offset": 5898800,
+      "record_end_offset": 6447720,
+      "shape": [
+        2048,
+        67,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "dependency-upgrade",
+      "prompt": "An agent is asked to upgrade a Java library across a Gradle multi-module project, but release notes mention a renamed API and a changed default timeout. Provide the shortest evidence-driven workflow: locate version ownership, enumerate call sites, update one dependency source, adapt affected code, and run only relevant compile/tests. Define stop conditions for incompatible transitive dependencies and generated lockfile churn.",
+      "prompt_utf8_bytes": 429,
+      "prompt_sha256": "9796ec9d0b28a86e1e772e3704fa6d501508de0b40f6ddf83f04cd26aa48b343",
+      "token_count": 75,
+      "tokens": [
+        {
+          "id": 2014,
+          "piece": "An"
+        },
+        {
+          "id": 8057,
+          "piece": " agent"
+        },
+        {
+          "id": 369,
+          "piece": " is"
+        },
+        {
+          "id": 4439,
+          "piece": " asked"
+        },
+        {
+          "id": 310,
+          "piece": " to"
+        },
+        {
+          "id": 13511,
+          "piece": " upgrade"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 7693,
+          "piece": " Java"
+        },
+        {
+          "id": 6522,
+          "piece": " library"
+        },
+        {
+          "id": 3808,
+          "piece": " across"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 21123,
+          "piece": " Grad"
+        },
+        {
+          "id": 273,
+          "piece": "le"
+        },
+        {
+          "id": 7072,
+          "piece": " multi"
+        },
+        {
+          "id": 45156,
+          "piece": "-module"
+        },
+        {
+          "id": 2313,
+          "piece": " project"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 694,
+          "piece": " but"
+        },
+        {
+          "id": 4722,
+          "piece": " release"
+        },
+        {
+          "id": 8129,
+          "piece": " notes"
+        },
+        {
+          "id": 6088,
+          "piece": " mention"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 26398,
+          "piece": " renamed"
+        },
+        {
+          "id": 5165,
+          "piece": " API"
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 5324,
+          "piece": " changed"
+        },
+        {
+          "id": 1581,
+          "piece": " default"
+        },
+        {
+          "id": 9345,
+          "piece": " timeout"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 38256,
+          "piece": " Provide"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 37847,
+          "piece": " shortest"
+        },
+        {
+          "id": 5721,
+          "piece": " evidence"
+        },
+        {
+          "id": 30373,
+          "piece": "-driven"
+        },
+        {
+          "id": 27370,
+          "piece": " workflow"
+        },
+        {
+          "id": 25,
+          "piece": ":"
+        },
+        {
+          "id": 23748,
+          "piece": " locate"
+        },
+        {
+          "id": 2243,
+          "piece": " version"
+        },
+        {
+          "id": 14834,
+          "piece": " ownership"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 12867,
+          "piece": " enumerate"
+        },
+        {
+          "id": 1562,
+          "piece": " call"
+        },
+        {
+          "id": 6386,
+          "piece": " sites"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 2560,
+          "piece": " update"
+        },
+        {
+          "id": 799,
+          "piece": " one"
+        },
+        {
+          "id": 23285,
+          "piece": " dependency"
+        },
+        {
+          "id": 2450,
+          "piece": " source"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 10202,
+          "piece": " adapt"
+        },
+        {
+          "id": 11164,
+          "piece": " affected"
+        },
+        {
+          "id": 1970,
+          "piece": " code"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 1542,
+          "piece": " run"
+        },
+        {
+          "id": 1132,
+          "piece": " only"
+        },
+        {
+          "id": 9468,
+          "piece": " relevant"
+        },
+        {
+          "id": 18612,
+          "piece": " compile"
+        },
+        {
+          "id": 60363,
+          "piece": "/tests"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 18053,
+          "piece": " Define"
+        },
+        {
+          "id": 2842,
+          "piece": " stop"
+        },
+        {
+          "id": 4530,
+          "piece": " conditions"
+        },
+        {
+          "id": 364,
+          "piece": " for"
+        },
+        {
+          "id": 51047,
+          "piece": " incompatible"
+        },
+        {
+          "id": 1308,
+          "piece": " trans"
+        },
+        {
+          "id": 3295,
+          "piece": "itive"
+        },
+        {
+          "id": 18948,
+          "piece": " dependencies"
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 7658,
+          "piece": " generated"
+        },
+        {
+          "id": 5128,
+          "piece": " lock"
+        },
+        {
+          "id": 1152,
+          "piece": "file"
+        },
+        {
+          "id": 78080,
+          "piece": " churn"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        }
+      ],
+      "request_dump_start": 6447720,
+      "request_dump_end": 7062176,
+      "record_offset": 6447720,
+      "record_end_offset": 7062176,
+      "shape": [
+        2048,
+        75,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "tool-argument-contract",
+      "prompt": "Define a JSON tool-call contract for `replace_text` with fields `path`, `old_text`, `new_text`, and optional `expected_replacements`. Specify validation for workspace containment, UTF-8, exact replacement count, empty strings, and concurrent file modification. Show how the tool returns a structured conflict without modifying the file, and how an agent should recover by re-reading rather than blindly retrying.",
+      "prompt_utf8_bytes": 412,
+      "prompt_sha256": "a3ff9c0c986d82d2e61ed2ccdcdf28430288ed04c56ad1fcf1e8e8c46e386914",
+      "token_count": 82,
+      "tokens": [
+        {
+          "id": 34167,
+          "piece": "Define"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 4566,
+          "piece": " JSON"
+        },
+        {
+          "id": 5224,
+          "piece": " tool"
+        },
+        {
+          "id": 56905,
+          "piece": "-call"
+        },
+        {
+          "id": 4954,
+          "piece": " contract"
+        },
+        {
+          "id": 364,
+          "piece": " for"
+        },
+        {
+          "id": 1510,
+          "piece": " `"
+        },
+        {
+          "id": 7899,
+          "piece": "replace"
+        },
+        {
+          "id": 4185,
+          "piece": "_text"
+        },
+        {
+          "id": 63,
+          "piece": "`"
+        },
+        {
+          "id": 440,
+          "piece": " with"
+        },
+        {
+          "id": 4881,
+          "piece": " fields"
+        },
+        {
+          "id": 1510,
+          "piece": " `"
+        },
+        {
+          "id": 2267,
+          "piece": "path"
+        },
+        {
+          "id": 7561,
+          "piece": "`,"
+        },
+        {
+          "id": 1510,
+          "piece": " `"
+        },
+        {
+          "id": 787,
+          "piece": "old"
+        },
+        {
+          "id": 4185,
+          "piece": "_text"
+        },
+        {
+          "id": 7561,
+          "piece": "`,"
+        },
+        {
+          "id": 1510,
+          "piece": " `"
+        },
+        {
+          "id": 902,
+          "piece": "new"
+        },
+        {
+          "id": 4185,
+          "piece": "_text"
+        },
+        {
+          "id": 7561,
+          "piece": "`,"
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 9801,
+          "piece": " optional"
+        },
+        {
+          "id": 1510,
+          "piece": " `"
+        },
+        {
+          "id": 7095,
+          "piece": "expected"
+        },
+        {
+          "id": 1243,
+          "piece": "_re"
+        },
+        {
+          "id": 61389,
+          "piece": "placements"
+        },
+        {
+          "id": 27653,
+          "piece": "`."
+        },
+        {
+          "id": 45816,
+          "piece": " Specify"
+        },
+        {
+          "id": 10206,
+          "piece": " validation"
+        },
+        {
+          "id": 364,
+          "piece": " for"
+        },
+        {
+          "id": 26622,
+          "piece": " workspace"
+        },
+        {
+          "id": 43703,
+          "piece": " containment"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 19464,
+          "piece": " UTF"
+        },
+        {
+          "id": 12,
+          "piece": "-"
+        },
+        {
+          "id": 23,
+          "piece": "8"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 4581,
+          "piece": " exact"
+        },
+        {
+          "id": 13329,
+          "piece": " replacement"
+        },
+        {
+          "id": 1698,
+          "piece": " count"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 4147,
+          "piece": " empty"
+        },
+        {
+          "id": 8796,
+          "piece": " strings"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 32907,
+          "piece": " concurrent"
+        },
+        {
+          "id": 999,
+          "piece": " file"
+        },
+        {
+          "id": 16531,
+          "piece": " modification"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 6712,
+          "piece": " Show"
+        },
+        {
+          "id": 1204,
+          "piece": " how"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 5224,
+          "piece": " tool"
+        },
+        {
+          "id": 4523,
+          "piece": " returns"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 31838,
+          "piece": " structured"
+        },
+        {
+          "id": 11712,
+          "piece": " conflict"
+        },
+        {
+          "id": 1973,
+          "piece": " without"
+        },
+        {
+          "id": 44504,
+          "piece": " modifying"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 999,
+          "piece": " file"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 1204,
+          "piece": " how"
+        },
+        {
+          "id": 449,
+          "piece": " an"
+        },
+        {
+          "id": 8057,
+          "piece": " agent"
+        },
+        {
+          "id": 1220,
+          "piece": " should"
+        },
+        {
+          "id": 11394,
+          "piece": " recover"
+        },
+        {
+          "id": 539,
+          "piece": " by"
+        },
+        {
+          "id": 311,
+          "piece": " re"
+        },
+        {
+          "id": 12,
+          "piece": "-"
+        },
+        {
+          "id": 5961,
+          "piece": "reading"
+        },
+        {
+          "id": 4598,
+          "piece": " rather"
+        },
+        {
+          "id": 1056,
+          "piece": " than"
+        },
+        {
+          "id": 85305,
+          "piece": " blindly"
+        },
+        {
+          "id": 21979,
+          "piece": " retry"
+        },
+        {
+          "id": 286,
+          "piece": "ing"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        }
+      ],
+      "request_dump_start": 7062176,
+      "request_dump_end": 7733976,
+      "record_offset": 7062176,
+      "record_end_offset": 7733976,
+      "shape": [
+        2048,
+        82,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "incident-priority",
+      "prompt": "During an incident, checkout requests fail at 18%, read-only catalog traffic is healthy, a new feature flag was enabled ten minutes earlier for 20% of users, and database health is normal. Give an ordered five-action response with an explicit observation gate after each action. Balance rapid mitigation, evidence preservation, communication, and prevention of an uncontrolled rollback cascade.",
+      "prompt_utf8_bytes": 394,
+      "prompt_sha256": "3c55987e24cd41f63c38204ea38e7a3520eb815bbcc12f06cebc07c6e2203de3",
+      "token_count": 75,
+      "tokens": [
+        {
+          "id": 15542,
+          "piece": "During"
+        },
+        {
+          "id": 449,
+          "piece": " an"
+        },
+        {
+          "id": 10142,
+          "piece": " incident"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 26384,
+          "piece": " checkout"
+        },
+        {
+          "id": 7154,
+          "piece": " requests"
+        },
+        {
+          "id": 3564,
+          "piece": " fail"
+        },
+        {
+          "id": 506,
+          "piece": " at"
+        },
+        {
+          "id": 220,
+          "piece": " "
+        },
+        {
+          "id": 16,
+          "piece": "1"
+        },
+        {
+          "id": 23,
+          "piece": "8"
+        },
+        {
+          "id": 12997,
+          "piece": "%,"
+        },
+        {
+          "id": 1301,
+          "piece": " read"
+        },
+        {
+          "id": 14934,
+          "piece": "-only"
+        },
+        {
+          "id": 15922,
+          "piece": " catalog"
+        },
+        {
+          "id": 9163,
+          "piece": " traffic"
+        },
+        {
+          "id": 369,
+          "piece": " is"
+        },
+        {
+          "id": 9038,
+          "piece": " healthy"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 491,
+          "piece": " new"
+        },
+        {
+          "id": 4416,
+          "piece": " feature"
+        },
+        {
+          "id": 5016,
+          "piece": " flag"
+        },
+        {
+          "id": 557,
+          "piece": " was"
+        },
+        {
+          "id": 8699,
+          "piece": " enabled"
+        },
+        {
+          "id": 5600,
+          "piece": " ten"
+        },
+        {
+          "id": 4276,
+          "piece": " minutes"
+        },
+        {
+          "id": 6575,
+          "piece": " earlier"
+        },
+        {
+          "id": 364,
+          "piece": " for"
+        },
+        {
+          "id": 220,
+          "piece": " "
+        },
+        {
+          "id": 17,
+          "piece": "2"
+        },
+        {
+          "id": 15,
+          "piece": "0"
+        },
+        {
+          "id": 4,
+          "piece": "%"
+        },
+        {
+          "id": 314,
+          "piece": " of"
+        },
+        {
+          "id": 3719,
+          "piece": " users"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 4475,
+          "piece": " database"
+        },
+        {
+          "id": 2730,
+          "piece": " health"
+        },
+        {
+          "id": 369,
+          "piece": " is"
+        },
+        {
+          "id": 4472,
+          "piece": " normal"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 20052,
+          "piece": " Give"
+        },
+        {
+          "id": 449,
+          "piece": " an"
+        },
+        {
+          "id": 11128,
+          "piece": " ordered"
+        },
+        {
+          "id": 4097,
+          "piece": " five"
+        },
+        {
+          "id": 24265,
+          "piece": "-action"
+        },
+        {
+          "id": 1965,
+          "piece": " response"
+        },
+        {
+          "id": 440,
+          "piece": " with"
+        },
+        {
+          "id": 449,
+          "piece": " an"
+        },
+        {
+          "id": 11135,
+          "piece": " explicit"
+        },
+        {
+          "id": 21254,
+          "piece": " observation"
+        },
+        {
+          "id": 17587,
+          "piece": " gate"
+        },
+        {
+          "id": 1238,
+          "piece": " after"
+        },
+        {
+          "id": 1754,
+          "piece": " each"
+        },
+        {
+          "id": 1852,
+          "piece": " action"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 29835,
+          "piece": " Balance"
+        },
+        {
+          "id": 10725,
+          "piece": " rapid"
+        },
+        {
+          "id": 63544,
+          "piece": " mitigation"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 5721,
+          "piece": " evidence"
+        },
+        {
+          "id": 44026,
+          "piece": " preservation"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 10222,
+          "piece": " communication"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 25411,
+          "piece": " prevention"
+        },
+        {
+          "id": 314,
+          "piece": " of"
+        },
+        {
+          "id": 449,
+          "piece": " an"
+        },
+        {
+          "id": 632,
+          "piece": " un"
+        },
+        {
+          "id": 56627,
+          "piece": "controlled"
+        },
+        {
+          "id": 58377,
+          "piece": " rollback"
+        },
+        {
+          "id": 40628,
+          "piece": " cascade"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        }
+      ],
+      "request_dump_start": 7733976,
+      "request_dump_end": 8348432,
+      "record_offset": 7733976,
+      "record_end_offset": 8348432,
+      "shape": [
+        2048,
+        75,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "context-revision",
+      "prompt": "A long task contains three requirements: initially output CSV, later switch to JSONL, and finally keep CSV only for the audit export while normal results remain JSONL. Restate the final effective contract without losing the exception, list which earlier instruction is superseded, and give two acceptance examples. Treat the latest compatible instruction as authoritative instead of simply following the last sentence in isolation.",
+      "prompt_utf8_bytes": 431,
+      "prompt_sha256": "f57eefe32b0f82dbced14d04c7f680b5f13cb40b017fda2b4ff921b0c95f6004",
+      "token_count": 75,
+      "tokens": [
+        {
+          "id": 32,
+          "piece": "A"
+        },
+        {
+          "id": 1248,
+          "piece": " long"
+        },
+        {
+          "id": 3274,
+          "piece": " task"
+        },
+        {
+          "id": 5435,
+          "piece": " contains"
+        },
+        {
+          "id": 2250,
+          "piece": " three"
+        },
+        {
+          "id": 8242,
+          "piece": " requirements"
+        },
+        {
+          "id": 25,
+          "piece": ":"
+        },
+        {
+          "id": 14661,
+          "piece": " initially"
+        },
+        {
+          "id": 2468,
+          "piece": " output"
+        },
+        {
+          "id": 26555,
+          "piece": " CSV"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 2843,
+          "piece": " later"
+        },
+        {
+          "id": 3289,
+          "piece": " switch"
+        },
+        {
+          "id": 310,
+          "piece": " to"
+        },
+        {
+          "id": 4566,
+          "piece": " JSON"
+        },
+        {
+          "id": 43,
+          "piece": "L"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 5326,
+          "piece": " finally"
+        },
+        {
+          "id": 2426,
+          "piece": " keep"
+        },
+        {
+          "id": 26555,
+          "piece": " CSV"
+        },
+        {
+          "id": 1132,
+          "piece": " only"
+        },
+        {
+          "id": 364,
+          "piece": " for"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 23513,
+          "piece": " audit"
+        },
+        {
+          "id": 7250,
+          "piece": " export"
+        },
+        {
+          "id": 1345,
+          "piece": " while"
+        },
+        {
+          "id": 4472,
+          "piece": " normal"
+        },
+        {
+          "id": 2961,
+          "piece": " results"
+        },
+        {
+          "id": 6922,
+          "piece": " remain"
+        },
+        {
+          "id": 4566,
+          "piece": " JSON"
+        },
+        {
+          "id": 43,
+          "piece": "L"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 8790,
+          "piece": " Rest"
+        },
+        {
+          "id": 344,
+          "piece": "ate"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 1534,
+          "piece": " final"
+        },
+        {
+          "id": 7139,
+          "piece": " effective"
+        },
+        {
+          "id": 4954,
+          "piece": " contract"
+        },
+        {
+          "id": 1973,
+          "piece": " without"
+        },
+        {
+          "id": 12806,
+          "piece": " losing"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 4531,
+          "piece": " exception"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 1103,
+          "piece": " list"
+        },
+        {
+          "id": 864,
+          "piece": " which"
+        },
+        {
+          "id": 6575,
+          "piece": " earlier"
+        },
+        {
+          "id": 7359,
+          "piece": " instruction"
+        },
+        {
+          "id": 369,
+          "piece": " is"
+        },
+        {
+          "id": 49948,
+          "piece": " supers"
+        },
+        {
+          "id": 28958,
+          "piece": "eded"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 2873,
+          "piece": " give"
+        },
+        {
+          "id": 1330,
+          "piece": " two"
+        },
+        {
+          "id": 24693,
+          "piece": " acceptance"
+        },
+        {
+          "id": 9989,
+          "piece": " examples"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 18307,
+          "piece": " Treat"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 5362,
+          "piece": " latest"
+        },
+        {
+          "id": 17606,
+          "piece": " compatible"
+        },
+        {
+          "id": 7359,
+          "piece": " instruction"
+        },
+        {
+          "id": 430,
+          "piece": " as"
+        },
+        {
+          "id": 62411,
+          "piece": " authoritative"
+        },
+        {
+          "id": 4370,
+          "piece": " instead"
+        },
+        {
+          "id": 314,
+          "piece": " of"
+        },
+        {
+          "id": 4777,
+          "piece": " simply"
+        },
+        {
+          "id": 2614,
+          "piece": " following"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 1483,
+          "piece": " last"
+        },
+        {
+          "id": 11316,
+          "piece": " sentence"
+        },
+        {
+          "id": 303,
+          "piece": " in"
+        },
+        {
+          "id": 29310,
+          "piece": " isolation"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        }
+      ],
+      "request_dump_start": 8348432,
+      "request_dump_end": 8962888,
+      "record_offset": 8348432,
+      "record_end_offset": 8962888,
+      "shape": [
+        2048,
+        75,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "web-race-debug",
+      "prompt": "A React page sometimes shows data from the previous account after rapid account switching. Requests cannot be cancelled on the server and may complete out of order. Explain the causal race, then give a hook-level design using request identity or generation counters that prevents stale commits while still allowing cache population. Include cleanup behavior and a deterministic test for the bad interleaving.",
+      "prompt_utf8_bytes": 408,
+      "prompt_sha256": "fc03fa0c741d43555e28758593d95ac8751cbfa7b073d31e469e280416e3d40c",
+      "token_count": 69,
+      "tokens": [
+        {
+          "id": 32,
+          "piece": "A"
+        },
+        {
+          "id": 3473,
+          "piece": " React"
+        },
+        {
+          "id": 2081,
+          "piece": " page"
+        },
+        {
+          "id": 6807,
+          "piece": " sometimes"
+        },
+        {
+          "id": 4774,
+          "piece": " shows"
+        },
+        {
+          "id": 795,
+          "piece": " data"
+        },
+        {
+          "id": 494,
+          "piece": " from"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 3555,
+          "piece": " previous"
+        },
+        {
+          "id": 2605,
+          "piece": " account"
+        },
+        {
+          "id": 1238,
+          "piece": " after"
+        },
+        {
+          "id": 10725,
+          "piece": " rapid"
+        },
+        {
+          "id": 2605,
+          "piece": " account"
+        },
+        {
+          "id": 26865,
+          "piece": " switching"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 49170,
+          "piece": " Requests"
+        },
+        {
+          "id": 4021,
+          "piece": " cannot"
+        },
+        {
+          "id": 381,
+          "piece": " be"
+        },
+        {
+          "id": 24863,
+          "piece": " cancelled"
+        },
+        {
+          "id": 383,
+          "piece": " on"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 3421,
+          "piece": " server"
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 1189,
+          "piece": " may"
+        },
+        {
+          "id": 4434,
+          "piece": " complete"
+        },
+        {
+          "id": 680,
+          "piece": " out"
+        },
+        {
+          "id": 314,
+          "piece": " of"
+        },
+        {
+          "id": 1906,
+          "piece": " order"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 79091,
+          "piece": " Explain"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 56485,
+          "piece": " causal"
+        },
+        {
+          "id": 6741,
+          "piece": " race"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 1179,
+          "piece": " then"
+        },
+        {
+          "id": 2873,
+          "piece": " give"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 9416,
+          "piece": " hook"
+        },
+        {
+          "id": 11258,
+          "piece": "-level"
+        },
+        {
+          "id": 2790,
+          "piece": " design"
+        },
+        {
+          "id": 1608,
+          "piece": " using"
+        },
+        {
+          "id": 1622,
+          "piece": " request"
+        },
+        {
+          "id": 9284,
+          "piece": " identity"
+        },
+        {
+          "id": 466,
+          "piece": " or"
+        },
+        {
+          "id": 9191,
+          "piece": " generation"
+        },
+        {
+          "id": 30494,
+          "piece": " counters"
+        },
+        {
+          "id": 421,
+          "piece": " that"
+        },
+        {
+          "id": 27028,
+          "piece": " prevents"
+        },
+        {
+          "id": 48659,
+          "piece": " stale"
+        },
+        {
+          "id": 40161,
+          "piece": " commits"
+        },
+        {
+          "id": 1345,
+          "piece": " while"
+        },
+        {
+          "id": 1990,
+          "piece": " still"
+        },
+        {
+          "id": 10377,
+          "piece": " allowing"
+        },
+        {
+          "id": 6297,
+          "piece": " cache"
+        },
+        {
+          "id": 6823,
+          "piece": " population"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 28763,
+          "piece": " Include"
+        },
+        {
+          "id": 20635,
+          "piece": " cleanup"
+        },
+        {
+          "id": 7465,
+          "piece": " behavior"
+        },
+        {
+          "id": 321,
+          "piece": " and"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 69892,
+          "piece": " deterministic"
+        },
+        {
+          "id": 1228,
+          "piece": " test"
+        },
+        {
+          "id": 364,
+          "piece": " for"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 3743,
+          "piece": " bad"
+        },
+        {
+          "id": 91689,
+          "piece": " interle"
+        },
+        {
+          "id": 2241,
+          "piece": "aving"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        }
+      ],
+      "request_dump_start": 8962888,
+      "request_dump_end": 9528192,
+      "record_offset": 8962888,
+      "record_end_offset": 9528192,
+      "shape": [
+        2048,
+        69,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "chinese-agent-recovery",
+      "prompt": "一个本地编程代理调用 `run_tests` 后进程被系统终止，只留下半截日志和未知退出码。请设计恢复流程：如何判断测试是否真的完成、如何保留原始证据、何时允许重跑、如何避免重复执行有副作用的集成测试，以及代理向用户汇报时必须区分哪些已知事实、合理推断和待验证项。",
+      "prompt_utf8_bytes": 370,
+      "prompt_sha256": "ffd01451023de833fb5ec0ee1bef685c9ecbebd0f572e520075432de3d340f17",
+      "token_count": 76,
+      "tokens": [
+        {
+          "id": 96125,
+          "piece": "一个"
+        },
+        {
+          "id": 103862,
+          "piece": "本地"
+        },
+        {
+          "id": 102027,
+          "piece": "编程"
+        },
+        {
+          "id": 98168,
+          "piece": "代理"
+        },
+        {
+          "id": 109185,
+          "piece": "调用"
+        },
+        {
+          "id": 1510,
+          "piece": " `"
+        },
+        {
+          "id": 5917,
+          "piece": "run"
+        },
+        {
+          "id": 31436,
+          "piece": "_tests"
+        },
+        {
+          "id": 63,
+          "piece": "`"
+        },
+        {
+          "id": 220,
+          "piece": " "
+        },
+        {
+          "id": 95946,
+          "piece": "后"
+        },
+        {
+          "id": 101919,
+          "piece": "进程"
+        },
+        {
+          "id": 96147,
+          "piece": "被"
+        },
+        {
+          "id": 96746,
+          "piece": "系统"
+        },
+        {
+          "id": 110042,
+          "piece": "终止"
+        },
+        {
+          "id": 3709,
+          "piece": "，"
+        },
+        {
+          "id": 96227,
+          "piece": "只"
+        },
+        {
+          "id": 108648,
+          "piece": "留下"
+        },
+        {
+          "id": 96569,
+          "piece": "半"
+        },
+        {
+          "id": 97750,
+          "piece": "截"
+        },
+        {
+          "id": 110509,
+          "piece": "日志"
+        },
+        {
+          "id": 95793,
+          "piece": "和"
+        },
+        {
+          "id": 109619,
+          "piece": "未知"
+        },
+        {
+          "id": 108916,
+          "piece": "退出"
+        },
+        {
+          "id": 96585,
+          "piece": "码"
+        },
+        {
+          "id": 1710,
+          "piece": "。"
+        },
+        {
+          "id": 96220,
+          "piece": "请"
+        },
+        {
+          "id": 96620,
+          "piece": "设计"
+        },
+        {
+          "id": 100550,
+          "piece": "恢复"
+        },
+        {
+          "id": 98440,
+          "piece": "流程"
+        },
+        {
+          "id": 4960,
+          "piece": "："
+        },
+        {
+          "id": 97033,
+          "piece": "如何"
+        },
+        {
+          "id": 100593,
+          "piece": "判断"
+        },
+        {
+          "id": 99449,
+          "piece": "测试"
+        },
+        {
+          "id": 97553,
+          "piece": "是否"
+        },
+        {
+          "id": 97896,
+          "piece": "真的"
+        },
+        {
+          "id": 97235,
+          "piece": "完成"
+        },
+        {
+          "id": 5205,
+          "piece": "、"
+        },
+        {
+          "id": 97033,
+          "piece": "如何"
+        },
+        {
+          "id": 101780,
+          "piece": "保留"
+        },
+        {
+          "id": 104159,
+          "piece": "原始"
+        },
+        {
+          "id": 100720,
+          "piece": "证据"
+        },
+        {
+          "id": 5205,
+          "piece": "、"
+        },
+        {
+          "id": 110707,
+          "piece": "何时"
+        },
+        {
+          "id": 100697,
+          "piece": "允许"
+        },
+        {
+          "id": 95949,
+          "piece": "重"
+        },
+        {
+          "id": 97300,
+          "piece": "跑"
+        },
+        {
+          "id": 5205,
+          "piece": "、"
+        },
+        {
+          "id": 97033,
+          "piece": "如何"
+        },
+        {
+          "id": 97909,
+          "piece": "避免"
+        },
+        {
+          "id": 108695,
+          "piece": "重复"
+        },
+        {
+          "id": 97328,
+          "piece": "执行"
+        },
+        {
+          "id": 95762,
+          "piece": "有"
+        },
+        {
+          "id": 111839,
+          "piece": "副作用"
+        },
+        {
+          "id": 95726,
+          "piece": "的"
+        },
+        {
+          "id": 100803,
+          "piece": "集成"
+        },
+        {
+          "id": 99449,
+          "piece": "测试"
+        },
+        {
+          "id": 3709,
+          "piece": "，"
+        },
+        {
+          "id": 98404,
+          "piece": "以及"
+        },
+        {
+          "id": 98168,
+          "piece": "代理"
+        },
+        {
+          "id": 96127,
+          "piece": "向"
+        },
+        {
+          "id": 97237,
+          "piece": "用户"
+        },
+        {
+          "id": 101948,
+          "piece": "汇报"
+        },
+        {
+          "id": 130580,
+          "piece": "时必须"
+        },
+        {
+          "id": 110190,
+          "piece": "区分"
+        },
+        {
+          "id": 99130,
+          "piece": "哪些"
+        },
+        {
+          "id": 111124,
+          "piece": "已知"
+        },
+        {
+          "id": 99201,
+          "piece": "事实"
+        },
+        {
+          "id": 5205,
+          "piece": "、"
+        },
+        {
+          "id": 98157,
+          "piece": "合理"
+        },
+        {
+          "id": 121786,
+          "piece": "推断"
+        },
+        {
+          "id": 95793,
+          "piece": "和"
+        },
+        {
+          "id": 96739,
+          "piece": "待"
+        },
+        {
+          "id": 103838,
+          "piece": "验证"
+        },
+        {
+          "id": 96176,
+          "piece": "项"
+        },
+        {
+          "id": 1710,
+          "piece": "。"
+        }
+      ],
+      "request_dump_start": 9528192,
+      "request_dump_end": 10150840,
+      "record_offset": 9528192,
+      "record_end_offset": 10150840,
+      "shape": [
+        2048,
+        76,
+        1,
+        1
+      ]
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "format": "colorlm-v18-single-model-capture-run-v1",
+  "result": "error",
+  "error": "llama-server提前退出，退出码=4294967295",
+  "model": "D:\\project\\大模型ssd化\\fast16\\models\\donor\\qwen3-coder-next-iq3s\\Qwen3-Coder-Next-UD-IQ3_S.gguf",
+  "model_bytes": 29690687488,
+  "alias": "Qwen3-Coder-Next-IQ3S",
+  "server": "D:\\project\\大模型ssd化\\llama.cpp\\build-v17-perf\\bin\\Release\\llama-server.exe",
+  "port": 8121,
+  "gpu_layers": 99,
+  "cpu_moe_layers": 48,
+  "pid": 21624,
+  "tensor": "^l_out-43$",
+  "layer": 43,
+  "stage": "l_out",
+  "dump": "D:\\project\\大模型ssd化\\fast16\\research\\v18_activation_bridge\\captures\\run-20260731\\donor.bin",
+  "receipt": "D:\\project\\大模型ssd化\\fast16\\research\\v18_activation_bridge\\captures\\run-20260731\\donor.receipt.json",
+  "collect_return_code": null,
+  "elapsed_seconds": 224.89,
+  "stdout_log": "D:\\project\\大模型ssd化\\fast16\\research\\v18_activation_bridge\\captures\\run-20260731\\donor.receipt.server.stdout.log",
+  "stderr_log": "D:\\project\\大模型ssd化\\fast16\\research\\v18_activation_bridge\\captures\\run-20260731\\donor.receipt.server.stderr.log"
+}

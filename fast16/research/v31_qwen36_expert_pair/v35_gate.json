@@ -1,0 +1,70 @@
+{
+  "format": "colormlm-v35-independent-short-gate-v1",
+  "date": "2026-08-01",
+  "frozen_before_generation": true,
+  "purpose": "独立检查前29层IQ3_S、后11层高精度的全局Qwen3.6 MoE混合是否同时保留能力与速度。",
+  "dimensions": ["reasoning", "knowledge", "long_context", "coding", "tools", "planning", "computer_use", "communication"],
+  "items": [
+    {
+      "id": "reasoning-updated-values-v35",
+      "dimension": "reasoning",
+      "max_output_tokens": 24,
+      "prompt": "初始x=6,y=2。严格依次执行x=x*y；y=x-y；x=x-y，每一步使用已更新值。只输出{\"x\":整数,\"y\":整数}。",
+      "validator": {"type": "exact_json", "expected": {"x": 2, "y": 10}}
+    },
+    {
+      "id": "knowledge-authoritative-record-v35",
+      "dimension": "knowledge",
+      "max_output_tokens": 32,
+      "prompt": "仅依据记录：D1未审核草稿称仓库为P1；D2已审核但标记retired，称仓库为P2；D3已审核且标记active，称仓库为P3。只输出{\"warehouse\":字符串,\"source\":字符串}。",
+      "validator": {"type": "exact_json", "expected": {"warehouse": "P3", "source": "D3"}}
+    },
+    {
+      "id": "long-context-filter-revision-v35",
+      "dimension": "long_context",
+      "max_output_tokens": 36,
+      "prompt": "记录A zone=alpha rev2。记录B limit=40 rev9 state=cancelled。记录C owner=Qi rev10。记录D zone=beta rev7 state=active。记录E limit=32 rev6 state=active。记录F zone=gamma rev5。规则：忽略cancelled；每字段取rev最大。只输出{\"zone\":字符串,\"limit\":整数}。",
+      "validator": {"type": "exact_json", "expected": {"zone": "beta", "limit": 32}}
+    },
+    {
+      "id": "coding-go-error-order-v35",
+      "dimension": "coding",
+      "max_output_tokens": 40,
+      "prompt": "Go代码在调用value, err := load()后先使用value再检查err。只输出合法JSON：{\"first\":字符串,\"second\":字符串}；first写if err != nil { return err }，second写use(value)。",
+      "validator": {"type": "exact_json", "expected": {"first": "if err != nil { return err }", "second": "use(value)"}}
+    },
+    {
+      "id": "tools-copy-file-v35",
+      "dimension": "tools",
+      "max_output_tokens": 64,
+      "prompt": "可用工具只有copy_file(source:string,destination:string,overwrite:string)。把assets/a.png复制到public/a.png，并明确overwrite为false。不要输出文本，只发起一次工具调用。",
+      "validator": {
+        "type": "tool_call",
+        "expected_name": "copy_file",
+        "expected_arguments": {"source": "assets/a.png", "destination": "public/a.png", "overwrite": "false"},
+        "expected_finish_reason": "tool_calls"
+      }
+    },
+    {
+      "id": "planning-prerequisite-budget-v35",
+      "dimension": "planning",
+      "max_output_tokens": 40,
+      "prompt": "预算9。A成本2价值3；B成本3价值6且依赖A；C成本6价值9；D成本1价值2。选B必须同时选A。最大化价值，价值相同取成本更低。只输出{\"choose\":[按字母排序],\"cost\":整数,\"value\":整数}。",
+      "validator": {"type": "exact_json", "expected": {"choose": ["A", "B", "D"], "cost": 6, "value": 11}}
+    },
+    {
+      "id": "computer-use-export-v35",
+      "dimension": "computer_use",
+      "max_output_tokens": 64,
+      "prompt": "离线界面：Export对话框已打开；Format下拉框当前为PNG，目标为PDF；Export按钮可用。只输出{\"actions\":[动作]}，动作格式{\"action\":\"click\",\"target\":标签}，不要解释。",
+      "validator": {"type": "exact_json", "expected": {"actions": [{"action": "click", "target": "Format"}, {"action": "click", "target": "PDF"}, {"action": "click", "target": "Export"}]}}
+    },
+    {
+      "id": "communication-evidence-boundary-v35",
+      "dimension": "communication",
+      "max_output_tokens": 32,
+      "prompt": "事实：压缩模型已生成；能力短门仍在等待。只输出合法JSON，字段必须且只能是artifact和evidence；artifact为ready，evidence为pending。",
+      "validator": {"type": "exact_json", "expected": {"artifact": "ready", "evidence": "pending"}}
+    }
+  ]
+}

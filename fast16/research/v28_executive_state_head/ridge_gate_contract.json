@@ -1,0 +1,34 @@
+{
+  "format": "colorlm-v28-ridge-gate-contract-v1",
+  "date": "2026-08-01",
+  "source_contract": "fast16/research/v28_executive_state_head/agent_state_gate_v1.json",
+  "source_contract_sha256": "17e62d828a110a24c1dd6c1fb38b88e7e013fe21b50e57082268f9dce041a35a",
+  "target": {
+    "continue_tool": 1.0,
+    "finish": -1.0,
+    "derivation": "tool_call validator => continue_tool; exact_json validator => finish"
+  },
+  "features": {
+    "tensor": "ColorLM terminal hidden before the native LM head",
+    "capture_kind": 4,
+    "hidden_size": 2048,
+    "position": "first next-token decision after the supplied tool result",
+    "normalization": "per-row L2 with epsilon 1e-8"
+  },
+  "probe": {
+    "family": "centered dual ridge regression",
+    "ridge_lambda": 0.01,
+    "decision_threshold": 0.0,
+    "parameter_scan_allowed": false,
+    "fit_split": "train"
+  },
+  "pass_gate": {
+    "train_accuracy": 1.0,
+    "validation_accuracy": 1.0,
+    "test_accuracy": 1.0,
+    "minimum_absolute_heldout_margin": 0.05,
+    "all_records_finite": true,
+    "exactly_one_hidden_and_one_logit_record_per_item": true
+  },
+  "failure_action": "stop v28 executive state head; do not scan ridge, rank, threshold, or relabel the frozen holdout"
+}

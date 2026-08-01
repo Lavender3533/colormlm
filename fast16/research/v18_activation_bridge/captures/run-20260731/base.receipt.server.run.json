@@ -1,0 +1,22 @@
+{
+  "format": "colorlm-v18-single-model-capture-run-v1",
+  "result": "ok",
+  "error": null,
+  "model": "D:\\project\\大模型ssd化\\fast16\\models\\ColorLM-v6-Q3Router-Fused-A1.gguf",
+  "model_bytes": 13731822496,
+  "alias": "ColorLM-v18-Bridge-Base",
+  "server": "D:\\project\\大模型ssd化\\llama.cpp\\build-v17-perf\\bin\\Release\\llama-server.exe",
+  "port": 8120,
+  "gpu_layers": 99,
+  "cpu_moe_layers": 29,
+  "pid": 31524,
+  "tensor": "^attn_residual-35$",
+  "layer": 35,
+  "stage": "attn_residual",
+  "dump": "D:\\project\\大模型ssd化\\fast16\\research\\v18_activation_bridge\\captures\\run-20260731\\base.bin",
+  "receipt": "D:\\project\\大模型ssd化\\fast16\\research\\v18_activation_bridge\\captures\\run-20260731\\base.receipt.json",
+  "collect_return_code": 0,
+  "elapsed_seconds": 38.578,
+  "stdout_log": "D:\\project\\大模型ssd化\\fast16\\research\\v18_activation_bridge\\captures\\run-20260731\\base.receipt.server.stdout.log",
+  "stderr_log": "D:\\project\\大模型ssd化\\fast16\\research\\v18_activation_bridge\\captures\\run-20260731\\base.receipt.server.stderr.log"
+}

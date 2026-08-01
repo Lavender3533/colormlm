@@ -1,0 +1,3317 @@
+{
+  "format": "colorlm-activation-capture-v2",
+  "endpoint": "http://127.0.0.1:8122",
+  "model": "GLM-4.7-Agent-Island-Capture",
+  "dump": "D:\\project\\大模型ssd化\\fast16\\research\\v21_glm_agent_island\\captures\\glm_l42.bin",
+  "dump_prefix_bytes": 6316760,
+  "dump_prefix_sha256": "c51c859f7bcd48eaba8b1eefc9d1db6c922d3c61720a87f90c1008cc7e57117a",
+  "layer": 42,
+  "stage": "l_out",
+  "capture_count": 12,
+  "captures": [
+    {
+      "prompt_id": "rust-borrow",
+      "prompt": "Review this Rust function and explain the ownership bug, then give the smallest correct patch.\n```rust\nfn first_long_word(items: Vec<String>) -> &str {\n    let mut best = \"\";\n    for item in items {\n        if item.len() > best.len() { best = &item; }\n    }\n    best\n}\n```\nKeep the public intent unchanged.",
+      "prompt_utf8_bytes": 306,
+      "prompt_sha256": "306430d52ec5e927976de8e0bf9aa2bf0529238dfefeefc2c12ef61779ac32de",
+      "token_count": 75,
+      "tokens": [
+        {
+          "id": 19395,
+          "piece": "Review"
+        },
+        {
+          "id": 419,
+          "piece": " this"
+        },
+        {
+          "id": 33627,
+          "piece": " Rust"
+        },
+        {
+          "id": 729,
+          "piece": " function"
+        },
+        {
+          "id": 323,
+          "piece": " and"
+        },
+        {
+          "id": 10334,
+          "piece": " explain"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 15266,
+          "piece": " ownership"
+        },
+        {
+          "id": 9871,
+          "piece": " bug"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 1221,
+          "piece": " then"
+        },
+        {
+          "id": 2968,
+          "piece": " give"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 24557,
+          "piece": " smallest"
+        },
+        {
+          "id": 4396,
+          "piece": " correct"
+        },
+        {
+          "id": 10895,
+          "piece": " patch"
+        },
+        {
+          "id": 624,
+          "piece": ".\n"
+        },
+        {
+          "id": 73022,
+          "piece": "```"
+        },
+        {
+          "id": 35609,
+          "piece": "rust"
+        },
+        {
+          "id": 198,
+          "piece": "\n"
+        },
+        {
+          "id": 8821,
+          "piece": "fn"
+        },
+        {
+          "id": 1156,
+          "piece": " first"
+        },
+        {
+          "id": 17773,
+          "piece": "_long"
+        },
+        {
+          "id": 13524,
+          "piece": "_word"
+        },
+        {
+          "id": 24267,
+          "piece": "(items"
+        },
+        {
+          "id": 25,
+          "piece": ":"
+        },
+        {
+          "id": 11307,
+          "piece": " Vec"
+        },
+        {
+          "id": 3464,
+          "piece": "<String"
+        },
+        {
+          "id": 9228,
+          "piece": ">)"
+        },
+        {
+          "id": 1464,
+          "piece": " ->"
+        },
+        {
+          "id": 609,
+          "piece": " &"
+        },
+        {
+          "id": 495,
+          "piece": "str"
+        },
+        {
+          "id": 341,
+          "piece": " {\n"
+        },
+        {
+          "id": 262,
+          "piece": "   "
+        },
+        {
+          "id": 1077,
+          "piece": " let"
+        },
+        {
+          "id": 5206,
+          "piece": " mut"
+        },
+        {
+          "id": 1850,
+          "piece": " best"
+        },
+        {
+          "id": 284,
+          "piece": " ="
+        },
+        {
+          "id": 5438,
+          "piece": " \"\";\n"
+        },
+        {
+          "id": 262,
+          "piece": "   "
+        },
+        {
+          "id": 369,
+          "piece": " for"
+        },
+        {
+          "id": 1509,
+          "piece": " item"
+        },
+        {
+          "id": 304,
+          "piece": " in"
+        },
+        {
+          "id": 3589,
+          "piece": " items"
+        },
+        {
+          "id": 341,
+          "piece": " {\n"
+        },
+        {
+          "id": 286,
+          "piece": "       "
+        },
+        {
+          "id": 421,
+          "piece": " if"
+        },
+        {
+          "id": 1509,
+          "piece": " item"
+        },
+        {
+          "id": 19369,
+          "piece": ".len"
+        },
+        {
+          "id": 368,
+          "piece": "()"
+        },
+        {
+          "id": 861,
+          "piece": " >"
+        },
+        {
+          "id": 1850,
+          "piece": " best"
+        },
+        {
+          "id": 19369,
+          "piece": ".len"
+        },
+        {
+          "id": 368,
+          "piece": "()"
+        },
+        {
+          "id": 314,
+          "piece": " {"
+        },
+        {
+          "id": 1850,
+          "piece": " best"
+        },
+        {
+          "id": 284,
+          "piece": " ="
+        },
+        {
+          "id": 609,
+          "piece": " &"
+        },
+        {
+          "id": 1203,
+          "piece": "item"
+        },
+        {
+          "id": 26,
+          "piece": ";"
+        },
+        {
+          "id": 456,
+          "piece": " }\n"
+        },
+        {
+          "id": 262,
+          "piece": "   "
+        },
+        {
+          "id": 456,
+          "piece": " }\n"
+        },
+        {
+          "id": 262,
+          "piece": "   "
+        },
+        {
+          "id": 1850,
+          "piece": " best"
+        },
+        {
+          "id": 198,
+          "piece": "\n"
+        },
+        {
+          "id": 532,
+          "piece": "}\n"
+        },
+        {
+          "id": 13865,
+          "piece": "``"
+        },
+        {
+          "id": 3989,
+          "piece": "`\n"
+        },
+        {
+          "id": 19397,
+          "piece": "Keep"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 584,
+          "piece": " public"
+        },
+        {
+          "id": 7385,
+          "piece": " intent"
+        },
+        {
+          "id": 34684,
+          "piece": " unchanged"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        }
+      ],
+      "request_dump_start": 16440,
+      "request_dump_end": 630896,
+      "record_offset": 16440,
+      "record_end_offset": 630896,
+      "shape": [
+        2048,
+        75,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "python-async",
+      "prompt": "Find the concurrency and cancellation defects in this Python code. Return a corrected implementation that preserves result ordering.\n```python\nasync def fetch_all(urls, client):\n    tasks = [asyncio.create_task(client.get(u)) for u in urls]\n    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)\n    return [task.result() for task in done]\n```",
+      "prompt_utf8_bytes": 371,
+      "prompt_sha256": "de6378acff6846b2b6da1a13449d010a1ceae11bf795f864007528964c9162e0",
+      "token_count": 79,
+      "tokens": [
+        {
+          "id": 9880,
+          "piece": "Find"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 77383,
+          "piece": " concurrency"
+        },
+        {
+          "id": 323,
+          "piece": " and"
+        },
+        {
+          "id": 35656,
+          "piece": " cancellation"
+        },
+        {
+          "id": 41320,
+          "piece": " defects"
+        },
+        {
+          "id": 304,
+          "piece": " in"
+        },
+        {
+          "id": 419,
+          "piece": " this"
+        },
+        {
+          "id": 13020,
+          "piece": " Python"
+        },
+        {
+          "id": 2038,
+          "piece": " code"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 3411,
+          "piece": " Return"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 35784,
+          "piece": " corrected"
+        },
+        {
+          "id": 8128,
+          "piece": " implementation"
+        },
+        {
+          "id": 429,
+          "piece": " that"
+        },
+        {
+          "id": 74309,
+          "piece": " preserves"
+        },
+        {
+          "id": 1102,
+          "piece": " result"
+        },
+        {
+          "id": 21341,
+          "piece": " ordering"
+        },
+        {
+          "id": 624,
+          "piece": ".\n"
+        },
+        {
+          "id": 73022,
+          "piece": "```"
+        },
+        {
+          "id": 12663,
+          "piece": "python"
+        },
+        {
+          "id": 198,
+          "piece": "\n"
+        },
+        {
+          "id": 7692,
+          "piece": "async"
+        },
+        {
+          "id": 707,
+          "piece": " def"
+        },
+        {
+          "id": 7807,
+          "piece": " fetch"
+        },
+        {
+          "id": 5705,
+          "piece": "_all"
+        },
+        {
+          "id": 90422,
+          "piece": "(urls"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 2943,
+          "piece": " client"
+        },
+        {
+          "id": 982,
+          "piece": "):\n"
+        },
+        {
+          "id": 262,
+          "piece": "   "
+        },
+        {
+          "id": 9076,
+          "piece": " tasks"
+        },
+        {
+          "id": 284,
+          "piece": " ="
+        },
+        {
+          "id": 508,
+          "piece": " ["
+        },
+        {
+          "id": 7692,
+          "piece": "async"
+        },
+        {
+          "id": 815,
+          "piece": "io"
+        },
+        {
+          "id": 2520,
+          "piece": ".create"
+        },
+        {
+          "id": 12178,
+          "piece": "_task"
+        },
+        {
+          "id": 12799,
+          "piece": "(client"
+        },
+        {
+          "id": 670,
+          "piece": ".get"
+        },
+        {
+          "id": 8153,
+          "piece": "(u"
+        },
+        {
+          "id": 593,
+          "piece": "))"
+        },
+        {
+          "id": 369,
+          "piece": " for"
+        },
+        {
+          "id": 575,
+          "piece": " u"
+        },
+        {
+          "id": 304,
+          "piece": " in"
+        },
+        {
+          "id": 29868,
+          "piece": " urls"
+        },
+        {
+          "id": 921,
+          "piece": "]\n"
+        },
+        {
+          "id": 262,
+          "piece": "   "
+        },
+        {
+          "id": 2814,
+          "piece": " done"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 15268,
+          "piece": " pending"
+        },
+        {
+          "id": 284,
+          "piece": " ="
+        },
+        {
+          "id": 2535,
+          "piece": " await"
+        },
+        {
+          "id": 44657,
+          "piece": " asyncio"
+        },
+        {
+          "id": 16280,
+          "piece": ".wait"
+        },
+        {
+          "id": 69815,
+          "piece": "(tasks"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 470,
+          "piece": " return"
+        },
+        {
+          "id": 47342,
+          "piece": "_when"
+        },
+        {
+          "id": 28,
+          "piece": "="
+        },
+        {
+          "id": 7692,
+          "piece": "async"
+        },
+        {
+          "id": 815,
+          "piece": "io"
+        },
+        {
+          "id": 991,
+          "piece": ".F"
+        },
+        {
+          "id": 14227,
+          "piece": "IRST"
+        },
+        {
+          "id": 27196,
+          "piece": "_EXCEPTION"
+        },
+        {
+          "id": 340,
+          "piece": ")\n"
+        },
+        {
+          "id": 262,
+          "piece": "   "
+        },
+        {
+          "id": 470,
+          "piece": " return"
+        },
+        {
+          "id": 508,
+          "piece": " ["
+        },
+        {
+          "id": 8201,
+          "piece": "task"
+        },
+        {
+          "id": 12065,
+          "piece": ".result"
+        },
+        {
+          "id": 368,
+          "piece": "()"
+        },
+        {
+          "id": 369,
+          "piece": " for"
+        },
+        {
+          "id": 3383,
+          "piece": " task"
+        },
+        {
+          "id": 304,
+          "piece": " in"
+        },
+        {
+          "id": 2814,
+          "piece": " done"
+        },
+        {
+          "id": 921,
+          "piece": "]\n"
+        },
+        {
+          "id": 73022,
+          "piece": "```"
+        }
+      ],
+      "request_dump_start": 630896,
+      "request_dump_end": 1278120,
+      "record_offset": 630896,
+      "record_end_offset": 1278120,
+      "shape": [
+        2048,
+        79,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "typescript-types",
+      "prompt": "Refactor this TypeScript API so invalid states are unrepresentable and exhaustive checking works.\n```ts\ntype Job = { status: string; value?: string; error?: Error };\nfunction render(job: Job): string {\n  if (job.status === 'done') return job.value!;\n  if (job.status === 'failed') return job.error!.message;\n  return 'waiting';\n}\n```",
+      "prompt_utf8_bytes": 333,
+      "prompt_sha256": "6fea86e1220cacfc9f97a0663a6004a79fd7573bdb52eb82e1fff904bbdfa19e",
+      "token_count": 79,
+      "tokens": [
+        {
+          "id": 3945,
+          "piece": "Ref"
+        },
+        {
+          "id": 5621,
+          "piece": "actor"
+        },
+        {
+          "id": 419,
+          "piece": " this"
+        },
+        {
+          "id": 86732,
+          "piece": " TypeScript"
+        },
+        {
+          "id": 5333,
+          "piece": " API"
+        },
+        {
+          "id": 773,
+          "piece": " so"
+        },
+        {
+          "id": 8317,
+          "piece": " invalid"
+        },
+        {
+          "id": 5302,
+          "piece": " states"
+        },
+        {
+          "id": 525,
+          "piece": " are"
+        },
+        {
+          "id": 650,
+          "piece": " un"
+        },
+        {
+          "id": 35094,
+          "piece": "represent"
+        },
+        {
+          "id": 480,
+          "piece": "able"
+        },
+        {
+          "id": 323,
+          "piece": " and"
+        },
+        {
+          "id": 71947,
+          "piece": " exhaustive"
+        },
+        {
+          "id": 13287,
+          "piece": " checking"
+        },
+        {
+          "id": 4278,
+          "piece": " works"
+        },
+        {
+          "id": 624,
+          "piece": ".\n"
+        },
+        {
+          "id": 73022,
+          "piece": "```"
+        },
+        {
+          "id": 2576,
+          "piece": "ts"
+        },
+        {
+          "id": 198,
+          "piece": "\n"
+        },
+        {
+          "id": 1313,
+          "piece": "type"
+        },
+        {
+          "id": 12005,
+          "piece": " Job"
+        },
+        {
+          "id": 284,
+          "piece": " ="
+        },
+        {
+          "id": 314,
+          "piece": " {"
+        },
+        {
+          "id": 2639,
+          "piece": " status"
+        },
+        {
+          "id": 25,
+          "piece": ":"
+        },
+        {
+          "id": 914,
+          "piece": " string"
+        },
+        {
+          "id": 26,
+          "piece": ";"
+        },
+        {
+          "id": 897,
+          "piece": " value"
+        },
+        {
+          "id": 4820,
+          "piece": "?:"
+        },
+        {
+          "id": 914,
+          "piece": " string"
+        },
+        {
+          "id": 26,
+          "piece": ";"
+        },
+        {
+          "id": 1465,
+          "piece": " error"
+        },
+        {
+          "id": 4820,
+          "piece": "?:"
+        },
+        {
+          "id": 4600,
+          "piece": " Error"
+        },
+        {
+          "id": 2605,
+          "piece": " };\n"
+        },
+        {
+          "id": 1688,
+          "piece": "function"
+        },
+        {
+          "id": 3141,
+          "piece": " render"
+        },
+        {
+          "id": 28231,
+          "piece": "(job"
+        },
+        {
+          "id": 25,
+          "piece": ":"
+        },
+        {
+          "id": 12005,
+          "piece": " Job"
+        },
+        {
+          "id": 1648,
+          "piece": "):"
+        },
+        {
+          "id": 914,
+          "piece": " string"
+        },
+        {
+          "id": 341,
+          "piece": " {\n"
+        },
+        {
+          "id": 220,
+          "piece": " "
+        },
+        {
+          "id": 421,
+          "piece": " if"
+        },
+        {
+          "id": 320,
+          "piece": " ("
+        },
+        {
+          "id": 8798,
+          "piece": "job"
+        },
+        {
+          "id": 4299,
+          "piece": ".status"
+        },
+        {
+          "id": 2049,
+          "piece": " ==="
+        },
+        {
+          "id": 364,
+          "piece": " '"
+        },
+        {
+          "id": 10433,
+          "piece": "done"
+        },
+        {
+          "id": 863,
+          "piece": "')"
+        },
+        {
+          "id": 470,
+          "piece": " return"
+        },
+        {
+          "id": 2618,
+          "piece": " job"
+        },
+        {
+          "id": 2824,
+          "piece": ".value"
+        },
+        {
+          "id": 84616,
+          "piece": "!;\n"
+        },
+        {
+          "id": 220,
+          "piece": " "
+        },
+        {
+          "id": 421,
+          "piece": " if"
+        },
+        {
+          "id": 320,
+          "piece": " ("
+        },
+        {
+          "id": 8798,
+          "piece": "job"
+        },
+        {
+          "id": 4299,
+          "piece": ".status"
+        },
+        {
+          "id": 2049,
+          "piece": " ==="
+        },
+        {
+          "id": 364,
+          "piece": " '"
+        },
+        {
+          "id": 16077,
+          "piece": "failed"
+        },
+        {
+          "id": 863,
+          "piece": "')"
+        },
+        {
+          "id": 470,
+          "piece": " return"
+        },
+        {
+          "id": 2618,
+          "piece": " job"
+        },
+        {
+          "id": 4417,
+          "piece": ".error"
+        },
+        {
+          "id": 15353,
+          "piece": "!."
+        },
+        {
+          "id": 1994,
+          "piece": "message"
+        },
+        {
+          "id": 280,
+          "piece": ";\n"
+        },
+        {
+          "id": 220,
+          "piece": " "
+        },
+        {
+          "id": 470,
+          "piece": " return"
+        },
+        {
+          "id": 364,
+          "piece": " '"
+        },
+        {
+          "id": 49217,
+          "piece": "waiting"
+        },
+        {
+          "id": 1010,
+          "piece": "';\n"
+        },
+        {
+          "id": 532,
+          "piece": "}\n"
+        },
+        {
+          "id": 73022,
+          "piece": "```"
+        }
+      ],
+      "request_dump_start": 1278120,
+      "request_dump_end": 1925344,
+      "record_offset": 1278120,
+      "record_end_offset": 1925344,
+      "shape": [
+        2048,
+        79,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "java-race",
+      "prompt": "Diagnose the race in this Java class and provide a minimal thread-safe replacement without serializing readers.\n```java\nfinal class Cache {\n  private final Map<String, String> values = new HashMap<>();\n  String get(String key) { return values.get(key); }\n  void put(String key, String value) { values.put(key, value); }\n}\n```",
+      "prompt_utf8_bytes": 325,
+      "prompt_sha256": "f3a5cf4db09ce4d8a8f6e54520cd058ba23b24a4c1fd150d6a6cf09cdf413a3a",
+      "token_count": 73,
+      "tokens": [
+        {
+          "id": 21633,
+          "piece": "Di"
+        },
+        {
+          "id": 3246,
+          "piece": "agn"
+        },
+        {
+          "id": 960,
+          "piece": "ose"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 6957,
+          "piece": " race"
+        },
+        {
+          "id": 304,
+          "piece": " in"
+        },
+        {
+          "id": 419,
+          "piece": " this"
+        },
+        {
+          "id": 7943,
+          "piece": " Java"
+        },
+        {
+          "id": 536,
+          "piece": " class"
+        },
+        {
+          "id": 323,
+          "piece": " and"
+        },
+        {
+          "id": 3410,
+          "piece": " provide"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 17355,
+          "piece": " minimal"
+        },
+        {
+          "id": 4516,
+          "piece": " thread"
+        },
+        {
+          "id": 54750,
+          "piece": "-safe"
+        },
+        {
+          "id": 13714,
+          "piece": " replacement"
+        },
+        {
+          "id": 2041,
+          "piece": " without"
+        },
+        {
+          "id": 6146,
+          "piece": " serial"
+        },
+        {
+          "id": 4849,
+          "piece": "izing"
+        },
+        {
+          "id": 12720,
+          "piece": " readers"
+        },
+        {
+          "id": 624,
+          "piece": ".\n"
+        },
+        {
+          "id": 73022,
+          "piece": "```"
+        },
+        {
+          "id": 10037,
+          "piece": "java"
+        },
+        {
+          "id": 198,
+          "piece": "\n"
+        },
+        {
+          "id": 11816,
+          "piece": "final"
+        },
+        {
+          "id": 536,
+          "piece": " class"
+        },
+        {
+          "id": 19442,
+          "piece": " Cache"
+        },
+        {
+          "id": 341,
+          "piece": " {\n"
+        },
+        {
+          "id": 220,
+          "piece": " "
+        },
+        {
+          "id": 869,
+          "piece": " private"
+        },
+        {
+          "id": 1590,
+          "piece": " final"
+        },
+        {
+          "id": 5027,
+          "piece": " Map"
+        },
+        {
+          "id": 3464,
+          "piece": "<String"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 923,
+          "piece": " String"
+        },
+        {
+          "id": 29,
+          "piece": ">"
+        },
+        {
+          "id": 2750,
+          "piece": " values"
+        },
+        {
+          "id": 284,
+          "piece": " ="
+        },
+        {
+          "id": 501,
+          "piece": " new"
+        },
+        {
+          "id": 10523,
+          "piece": " HashMap"
+        },
+        {
+          "id": 10869,
+          "piece": "<>();\n"
+        },
+        {
+          "id": 220,
+          "piece": " "
+        },
+        {
+          "id": 923,
+          "piece": " String"
+        },
+        {
+          "id": 633,
+          "piece": " get"
+        },
+        {
+          "id": 2242,
+          "piece": "(String"
+        },
+        {
+          "id": 1376,
+          "piece": " key"
+        },
+        {
+          "id": 8,
+          "piece": ")"
+        },
+        {
+          "id": 314,
+          "piece": " {"
+        },
+        {
+          "id": 470,
+          "piece": " return"
+        },
+        {
+          "id": 2750,
+          "piece": " values"
+        },
+        {
+          "id": 670,
+          "piece": ".get"
+        },
+        {
+          "id": 4857,
+          "piece": "(key"
+        },
+        {
+          "id": 1215,
+          "piece": ");"
+        },
+        {
+          "id": 456,
+          "piece": " }\n"
+        },
+        {
+          "id": 220,
+          "piece": " "
+        },
+        {
+          "id": 737,
+          "piece": " void"
+        },
+        {
+          "id": 2182,
+          "piece": " put"
+        },
+        {
+          "id": 2242,
+          "piece": "(String"
+        },
+        {
+          "id": 1376,
+          "piece": " key"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 923,
+          "piece": " String"
+        },
+        {
+          "id": 897,
+          "piece": " value"
+        },
+        {
+          "id": 8,
+          "piece": ")"
+        },
+        {
+          "id": 314,
+          "piece": " {"
+        },
+        {
+          "id": 2750,
+          "piece": " values"
+        },
+        {
+          "id": 3597,
+          "piece": ".put"
+        },
+        {
+          "id": 4857,
+          "piece": "(key"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 897,
+          "piece": " value"
+        },
+        {
+          "id": 1215,
+          "piece": ");"
+        },
+        {
+          "id": 456,
+          "piece": " }\n"
+        },
+        {
+          "id": 532,
+          "piece": "}\n"
+        },
+        {
+          "id": 73022,
+          "piece": "```"
+        }
+      ],
+      "request_dump_start": 1925344,
+      "request_dump_end": 2523416,
+      "record_offset": 1925344,
+      "record_end_offset": 2523416,
+      "shape": [
+        2048,
+        73,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "sql-transaction",
+      "prompt": "A service reserves inventory and creates an order in two SQL statements. Explain one interleaving that oversells stock, then write a transaction that is correct under READ COMMITTED. Include the failure check and rollback behavior.",
+      "prompt_utf8_bytes": 231,
+      "prompt_sha256": "5516df1ec1b3c8cf2ee0fbcb2f4f2ae6f9404f60800de2a62c04e82f9623c665",
+      "token_count": 42,
+      "tokens": [
+        {
+          "id": 32,
+          "piece": "A"
+        },
+        {
+          "id": 2473,
+          "piece": " service"
+        },
+        {
+          "id": 29389,
+          "piece": " reserves"
+        },
+        {
+          "id": 15432,
+          "piece": " inventory"
+        },
+        {
+          "id": 323,
+          "piece": " and"
+        },
+        {
+          "id": 11445,
+          "piece": " creates"
+        },
+        {
+          "id": 458,
+          "piece": " an"
+        },
+        {
+          "id": 1973,
+          "piece": " order"
+        },
+        {
+          "id": 304,
+          "piece": " in"
+        },
+        {
+          "id": 1378,
+          "piece": " two"
+        },
+        {
+          "id": 7870,
+          "piece": " SQL"
+        },
+        {
+          "id": 12233,
+          "piece": " statements"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 81247,
+          "piece": " Explain"
+        },
+        {
+          "id": 825,
+          "piece": " one"
+        },
+        {
+          "id": 94171,
+          "piece": " interle"
+        },
+        {
+          "id": 2317,
+          "piece": "aving"
+        },
+        {
+          "id": 429,
+          "piece": " that"
+        },
+        {
+          "id": 17436,
+          "piece": " overs"
+        },
+        {
+          "id": 6436,
+          "piece": "ells"
+        },
+        {
+          "id": 5591,
+          "piece": " stock"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 1221,
+          "piece": " then"
+        },
+        {
+          "id": 3270,
+          "piece": " write"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 7745,
+          "piece": " transaction"
+        },
+        {
+          "id": 429,
+          "piece": " that"
+        },
+        {
+          "id": 374,
+          "piece": " is"
+        },
+        {
+          "id": 4396,
+          "piece": " correct"
+        },
+        {
+          "id": 1212,
+          "piece": " under"
+        },
+        {
+          "id": 18633,
+          "piece": " READ"
+        },
+        {
+          "id": 82541,
+          "piece": " COMMIT"
+        },
+        {
+          "id": 33309,
+          "piece": "TED"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 29620,
+          "piece": " Include"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 7901,
+          "piece": " failure"
+        },
+        {
+          "id": 1779,
+          "piece": " check"
+        },
+        {
+          "id": 323,
+          "piece": " and"
+        },
+        {
+          "id": 59993,
+          "piece": " rollback"
+        },
+        {
+          "id": 7709,
+          "piece": " behavior"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        }
+      ],
+      "request_dump_start": 2523416,
+      "request_dump_end": 2867536,
+      "record_offset": 2523416,
+      "record_end_offset": 2867536,
+      "shape": [
+        2048,
+        42,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "agent-tool",
+      "prompt": "You can call read_file, search_text, apply_patch, and run_tests. A user asks you to fix a parser regression in an unfamiliar repository. Produce a compact tool plan with explicit evidence gates. Do not guess file names and do not edit before locating the parser and its tests.",
+      "prompt_utf8_bytes": 276,
+      "prompt_sha256": "c0417c4264ecebf048a7546dae0ffadba3ecf4fd7b179d6de89d0ab3fc08b333",
+      "token_count": 57,
+      "tokens": [
+        {
+          "id": 2610,
+          "piece": "You"
+        },
+        {
+          "id": 646,
+          "piece": " can"
+        },
+        {
+          "id": 1618,
+          "piece": " call"
+        },
+        {
+          "id": 1349,
+          "piece": " read"
+        },
+        {
+          "id": 2458,
+          "piece": "_file"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 2711,
+          "piece": " search"
+        },
+        {
+          "id": 4326,
+          "piece": "_text"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 3796,
+          "piece": " apply"
+        },
+        {
+          "id": 39428,
+          "piece": "_patch"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 323,
+          "piece": " and"
+        },
+        {
+          "id": 1598,
+          "piece": " run"
+        },
+        {
+          "id": 32362,
+          "piece": "_tests"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 362,
+          "piece": " A"
+        },
+        {
+          "id": 1196,
+          "piece": " user"
+        },
+        {
+          "id": 17045,
+          "piece": " asks"
+        },
+        {
+          "id": 498,
+          "piece": " you"
+        },
+        {
+          "id": 311,
+          "piece": " to"
+        },
+        {
+          "id": 5046,
+          "piece": " fix"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 6729,
+          "piece": " parser"
+        },
+        {
+          "id": 30429,
+          "piece": " regression"
+        },
+        {
+          "id": 304,
+          "piece": " in"
+        },
+        {
+          "id": 458,
+          "piece": " an"
+        },
+        {
+          "id": 48966,
+          "piece": " unfamiliar"
+        },
+        {
+          "id": 12536,
+          "piece": " repository"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 86168,
+          "piece": " Produce"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 16812,
+          "piece": " compact"
+        },
+        {
+          "id": 5392,
+          "piece": " tool"
+        },
+        {
+          "id": 3119,
+          "piece": " plan"
+        },
+        {
+          "id": 448,
+          "piece": " with"
+        },
+        {
+          "id": 11459,
+          "piece": " explicit"
+        },
+        {
+          "id": 5904,
+          "piece": " evidence"
+        },
+        {
+          "id": 34364,
+          "piece": " gates"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 3155,
+          "piece": " Do"
+        },
+        {
+          "id": 537,
+          "piece": " not"
+        },
+        {
+          "id": 7942,
+          "piece": " guess"
+        },
+        {
+          "id": 1034,
+          "piece": " file"
+        },
+        {
+          "id": 5036,
+          "piece": " names"
+        },
+        {
+          "id": 323,
+          "piece": " and"
+        },
+        {
+          "id": 653,
+          "piece": " do"
+        },
+        {
+          "id": 537,
+          "piece": " not"
+        },
+        {
+          "id": 4499,
+          "piece": " edit"
+        },
+        {
+          "id": 1573,
+          "piece": " before"
+        },
+        {
+          "id": 71342,
+          "piece": " locating"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 6729,
+          "piece": " parser"
+        },
+        {
+          "id": 323,
+          "piece": " and"
+        },
+        {
+          "id": 1181,
+          "piece": " its"
+        },
+        {
+          "id": 7032,
+          "piece": " tests"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        }
+      ],
+      "request_dump_start": 2867536,
+      "request_dump_end": 3334536,
+      "record_offset": 2867536,
+      "record_end_offset": 3334536,
+      "shape": [
+        2048,
+        57,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "go-context",
+      "prompt": "Correct this Go function so timeout, goroutine lifetime, channel closure, and error propagation are all sound.\n```go\nfunc load(ctx context.Context) string {\n    ch := make(chan string)\n    go func() { ch <- slowRead() }()\n    select {\n    case value := <-ch: return value\n    case <-time.After(time.Second): return \"\"\n    }\n}\n```",
+      "prompt_utf8_bytes": 329,
+      "prompt_sha256": "c0614e0b4624d968cb41486220abb327f587dcab0dcb1d6f85875f69d06ac17b",
+      "token_count": 77,
+      "tokens": [
+        {
+          "id": 32934,
+          "piece": "Correct"
+        },
+        {
+          "id": 419,
+          "piece": " this"
+        },
+        {
+          "id": 5994,
+          "piece": " Go"
+        },
+        {
+          "id": 729,
+          "piece": " function"
+        },
+        {
+          "id": 773,
+          "piece": " so"
+        },
+        {
+          "id": 9628,
+          "piece": " timeout"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 44930,
+          "piece": " gor"
+        },
+        {
+          "id": 14150,
+          "piece": "outine"
+        },
+        {
+          "id": 18996,
+          "piece": " lifetime"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 5496,
+          "piece": " channel"
+        },
+        {
+          "id": 21901,
+          "piece": " closure"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 323,
+          "piece": " and"
+        },
+        {
+          "id": 1465,
+          "piece": " error"
+        },
+        {
+          "id": 53286,
+          "piece": " propagation"
+        },
+        {
+          "id": 525,
+          "piece": " are"
+        },
+        {
+          "id": 678,
+          "piece": " all"
+        },
+        {
+          "id": 5112,
+          "piece": " sound"
+        },
+        {
+          "id": 624,
+          "piece": ".\n"
+        },
+        {
+          "id": 73022,
+          "piece": "```"
+        },
+        {
+          "id": 3346,
+          "piece": "go"
+        },
+        {
+          "id": 198,
+          "piece": "\n"
+        },
+        {
+          "id": 2830,
+          "piece": "func"
+        },
+        {
+          "id": 2795,
+          "piece": " load"
+        },
+        {
+          "id": 7502,
+          "piece": "(ctx"
+        },
+        {
+          "id": 2266,
+          "piece": " context"
+        },
+        {
+          "id": 9325,
+          "piece": ".Context"
+        },
+        {
+          "id": 8,
+          "piece": ")"
+        },
+        {
+          "id": 914,
+          "piece": " string"
+        },
+        {
+          "id": 341,
+          "piece": " {\n"
+        },
+        {
+          "id": 262,
+          "piece": "   "
+        },
+        {
+          "id": 521,
+          "piece": " ch"
+        },
+        {
+          "id": 1669,
+          "piece": " :="
+        },
+        {
+          "id": 1281,
+          "piece": " make"
+        },
+        {
+          "id": 35016,
+          "piece": "(chan"
+        },
+        {
+          "id": 914,
+          "piece": " string"
+        },
+        {
+          "id": 340,
+          "piece": ")\n"
+        },
+        {
+          "id": 262,
+          "piece": "   "
+        },
+        {
+          "id": 728,
+          "piece": " go"
+        },
+        {
+          "id": 2915,
+          "piece": " func"
+        },
+        {
+          "id": 368,
+          "piece": "()"
+        },
+        {
+          "id": 314,
+          "piece": " {"
+        },
+        {
+          "id": 521,
+          "piece": " ch"
+        },
+        {
+          "id": 9116,
+          "piece": " <-"
+        },
+        {
+          "id": 6301,
+          "piece": " slow"
+        },
+        {
+          "id": 4418,
+          "piece": "Read"
+        },
+        {
+          "id": 368,
+          "piece": "()"
+        },
+        {
+          "id": 50413,
+          "piece": " }()\n"
+        },
+        {
+          "id": 262,
+          "piece": "   "
+        },
+        {
+          "id": 3293,
+          "piece": " select"
+        },
+        {
+          "id": 341,
+          "piece": " {\n"
+        },
+        {
+          "id": 262,
+          "piece": "   "
+        },
+        {
+          "id": 1142,
+          "piece": " case"
+        },
+        {
+          "id": 897,
+          "piece": " value"
+        },
+        {
+          "id": 1669,
+          "piece": " :="
+        },
+        {
+          "id": 9116,
+          "piece": " <-"
+        },
+        {
+          "id": 331,
+          "piece": "ch"
+        },
+        {
+          "id": 25,
+          "piece": ":"
+        },
+        {
+          "id": 470,
+          "piece": " return"
+        },
+        {
+          "id": 897,
+          "piece": " value"
+        },
+        {
+          "id": 198,
+          "piece": "\n"
+        },
+        {
+          "id": 262,
+          "piece": "   "
+        },
+        {
+          "id": 1142,
+          "piece": " case"
+        },
+        {
+          "id": 9116,
+          "piece": " <-"
+        },
+        {
+          "id": 1678,
+          "piece": "time"
+        },
+        {
+          "id": 36700,
+          "piece": ".After"
+        },
+        {
+          "id": 9726,
+          "piece": "(time"
+        },
+        {
+          "id": 32289,
+          "piece": ".Second"
+        },
+        {
+          "id": 1648,
+          "piece": "):"
+        },
+        {
+          "id": 470,
+          "piece": " return"
+        },
+        {
+          "id": 8388,
+          "piece": " \"\"\n"
+        },
+        {
+          "id": 262,
+          "piece": "   "
+        },
+        {
+          "id": 456,
+          "piece": " }\n"
+        },
+        {
+          "id": 532,
+          "piece": "}\n"
+        },
+        {
+          "id": 73022,
+          "piece": "```"
+        }
+      ],
+      "request_dump_start": 3334536,
+      "request_dump_end": 3965376,
+      "record_offset": 3334536,
+      "record_end_offset": 3965376,
+      "shape": [
+        2048,
+        77,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "cpp-lifetime",
+      "prompt": "Explain precisely why this C++ code has undefined behavior and rewrite it with a clear ownership contract.\n```cpp\nstd::string_view label() {\n    std::string value = compute_label();\n    return value;\n}\n```\nAlso state one test that would fail nondeterministically in the original version.",
+      "prompt_utf8_bytes": 287,
+      "prompt_sha256": "68b7512a443711b06de57c537de1b6efa8fe592cd06fa0b743a4dd8a90cf4f8e",
+      "token_count": 61,
+      "tokens": [
+        {
+          "id": 840,
+          "piece": "Ex"
+        },
+        {
+          "id": 20726,
+          "piece": "plain"
+        },
+        {
+          "id": 23573,
+          "piece": " precisely"
+        },
+        {
+          "id": 3170,
+          "piece": " why"
+        },
+        {
+          "id": 419,
+          "piece": " this"
+        },
+        {
+          "id": 356,
+          "piece": " C"
+        },
+        {
+          "id": 1027,
+          "piece": "++"
+        },
+        {
+          "id": 2038,
+          "piece": " code"
+        },
+        {
+          "id": 702,
+          "piece": " has"
+        },
+        {
+          "id": 5614,
+          "piece": " undefined"
+        },
+        {
+          "id": 7709,
+          "piece": " behavior"
+        },
+        {
+          "id": 323,
+          "piece": " and"
+        },
+        {
+          "id": 18102,
+          "piece": " rewrite"
+        },
+        {
+          "id": 432,
+          "piece": " it"
+        },
+        {
+          "id": 448,
+          "piece": " with"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 2797,
+          "piece": " clear"
+        },
+        {
+          "id": 15266,
+          "piece": " ownership"
+        },
+        {
+          "id": 5116,
+          "piece": " contract"
+        },
+        {
+          "id": 624,
+          "piece": ".\n"
+        },
+        {
+          "id": 73022,
+          "piece": "```"
+        },
+        {
+          "id": 10816,
+          "piece": "cpp"
+        },
+        {
+          "id": 198,
+          "piece": "\n"
+        },
+        {
+          "id": 1834,
+          "piece": "std"
+        },
+        {
+          "id": 486,
+          "piece": "::"
+        },
+        {
+          "id": 917,
+          "piece": "string"
+        },
+        {
+          "id": 7122,
+          "piece": "_view"
+        },
+        {
+          "id": 2383,
+          "piece": " label"
+        },
+        {
+          "id": 368,
+          "piece": "()"
+        },
+        {
+          "id": 341,
+          "piece": " {\n"
+        },
+        {
+          "id": 262,
+          "piece": "   "
+        },
+        {
+          "id": 1460,
+          "piece": " std"
+        },
+        {
+          "id": 486,
+          "piece": "::"
+        },
+        {
+          "id": 917,
+          "piece": "string"
+        },
+        {
+          "id": 897,
+          "piece": " value"
+        },
+        {
+          "id": 284,
+          "piece": " ="
+        },
+        {
+          "id": 12558,
+          "piece": " compute"
+        },
+        {
+          "id": 6106,
+          "piece": "_label"
+        },
+        {
+          "id": 543,
+          "piece": "();\n"
+        },
+        {
+          "id": 262,
+          "piece": "   "
+        },
+        {
+          "id": 470,
+          "piece": " return"
+        },
+        {
+          "id": 897,
+          "piece": " value"
+        },
+        {
+          "id": 280,
+          "piece": ";\n"
+        },
+        {
+          "id": 532,
+          "piece": "}\n"
+        },
+        {
+          "id": 13865,
+          "piece": "``"
+        },
+        {
+          "id": 3989,
+          "piece": "`\n"
+        },
+        {
+          "id": 13385,
+          "piece": "Also"
+        },
+        {
+          "id": 1584,
+          "piece": " state"
+        },
+        {
+          "id": 825,
+          "piece": " one"
+        },
+        {
+          "id": 1273,
+          "piece": " test"
+        },
+        {
+          "id": 429,
+          "piece": " that"
+        },
+        {
+          "id": 1035,
+          "piece": " would"
+        },
+        {
+          "id": 3690,
+          "piece": " fail"
+        },
+        {
+          "id": 73324,
+          "piece": " nond"
+        },
+        {
+          "id": 16468,
+          "piece": "etermin"
+        },
+        {
+          "id": 36916,
+          "piece": "istically"
+        },
+        {
+          "id": 304,
+          "piece": " in"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 4024,
+          "piece": " original"
+        },
+        {
+          "id": 2319,
+          "piece": " version"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        }
+      ],
+      "request_dump_start": 3965376,
+      "request_dump_end": 4465144,
+      "record_offset": 3965376,
+      "record_end_offset": 4465144,
+      "shape": [
+        2048,
+        61,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "react-state",
+      "prompt": "A React editor loses recent keystrokes when autosave responses arrive out of order. Describe the state transition bug and provide a hook design that prevents stale acknowledgements from replacing newer local state. Keep the answer implementation-oriented.",
+      "prompt_utf8_bytes": 255,
+      "prompt_sha256": "836b637f793d9df1a6701be08e0a032b8877dc173b3a7234ca1be2861aea385a",
+      "token_count": 43,
+      "tokens": [
+        {
+          "id": 32,
+          "piece": "A"
+        },
+        {
+          "id": 3592,
+          "piece": " React"
+        },
+        {
+          "id": 6440,
+          "piece": " editor"
+        },
+        {
+          "id": 32047,
+          "piece": " loses"
+        },
+        {
+          "id": 3213,
+          "piece": " recent"
+        },
+        {
+          "id": 98290,
+          "piece": " keyst"
+        },
+        {
+          "id": 54668,
+          "piece": "rokes"
+        },
+        {
+          "id": 979,
+          "piece": " when"
+        },
+        {
+          "id": 46584,
+          "piece": " autos"
+        },
+        {
+          "id": 523,
+          "piece": "ave"
+        },
+        {
+          "id": 14497,
+          "piece": " responses"
+        },
+        {
+          "id": 17310,
+          "piece": " arrive"
+        },
+        {
+          "id": 700,
+          "piece": " out"
+        },
+        {
+          "id": 315,
+          "piece": " of"
+        },
+        {
+          "id": 1973,
+          "piece": " order"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 60359,
+          "piece": " Describe"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 1584,
+          "piece": " state"
+        },
+        {
+          "id": 9139,
+          "piece": " transition"
+        },
+        {
+          "id": 9871,
+          "piece": " bug"
+        },
+        {
+          "id": 323,
+          "piece": " and"
+        },
+        {
+          "id": 3410,
+          "piece": " provide"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 9700,
+          "piece": " hook"
+        },
+        {
+          "id": 2884,
+          "piece": " design"
+        },
+        {
+          "id": 429,
+          "piece": " that"
+        },
+        {
+          "id": 27839,
+          "piece": " prevents"
+        },
+        {
+          "id": 50025,
+          "piece": " stale"
+        },
+        {
+          "id": 15811,
+          "piece": " acknowled"
+        },
+        {
+          "id": 82339,
+          "piece": "gements"
+        },
+        {
+          "id": 504,
+          "piece": " from"
+        },
+        {
+          "id": 24815,
+          "piece": " replacing"
+        },
+        {
+          "id": 25467,
+          "piece": " newer"
+        },
+        {
+          "id": 2205,
+          "piece": " local"
+        },
+        {
+          "id": 1584,
+          "piece": " state"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 13646,
+          "piece": " Keep"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 4226,
+          "piece": " answer"
+        },
+        {
+          "id": 8128,
+          "piece": " implementation"
+        },
+        {
+          "id": 34911,
+          "piece": "-oriented"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        }
+      ],
+      "request_dump_start": 4465144,
+      "request_dump_end": 4817456,
+      "record_offset": 4465144,
+      "record_end_offset": 4817456,
+      "shape": [
+        2048,
+        43,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "debug-stack",
+      "prompt": "A request succeeds locally but fails behind a reverse proxy with 413. The application log contains no exception, the proxy access log reports request_length 12590123, and the configured client timeout is 60 seconds. Identify the most likely layer, the next two checks, and the narrowest safe fix.",
+      "prompt_utf8_bytes": 296,
+      "prompt_sha256": "53063d8a723b8a2b70647e87ac8566afff4185d6ffea8798d5b05899235db49f",
+      "token_count": 63,
+      "tokens": [
+        {
+          "id": 32,
+          "piece": "A"
+        },
+        {
+          "id": 1681,
+          "piece": " request"
+        },
+        {
+          "id": 49759,
+          "piece": " succeeds"
+        },
+        {
+          "id": 23425,
+          "piece": " locally"
+        },
+        {
+          "id": 714,
+          "piece": " but"
+        },
+        {
+          "id": 14515,
+          "piece": " fails"
+        },
+        {
+          "id": 4815,
+          "piece": " behind"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 9926,
+          "piece": " reverse"
+        },
+        {
+          "id": 13283,
+          "piece": " proxy"
+        },
+        {
+          "id": 448,
+          "piece": " with"
+        },
+        {
+          "id": 220,
+          "piece": " "
+        },
+        {
+          "id": 19,
+          "piece": "4"
+        },
+        {
+          "id": 99366,
+          "piece": "13"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 576,
+          "piece": " The"
+        },
+        {
+          "id": 3766,
+          "piece": " application"
+        },
+        {
+          "id": 1487,
+          "piece": " log"
+        },
+        {
+          "id": 5610,
+          "piece": " contains"
+        },
+        {
+          "id": 902,
+          "piece": " no"
+        },
+        {
+          "id": 4683,
+          "piece": " exception"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 13283,
+          "piece": " proxy"
+        },
+        {
+          "id": 2615,
+          "piece": " access"
+        },
+        {
+          "id": 1487,
+          "piece": " log"
+        },
+        {
+          "id": 6682,
+          "piece": " reports"
+        },
+        {
+          "id": 1681,
+          "piece": " request"
+        },
+        {
+          "id": 5118,
+          "piece": "_length"
+        },
+        {
+          "id": 220,
+          "piece": " "
+        },
+        {
+          "id": 109641,
+          "piece": "125"
+        },
+        {
+          "id": 100067,
+          "piece": "90"
+        },
+        {
+          "id": 16,
+          "piece": "1"
+        },
+        {
+          "id": 99619,
+          "piece": "23"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 323,
+          "piece": " and"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 19718,
+          "piece": " configured"
+        },
+        {
+          "id": 2943,
+          "piece": " client"
+        },
+        {
+          "id": 9628,
+          "piece": " timeout"
+        },
+        {
+          "id": 374,
+          "piece": " is"
+        },
+        {
+          "id": 220,
+          "piece": " "
+        },
+        {
+          "id": 99618,
+          "piece": "60"
+        },
+        {
+          "id": 6486,
+          "piece": " seconds"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 64081,
+          "piece": " Identify"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 1429,
+          "piece": " most"
+        },
+        {
+          "id": 4363,
+          "piece": " likely"
+        },
+        {
+          "id": 6193,
+          "piece": " layer"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 1790,
+          "piece": " next"
+        },
+        {
+          "id": 1378,
+          "piece": " two"
+        },
+        {
+          "id": 12335,
+          "piece": " checks"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 323,
+          "piece": " and"
+        },
+        {
+          "id": 279,
+          "piece": " the"
+        },
+        {
+          "id": 15014,
+          "piece": " narrow"
+        },
+        {
+          "id": 477,
+          "piece": "est"
+        },
+        {
+          "id": 6092,
+          "piece": " safe"
+        },
+        {
+          "id": 5046,
+          "piece": " fix"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        }
+      ],
+      "request_dump_start": 4817456,
+      "request_dump_end": 5333608,
+      "record_offset": 4817456,
+      "record_end_offset": 5333608,
+      "shape": [
+        2048,
+        63,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "json-contract",
+      "prompt": "Given a tool protocol with request fields id, method, params and response fields id, result, error, define invariants for exactly one of result or error, stable id correlation, retry safety, and backward-compatible schema evolution. Then show one valid success response and one valid failure response.",
+      "prompt_utf8_bytes": 301,
+      "prompt_sha256": "ac636b4318505fbce1e793faa9c55e4f857e4ddb0ecd81d6d598741be501309b",
+      "token_count": 57,
+      "tokens": [
+        {
+          "id": 21989,
+          "piece": "Given"
+        },
+        {
+          "id": 264,
+          "piece": " a"
+        },
+        {
+          "id": 5392,
+          "piece": " tool"
+        },
+        {
+          "id": 11502,
+          "piece": " protocol"
+        },
+        {
+          "id": 448,
+          "piece": " with"
+        },
+        {
+          "id": 1681,
+          "piece": " request"
+        },
+        {
+          "id": 5043,
+          "piece": " fields"
+        },
+        {
+          "id": 877,
+          "piece": " id"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 1714,
+          "piece": " method"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 3628,
+          "piece": " params"
+        },
+        {
+          "id": 323,
+          "piece": " and"
+        },
+        {
+          "id": 2033,
+          "piece": " response"
+        },
+        {
+          "id": 5043,
+          "piece": " fields"
+        },
+        {
+          "id": 877,
+          "piece": " id"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 1102,
+          "piece": " result"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 1465,
+          "piece": " error"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 6979,
+          "piece": " define"
+        },
+        {
+          "id": 304,
+          "piece": " in"
+        },
+        {
+          "id": 54247,
+          "piece": "variants"
+        },
+        {
+          "id": 369,
+          "piece": " for"
+        },
+        {
+          "id": 6896,
+          "piece": " exactly"
+        },
+        {
+          "id": 825,
+          "piece": " one"
+        },
+        {
+          "id": 315,
+          "piece": " of"
+        },
+        {
+          "id": 1102,
+          "piece": " result"
+        },
+        {
+          "id": 476,
+          "piece": " or"
+        },
+        {
+          "id": 1465,
+          "piece": " error"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 15163,
+          "piece": " stable"
+        },
+        {
+          "id": 877,
+          "piece": " id"
+        },
+        {
+          "id": 25509,
+          "piece": " correlation"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 22624,
+          "piece": " retry"
+        },
+        {
+          "id": 7149,
+          "piece": " safety"
+        },
+        {
+          "id": 11,
+          "piece": ","
+        },
+        {
+          "id": 323,
+          "piece": " and"
+        },
+        {
+          "id": 27463,
+          "piece": " backward"
+        },
+        {
+          "id": 79569,
+          "piece": "-compatible"
+        },
+        {
+          "id": 10797,
+          "piece": " schema"
+        },
+        {
+          "id": 15367,
+          "piece": " evolution"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        },
+        {
+          "id": 5005,
+          "piece": " Then"
+        },
+        {
+          "id": 1473,
+          "piece": " show"
+        },
+        {
+          "id": 825,
+          "piece": " one"
+        },
+        {
+          "id": 2697,
+          "piece": " valid"
+        },
+        {
+          "id": 2393,
+          "piece": " success"
+        },
+        {
+          "id": 2033,
+          "piece": " response"
+        },
+        {
+          "id": 323,
+          "piece": " and"
+        },
+        {
+          "id": 825,
+          "piece": " one"
+        },
+        {
+          "id": 2697,
+          "piece": " valid"
+        },
+        {
+          "id": 7901,
+          "piece": " failure"
+        },
+        {
+          "id": 2033,
+          "piece": " response"
+        },
+        {
+          "id": 13,
+          "piece": "."
+        }
+      ],
+      "request_dump_start": 5333608,
+      "request_dump_end": 5800608,
+      "record_offset": 5333608,
+      "record_end_offset": 5800608,
+      "shape": [
+        2048,
+        57,
+        1,
+        1
+      ]
+    },
+    {
+      "prompt_id": "chinese-code-spec",
+      "prompt": "请把下面需求拆成可验证的实现步骤：实现一个本地代码代理，它只能修改工作区内文件；每次修改前读取原文件；修改后只运行相关短测试；工具失败时保留原始错误；不允许用关键词判断任务类型。重点说明状态机、不变量和失败恢复。",
+      "prompt_utf8_bytes": 318,
+      "prompt_sha256": "1e304c42ced6fd3952447a76daf2d790d077c119453aefc152223717bd3d8025",
+      "token_count": 63,
+      "tokens": [
+        {
+          "id": 98964,
+          "piece": "请"
+        },
+        {
+          "id": 98657,
+          "piece": "把"
+        },
+        {
+          "id": 101534,
+          "piece": "下面"
+        },
+        {
+          "id": 99713,
+          "piece": "需求"
+        },
+        {
+          "id": 101558,
+          "piece": "拆"
+        },
+        {
+          "id": 98350,
+          "piece": "成"
+        },
+        {
+          "id": 98348,
+          "piece": "可"
+        },
+        {
+          "id": 103626,
+          "piece": "验证"
+        },
+        {
+          "id": 127281,
+          "piece": "的实现"
+        },
+        {
+          "id": 103131,
+          "piece": "步骤"
+        },
+        {
+          "id": 5122,
+          "piece": "："
+        },
+        {
+          "id": 99254,
+          "piece": "实现"
+        },
+        {
+          "id": 98444,
+          "piece": "一个"
+        },
+        {
+          "id": 104174,
+          "piece": "本地"
+        },
+        {
+          "id": 103461,
+          "piece": "代码"
+        },
+        {
+          "id": 101834,
+          "piece": "代理"
+        },
+        {
+          "id": 3837,
+          "piece": "，"
+        },
+        {
+          "id": 98774,
+          "piece": "它"
+        },
+        {
+          "id": 100289,
+          "piece": "只能"
+        },
+        {
+          "id": 102460,
+          "piece": "修改"
+        },
+        {
+          "id": 98538,
+          "piece": "工作"
+        },
+        {
+          "id": 109275,
+          "piece": "区内"
+        },
+        {
+          "id": 100638,
+          "piece": "文件"
+        },
+        {
+          "id": 24892,
+          "piece": "；"
+        },
+        {
+          "id": 101579,
+          "piece": "每次"
+        },
+        {
+          "id": 102460,
+          "piece": "修改"
+        },
+        {
+          "id": 98422,
+          "piece": "前"
+        },
+        {
+          "id": 117735,
+          "piece": "读取"
+        },
+        {
+          "id": 98553,
+          "piece": "原"
+        },
+        {
+          "id": 100638,
+          "piece": "文件"
+        },
+        {
+          "id": 24892,
+          "piece": "；"
+        },
+        {
+          "id": 102460,
+          "piece": "修改"
+        },
+        {
+          "id": 98365,
+          "piece": "后"
+        },
+        {
+          "id": 98552,
+          "piece": "只"
+        },
+        {
+          "id": 100409,
+          "piece": "运行"
+        },
+        {
+          "id": 99135,
+          "piece": "相关"
+        },
+        {
+          "id": 99329,
+          "piece": "短"
+        },
+        {
+          "id": 100838,
+          "piece": "测试"
+        },
+        {
+          "id": 24892,
+          "piece": "；"
+        },
+        {
+          "id": 100764,
+          "piece": "工具"
+        },
+        {
+          "id": 102228,
+          "piece": "失败"
+        },
+        {
+          "id": 98335,
+          "piece": "时"
+        },
+        {
+          "id": 103201,
+          "piece": "保留"
+        },
+        {
+          "id": 103917,
+          "piece": "原始"
+        },
+        {
+          "id": 101390,
+          "piece": "错误"
+        },
+        {
+          "id": 24892,
+          "piece": "；"
+        },
+        {
+          "id": 111709,
+          "piece": "不允许"
+        },
+        {
+          "id": 98340,
+          "piece": "用"
+        },
+        {
+          "id": 105717,
+          "piece": "关键词"
+        },
+        {
+          "id": 101270,
+          "piece": "判断"
+        },
+        {
+          "id": 100062,
+          "piece": "任务"
+        },
+        {
+          "id": 100173,
+          "piece": "类型"
+        },
+        {
+          "id": 1773,
+          "piece": "。"
+        },
+        {
+          "id": 99757,
+          "piece": "重点"
+        },
+        {
+          "id": 100205,
+          "piece": "说明"
+        },
+        {
+          "id": 99836,
+          "piece": "状态"
+        },
+        {
+          "id": 98418,
+          "piece": "机"
+        },
+        {
+          "id": 5373,
+          "piece": "、"
+        },
+        {
+          "id": 104345,
+          "piece": "不变"
+        },
+        {
+          "id": 113837,
+          "piece": "量和"
+        },
+        {
+          "id": 102228,
+          "piece": "失败"
+        },
+        {
+          "id": 100870,
+          "piece": "恢复"
+        },
+        {
+          "id": 1773,
+          "piece": "。"
+        }
+      ],
+      "request_dump_start": 5800608,
+      "request_dump_end": 6316760,
+      "record_offset": 5800608,
+      "record_end_offset": 6316760,
+      "shape": [
+        2048,
+        63,
+        1,
+        1
+      ]
+    }
+  ]
+}

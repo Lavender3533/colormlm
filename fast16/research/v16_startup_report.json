@@ -1,0 +1,37 @@
+{
+  "format": "colorlm-v16-startup-report-v1",
+  "date": "2026-07-30",
+  "result": "startup-and-short-generation-passed",
+  "runtime": {
+    "alias": "ColorLM-v16-Coder-Neural-Block",
+    "url": "http://127.0.0.1:8104",
+    "context": 32768,
+    "backend": "Vulkan",
+    "base": "ColorLM-v6-Q3Router-Fused-A1.gguf",
+    "k3_plan": "fast16/models/ColorLM-v13-Causal-Sparse-L12.k3plan.json"
+  },
+  "neural_block": {
+    "source": "Qwen/Qwen3-Coder-Next L47",
+    "target_site": 35,
+    "tensor_count": 18,
+    "weights_bytes": 940461184,
+    "weights_sha256": "eda3d32940538fbc135f7fa44ba2d39b1ee475d6b998d0aea81600515c2a188e",
+    "manifest_sha256": "a2bf92638e012338486eca8f175efefd4eac44c4e954cdf89f950b45b6362578",
+    "alpha": 0.04,
+    "loaded_device": "Vulkan0",
+    "loaded_mib": 896.89
+  },
+  "short_generation": {
+    "prompt": "只回答：OK",
+    "response": "OK",
+    "prompt_tokens": 16,
+    "completion_tokens": 2,
+    "wall_seconds": 3.55
+  },
+  "claims": {
+    "same_graph_execution": true,
+    "startup_verified": true,
+    "short_generation_verified": true,
+    "capability_improvement_verified": false
+  }
+}

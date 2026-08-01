@@ -1,0 +1,395 @@
+{
+  "format": "colorlm-deep-activation-bridge-v1",
+  "pairing": {
+    "base": {
+      "receipt": "D:\\project\\大模型ssd化\\fast16\\research\\v18_activation_bridge\\captures\\run-20260731\\base.receipt.json",
+      "model": "ColorLM-v18-Bridge-Base",
+      "layer": 35,
+      "stage": "attn_residual"
+    },
+    "donor": {
+      "receipt": "D:\\project\\大模型ssd化\\fast16\\research\\v21_glm_agent_island\\captures\\glm_l42.receipt.json",
+      "model": "GLM-4.7-Agent-Island-Capture",
+      "layer": 42,
+      "stage": "l_out"
+    },
+    "common_prompts": 12,
+    "paired_prompts": 12,
+    "total_base_tokens": 815,
+    "total_donor_tokens": 769,
+    "total_matched_tokens": 766,
+    "mean_match_coverage": 0.9470892833804992,
+    "prompt_alignment": [
+      {
+        "prompt_id": "agent-tool",
+        "prompt_utf8_bytes": 276,
+        "base_tokens": 57,
+        "donor_tokens": 57,
+        "base_mappable_tokens": 57,
+        "donor_mappable_tokens": 57,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 57,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 276,
+        "paired": true
+      },
+      {
+        "prompt_id": "chinese-code-spec",
+        "prompt_utf8_bytes": 318,
+        "base_tokens": 62,
+        "donor_tokens": 63,
+        "base_mappable_tokens": 62,
+        "donor_mappable_tokens": 63,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 62,
+        "match_coverage": 0.9841269841269841,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 0.9841269841269841,
+        "last_matched_end_byte": 318,
+        "paired": true
+      },
+      {
+        "prompt_id": "cpp-lifetime",
+        "prompt_utf8_bytes": 287,
+        "base_tokens": 66,
+        "donor_tokens": 61,
+        "base_mappable_tokens": 66,
+        "donor_mappable_tokens": 61,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 60,
+        "match_coverage": 0.9090909090909091,
+        "base_match_coverage": 0.9090909090909091,
+        "donor_match_coverage": 0.9836065573770492,
+        "last_matched_end_byte": 287,
+        "paired": true
+      },
+      {
+        "prompt_id": "debug-stack",
+        "prompt_utf8_bytes": 296,
+        "base_tokens": 69,
+        "donor_tokens": 63,
+        "base_mappable_tokens": 69,
+        "donor_mappable_tokens": 63,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 63,
+        "match_coverage": 0.9130434782608695,
+        "base_match_coverage": 0.9130434782608695,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 296,
+        "paired": true
+      },
+      {
+        "prompt_id": "go-context",
+        "prompt_utf8_bytes": 329,
+        "base_tokens": 86,
+        "donor_tokens": 77,
+        "base_mappable_tokens": 86,
+        "donor_mappable_tokens": 77,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 77,
+        "match_coverage": 0.8953488372093024,
+        "base_match_coverage": 0.8953488372093024,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 329,
+        "paired": true
+      },
+      {
+        "prompt_id": "java-race",
+        "prompt_utf8_bytes": 325,
+        "base_tokens": 80,
+        "donor_tokens": 73,
+        "base_mappable_tokens": 80,
+        "donor_mappable_tokens": 73,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 73,
+        "match_coverage": 0.9125,
+        "base_match_coverage": 0.9125,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 325,
+        "paired": true
+      },
+      {
+        "prompt_id": "json-contract",
+        "prompt_utf8_bytes": 301,
+        "base_tokens": 57,
+        "donor_tokens": 57,
+        "base_mappable_tokens": 57,
+        "donor_mappable_tokens": 57,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 57,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 301,
+        "paired": true
+      },
+      {
+        "prompt_id": "python-async",
+        "prompt_utf8_bytes": 371,
+        "base_tokens": 84,
+        "donor_tokens": 79,
+        "base_mappable_tokens": 84,
+        "donor_mappable_tokens": 79,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 79,
+        "match_coverage": 0.9404761904761905,
+        "base_match_coverage": 0.9404761904761905,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 371,
+        "paired": true
+      },
+      {
+        "prompt_id": "react-state",
+        "prompt_utf8_bytes": 255,
+        "base_tokens": 43,
+        "donor_tokens": 43,
+        "base_mappable_tokens": 43,
+        "donor_mappable_tokens": 43,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 43,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 255,
+        "paired": true
+      },
+      {
+        "prompt_id": "rust-borrow",
+        "prompt_utf8_bytes": 306,
+        "base_tokens": 82,
+        "donor_tokens": 75,
+        "base_mappable_tokens": 82,
+        "donor_mappable_tokens": 75,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 74,
+        "match_coverage": 0.9024390243902439,
+        "base_match_coverage": 0.9024390243902439,
+        "donor_match_coverage": 0.9866666666666667,
+        "last_matched_end_byte": 306,
+        "paired": true
+      },
+      {
+        "prompt_id": "sql-transaction",
+        "prompt_utf8_bytes": 231,
+        "base_tokens": 42,
+        "donor_tokens": 42,
+        "base_mappable_tokens": 42,
+        "donor_mappable_tokens": 42,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 42,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 231,
+        "paired": true
+      },
+      {
+        "prompt_id": "typescript-types",
+        "prompt_utf8_bytes": 333,
+        "base_tokens": 87,
+        "donor_tokens": 79,
+        "base_mappable_tokens": 87,
+        "donor_mappable_tokens": 79,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 79,
+        "match_coverage": 0.9080459770114943,
+        "base_match_coverage": 0.9080459770114943,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 333,
+        "paired": true
+      }
+    ],
+    "skipped": []
+  },
+  "method": {
+    "name": "nullspace_anchored",
+    "fit_direction": "ColorLM-L35-attn-residual rows -> Coder-L44-input rows",
+    "prior": "D:\\project\\大模型ssd化\\fast16\\research\\v21_glm_agent_island\\glm_to_colorlm_token_orthogonal_f32.npy",
+    "prior_sha256": "5a9c1123411f0e32e5ea4c4d67dfe1490036f27006f2d4e55184c693baa95742",
+    "prior_equivalent_samples": 0.0,
+    "rank_relative_tolerance": 1e-06,
+    "train_split_unit": "whole prompt",
+    "seed": 18
+  },
+  "samples": {
+    "paired_prompts": 12,
+    "paired_tokens": 766,
+    "train_prompts": 9,
+    "heldout_prompts": 3,
+    "train_tokens_used": 594,
+    "heldout_tokens_used": 172
+  },
+  "fit": {
+    "seconds": 6.73513020000064,
+    "scale": 4.0,
+    "raw_median_scale": 4.397706508636475,
+    "singular_value_min": 3.109088993369369e-06,
+    "singular_value_median": 1.040082861436531e-05,
+    "singular_value_max": 188.75413513183594,
+    "effective_rank": 593,
+    "orthogonality_rmse": 4.822068149223924e-07,
+    "cycle_rmse": 4.822157393391535e-07
+  },
+  "heldout": {
+    "identity": {
+      "cosine": {
+        "mean": 0.00818354170769453,
+        "median": 0.006899456027895212,
+        "p05": -0.026279309764504433,
+        "p95": 0.041613221168518066,
+        "min": -0.05805665999650955,
+        "max": 0.06246863678097725
+      },
+      "relative_rmse": 0.9999971017459457,
+      "scale": 0.07102859074222286
+    },
+    "embedding_bridge": {
+      "cosine": {
+        "mean": 0.010041167959570885,
+        "median": 0.012624235823750496,
+        "p05": -0.037397921085357666,
+        "p95": 0.04758823290467262,
+        "min": -0.07042663544416428,
+        "max": 0.07551157474517822
+      },
+      "relative_rmse": 1.0091084273530306,
+      "scale": 4.0
+    },
+    "embedding_bridge_optimal_scale_diagnostic": {
+      "cosine": {
+        "mean": 0.010041167959570885,
+        "median": 0.012624235823750496,
+        "p05": -0.037397921085357666,
+        "p95": 0.04758823290467262,
+        "min": -0.07042663544416428,
+        "max": 0.07551157474517822
+      },
+      "relative_rmse": 0.9999999623904676,
+      "scale": 0.008103574435934586
+    },
+    "activation_bridge": {
+      "cosine": {
+        "mean": 0.5484103560447693,
+        "median": 0.5593874454498291,
+        "p05": 0.287522554397583,
+        "p95": 0.7147756218910217,
+        "min": 0.11290599405765533,
+        "max": 0.8276214003562927
+      },
+      "relative_rmse": 0.9916564649739221,
+      "scale": 4.0
+    },
+    "activation_bridge_optimal_scale_diagnostic": {
+      "cosine": {
+        "mean": 0.5484103560447693,
+        "median": 0.5593874454498291,
+        "p05": 0.287522554397583,
+        "p95": 0.7147756218910217,
+        "min": 0.11290599405765533,
+        "max": 0.8276214003562927
+      },
+      "relative_rmse": 0.9916352907959863,
+      "scale": 3.8087670989145757
+    },
+    "median_cosine_lift_vs_embedding": 0.5467632096260786,
+    "nrmse_ratio_vs_embedding": 0.982705562746229,
+    "positive_prompt_rate": 1.0,
+    "per_prompt": [
+      {
+        "prompt_id": "agent-tool",
+        "tokens": 57,
+        "baseline_median_cosine": 0.009103450924158096,
+        "activation_median_cosine": 0.5703524351119995,
+        "lift": 0.5612489841878414
+      },
+      {
+        "prompt_id": "java-race",
+        "tokens": 73,
+        "baseline_median_cosine": 0.01570465974509716,
+        "activation_median_cosine": 0.5578454732894897,
+        "lift": 0.5421408135443926
+      },
+      {
+        "prompt_id": "sql-transaction",
+        "tokens": 42,
+        "baseline_median_cosine": 0.009753189980983734,
+        "activation_median_cosine": 0.5463504791259766,
+        "lift": 0.5365972891449928
+      }
+    ]
+  },
+  "runtime": {
+    "input_weight": {
+      "file": "coder_activation_input_weight_f32.npy",
+      "sha256": "03ddb68b0efd11d12ef7b12f16b747f8608f9987a591d5e973559c79b9a619b3",
+      "contract": "donor_column = W_in @ colorlm_column"
+    },
+    "output_weight": {
+      "file": "coder_activation_output_weight_f32.npy",
+      "sha256": "1ac7805c8310d4513b3796ccf27d3c0dc9ee163a85b2fdde255e1f2380eec621",
+      "contract": "colorlm_delta_column = W_out @ donor_delta_column"
+    },
+    "orthogonal_compatibility": {
+      "file": "coder_to_colorlm_activation_orthogonal_f32.npy",
+      "sha256": "6e00bae915c02018b0c708cf61393e1f1ba3260992388990552b96edd4dd0859",
+      "contract": "donor_row @ T = colorlm_row; legacy compiler uses T/T.T"
+    }
+  },
+  "promotion": {
+    "gates": {
+      "enough_prompts": true,
+      "enough_tokens": true,
+      "heldout_cosine_lift": true,
+      "heldout_nrmse_ratio": false,
+      "positive_prompt_rate": true,
+      "reversible": true,
+      "scale_in_contract": false
+    },
+    "decision": "reject",
+    "thresholds": {
+      "min_prompts": 6,
+      "min_tokens": 512,
+      "min_cosine_lift": 0.03,
+      "max_nrmse_ratio": 0.95,
+      "min_positive_prompt_rate": 0.67
+    }
+  }
+}

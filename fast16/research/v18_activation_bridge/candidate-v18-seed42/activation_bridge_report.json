@@ -1,0 +1,393 @@
+{
+  "format": "colorlm-deep-activation-bridge-v1",
+  "pairing": {
+    "base": {
+      "receipt": "D:\\project\\大模型ssd化\\fast16\\research\\v18_activation_bridge\\captures\\run-20260731\\base.receipt.json",
+      "model": "ColorLM-v18-Bridge-Base",
+      "layer": 35,
+      "stage": "attn_residual"
+    },
+    "donor": {
+      "receipt": "D:\\project\\大模型ssd化\\fast16\\research\\v18_activation_bridge\\captures\\run-20260731b\\donor.receipt.json",
+      "model": "Qwen3-Coder-Next-IQ3S",
+      "layer": 43,
+      "stage": "l_out"
+    },
+    "common_prompts": 12,
+    "paired_prompts": 12,
+    "total_base_tokens": 815,
+    "total_donor_tokens": 778,
+    "total_matched_tokens": 772,
+    "mean_match_coverage": 0.9506079064643398,
+    "prompt_alignment": [
+      {
+        "prompt_id": "agent-tool",
+        "prompt_utf8_bytes": 276,
+        "base_tokens": 57,
+        "donor_tokens": 57,
+        "base_mappable_tokens": 57,
+        "donor_mappable_tokens": 57,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 57,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 276,
+        "paired": true
+      },
+      {
+        "prompt_id": "chinese-code-spec",
+        "prompt_utf8_bytes": 318,
+        "base_tokens": 62,
+        "donor_tokens": 66,
+        "base_mappable_tokens": 62,
+        "donor_mappable_tokens": 66,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 62,
+        "match_coverage": 0.9393939393939394,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 0.9393939393939394,
+        "last_matched_end_byte": 318,
+        "paired": true
+      },
+      {
+        "prompt_id": "cpp-lifetime",
+        "prompt_utf8_bytes": 287,
+        "base_tokens": 66,
+        "donor_tokens": 61,
+        "base_mappable_tokens": 66,
+        "donor_mappable_tokens": 61,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 60,
+        "match_coverage": 0.9090909090909091,
+        "base_match_coverage": 0.9090909090909091,
+        "donor_match_coverage": 0.9836065573770492,
+        "last_matched_end_byte": 287,
+        "paired": true
+      },
+      {
+        "prompt_id": "debug-stack",
+        "prompt_utf8_bytes": 296,
+        "base_tokens": 69,
+        "donor_tokens": 69,
+        "base_mappable_tokens": 69,
+        "donor_mappable_tokens": 69,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 69,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 296,
+        "paired": true
+      },
+      {
+        "prompt_id": "go-context",
+        "prompt_utf8_bytes": 329,
+        "base_tokens": 86,
+        "donor_tokens": 77,
+        "base_mappable_tokens": 86,
+        "donor_mappable_tokens": 77,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 77,
+        "match_coverage": 0.8953488372093024,
+        "base_match_coverage": 0.8953488372093024,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 329,
+        "paired": true
+      },
+      {
+        "prompt_id": "java-race",
+        "prompt_utf8_bytes": 325,
+        "base_tokens": 80,
+        "donor_tokens": 73,
+        "base_mappable_tokens": 80,
+        "donor_mappable_tokens": 73,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 73,
+        "match_coverage": 0.9125,
+        "base_match_coverage": 0.9125,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 325,
+        "paired": true
+      },
+      {
+        "prompt_id": "json-contract",
+        "prompt_utf8_bytes": 301,
+        "base_tokens": 57,
+        "donor_tokens": 57,
+        "base_mappable_tokens": 57,
+        "donor_mappable_tokens": 57,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 57,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 301,
+        "paired": true
+      },
+      {
+        "prompt_id": "python-async",
+        "prompt_utf8_bytes": 371,
+        "base_tokens": 84,
+        "donor_tokens": 79,
+        "base_mappable_tokens": 84,
+        "donor_mappable_tokens": 79,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 79,
+        "match_coverage": 0.9404761904761905,
+        "base_match_coverage": 0.9404761904761905,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 371,
+        "paired": true
+      },
+      {
+        "prompt_id": "react-state",
+        "prompt_utf8_bytes": 255,
+        "base_tokens": 43,
+        "donor_tokens": 43,
+        "base_mappable_tokens": 43,
+        "donor_mappable_tokens": 43,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 43,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 255,
+        "paired": true
+      },
+      {
+        "prompt_id": "rust-borrow",
+        "prompt_utf8_bytes": 306,
+        "base_tokens": 82,
+        "donor_tokens": 75,
+        "base_mappable_tokens": 82,
+        "donor_mappable_tokens": 75,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 74,
+        "match_coverage": 0.9024390243902439,
+        "base_match_coverage": 0.9024390243902439,
+        "donor_match_coverage": 0.9866666666666667,
+        "last_matched_end_byte": 306,
+        "paired": true
+      },
+      {
+        "prompt_id": "sql-transaction",
+        "prompt_utf8_bytes": 231,
+        "base_tokens": 42,
+        "donor_tokens": 42,
+        "base_mappable_tokens": 42,
+        "donor_mappable_tokens": 42,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 42,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 231,
+        "paired": true
+      },
+      {
+        "prompt_id": "typescript-types",
+        "prompt_utf8_bytes": 333,
+        "base_tokens": 87,
+        "donor_tokens": 79,
+        "base_mappable_tokens": 87,
+        "donor_mappable_tokens": 79,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 79,
+        "match_coverage": 0.9080459770114943,
+        "base_match_coverage": 0.9080459770114943,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 333,
+        "paired": true
+      }
+    ],
+    "skipped": []
+  },
+  "method": {
+    "name": "prior-anchored scaled orthogonal Procrustes",
+    "fit_direction": "ColorLM-L35-attn-residual rows -> Coder-L44-input rows",
+    "prior": "D:\\project\\大模型ssd化\\fast16\\research\\coder_next_to_colorlm_orthogonal_f32.npy",
+    "prior_sha256": "7209781fa72220c337314e8456497c83cf1b51798d2b4321414200a98de04d12",
+    "prior_equivalent_samples": 0.0,
+    "train_split_unit": "whole prompt",
+    "seed": 42
+  },
+  "samples": {
+    "paired_prompts": 12,
+    "paired_tokens": 772,
+    "train_prompts": 9,
+    "heldout_prompts": 3,
+    "train_tokens_used": 579,
+    "heldout_tokens_used": 193
+  },
+  "fit": {
+    "seconds": 2.3801039999962086,
+    "scale": 2.397812843322754,
+    "raw_median_scale": 2.397812843322754,
+    "singular_value_min": 7.883346029302629e-07,
+    "singular_value_median": 9.900541044771671e-06,
+    "singular_value_max": 181.60182189941406,
+    "orthogonality_rmse": 3.3317796521714627e-08,
+    "cycle_rmse": 3.333652998094294e-08
+  },
+  "heldout": {
+    "identity": {
+      "cosine": {
+        "mean": 0.005406621377915144,
+        "median": 0.006702333223074675,
+        "p05": -0.029629060998558998,
+        "p95": 0.036679141223430634,
+        "min": -0.0481332466006279,
+        "max": 0.060608573257923126
+      },
+      "relative_rmse": 0.9999842610358868,
+      "scale": 0.013409904225840586
+    },
+    "embedding_bridge": {
+      "cosine": {
+        "mean": 0.18545947968959808,
+        "median": 0.18990840017795563,
+        "p05": 0.1036013588309288,
+        "p95": 0.2608112096786499,
+        "min": 0.02305169776082039,
+        "max": 0.3173951208591461
+      },
+      "relative_rmse": 1.2760670081800005,
+      "scale": 2.397812843322754
+    },
+    "embedding_bridge_optimal_scale_diagnostic": {
+      "cosine": {
+        "mean": 0.18545947968959808,
+        "median": 0.18990840017795563,
+        "p05": 0.1036013588309288,
+        "p95": 0.2608112096786499,
+        "min": 0.02305169776082039,
+        "max": 0.3173951208591461
+      },
+      "relative_rmse": 0.9820871397365476,
+      "scale": 0.4503729664152623
+    },
+    "activation_bridge": {
+      "cosine": {
+        "mean": 0.5240454077720642,
+        "median": 0.5312420725822449,
+        "p05": 0.33424216508865356,
+        "p95": 0.7056297063827515,
+        "min": 0.26808077096939087,
+        "max": 0.7844783067703247
+      },
+      "relative_rmse": 0.9748881968391948,
+      "scale": 2.397812843322754
+    },
+    "activation_bridge_optimal_scale_diagnostic": {
+      "cosine": {
+        "mean": 0.5240454077720642,
+        "median": 0.5312420725822449,
+        "p05": 0.33424216508865356,
+        "p95": 0.7056297063827515,
+        "min": 0.26808077096939087,
+        "max": 0.7844783067703247
+      },
+      "relative_rmse": 0.8502886480285585,
+      "scale": 1.257985271091751
+    },
+    "median_cosine_lift_vs_embedding": 0.34133367240428925,
+    "nrmse_ratio_vs_embedding": 0.7639788432659472,
+    "positive_prompt_rate": 1.0,
+    "per_prompt": [
+      {
+        "prompt_id": "agent-tool",
+        "tokens": 57,
+        "baseline_median_cosine": 0.192464679479599,
+        "activation_median_cosine": 0.5408875942230225,
+        "lift": 0.34842291474342346
+      },
+      {
+        "prompt_id": "json-contract",
+        "tokens": 57,
+        "baseline_median_cosine": 0.19332708418369293,
+        "activation_median_cosine": 0.546506404876709,
+        "lift": 0.35317932069301605
+      },
+      {
+        "prompt_id": "python-async",
+        "tokens": 79,
+        "baseline_median_cosine": 0.16860252618789673,
+        "activation_median_cosine": 0.4809693396091461,
+        "lift": 0.3123668134212494
+      }
+    ]
+  },
+  "runtime": {
+    "input_weight": {
+      "file": "coder_activation_input_weight_f32.npy",
+      "sha256": "961e82ee5466f0ced9448baaf5ec321d4ac634ba6f148b88a5604e5ddda9b762",
+      "contract": "donor_column = W_in @ colorlm_column"
+    },
+    "output_weight": {
+      "file": "coder_activation_output_weight_f32.npy",
+      "sha256": "bec724bdb96edaefbea1dc2bd09a9d02981e7094faece68e0b9a0575e25aa02b",
+      "contract": "colorlm_delta_column = W_out @ donor_delta_column"
+    },
+    "orthogonal_compatibility": {
+      "file": "coder_to_colorlm_activation_orthogonal_f32.npy",
+      "sha256": "4cdc2b05ae5a8472b0986dea97e3694afbc9b00add09374d746a931bf49b0a7f",
+      "contract": "donor_row @ T = colorlm_row; legacy compiler uses T/T.T"
+    }
+  },
+  "promotion": {
+    "gates": {
+      "enough_prompts": true,
+      "enough_tokens": true,
+      "heldout_cosine_lift": true,
+      "heldout_nrmse_ratio": true,
+      "positive_prompt_rate": true,
+      "reversible": true,
+      "scale_in_contract": true
+    },
+    "decision": "candidate",
+    "thresholds": {
+      "min_prompts": 6,
+      "min_tokens": 512,
+      "min_cosine_lift": 0.03,
+      "max_nrmse_ratio": 0.95,
+      "min_positive_prompt_rate": 0.67
+    }
+  }
+}

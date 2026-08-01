@@ -1,0 +1,55 @@
+{
+  "format": "colorlm-k3-smoke-report-v1",
+  "model": "ColorLM-v9-K3-rc1",
+  "date": "2026-07-29",
+  "gpu": "Vulkan0 / AMD Radeon RX 5700 XT",
+  "base": "ColorLM-v6-Q3Router-Fused-A1.gguf",
+  "site_plan_sha256": "bb450b693e935fbe46554eb4963a8f7e77b898758706ecd168c199c4d063fdc4",
+  "runtime": {
+    "llama_dll_sha256": "6529d285da821671906687fa3e1b7f99b49b7d26203f11ef3ff0f6bea024eb6d",
+    "llama_server_sha256": "6a9be8372f55c635a8610c68455068db48c6d1c08367091443334cffbb312ff5",
+    "k3_weight_bytes": 190855168,
+    "k3_device": "Vulkan0"
+  },
+  "sites": [
+    {
+      "colorlm_layer": 12,
+      "k3_layer": 28,
+      "expert": 41,
+      "transport_gain": 1.0,
+      "prefill_raw_rms": 0.0071296,
+      "prefill_applied_rms": 0.00020085,
+      "decode_raw_rms": 0.00751981,
+      "decode_applied_rms": 0.00000361,
+      "finite": true,
+      "nonzero": true
+    },
+    {
+      "colorlm_layer": 28,
+      "k3_layer": 65,
+      "expert": 539,
+      "transport_gain": 0.05,
+      "prefill_raw_rms": 0.00699415,
+      "prefill_applied_rms": 0.00014597,
+      "decode_raw_rms": 0.00710687,
+      "decode_applied_rms": 0.00001675,
+      "finite": true,
+      "nonzero": true
+    }
+  ],
+  "request": {
+    "prompt": "只回复：你好",
+    "response": "你好",
+    "prompt_tokens": 16,
+    "completion_tokens": 2,
+    "prompt_tokens_per_second": 35.736381646687796,
+    "generation_tokens_per_second": 34.65123531653903
+  },
+  "gates": {
+    "manifest_and_tensor_sha256": "passed",
+    "site_specific_capsules": "passed",
+    "finite_nonzero_residuals": "passed",
+    "vulkan_execution": "passed",
+    "long_benchmark": "not_run_by_design"
+  }
+}

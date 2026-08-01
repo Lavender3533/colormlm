@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://colorlm.local/schemas/design-genome-v1.json",
+  "title": "ColorLM v47 Design Genome 闭集动作 IR",
+  "description": "模型目标只含闭集基因与 copy-slot 索引；用户专有文字位于独立 slots sidecar。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "q", "y", "l", "c", "x", "r", "a", "z"],
+  "properties": {
+    "v": {"const": "dg1"},
+    "q": {
+      "description": "依次为 title、lede 的 copy-slot id。",
+      "type": "array",
+      "prefixItems": [
+        {"type": "integer", "minimum": 0, "maximum": 63},
+        {"type": "integer", "minimum": 0, "maximum": 63}
+      ],
+      "items": false
+    },
+    "y": {
+      "description": "mode、palette、density、shape。",
+      "type": "array",
+      "prefixItems": [
+        {"enum": ["light", "dark", "paper"]},
+        {"enum": ["cyan", "indigo", "coral", "green", "amber", "violet", "blue"]},
+        {"enum": ["compact", "normal", "airy"]},
+        {"enum": ["square", "soft", "round"]}
+      ],
+      "items": false
+    },
+    "l": {
+      "description": "layout grammar、mobile composition、breakpoint profile。",
+      "type": "array",
+      "prefixItems": [
+        {"enum": ["dashboard", "editorial", "timeline", "split", "docs", "settings", "schedule", "story"]},
+        {"enum": ["stack", "cards", "drawer", "accordion"]},
+        {"type": "integer", "minimum": 0, "maximum": 2}
+      ],
+      "items": false
+    },
+    "c": {
+      "description": "组件基因 [family, variant]；组合合法性由 registry 校验。",
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "prefixItems": [
+        {"type": "array", "prefixItems": [{"enum": ["hero", "sidebar", "metrics"]}, {"enum": ["plain", "editorial", "story", "docs", "settings", "ops", "generic"]}], "items": false},
+        {"type": "array", "prefixItems": [{"enum": ["filters", "toggles", "tabs", "form"]}, {"enum": ["status", "catalog", "project", "date-stage", "year", "generic", "privacy", "language", "search"]}], "items": false},
+        {"type": "array", "prefixItems": [{"enum": ["table", "products", "timeline", "form", "code", "schedule", "chart"]}, {"enum": ["ops", "devices", "data", "generic", "magazine", "catalog", "case-study", "process", "booking", "request", "response", "stages", "year-series", "spark"]}], "items": false},
+        {"type": "array", "prefixItems": [{"enum": ["drawer", "dialog", "compare", "tabs", "table"]}, {"enum": ["detail", "navigation", "confirm", "preview", "danger", "success", "before-after", "range", "response", "generic", "data"]}], "items": false},
+        {"type": "array", "prefixItems": [{"enum": ["metrics", "note", "bag", "dialog", "drawer", "code"]}, {"enum": ["ops", "story", "generic", "source", "method", "counter", "confirm", "success", "danger", "navigation", "detail", "response"]}], "items": false}
+      ],
+      "items": false
+    },
+    "x": {
+      "description": "固定顺序 data/view/commit/state。",
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "prefixItems": [
+        {"enum": ["filter", "sort", "year", "navigate", "none"]},
+        {"enum": ["open", "compare", "tab", "accordion", "inspect", "none"]},
+        {"enum": ["confirm", "count", "validate", "copy", "favorite", "none"]},
+        {"enum": ["reset", "toggle", "sort", "announce", "save", "none"]}
+      ],
+      "items": false
+    },
+    "r": {
+      "description": "固定顺序 main/overlay。",
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {"enum": ["table>cards", "grid>stack", "schedule>accordion", "chart>scroll", "code>scroll"]},
+        {"enum": ["drawer>full", "aside>drawer", "none"]}
+      ],
+      "items": false
+    },
+    "a": {
+      "description": "无障碍位图：1 skip、2 focus、4 motion、8 live、16 labels、32 keyboard、64 contrast、128 table-alt。",
+      "type": "integer",
+      "minimum": 15,
+      "maximum": 255
+    },
+    "z": {"enum": ["inline", "none"]},
+    "e": {
+      "description": "版本化扩展；键须有命名空间，值限标量，防止退化为自由文案通道。",
+      "type": "object",
+      "propertyNames": {"pattern": "^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$"},
+      "additionalProperties": {"type": ["boolean", "integer", "number"]}
+    }
+  }
+}

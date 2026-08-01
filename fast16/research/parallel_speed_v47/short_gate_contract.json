@@ -1,0 +1,70 @@
+{
+  "format": "colorlm-parallel-speed-v47-short-gate-v1",
+  "manifest": "manifest.json",
+  "offline_only": true,
+  "inputs_are_frozen": true,
+  "gates": {
+    "common": {
+      "all_evidence_hashes_match": true,
+      "all_json_parse": true,
+      "all_text_utf8_without_bom": true,
+      "no_model_or_gpu_required": true
+    },
+    "A_draft_head": {
+      "structural": [
+        "draft_tokens在1到4之间",
+        "复用冻结embedding/lm_head",
+        "不写KV或神经岛recurrent state",
+        "拒绝时只提交已接受前缀"
+      ],
+      "budget": {
+        "maximum_trainable_parameters": 10000000,
+        "maximum_f16_weight_mib": 24.0,
+        "minimum_analytical_upper_bound_speedup": 1.10
+      },
+      "runtime_promotion_required_later": {
+        "greedy_exact_on_all_frozen_tasks": true,
+        "minimum_acceptance_rate": 0.60,
+        "minimum_end_to_end_speedup": 1.10,
+        "minimum_tasks": 32
+      }
+    },
+    "B_latent_recursion": {
+      "structural": [
+        "K严格属于0到4",
+        "K0不创建循环图节点且逐位旁路",
+        "循环权重共享",
+        "循环内禁止写KV、recurrent state和缓存策略状态"
+      ],
+      "budget": {
+        "maximum_trainable_parameters": 3000000,
+        "maximum_mean_k": 1.5,
+        "minimum_k0_fraction": 0.25
+      },
+      "runtime_promotion_required_later": {
+        "frozen_quality_zero_regression": true,
+        "minimum_end_to_end_speedup": 1.05,
+        "report_k_histogram_and_router_calibration": true
+      }
+    },
+    "C_paging": {
+      "offline_replay": {
+        "split_by_layer_first_half_train_second_half_test": true,
+        "minimum_cold_miss_reduction_vs_hierarchical_lru": 0.05,
+        "minimum_useful_prefetch_precision": 0.10,
+        "exact_miss_path": true
+      },
+      "runtime_promotion_required_later": {
+        "greedy_output_exact": true,
+        "report_ram_vram_ssd_pcie_and_wait_time": true,
+        "p95_latency_no_regression": true,
+        "minimum_end_to_end_speedup": 1.05
+      }
+    }
+  },
+  "decision_vocabulary": {
+    "offline_feasible": "仅说明结构、预算和现有记录回放满足离线门",
+    "needs_runtime_evidence": "离线门通过但不得晋级运行候选",
+    "reject": "至少一项硬门失败"
+  }
+}

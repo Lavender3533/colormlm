@@ -1,0 +1,38 @@
+{
+  "format": "colorlm-parallel-speed-v47-cost-v1",
+  "assumption_boundary": "解析成本模型；不是端到端测速，也不包含训练后接受率或真实内核效率",
+  "draft_head": {
+    "trainable_parameters": 4464640,
+    "fusion_parameters": 3145728,
+    "position_parameters": 1318912,
+    "f16_weight_mib": 8.515625,
+    "adapter_flops_per_base_step": 8929280,
+    "vocabulary_projection_flops_per_base_step": 2489319424,
+    "total_draft_flops_per_base_step": 2498248704,
+    "draft_to_base_step_flops_ratio": 0.416374784,
+    "uniform_acceptance_assumption": 0.65,
+    "expected_advanced_tokens_per_cycle": 2.52563125,
+    "analytical_upper_bound_speedup": 1.429838827454638,
+    "warning": "上界依赖批量验证因子与接受率；未训练头时不可当成预期实测速度"
+  },
+  "latent_recursion": {
+    "trainable_parameters": 2228549,
+    "f16_weight_mib": 4.250619888305664,
+    "mean_k_assumption": 1.33,
+    "p95_k_assumption": 4,
+    "mean_extra_flops_per_token": 5841218.32,
+    "extra_to_base_step_flops_ratio": 0.0009735363866666667,
+    "k0_fraction_assumption": 0.35,
+    "warning": "小FLOPs不代表可提速；该块默认增加计算，只能用质量/路由收益或替代原层证明价值"
+  },
+  "paging": {
+    "v17_four_layer_full_expert_bank_gib": 3.375,
+    "gpu_pool_gib": 0.2109375,
+    "cpu_warm_pool_gib": 0.84375,
+    "active_expert_mib_per_token": 67.5,
+    "no_cache_ideal_ssd_ms_per_token": 18.833705357142858,
+    "no_cache_ideal_pcie_ms_per_token": 5.4931640625,
+    "residual_prefetch_exposed_ssd_ms_lower_bound": 7.533482142857143,
+    "warning": "理想值不含随机I/O、解压、Vulkan提交、CPU专家计算和同步尾延迟"
+  }
+}

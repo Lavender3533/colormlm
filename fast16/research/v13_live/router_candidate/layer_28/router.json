@@ -1,0 +1,45 @@
+{
+  "format": "colorlm-intelligence-router-v1",
+  "runtime_layout": "two-headerless-f32-le-row-major-v1",
+  "input_width": 2048,
+  "input_transform": "per-token-l2-unit",
+  "route_count": 3,
+  "routes": [
+    "no_op",
+    "coder",
+    "k3"
+  ],
+  "tensors": {
+    "weight": {
+      "file": "weight.f32",
+      "dtype": "float32-le",
+      "ggml_shape": [
+        2048,
+        3
+      ],
+      "bytes": 24576,
+      "sha256": "777045d061f19f54b8863f7997219739fd044fadd0802174e7662b2eb2960213"
+    },
+    "bias": {
+      "file": "bias.f32",
+      "dtype": "float32-le",
+      "ggml_shape": [
+        3
+      ],
+      "bytes": 12,
+      "sha256": "8878aabb426124e1bbc29744ce8324cfe41a426c5e5e37464dbb8433343e8dfc"
+    }
+  },
+  "calibration": {
+    "site": 28,
+    "train_accuracy": 1.0,
+    "heldout_accuracy": 0.5,
+    "majority_route": "coder",
+    "majority_heldout_accuracy": 0.625,
+    "always_no_op_heldout_accuracy": 0.125,
+    "required_lift": 0.1,
+    "promotable": false,
+    "train_loss": 0.11191445589065552,
+    "final_fit_loss": 0.18360060453414917
+  }
+}

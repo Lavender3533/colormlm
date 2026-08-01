@@ -1,0 +1,71 @@
+{
+  "format": "colorlm-frontier-capability-matrix-v1",
+  "date": "2026-07-31",
+  "north_star": "追赶 Claude/GPT 的通用智能体能力，而不是只做代码或工具专项模型",
+  "principle": "代码与工具是当前最便宜、最可自动验证的探针，不是最终能力边界",
+  "dimensions": [
+    {
+      "id": "reasoning",
+      "name": "推理与问题分解",
+      "target": "约束推理、数学、反事实、复杂任务拆解",
+      "current_short_gate": "加入可精确判分的逻辑、算术和状态转换任务",
+      "future_gate": "多步推理与长链规划，但不以隐藏思维文本长度作为能力指标"
+    },
+    {
+      "id": "knowledge",
+      "name": "知识与事实可靠性",
+      "target": "通用知识、技术知识、时效边界与不确定性表达",
+      "current_short_gate": "本地冻结事实集和可核验引用任务",
+      "future_gate": "知识覆盖、幻觉率和拒答校准"
+    },
+    {
+      "id": "long_context",
+      "name": "长上下文理解",
+      "target": "跨文件定位、信息保持、冲突消解和长文综合",
+      "current_short_gate": "标记取回、跨段依赖和冲突事实选择",
+      "future_gate": "多文件代码库与长任务状态保持"
+    },
+    {
+      "id": "coding",
+      "name": "编程与调试",
+      "target": "正确实现、调试、补丁、测试和跨语言迁移",
+      "current_short_gate": "单元测试可执行的独立代码任务和精确 next-token NLL",
+      "future_gate": "仓库级修改、编译测试闭环和回归控制"
+    },
+    {
+      "id": "tools",
+      "name": "工具调用",
+      "target": "工具选择、参数 Schema、结果回填和多步闭环",
+      "current_short_gate": "5 类工具的必填参数与目标 token NLL",
+      "future_gate": "多工具状态机、异常恢复与停止行为"
+    },
+    {
+      "id": "planning",
+      "name": "规划与自我纠错",
+      "target": "制定计划、执行检查、发现失败并调整",
+      "current_short_gate": "短状态机与可验证子目标顺序",
+      "future_gate": "长任务成功率、重试质量与预算控制"
+    },
+    {
+      "id": "computer_use",
+      "name": "电脑操作",
+      "target": "理解界面、执行动作、校验结果和安全恢复",
+      "current_short_gate": "结构化界面状态到动作序列的离线任务",
+      "future_gate": "真实桌面沙箱中的端到端任务完成率"
+    },
+    {
+      "id": "communication",
+      "name": "自然交流与指令遵循",
+      "target": "准确、简洁、格式稳定、多轮一致和知道边界",
+      "current_short_gate": "格式约束、停止行为、多轮一致性",
+      "future_gate": "复杂协作、澄清质量和长期偏好保持"
+    }
+  ],
+  "promotion_rule": {
+    "near_term": "任何融合模块必须先在其目标维度独立增益，且不能显著损害其他维度",
+    "v19_1": "连续前 6 token 仅算冒烟；还必须通过任务级胜负、最差回归、leave-one-task-out、人工预先选择的关键决策 token，以及实际生成可验证净改善",
+    "frontier_claim": "只有多维任务矩阵出现可重复综合提升，才讨论追赶 Claude/GPT；单一代码、工具或 NLL 结果不得外推",
+    "hardware_constraint": "所有候选必须保留 8GB 显卡可运行路径、alpha=0 物理旁路和本地低成本验证"
+  },
+  "v19_1_contract": "fast16/research/v19_dual_head/v19_1_evaluation_contract.json"
+}

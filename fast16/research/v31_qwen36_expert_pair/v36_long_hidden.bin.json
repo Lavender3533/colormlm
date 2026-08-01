@@ -1,0 +1,21 @@
+{
+  "format": "colormlm-qwen36-layer-hidden-capture-v1",
+  "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone.gguf",
+  "alias": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+  "dump": "D:/project/大模型ssd化/fast16/research/v31_qwen36_expert_pair/v36_long_hidden.bin",
+  "dump_bytes": 649408,
+  "load_seconds": 17.295726899996225,
+  "prompt": "日志1 region=west rev2。日志2 quota=80 rev3。日志3 owner=Mei rev9。日志4 quota=120 rev8 state=cancelled。日志5 region=east rev6 state=active。日志6 quota=96 rev7 state=active。日志7 region=north rev5。规则：忽略cancelled；每字段取rev最大。只输出{\"region\":字符串,\"quota\":整数}。",
+  "first_token": "{\"",
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 121,
+    "prompt_ms": 899.411,
+    "prompt_per_token_ms": 7.433148760330578,
+    "prompt_per_second": 134.53248848413017,
+    "predicted_n": 1,
+    "predicted_ms": 0.001,
+    "predicted_per_token_ms": 0.001,
+    "predicted_per_second": 1000000.0
+  }
+}

@@ -1,0 +1,382 @@
+{
+  "format": "colorlm-parallel-speed-v47-offline-report-v1",
+  "generated_utc": "2026-08-01T06:12:42.537409+00:00",
+  "cpu_only": true,
+  "model_loaded": false,
+  "gpu_used": false,
+  "manifest_errors": [],
+  "evidence": {
+    "all_hashes_match": true,
+    "files": [
+      {
+        "id": "v38-runtime",
+        "path": "fast16/research/v31_qwen36_expert_pair/v38_runtime_check.json",
+        "exists": true,
+        "expected_sha256": "09727573322051db5cef63c9e86f14dbee73a1ceefeacd50b2e0192ceca70bdb",
+        "actual_sha256": "09727573322051db5cef63c9e86f14dbee73a1ceefeacd50b2e0192ceca70bdb",
+        "matches": true
+      },
+      {
+        "id": "v36-v17-full16",
+        "path": "fast16/research/v31_qwen36_expert_pair/v36_vs_v17_full16_report.json",
+        "exists": true,
+        "expected_sha256": "62fc850f0dbef59dbce278fed62448f83113ab6829d055304ccf94cc6a336a7a",
+        "actual_sha256": "62fc850f0dbef59dbce278fed62448f83113ab6829d055304ccf94cc6a336a7a",
+        "matches": true
+      },
+      {
+        "id": "v24-ngram-negative",
+        "path": "fast16/research/v24_speed_quality_bus/ngram-ab-report.json",
+        "exists": true,
+        "expected_sha256": "f8f4551992e679621e4ac29de82a6501e23f3fb992845e75b8ae8231c9d2518e",
+        "actual_sha256": "f8f4551992e679621e4ac29de82a6501e23f3fb992845e75b8ae8231c9d2518e",
+        "matches": true
+      },
+      {
+        "id": "v24-routes",
+        "path": "fast16/research/v24_speed_quality_bus/routes-none-20260801.bin",
+        "exists": true,
+        "expected_sha256": "695db1b0adadae1e02d27f8071b2da41056cc098f7c40a18fd652d39fa5f9556",
+        "actual_sha256": "695db1b0adadae1e02d27f8071b2da41056cc098f7c40a18fd652d39fa5f9556",
+        "matches": true
+      },
+      {
+        "id": "v24-route-analysis",
+        "path": "fast16/research/v24_speed_quality_bus/route-analysis.json",
+        "exists": true,
+        "expected_sha256": "329fb986d582b3713b6cf4b9ecd8e00b4c8a8b0e9fbdc780d244c981e77e2055",
+        "actual_sha256": "329fb986d582b3713b6cf4b9ecd8e00b4c8a8b0e9fbdc780d244c981e77e2055",
+        "matches": true
+      },
+      {
+        "id": "v24-cache-lru",
+        "path": "fast16/research/v24_speed_quality_bus/cache-lru.json",
+        "exists": true,
+        "expected_sha256": "9a63385c51af76162dbfd338d6d5d71b95c9dc05e800ed06bf10a91bf1fe69b1",
+        "actual_sha256": "9a63385c51af76162dbfd338d6d5d71b95c9dc05e800ed06bf10a91bf1fe69b1",
+        "matches": true
+      },
+      {
+        "id": "v24-cache-lfu97",
+        "path": "fast16/research/v24_speed_quality_bus/cache-lfu97.json",
+        "exists": true,
+        "expected_sha256": "fc32024c163af19f9b84871430a4fbf4bb5381cad48a42b4a6a1b7810be2a200",
+        "actual_sha256": "fc32024c163af19f9b84871430a4fbf4bb5381cad48a42b4a6a1b7810be2a200",
+        "matches": true
+      },
+      {
+        "id": "v17-island",
+        "path": "fast16/research/v17_coder_island/runtime-v3/island.json",
+        "exists": true,
+        "expected_sha256": "7ea2b40a2551ba30bf4dd664043c0bc33d9c486785a62ce2793e7c3ec8ff3cba",
+        "actual_sha256": "7ea2b40a2551ba30bf4dd664043c0bc33d9c486785a62ce2793e7c3ec8ff3cba",
+        "matches": true
+      }
+    ]
+  },
+  "cost": {
+    "format": "colorlm-parallel-speed-v47-cost-v1",
+    "assumption_boundary": "解析成本模型；不是端到端测速，也不包含训练后接受率或真实内核效率",
+    "draft_head": {
+      "trainable_parameters": 4464640,
+      "fusion_parameters": 3145728,
+      "position_parameters": 1318912,
+      "f16_weight_mib": 8.515625,
+      "adapter_flops_per_base_step": 8929280,
+      "vocabulary_projection_flops_per_base_step": 2489319424,
+      "total_draft_flops_per_base_step": 2498248704,
+      "draft_to_base_step_flops_ratio": 0.416374784,
+      "uniform_acceptance_assumption": 0.65,
+      "expected_advanced_tokens_per_cycle": 2.52563125,
+      "analytical_upper_bound_speedup": 1.429838827454638,
+      "warning": "上界依赖批量验证因子与接受率；未训练头时不可当成预期实测速度"
+    },
+    "latent_recursion": {
+      "trainable_parameters": 2228549,
+      "f16_weight_mib": 4.250619888305664,
+      "mean_k_assumption": 1.33,
+      "p95_k_assumption": 4,
+      "mean_extra_flops_per_token": 5841218.32,
+      "extra_to_base_step_flops_ratio": 0.0009735363866666667,
+      "k0_fraction_assumption": 0.35,
+      "warning": "小FLOPs不代表可提速；该块默认增加计算，只能用质量/路由收益或替代原层证明价值"
+    },
+    "paging": {
+      "v17_four_layer_full_expert_bank_gib": 3.375,
+      "gpu_pool_gib": 0.2109375,
+      "cpu_warm_pool_gib": 0.84375,
+      "active_expert_mib_per_token": 67.5,
+      "no_cache_ideal_ssd_ms_per_token": 18.833705357142858,
+      "no_cache_ideal_pcie_ms_per_token": 5.4931640625,
+      "residual_prefetch_exposed_ssd_ms_lower_bound": 7.533482142857143,
+      "warning": "理想值不含随机I/O、解压、Vulkan提交、CPU专家计算和同步尾延迟"
+    }
+  },
+  "routing_replay": {
+    "split": "每层前50%仅训练转移统计，后50%冷启动回放；无未来信息",
+    "records": 512,
+    "per_layer": {
+      "44": {
+        "lru": {
+          "requests": 640,
+          "gpu_hits": 201,
+          "cpu_warm_hits": 190,
+          "cold_misses": 249,
+          "gpu_hit_rate": 0.3140625,
+          "hierarchy_hit_rate": 0.6109375,
+          "gpu_uploads": 439,
+          "cpu_executions": 0,
+          "demand_ssd_mib": 420.1875,
+          "prefetch_ssd_mib": 0.0,
+          "useful_prefetch_hits": 0,
+          "wasted_prefetch_evictions": 0,
+          "useful_prefetch_precision": 0.0
+        },
+        "lfu97": {
+          "requests": 640,
+          "gpu_hits": 226,
+          "cpu_warm_hits": 166,
+          "cold_misses": 248,
+          "gpu_hit_rate": 0.353125,
+          "hierarchy_hit_rate": 0.6125,
+          "gpu_uploads": 414,
+          "cpu_executions": 0,
+          "demand_ssd_mib": 418.5,
+          "prefetch_ssd_mib": 0.0,
+          "useful_prefetch_hits": 0,
+          "wasted_prefetch_evictions": 0,
+          "useful_prefetch_precision": 0.0
+        },
+        "dali": {
+          "requests": 640,
+          "gpu_hits": 199,
+          "cpu_warm_hits": 198,
+          "cold_misses": 243,
+          "gpu_hit_rate": 0.3109375,
+          "hierarchy_hit_rate": 0.6203125,
+          "gpu_uploads": 129,
+          "cpu_executions": 312,
+          "demand_ssd_mib": 410.0625,
+          "prefetch_ssd_mib": 42.1875,
+          "useful_prefetch_hits": 5,
+          "wasted_prefetch_evictions": 20,
+          "useful_prefetch_precision": 0.2
+        }
+      },
+      "45": {
+        "lru": {
+          "requests": 640,
+          "gpu_hits": 124,
+          "cpu_warm_hits": 196,
+          "cold_misses": 320,
+          "gpu_hit_rate": 0.19375,
+          "hierarchy_hit_rate": 0.5,
+          "gpu_uploads": 516,
+          "cpu_executions": 0,
+          "demand_ssd_mib": 540.0,
+          "prefetch_ssd_mib": 0.0,
+          "useful_prefetch_hits": 0,
+          "wasted_prefetch_evictions": 0,
+          "useful_prefetch_precision": 0.0
+        },
+        "lfu97": {
+          "requests": 640,
+          "gpu_hits": 143,
+          "cpu_warm_hits": 185,
+          "cold_misses": 312,
+          "gpu_hit_rate": 0.2234375,
+          "hierarchy_hit_rate": 0.5125,
+          "gpu_uploads": 497,
+          "cpu_executions": 0,
+          "demand_ssd_mib": 526.5,
+          "prefetch_ssd_mib": 0.0,
+          "useful_prefetch_hits": 0,
+          "wasted_prefetch_evictions": 0,
+          "useful_prefetch_precision": 0.0
+        },
+        "dali": {
+          "requests": 640,
+          "gpu_hits": 134,
+          "cpu_warm_hits": 203,
+          "cold_misses": 303,
+          "gpu_hit_rate": 0.209375,
+          "hierarchy_hit_rate": 0.5265625,
+          "gpu_uploads": 140,
+          "cpu_executions": 366,
+          "demand_ssd_mib": 511.3125,
+          "prefetch_ssd_mib": 64.125,
+          "useful_prefetch_hits": 10,
+          "wasted_prefetch_evictions": 28,
+          "useful_prefetch_precision": 0.2631578947368421
+        }
+      },
+      "46": {
+        "lru": {
+          "requests": 640,
+          "gpu_hits": 112,
+          "cpu_warm_hits": 203,
+          "cold_misses": 325,
+          "gpu_hit_rate": 0.175,
+          "hierarchy_hit_rate": 0.4921875,
+          "gpu_uploads": 528,
+          "cpu_executions": 0,
+          "demand_ssd_mib": 548.4375,
+          "prefetch_ssd_mib": 0.0,
+          "useful_prefetch_hits": 0,
+          "wasted_prefetch_evictions": 0,
+          "useful_prefetch_precision": 0.0
+        },
+        "lfu97": {
+          "requests": 640,
+          "gpu_hits": 143,
+          "cpu_warm_hits": 171,
+          "cold_misses": 326,
+          "gpu_hit_rate": 0.2234375,
+          "hierarchy_hit_rate": 0.490625,
+          "gpu_uploads": 497,
+          "cpu_executions": 0,
+          "demand_ssd_mib": 550.125,
+          "prefetch_ssd_mib": 0.0,
+          "useful_prefetch_hits": 0,
+          "wasted_prefetch_evictions": 0,
+          "useful_prefetch_precision": 0.0
+        },
+        "dali": {
+          "requests": 640,
+          "gpu_hits": 144,
+          "cpu_warm_hits": 175,
+          "cold_misses": 321,
+          "gpu_hit_rate": 0.225,
+          "hierarchy_hit_rate": 0.4984375,
+          "gpu_uploads": 135,
+          "cpu_executions": 361,
+          "demand_ssd_mib": 541.6875,
+          "prefetch_ssd_mib": 59.0625,
+          "useful_prefetch_hits": 6,
+          "wasted_prefetch_evictions": 29,
+          "useful_prefetch_precision": 0.17142857142857143
+        }
+      },
+      "47": {
+        "lru": {
+          "requests": 640,
+          "gpu_hits": 162,
+          "cpu_warm_hits": 199,
+          "cold_misses": 279,
+          "gpu_hit_rate": 0.253125,
+          "hierarchy_hit_rate": 0.5640625,
+          "gpu_uploads": 478,
+          "cpu_executions": 0,
+          "demand_ssd_mib": 470.8125,
+          "prefetch_ssd_mib": 0.0,
+          "useful_prefetch_hits": 0,
+          "wasted_prefetch_evictions": 0,
+          "useful_prefetch_precision": 0.0
+        },
+        "lfu97": {
+          "requests": 640,
+          "gpu_hits": 212,
+          "cpu_warm_hits": 146,
+          "cold_misses": 282,
+          "gpu_hit_rate": 0.33125,
+          "hierarchy_hit_rate": 0.559375,
+          "gpu_uploads": 428,
+          "cpu_executions": 0,
+          "demand_ssd_mib": 475.875,
+          "prefetch_ssd_mib": 0.0,
+          "useful_prefetch_hits": 0,
+          "wasted_prefetch_evictions": 0,
+          "useful_prefetch_precision": 0.0
+        },
+        "dali": {
+          "requests": 640,
+          "gpu_hits": 217,
+          "cpu_warm_hits": 147,
+          "cold_misses": 276,
+          "gpu_hit_rate": 0.3390625,
+          "hierarchy_hit_rate": 0.56875,
+          "gpu_uploads": 115,
+          "cpu_executions": 308,
+          "demand_ssd_mib": 465.75,
+          "prefetch_ssd_mib": 30.375,
+          "useful_prefetch_hits": 6,
+          "wasted_prefetch_evictions": 12,
+          "useful_prefetch_precision": 0.3333333333333333
+        }
+      }
+    },
+    "aggregate": {
+      "lru": {
+        "requests": 2560,
+        "gpu_hits": 599,
+        "cpu_warm_hits": 788,
+        "cold_misses": 1173,
+        "gpu_hit_rate": 0.233984375,
+        "hierarchy_hit_rate": 0.541796875,
+        "gpu_uploads": 1961,
+        "cpu_executions": 0,
+        "demand_ssd_mib": 1979.4375,
+        "prefetch_ssd_mib": 0.0,
+        "useful_prefetch_hits": 0,
+        "wasted_prefetch_evictions": 0,
+        "useful_prefetch_precision": 0.0
+      },
+      "lfu97": {
+        "requests": 2560,
+        "gpu_hits": 724,
+        "cpu_warm_hits": 668,
+        "cold_misses": 1168,
+        "gpu_hit_rate": 0.2828125,
+        "hierarchy_hit_rate": 0.54375,
+        "gpu_uploads": 1836,
+        "cpu_executions": 0,
+        "demand_ssd_mib": 1971.0,
+        "prefetch_ssd_mib": 0.0,
+        "useful_prefetch_hits": 0,
+        "wasted_prefetch_evictions": 0,
+        "useful_prefetch_precision": 0.0
+      },
+      "dali": {
+        "requests": 2560,
+        "gpu_hits": 694,
+        "cpu_warm_hits": 723,
+        "cold_misses": 1143,
+        "gpu_hit_rate": 0.27109375,
+        "hierarchy_hit_rate": 0.553515625,
+        "gpu_uploads": 519,
+        "cpu_executions": 1347,
+        "demand_ssd_mib": 1928.8125,
+        "prefetch_ssd_mib": 195.75,
+        "useful_prefetch_hits": 27,
+        "wasted_prefetch_evictions": 89,
+        "useful_prefetch_precision": 0.23275862068965517
+      }
+    },
+    "dali_cold_miss_reduction_vs_lru": 0.02557544757033248,
+    "note": "预取字节与需求字节分别报告；命中改善不是端到端速度证明"
+  },
+  "decision": {
+    "offline_feasible": false,
+    "runtime_promotable": false,
+    "status": "reject",
+    "gates": {
+      "manifest_valid": true,
+      "evidence_hashes": true,
+      "utf8_no_bom": true,
+      "A_parameters": true,
+      "A_weight_bytes": true,
+      "A_analytical_upper_bound": true,
+      "B_parameters": true,
+      "B_mean_k": true,
+      "B_k0_fraction": true,
+      "C_cold_miss_reduction": false,
+      "C_prefetch_precision": true,
+      "C_exact_miss_path": true
+    },
+    "failed_gates": [
+      "C_cold_miss_reduction"
+    ],
+    "reason": "C冷miss降幅未达到预声明5%硬门；A/B仅通过结构/预算门，仍无运行证据"
+  },
+  "claim_limit": "本报告只证明离线工具可运行及所列解析/回放门结果；不证明论文速度、真实端到端加速或可直接集成。"
+}

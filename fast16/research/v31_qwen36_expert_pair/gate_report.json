@@ -1,0 +1,520 @@
+{
+  "format": "colormlm-v31-independent-short-gate-report-v1",
+  "contract": "D:/project/大模型ssd化/fast16/research/v31_qwen36_expert_pair/v31_gate.json",
+  "contract_sha256": "4152e825327dd755fa5d07ecaaf8387c105791e2ae3a467e7fe5e619728962ff",
+  "models": [
+    {
+      "alias": "ColorLM-v6-v31-control",
+      "model": "ColorLM-v6-Q3Router-Fused-A1.gguf",
+      "model_bytes": 13731822496,
+      "load_seconds": 15.72499339999922,
+      "passed": 5,
+      "total": 8,
+      "responses": [
+        {
+          "id": "reasoning-inventory-transition-v31",
+          "output": "{\"red\":7,\"blue\":6}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 10,
+            "prompt_tokens": 85,
+            "total_tokens": 95,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 85,
+            "prompt_ms": 813.982,
+            "prompt_per_token_ms": 9.576258823529411,
+            "prompt_per_second": 104.42491357302741,
+            "predicted_n": 10,
+            "predicted_ms": 363.44,
+            "predicted_per_token_ms": 36.344,
+            "predicted_per_second": 27.5148580233326
+          },
+          "passed": true,
+          "detail": "exact_json"
+        },
+        {
+          "id": "knowledge-evidence-scope-v31",
+          "output": "{\"location\": \"南柜\", \"source\": \"K2\"}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 15,
+            "prompt_tokens": 88,
+            "total_tokens": 103,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 88,
+            "prompt_ms": 852.395,
+            "prompt_per_token_ms": 9.686306818181817,
+            "prompt_per_second": 103.23852204670371,
+            "predicted_n": 15,
+            "predicted_ms": 541.719,
+            "predicted_per_token_ms": 36.1146,
+            "predicted_per_second": 27.689632447818884
+          },
+          "passed": true,
+          "detail": "exact_json"
+        },
+        {
+          "id": "long-context-active-config-v31",
+          "output": "{\"endpoint\":\"/v3\",\"retry\":5}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 11,
+            "prompt_tokens": 112,
+            "total_tokens": 123,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 112,
+            "prompt_ms": 828.962,
+            "prompt_per_token_ms": 7.401446428571428,
+            "prompt_per_second": 135.10872633486215,
+            "predicted_n": 11,
+            "predicted_ms": 413.606,
+            "predicted_per_token_ms": 37.600545454545454,
+            "predicted_per_second": 26.595358868101528
+          },
+          "passed": true,
+          "detail": "exact_json"
+        },
+        {
+          "id": "coding-js-comparator-v31",
+          "output": "items.sort((a,b)=>b.score-a.score||a.id.localeCompare(b.id))",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 19,
+            "prompt_tokens": 73,
+            "total_tokens": 92,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 73,
+            "prompt_ms": 741.59,
+            "prompt_per_token_ms": 10.15876712328767,
+            "prompt_per_second": 98.4371418169069,
+            "predicted_n": 19,
+            "predicted_ms": 701.97,
+            "predicted_per_token_ms": 36.945789473684215,
+            "predicted_per_second": 27.066683761414303
+          },
+          "passed": false,
+          "detail": "文本不匹配: actual='items.sort((a,b)=>b.score-a.score||a.id.localeCompare(b.id))'"
+        },
+        {
+          "id": "tools-move-file-v31",
+          "output": "",
+          "finish_reason": "length",
+          "usage": {
+            "completion_tokens": 40,
+            "prompt_tokens": 355,
+            "total_tokens": 395,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 355,
+            "prompt_ms": 1523.29,
+            "prompt_per_token_ms": 4.290957746478873,
+            "prompt_per_second": 233.04820487234866,
+            "predicted_n": 40,
+            "predicted_ms": 1500.693,
+            "predicted_per_token_ms": 37.517325,
+            "predicted_per_second": 26.654352355878252
+          },
+          "tool_calls": [
+            {
+              "type": "function",
+              "function": {
+                "name": "move_file",
+                "arguments": "{\"source\":\"tmp/result.json\",\"destination\":\"reports/final.json\""
+              },
+              "id": "6WOhLO9N1Au2xHVOZCZ3dZk7ahMYJbqp"
+            }
+          ],
+          "passed": false,
+          "detail": "tool_calls[0].function.arguments 不是合法 JSON"
+        },
+        {
+          "id": "planning-dependency-chain-v31",
+          "output": "{\"rounds\":[[\"A\"],[\"B\",\"C\"],[\"D\"]]}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 15,
+            "prompt_tokens": 80,
+            "total_tokens": 95,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 80,
+            "prompt_ms": 776.127,
+            "prompt_per_token_ms": 9.701587499999999,
+            "prompt_per_second": 103.07591412230215,
+            "predicted_n": 15,
+            "predicted_ms": 605.775,
+            "predicted_per_token_ms": 40.385,
+            "predicted_per_second": 24.76166893648632
+          },
+          "passed": true,
+          "detail": "exact_json"
+        },
+        {
+          "id": "computer-use-overwrite-dialog-v31",
+          "output": "```json\n[\n  {\n    \"type\": \"click\",\n    \"element\": \"Save\"\n  },\n  {\n    \"type\": \"click\",\n    \"element\": \"Replace\"\n  }\n]\n```",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 53,
+            "prompt_tokens": 81,
+            "total_tokens": 134,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 81,
+            "prompt_ms": 727.646,
+            "prompt_per_token_ms": 8.983283950617283,
+            "prompt_per_second": 111.3178661052215,
+            "predicted_n": 53,
+            "predicted_ms": 2009.259,
+            "predicted_per_token_ms": 37.91054716981132,
+            "predicted_per_second": 26.37788358792968
+          },
+          "passed": false,
+          "detail": "output 不是纯 JSON: Expecting value"
+        },
+        {
+          "id": "communication-calibrated-status-v31",
+          "output": "{\"ready\":false,\"claim\":\"尚未证明能力提升\"}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 12,
+            "prompt_tokens": 64,
+            "total_tokens": 76,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 64,
+            "prompt_ms": 698.151,
+            "prompt_per_token_ms": 10.908609375,
+            "prompt_per_second": 91.67071306923575,
+            "predicted_n": 12,
+            "predicted_ms": 408.951,
+            "predicted_per_token_ms": 34.07925,
+            "predicted_per_second": 29.343368765451117
+          },
+          "passed": true,
+          "detail": "exact_json"
+        }
+      ],
+      "speed": {
+        "output": "1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 ",
+        "finish_reason": "length",
+        "usage": {
+          "completion_tokens": 96,
+          "prompt_tokens": 31,
+          "total_tokens": 127,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 31,
+          "prompt_ms": 621.275,
+          "prompt_per_token_ms": 20.041129032258063,
+          "prompt_per_second": 49.89738843507303,
+          "predicted_n": 96,
+          "predicted_ms": 3747.306,
+          "predicted_per_token_ms": 39.0344375,
+          "predicted_per_second": 25.61840426162155
+        }
+      }
+    },
+    {
+      "alias": "ColorLM-v31-Qwen36-L39-Pair",
+      "model": "ColorLM-v31-Qwen36-L39-Expert-Pair.gguf",
+      "model_bytes": 13963754624,
+      "load_seconds": 18.233857600000192,
+      "passed": 5,
+      "total": 8,
+      "responses": [
+        {
+          "id": "reasoning-inventory-transition-v31",
+          "output": "{\"red\":7,\"blue\":6}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 10,
+            "prompt_tokens": 85,
+            "total_tokens": 95,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 85,
+            "prompt_ms": 1288.256,
+            "prompt_per_token_ms": 15.155952941176471,
+            "prompt_per_second": 65.98067464851707,
+            "predicted_n": 10,
+            "predicted_ms": 436.357,
+            "predicted_per_token_ms": 43.6357,
+            "predicted_per_second": 22.917015196272775
+          },
+          "passed": true,
+          "detail": "exact_json"
+        },
+        {
+          "id": "knowledge-evidence-scope-v31",
+          "output": "{\"location\": \"南柜\", \"source\": \"K2\"}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 15,
+            "prompt_tokens": 88,
+            "total_tokens": 103,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 88,
+            "prompt_ms": 1475.634,
+            "prompt_per_token_ms": 16.768568181818182,
+            "prompt_per_second": 59.635383841792745,
+            "predicted_n": 15,
+            "predicted_ms": 723.363,
+            "predicted_per_token_ms": 48.2242,
+            "predicted_per_second": 20.736476706715713
+          },
+          "passed": true,
+          "detail": "exact_json"
+        },
+        {
+          "id": "long-context-active-config-v31",
+          "output": "{\"endpoint\":\"/v3\",\"retry\":5}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 11,
+            "prompt_tokens": 112,
+            "total_tokens": 123,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 112,
+            "prompt_ms": 1367.566,
+            "prompt_per_token_ms": 12.210410714285715,
+            "prompt_per_second": 81.89732707598756,
+            "predicted_n": 11,
+            "predicted_ms": 496.109,
+            "predicted_per_token_ms": 45.10081818181818,
+            "predicted_per_second": 22.172546758877587
+          },
+          "passed": true,
+          "detail": "exact_json"
+        },
+        {
+          "id": "coding-js-comparator-v31",
+          "output": "items.sort((a,b)=>b.score-a.score||a.id.localeCompare(b.id))",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 19,
+            "prompt_tokens": 73,
+            "total_tokens": 92,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 73,
+            "prompt_ms": 1178.876,
+            "prompt_per_token_ms": 16.148986301369863,
+            "prompt_per_second": 61.9233914338743,
+            "predicted_n": 19,
+            "predicted_ms": 943.098,
+            "predicted_per_token_ms": 49.63673684210526,
+            "predicted_per_second": 20.146368670063982
+          },
+          "passed": false,
+          "detail": "文本不匹配: actual='items.sort((a,b)=>b.score-a.score||a.id.localeCompare(b.id))'"
+        },
+        {
+          "id": "tools-move-file-v31",
+          "output": "",
+          "finish_reason": "length",
+          "usage": {
+            "completion_tokens": 40,
+            "prompt_tokens": 355,
+            "total_tokens": 395,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 355,
+            "prompt_ms": 2966.923,
+            "prompt_per_token_ms": 8.357529577464788,
+            "prompt_per_second": 119.65258282739391,
+            "predicted_n": 40,
+            "predicted_ms": 2034.184,
+            "predicted_per_token_ms": 50.8546,
+            "predicted_per_second": 19.663904543541783
+          },
+          "tool_calls": [
+            {
+              "type": "function",
+              "function": {
+                "name": "move_file",
+                "arguments": "{\"source\":\"tmp/result.json\",\"destination\":\"reports/final.json\""
+              },
+              "id": "XX1ld6lGtkwSuCMky0UZbdDpOGO5txlR"
+            }
+          ],
+          "passed": false,
+          "detail": "tool_calls[0].function.arguments 不是合法 JSON"
+        },
+        {
+          "id": "planning-dependency-chain-v31",
+          "output": "{\"rounds\":[[\"A\"],[\"B\",\"C\"],[\"D\"]]}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 15,
+            "prompt_tokens": 80,
+            "total_tokens": 95,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 80,
+            "prompt_ms": 1276.831,
+            "prompt_per_token_ms": 15.9603875,
+            "prompt_per_second": 62.65512037223408,
+            "predicted_n": 15,
+            "predicted_ms": 734.591,
+            "predicted_per_token_ms": 48.97273333333333,
+            "predicted_per_second": 20.419525967511174
+          },
+          "passed": true,
+          "detail": "exact_json"
+        },
+        {
+          "id": "computer-use-overwrite-dialog-v31",
+          "output": "{\"type\": \"click\", \"element\": \"Save\"}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 13,
+            "prompt_tokens": 81,
+            "total_tokens": 94,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 81,
+            "prompt_ms": 1184.843,
+            "prompt_per_token_ms": 14.627691358024693,
+            "prompt_per_second": 68.36348782074924,
+            "predicted_n": 13,
+            "predicted_ms": 609.952,
+            "predicted_per_token_ms": 46.919384615384615,
+            "predicted_per_second": 21.31315251036147
+          },
+          "passed": false,
+          "detail": "JSON 不匹配: actual={'type': 'click', 'element': 'Save'}"
+        },
+        {
+          "id": "communication-calibrated-status-v31",
+          "output": "{\"ready\":false,\"claim\":\"尚未证明能力提升\"}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 12,
+            "prompt_tokens": 64,
+            "total_tokens": 76,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 64,
+            "prompt_ms": 1124.809,
+            "prompt_per_token_ms": 17.575140625,
+            "prompt_per_second": 56.898548998096565,
+            "predicted_n": 12,
+            "predicted_ms": 556.65,
+            "predicted_per_token_ms": 46.387499999999996,
+            "predicted_per_second": 21.55753166262463
+          },
+          "passed": true,
+          "detail": "exact_json"
+        }
+      ],
+      "speed": {
+        "output": "</think>\n\n1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 3",
+        "finish_reason": "length",
+        "usage": {
+          "completion_tokens": 96,
+          "prompt_tokens": 31,
+          "total_tokens": 127,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 31,
+          "prompt_ms": 679.592,
+          "prompt_per_token_ms": 21.92232258064516,
+          "prompt_per_second": 45.6156046569118,
+          "predicted_n": 96,
+          "predicted_ms": 5012.495,
+          "predicted_per_token_ms": 52.213489583333335,
+          "predicted_per_second": 19.152138805125993
+        }
+      }
+    }
+  ],
+  "comparison": {
+    "wins": [],
+    "regressions": [],
+    "score_delta": 0,
+    "base_tokens_per_second": 25.61840426162155,
+    "candidate_tokens_per_second": 19.152138805125993,
+    "speed_delta": -0.2524070348199847,
+    "generation_gate_pass": false,
+    "speed_gate_pass": false,
+    "prototype_advances": false
+  }
+}

@@ -1,0 +1,147 @@
+{
+  "format": "colorlm-v13-intelligence-router-v1",
+  "status": "rejected_control",
+  "classes": [
+    "no_op",
+    "coder",
+    "k3"
+  ],
+  "input": {
+    "tensor": "attn_post_norm",
+    "transform": "per-token-l2-unit",
+    "n_embd": 2048,
+    "sites": [
+      12,
+      28
+    ]
+  },
+  "label": "argmin exact counterfactual next-token NLL",
+  "margin": 0.0001,
+  "sample_accounting": {
+    "teacher_total": 24,
+    "selected": 18,
+    "censored": 0,
+    "low_margin": 6,
+    "class_counts": {
+      "no_op": 2,
+      "coder": 11,
+      "k3": 5
+    },
+    "mean_margin": 0.2182772167693151
+  },
+  "split": {
+    "kind": "task_group",
+    "train": 10,
+    "heldout": 8,
+    "seed": 13
+  },
+  "optimizer": {
+    "name": "full-batch Adam softmax regression",
+    "epochs": 200,
+    "learning_rate": 0.03,
+    "l2": 0.001
+  },
+  "sites": [
+    {
+      "site": 12,
+      "train_accuracy": 1.0,
+      "heldout_accuracy": 0.5,
+      "majority_route": "coder",
+      "majority_heldout_accuracy": 0.625,
+      "always_no_op_heldout_accuracy": 0.125,
+      "required_lift": 0.1,
+      "promotable": false,
+      "train_loss": 0.09428007900714874,
+      "final_fit_loss": 0.1727026104927063
+    },
+    {
+      "site": 28,
+      "train_accuracy": 1.0,
+      "heldout_accuracy": 0.5,
+      "majority_route": "coder",
+      "majority_heldout_accuracy": 0.625,
+      "always_no_op_heldout_accuracy": 0.125,
+      "required_lift": 0.1,
+      "promotable": false,
+      "train_loss": 0.11191445589065552,
+      "final_fit_loss": 0.18360060453414917
+    }
+  ],
+  "artifacts": [
+    {
+      "site": 12,
+      "directory": "layer_12",
+      "manifest": "router.json",
+      "manifest_sha256": "f08441f6f4a39c5df5c7be374eab00f8b3116692a08d01a19324f7b931120f77",
+      "weight": {
+        "file": "weight.f32",
+        "dtype": "float32-le",
+        "ggml_shape": [
+          2048,
+          3
+        ],
+        "bytes": 24576,
+        "sha256": "2877cb4ccf7558b47d92f305cffaec95e46e3284a33629a021c66a149c294759"
+      },
+      "bias": {
+        "file": "bias.f32",
+        "dtype": "float32-le",
+        "ggml_shape": [
+          3
+        ],
+        "bytes": 12,
+        "sha256": "a25008d4c771dc24ff0b050ef58a617c96c628d747f50d0b26ec57b40eb932f6"
+      }
+    },
+    {
+      "site": 28,
+      "directory": "layer_28",
+      "manifest": "router.json",
+      "manifest_sha256": "8e68a1ee347e5cf0ba43ba82b174ed71be299bd02ed153bac8dd3fe3f4bd957a",
+      "weight": {
+        "file": "weight.f32",
+        "dtype": "float32-le",
+        "ggml_shape": [
+          2048,
+          3
+        ],
+        "bytes": 24576,
+        "sha256": "777045d061f19f54b8863f7997219739fd044fadd0802174e7662b2eb2960213"
+      },
+      "bias": {
+        "file": "bias.f32",
+        "dtype": "float32-le",
+        "ggml_shape": [
+          3
+        ],
+        "bytes": 12,
+        "sha256": "8878aabb426124e1bbc29744ce8324cfe41a426c5e5e37464dbb8433343e8dfc"
+      }
+    }
+  ],
+  "source_teacher_sha256": "296ba6b3201fe7e5212c91063589a853fd48c9297b9f9f192745f68fe1e49c0f",
+  "source_shards": [
+    {
+      "route": "no_op",
+      "file": "D:\\project\\大模型ssd化\\fast16\\research\\v13_live\\no_op.jsonl",
+      "sha256": "ded965e8f4e2fd56c4b696f36c171936223021ace7b953a8ca81a361993992ec"
+    },
+    {
+      "route": "coder",
+      "file": "D:\\project\\大模型ssd化\\fast16\\research\\v13_live\\coder.jsonl",
+      "sha256": "b41df90ea01c6b6cab733d4b1f77ecc30787432cf6d932011e1fefcf8492dee9"
+    },
+    {
+      "route": "k3",
+      "file": "D:\\project\\大模型ssd化\\fast16\\research\\v13_live\\k3.jsonl",
+      "sha256": "3d8beea14d0bf0bb558f55e6fcf5a4ececf7c6f434b381c840c9a20ee6f6f2b0"
+    }
+  ],
+  "runtime_contract": {
+    "logits": "W @ l2_unit(attn_post_norm) + bias",
+    "probabilities": "softmax(logits)",
+    "no_op": "must create no residual nodes when selected by a future lazy executor",
+    "current_runtime_support": true,
+    "execution": "dense-residual-v1"
+  }
+}

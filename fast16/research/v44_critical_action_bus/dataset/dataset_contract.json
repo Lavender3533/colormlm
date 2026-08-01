@@ -1,0 +1,84 @@
+{
+  "format": "colorlm-v44-critical-action-dataset-contract-v1",
+  "date": "2026-08-01",
+  "status": "frozen-before-model-capture",
+  "dataset_version": "v44.0",
+  "scope": {
+    "capabilities": [
+      "tool_argument_repair",
+      "continue_or_finish",
+      "missing_parameter_clarification",
+      "multi_step_planning",
+      "computer_operation",
+      "code_debugging"
+    ],
+    "task_count": 240,
+    "group_count": 120,
+    "counterfactual_variants_per_group": 2,
+    "groups_per_template_cluster": 5,
+    "template_clusters_per_capability": 4
+  },
+  "split_contract": {
+    "unit": "template_cluster_id",
+    "train_clusters_per_capability": 2,
+    "validation_clusters_per_capability": 1,
+    "blind_clusters_per_capability": 1,
+    "expected_task_counts": {
+      "train": 120,
+      "validation": 60,
+      "blind": 60
+    },
+    "group_or_cluster_overlap_allowed": false,
+    "target_token_overlap_allowed": true,
+    "common_tool_protocol_names_allowed": true
+  },
+  "label_contract": {
+    "source": "derive_expected_action(capability, template_key, state)",
+    "teacher_or_donor_labels_allowed": false,
+    "post_hoc_human_labels_allowed": false,
+    "online_text_keyword_routing_allowed": false,
+    "counterfactual_pair_must_change_expected_action": true,
+    "pair_must_differ_in_exactly_one_observation_message": true
+  },
+  "critical_action_supervision": {
+    "source": "full canonical target",
+    "first_n_token_truncation_allowed": false,
+    "semantic_roles": [
+      "action_prefix",
+      "tool_name",
+      "argument",
+      "finish_field"
+    ],
+    "token_spans_are_added_only_after_byte_exact_tokenizer_mapping": true,
+    "maximum_generation_tokens": 96
+  },
+  "judge_contract": {
+    "type": "exact-semantic-action-v1",
+    "expected_action_must_pass": true,
+    "minimum_rejected_mutations_per_case": 4,
+    "mutation_types": [
+      "wrong_action_type_or_name",
+      "missing_field",
+      "wrong_value",
+      "extra_field"
+    ]
+  },
+  "integrity_gate": {
+    "utf8_without_bom": true,
+    "byte_reproducible_generation": true,
+    "task_oracle_id_bijection": true,
+    "template_cluster_leakage": 0,
+    "group_leakage": 0,
+    "normalized_input_fingerprint_leakage": 0,
+    "judge_false_accepts": 0,
+    "judge_false_rejects": 0
+  },
+  "scientific_limits": [
+    "这是确定性合成关键动作集，不是实际Claude Code仓库任务成功率。",
+    "computer_operation使用结构化可访问性状态，不含截图视觉理解。",
+    "code_debugging只监督下一关键动作，不执行真实补丁和隐藏单元测试。",
+    "blind表示模板簇隔离但目标仍在本地文件中，不是密码学隐藏盲测。",
+    "每个validation/blind能力目前各只有一个模板簇，适合短门，不足以支持前沿模型声明。",
+    "精确语义judge假设唯一动作；真实环境中的多条等价计划需要另建终态模拟器。"
+  ]
+}

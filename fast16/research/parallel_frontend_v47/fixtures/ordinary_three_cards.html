@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>普通三卡片模板</title>
+  <style>
+    body{margin:0;font-family:Arial,sans-serif;background:#f5f7fb;color:#223}
+    header{text-align:center;padding:64px 20px;background:linear-gradient(135deg,#536dfe,#7c4dff);color:white}
+    .features{display:flex;gap:20px;max-width:1000px;margin:40px auto;padding:0 20px}
+    .card{flex:1;padding:24px;background:white;border-radius:12px;box-shadow:0 4px 16px #0002;transition:transform .2s}
+    .card:hover{transform:translateY(-4px)}
+    @media(max-width:700px){.features{display:block}.card{margin-bottom:16px}}
+  </style>
+</head>
+<body>
+  <header><h1>让工作更简单</h1><p>一个现代、快速、可靠的产品。</p><a href="#">立即开始</a></header>
+  <section class="features">
+    <div class="card"><h3>快速</h3><p>立即获得结果。</p></div>
+    <div class="card"><h3>现代</h3><p>拥有漂亮设计。</p></div>
+    <div class="card"><h3>安全</h3><p>始终值得信赖。</p></div>
+  </section>
+</body>
+</html>

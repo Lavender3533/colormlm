@@ -1,0 +1,150 @@
+{
+  "format": "colorlm-kimi-k3-expert-range-plan-v1",
+  "repo": "moonshotai/Kimi-K3",
+  "revision": "master",
+  "layer": 65,
+  "expert": 752,
+  "source_shard": "model-00066-of-000096.safetensors",
+  "header_cache": "D:\\project\\大模型ssd化\\fast16\\research\\biopsy_cache\\moonshotai_Kimi-K3\\master\\headers\\model-00066-of-000096.safetensors.json",
+  "header_bytes": 824104,
+  "header_tensors_sha256": "90998142a7a3b473b9c47895589a195282af86e26128df5d436ec0512c38f460",
+  "http_range": {
+    "start": 14007882032,
+    "end_inclusive": 14025429295,
+    "bytes": 17547264
+  },
+  "download_bytes": 17547264,
+  "download_mib": 16.734375,
+  "group_size": 32,
+  "quantization": "MXFP4 E2M1 + E8M0 scale",
+  "nibble_order": "low_then_high_interleaved",
+  "scale_equation": "value * 2**(scale_u8 - 127)",
+  "matrix_mapping": {
+    "w1": "gate",
+    "w3": "up",
+    "w2": "down"
+  },
+  "matrix_orientation": "pytorch-linear-out-in",
+  "latent_input_width": 3584,
+  "intermediate_width": 3072,
+  "activation": {
+    "name": "situ",
+    "beta": 4.0,
+    "linear_beta": 25.0,
+    "equation": "beta*tanh(gate/beta)*sigmoid(gate) * linear_beta*tanh(up/linear_beta)"
+  },
+  "matrix_shapes": {
+    "gate": [
+      3072,
+      3584
+    ],
+    "down": [
+      3584,
+      3072
+    ],
+    "up": [
+      3072,
+      3584
+    ]
+  },
+  "decoded_f16_bytes": 66060288,
+  "decoded_f32_bytes": 132120576,
+  "tensors": [
+    {
+      "name": "language_model.model.layers.65.block_sparse_moe.experts.752.w1.weight_packed",
+      "weight": "w1",
+      "role": "gate",
+      "component": "weight_packed",
+      "dtype": "U8",
+      "shape": [
+        3072,
+        1792
+      ],
+      "bytes": 5505024,
+      "absolute_start": 14007882032,
+      "absolute_end": 14013387056,
+      "capsule_offset_start": 0,
+      "capsule_offset_end": 5505024
+    },
+    {
+      "name": "language_model.model.layers.65.block_sparse_moe.experts.752.w1.weight_scale",
+      "weight": "w1",
+      "role": "gate",
+      "component": "weight_scale",
+      "dtype": "U8",
+      "shape": [
+        3072,
+        112
+      ],
+      "bytes": 344064,
+      "absolute_start": 14013387056,
+      "absolute_end": 14013731120,
+      "capsule_offset_start": 5505024,
+      "capsule_offset_end": 5849088
+    },
+    {
+      "name": "language_model.model.layers.65.block_sparse_moe.experts.752.w2.weight_packed",
+      "weight": "w2",
+      "role": "down",
+      "component": "weight_packed",
+      "dtype": "U8",
+      "shape": [
+        3584,
+        1536
+      ],
+      "bytes": 5505024,
+      "absolute_start": 14013731120,
+      "absolute_end": 14019236144,
+      "capsule_offset_start": 5849088,
+      "capsule_offset_end": 11354112
+    },
+    {
+      "name": "language_model.model.layers.65.block_sparse_moe.experts.752.w2.weight_scale",
+      "weight": "w2",
+      "role": "down",
+      "component": "weight_scale",
+      "dtype": "U8",
+      "shape": [
+        3584,
+        96
+      ],
+      "bytes": 344064,
+      "absolute_start": 14019236144,
+      "absolute_end": 14019580208,
+      "capsule_offset_start": 11354112,
+      "capsule_offset_end": 11698176
+    },
+    {
+      "name": "language_model.model.layers.65.block_sparse_moe.experts.752.w3.weight_packed",
+      "weight": "w3",
+      "role": "up",
+      "component": "weight_packed",
+      "dtype": "U8",
+      "shape": [
+        3072,
+        1792
+      ],
+      "bytes": 5505024,
+      "absolute_start": 14019580208,
+      "absolute_end": 14025085232,
+      "capsule_offset_start": 11698176,
+      "capsule_offset_end": 17203200
+    },
+    {
+      "name": "language_model.model.layers.65.block_sparse_moe.experts.752.w3.weight_scale",
+      "weight": "w3",
+      "role": "up",
+      "component": "weight_scale",
+      "dtype": "U8",
+      "shape": [
+        3072,
+        112
+      ],
+      "bytes": 344064,
+      "absolute_start": 14025085232,
+      "absolute_end": 14025429296,
+      "capsule_offset_start": 17203200,
+      "capsule_offset_end": 17547264
+    }
+  ]
+}

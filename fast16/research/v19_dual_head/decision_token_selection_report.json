@@ -1,0 +1,662 @@
+{
+  "format": "colorlm-v19.1-decision-token-selection-v1",
+  "source_teacher": "D:\\project\\大模型ssd化\\fast16\\research\\v19_dual_head\\teacher_v19_full_targets.jsonl",
+  "selection_timing": "before evaluating any candidate after alpha=0.03 smoke failure",
+  "candidate_results_used": false,
+  "sample_count": 71,
+  "task_count": 12,
+  "code_categories": [
+    "boundary_condition",
+    "critical_api",
+    "operator",
+    "return_value"
+  ],
+  "tool_categories": [
+    "argument_name",
+    "argument_value",
+    "termination_marker",
+    "tool_name"
+  ],
+  "teacher_sha256": "2f442b8b11baca3df1e06e3b6663a37da2f1d102cb725045f298fed2b634e564",
+  "audit": [
+    {
+      "sample_id": "code-binary-search:0011",
+      "task_id": "code-binary-search",
+      "token_index": 11,
+      "target_token_id": 471,
+      "token_text": " -",
+      "category": "operator",
+      "reason": "implements a core comparison or arithmetic decision"
+    },
+    {
+      "sample_id": "code-binary-search:0016",
+      "task_id": "code-binary-search",
+      "token_index": 16,
+      "target_token_id": 1345,
+      "token_text": " while",
+      "category": "boundary_condition",
+      "reason": "controls a boundary or branch"
+    },
+    {
+      "sample_id": "code-binary-search:0018",
+      "task_id": "code-binary-search",
+      "token_index": 18,
+      "target_token_id": 2564,
+      "token_text": " <=",
+      "category": "operator",
+      "reason": "implements a core comparison or arithmetic decision"
+    },
+    {
+      "sample_id": "code-binary-search:0027",
+      "task_id": "code-binary-search",
+      "token_index": 27,
+      "target_token_id": 478,
+      "token_text": " +",
+      "category": "operator",
+      "reason": "implements a core comparison or arithmetic decision"
+    },
+    {
+      "sample_id": "code-binary-search:0030",
+      "task_id": "code-binary-search",
+      "token_index": 30,
+      "target_token_id": 434,
+      "token_text": " //",
+      "category": "operator",
+      "reason": "implements a core comparison or arithmetic decision"
+    },
+    {
+      "sample_id": "code-binary-search:0035",
+      "task_id": "code-binary-search",
+      "token_index": 35,
+      "target_token_id": 413,
+      "token_text": " if",
+      "category": "boundary_condition",
+      "reason": "controls a boundary or branch"
+    },
+    {
+      "sample_id": "code-binary-search:0045",
+      "task_id": "code-binary-search",
+      "token_index": 45,
+      "target_token_id": 460,
+      "token_text": " return",
+      "category": "return_value",
+      "reason": "determines the returned result"
+    },
+    {
+      "sample_id": "code-binary-search:0049",
+      "task_id": "code-binary-search",
+      "token_index": 49,
+      "target_token_id": 413,
+      "token_text": " if",
+      "category": "boundary_condition",
+      "reason": "controls a boundary or branch"
+    },
+    {
+      "sample_id": "code-binary-search:0054",
+      "task_id": "code-binary-search",
+      "token_index": 54,
+      "target_token_id": 361,
+      "token_text": " <",
+      "category": "operator",
+      "reason": "implements a core comparison or arithmetic decision"
+    },
+    {
+      "sample_id": "code-binary-search:0062",
+      "task_id": "code-binary-search",
+      "token_index": 62,
+      "target_token_id": 478,
+      "token_text": " +",
+      "category": "operator",
+      "reason": "implements a core comparison or arithmetic decision"
+    },
+    {
+      "sample_id": "code-binary-search:0067",
+      "task_id": "code-binary-search",
+      "token_index": 67,
+      "target_token_id": 745,
+      "token_text": " else",
+      "category": "boundary_condition",
+      "reason": "controls a boundary or branch"
+    },
+    {
+      "sample_id": "code-binary-search:0074",
+      "task_id": "code-binary-search",
+      "token_index": 74,
+      "target_token_id": 471,
+      "token_text": " -",
+      "category": "operator",
+      "reason": "implements a core comparison or arithmetic decision"
+    },
+    {
+      "sample_id": "code-binary-search:0079",
+      "task_id": "code-binary-search",
+      "token_index": 79,
+      "target_token_id": 460,
+      "token_text": " return",
+      "category": "return_value",
+      "reason": "determines the returned result"
+    },
+    {
+      "sample_id": "code-binary-search:0080",
+      "task_id": "code-binary-search",
+      "token_index": 80,
+      "target_token_id": 471,
+      "token_text": " -",
+      "category": "operator",
+      "reason": "implements a core comparison or arithmetic decision"
+    },
+    {
+      "sample_id": "code-close-elements:0016",
+      "task_id": "code-close-elements",
+      "token_index": 16,
+      "target_token_id": 478,
+      "token_text": " +",
+      "category": "operator",
+      "reason": "implements a core comparison or arithmetic decision"
+    },
+    {
+      "sample_id": "code-close-elements:0023",
+      "task_id": "code-close-elements",
+      "token_index": 23,
+      "target_token_id": 413,
+      "token_text": " if",
+      "category": "boundary_condition",
+      "reason": "controls a boundary or branch"
+    },
+    {
+      "sample_id": "code-close-elements:0026",
+      "task_id": "code-close-elements",
+      "token_index": 26,
+      "target_token_id": 471,
+      "token_text": " -",
+      "category": "operator",
+      "reason": "implements a core comparison or arithmetic decision"
+    },
+    {
+      "sample_id": "code-close-elements:0029",
+      "task_id": "code-close-elements",
+      "token_index": 29,
+      "target_token_id": 361,
+      "token_text": " <",
+      "category": "operator",
+      "reason": "implements a core comparison or arithmetic decision"
+    },
+    {
+      "sample_id": "code-close-elements:0034",
+      "task_id": "code-close-elements",
+      "token_index": 34,
+      "target_token_id": 460,
+      "token_text": " return",
+      "category": "return_value",
+      "reason": "determines the returned result"
+    },
+    {
+      "sample_id": "code-close-elements:0035",
+      "task_id": "code-close-elements",
+      "token_index": 35,
+      "target_token_id": 2912,
+      "token_text": " True",
+      "category": "return_value",
+      "reason": "determines the returned result"
+    },
+    {
+      "sample_id": "code-close-elements:0038",
+      "task_id": "code-close-elements",
+      "token_index": 38,
+      "target_token_id": 460,
+      "token_text": " return",
+      "category": "return_value",
+      "reason": "determines the returned result"
+    },
+    {
+      "sample_id": "code-close-elements:0039",
+      "task_id": "code-close-elements",
+      "token_index": 39,
+      "target_token_id": 3439,
+      "token_text": " False",
+      "category": "return_value",
+      "reason": "determines the returned result"
+    },
+    {
+      "sample_id": "code-java-add:0001",
+      "task_id": "code-java-add",
+      "token_index": 1,
+      "target_token_id": 460,
+      "token_text": " return",
+      "category": "return_value",
+      "reason": "determines the returned result"
+    },
+    {
+      "sample_id": "code-java-add:0003",
+      "task_id": "code-java-add",
+      "token_index": 3,
+      "target_token_id": 478,
+      "token_text": " +",
+      "category": "operator",
+      "reason": "implements a core comparison or arithmetic decision"
+    },
+    {
+      "sample_id": "code-python-clamp:0001",
+      "task_id": "code-python-clamp",
+      "token_index": 1,
+      "target_token_id": 460,
+      "token_text": " return",
+      "category": "return_value",
+      "reason": "determines the returned result"
+    },
+    {
+      "sample_id": "code-python-clamp:0002",
+      "task_id": "code-python-clamp",
+      "token_index": 2,
+      "target_token_id": 1866,
+      "token_text": " max",
+      "category": "critical_api",
+      "reason": "selects the key implementation API"
+    },
+    {
+      "sample_id": "code-python-clamp:0005",
+      "task_id": "code-python-clamp",
+      "token_index": 5,
+      "target_token_id": 1262,
+      "token_text": " min",
+      "category": "critical_api",
+      "reason": "selects the key implementation API"
+    },
+    {
+      "sample_id": "code-rust-max:0002",
+      "task_id": "code-rust-max",
+      "token_index": 2,
+      "target_token_id": 18879,
+      "token_text": ".iter",
+      "category": "critical_api",
+      "reason": "selects the key implementation API"
+    },
+    {
+      "sample_id": "code-rust-max:0007",
+      "task_id": "code-rust-max",
+      "token_index": 7,
+      "target_token_id": 2721,
+      "token_text": "max",
+      "category": "critical_api",
+      "reason": "selects the key implementation API"
+    },
+    {
+      "sample_id": "code-truncate:0001",
+      "task_id": "code-truncate",
+      "token_index": 1,
+      "target_token_id": 460,
+      "token_text": " return",
+      "category": "return_value",
+      "reason": "determines the returned result"
+    },
+    {
+      "sample_id": "code-truncate:0003",
+      "task_id": "code-truncate",
+      "token_index": 3,
+      "target_token_id": 471,
+      "token_text": " -",
+      "category": "operator",
+      "reason": "implements a core comparison or arithmetic decision"
+    },
+    {
+      "sample_id": "code-typescript-unique:0001",
+      "task_id": "code-typescript-unique",
+      "token_index": 1,
+      "target_token_id": 460,
+      "token_text": " return",
+      "category": "return_value",
+      "reason": "determines the returned result"
+    },
+    {
+      "sample_id": "code-typescript-unique:0004",
+      "task_id": "code-typescript-unique",
+      "token_index": 4,
+      "target_token_id": 2488,
+      "token_text": " Set",
+      "category": "critical_api",
+      "reason": "selects the key implementation API"
+    },
+    {
+      "sample_id": "tool-glob-files:0006",
+      "task_id": "tool-glob-files",
+      "token_index": 6,
+      "target_token_id": 56933,
+      "token_text": "glob",
+      "category": "tool_name",
+      "reason": "identifies the required tool"
+    },
+    {
+      "sample_id": "tool-glob-files:0007",
+      "task_id": "tool-glob-files",
+      "token_index": 7,
+      "target_token_id": 10612,
+      "token_text": "_files",
+      "category": "tool_name",
+      "reason": "identifies the required tool"
+    },
+    {
+      "sample_id": "tool-glob-files:0010",
+      "task_id": "tool-glob-files",
+      "token_index": 10,
+      "target_token_id": 15889,
+      "token_text": "arguments",
+      "category": "argument_name",
+      "reason": "selects a required schema field"
+    },
+    {
+      "sample_id": "tool-glob-files:0013",
+      "task_id": "tool-glob-files",
+      "token_index": 13,
+      "target_token_id": 13927,
+      "token_text": "pattern",
+      "category": "argument_name",
+      "reason": "selects a required schema field"
+    },
+    {
+      "sample_id": "tool-glob-files:0016",
+      "task_id": "tool-glob-files",
+      "token_index": 16,
+      "target_token_id": 3431,
+      "token_text": "src",
+      "category": "argument_value",
+      "reason": "forms a required argument value"
+    },
+    {
+      "sample_id": "tool-glob-files:0017",
+      "task_id": "tool-glob-files",
+      "token_index": 17,
+      "target_token_id": 50794,
+      "token_text": "/**/*.",
+      "category": "argument_value",
+      "reason": "forms a required argument value"
+    },
+    {
+      "sample_id": "tool-glob-files:0018",
+      "task_id": "tool-glob-files",
+      "token_index": 18,
+      "target_token_id": 2491,
+      "token_text": "ts",
+      "category": "argument_value",
+      "reason": "forms a required argument value"
+    },
+    {
+      "sample_id": "tool-glob-files:0021",
+      "task_id": "tool-glob-files",
+      "token_index": 21,
+      "target_token_id": 248059,
+      "token_text": "</tool_call>",
+      "category": "termination_marker",
+      "reason": "closes the structured tool call"
+    },
+    {
+      "sample_id": "tool-read-file:0006",
+      "task_id": "tool-read-file",
+      "token_index": 6,
+      "target_token_id": 851,
+      "token_text": "read",
+      "category": "tool_name",
+      "reason": "identifies the required tool"
+    },
+    {
+      "sample_id": "tool-read-file:0007",
+      "task_id": "tool-read-file",
+      "token_index": 7,
+      "target_token_id": 2378,
+      "token_text": "_file",
+      "category": "tool_name",
+      "reason": "identifies the required tool"
+    },
+    {
+      "sample_id": "tool-read-file:0010",
+      "task_id": "tool-read-file",
+      "token_index": 10,
+      "target_token_id": 15889,
+      "token_text": "arguments",
+      "category": "argument_name",
+      "reason": "selects a required schema field"
+    },
+    {
+      "sample_id": "tool-read-file:0013",
+      "task_id": "tool-read-file",
+      "token_index": 13,
+      "target_token_id": 2267,
+      "token_text": "path",
+      "category": "argument_name",
+      "reason": "selects a required schema field"
+    },
+    {
+      "sample_id": "tool-read-file:0016",
+      "task_id": "tool-read-file",
+      "token_index": 16,
+      "target_token_id": 3431,
+      "token_text": "src",
+      "category": "argument_value",
+      "reason": "forms a required argument value"
+    },
+    {
+      "sample_id": "tool-read-file:0017",
+      "task_id": "tool-read-file",
+      "token_index": 17,
+      "target_token_id": 14905,
+      "token_text": "/main",
+      "category": "argument_value",
+      "reason": "forms a required argument value"
+    },
+    {
+      "sample_id": "tool-read-file:0018",
+      "task_id": "tool-read-file",
+      "token_index": 18,
+      "target_token_id": 24822,
+      "token_text": ".rs",
+      "category": "argument_value",
+      "reason": "forms a required argument value"
+    },
+    {
+      "sample_id": "tool-read-file:0021",
+      "task_id": "tool-read-file",
+      "token_index": 21,
+      "target_token_id": 248059,
+      "token_text": "</tool_call>",
+      "category": "termination_marker",
+      "reason": "closes the structured tool call"
+    },
+    {
+      "sample_id": "tool-run-command:0006",
+      "task_id": "tool-run-command",
+      "token_index": 6,
+      "target_token_id": 5917,
+      "token_text": "run",
+      "category": "tool_name",
+      "reason": "identifies the required tool"
+    },
+    {
+      "sample_id": "tool-run-command:0007",
+      "task_id": "tool-run-command",
+      "token_index": 7,
+      "target_token_id": 10494,
+      "token_text": "_command",
+      "category": "tool_name",
+      "reason": "identifies the required tool"
+    },
+    {
+      "sample_id": "tool-run-command:0010",
+      "task_id": "tool-run-command",
+      "token_index": 10,
+      "target_token_id": 15889,
+      "token_text": "arguments",
+      "category": "argument_name",
+      "reason": "selects a required schema field"
+    },
+    {
+      "sample_id": "tool-run-command:0013",
+      "task_id": "tool-run-command",
+      "token_index": 13,
+      "target_token_id": 5454,
+      "token_text": "command",
+      "category": "argument_name",
+      "reason": "selects a required schema field"
+    },
+    {
+      "sample_id": "tool-run-command:0016",
+      "task_id": "tool-run-command",
+      "token_index": 16,
+      "target_token_id": 64460,
+      "token_text": "cargo",
+      "category": "argument_value",
+      "reason": "forms a required argument value"
+    },
+    {
+      "sample_id": "tool-run-command:0017",
+      "task_id": "tool-run-command",
+      "token_index": 17,
+      "target_token_id": 1716,
+      "token_text": " check",
+      "category": "argument_value",
+      "reason": "forms a required argument value"
+    },
+    {
+      "sample_id": "tool-run-command:0020",
+      "task_id": "tool-run-command",
+      "token_index": 20,
+      "target_token_id": 248059,
+      "token_text": "</tool_call>",
+      "category": "termination_marker",
+      "reason": "closes the structured tool call"
+    },
+    {
+      "sample_id": "tool-search-text:0006",
+      "task_id": "tool-search-text",
+      "token_index": 6,
+      "target_token_id": 1773,
+      "token_text": "search",
+      "category": "tool_name",
+      "reason": "identifies the required tool"
+    },
+    {
+      "sample_id": "tool-search-text:0007",
+      "task_id": "tool-search-text",
+      "token_index": 7,
+      "target_token_id": 4185,
+      "token_text": "_text",
+      "category": "tool_name",
+      "reason": "identifies the required tool"
+    },
+    {
+      "sample_id": "tool-search-text:0010",
+      "task_id": "tool-search-text",
+      "token_index": 10,
+      "target_token_id": 15889,
+      "token_text": "arguments",
+      "category": "argument_name",
+      "reason": "selects a required schema field"
+    },
+    {
+      "sample_id": "tool-search-text:0013",
+      "task_id": "tool-search-text",
+      "token_index": 13,
+      "target_token_id": 1574,
+      "token_text": "query",
+      "category": "argument_name",
+      "reason": "selects a required schema field"
+    },
+    {
+      "sample_id": "tool-search-text:0016",
+      "task_id": "tool-search-text",
+      "token_index": 16,
+      "target_token_id": 14306,
+      "token_text": "TODO",
+      "category": "argument_value",
+      "reason": "forms a required argument value"
+    },
+    {
+      "sample_id": "tool-search-text:0019",
+      "task_id": "tool-search-text",
+      "token_index": 19,
+      "target_token_id": 248059,
+      "token_text": "</tool_call>",
+      "category": "termination_marker",
+      "reason": "closes the structured tool call"
+    },
+    {
+      "sample_id": "tool-write-file:0006",
+      "task_id": "tool-write-file",
+      "token_index": 6,
+      "target_token_id": 4775,
+      "token_text": "write",
+      "category": "tool_name",
+      "reason": "identifies the required tool"
+    },
+    {
+      "sample_id": "tool-write-file:0007",
+      "task_id": "tool-write-file",
+      "token_index": 7,
+      "target_token_id": 2378,
+      "token_text": "_file",
+      "category": "tool_name",
+      "reason": "identifies the required tool"
+    },
+    {
+      "sample_id": "tool-write-file:0010",
+      "task_id": "tool-write-file",
+      "token_index": 10,
+      "target_token_id": 15889,
+      "token_text": "arguments",
+      "category": "argument_name",
+      "reason": "selects a required schema field"
+    },
+    {
+      "sample_id": "tool-write-file:0013",
+      "task_id": "tool-write-file",
+      "token_index": 13,
+      "target_token_id": 2267,
+      "token_text": "path",
+      "category": "argument_name",
+      "reason": "selects a required schema field"
+    },
+    {
+      "sample_id": "tool-write-file:0016",
+      "task_id": "tool-write-file",
+      "token_index": 16,
+      "target_token_id": 17742,
+      "token_text": "notes",
+      "category": "argument_value",
+      "reason": "forms a required argument value"
+    },
+    {
+      "sample_id": "tool-write-file:0017",
+      "task_id": "tool-write-file",
+      "token_index": 17,
+      "target_token_id": 3778,
+      "token_text": ".txt",
+      "category": "argument_value",
+      "reason": "forms a required argument value"
+    },
+    {
+      "sample_id": "tool-write-file:0020",
+      "task_id": "tool-write-file",
+      "token_index": 20,
+      "target_token_id": 1733,
+      "token_text": "content",
+      "category": "argument_name",
+      "reason": "selects a required schema field"
+    },
+    {
+      "sample_id": "tool-write-file:0023",
+      "task_id": "tool-write-file",
+      "token_index": 23,
+      "target_token_id": 14556,
+      "token_text": "hello",
+      "category": "argument_value",
+      "reason": "forms a required argument value"
+    },
+    {
+      "sample_id": "tool-write-file:0026",
+      "task_id": "tool-write-file",
+      "token_index": 26,
+      "target_token_id": 248059,
+      "token_text": "</tool_call>",
+      "category": "termination_marker",
+      "reason": "closes the structured tool call"
+    }
+  ]
+}

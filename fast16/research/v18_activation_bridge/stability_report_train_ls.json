@@ -1,0 +1,1865 @@
+{
+  "format": "colorlm-activation-bridge-stability-v1",
+  "decision": "reject",
+  "elapsed_seconds": 28.91216289998556,
+  "inputs": {
+    "base_receipt": "D:\\project\\大模型ssd化\\fast16\\research\\v18_activation_bridge\\captures\\run-20260731\\base.receipt.json",
+    "base_receipt_sha256": "f576c237d594d8ca81e7e61d9e6ceb4fd0c89b3375e6ca26d8d6425bb8c6a8c2",
+    "donor_receipt": "D:\\project\\大模型ssd化\\fast16\\research\\v18_activation_bridge\\captures\\run-20260731b\\donor.receipt.json",
+    "donor_receipt_sha256": "327157ceb4444e9dc07a66479961703ff25653fd80274af665f4015f3762ea85",
+    "baseline": "D:\\project\\大模型ssd化\\fast16\\research\\coder_next_to_colorlm_orthogonal_f32.npy",
+    "baseline_sha256": "7209781fa72220c337314e8456497c83cf1b51798d2b4321414200a98de04d12",
+    "paired_prompts": 12,
+    "paired_tokens": 772,
+    "hidden_width": 2048,
+    "mean_match_coverage": 0.9506079064643398
+  },
+  "method": {
+    "split_unit": "whole prompt",
+    "prior_equivalent_samples": 0.0,
+    "candidate_scale_source": "train_least_squares",
+    "baseline_scale_source": "training-prompt least squares",
+    "loto_folds": 12,
+    "multi_seed_values": [
+      18,
+      19,
+      20,
+      21,
+      22
+    ],
+    "rank_relative_tolerance": 1e-06
+  },
+  "thresholds": {
+    "min_prompts": 6,
+    "min_tokens": 512,
+    "min_cosine_lift": 0.03,
+    "max_nrmse_ratio": 0.95,
+    "max_absolute_nrmse": 0.95,
+    "min_positive_prompt_rate": 0.67,
+    "min_seed_pass_rate": 0.8,
+    "min_median_prediction_stability": 0.95,
+    "min_worst_prediction_stability": 0.9
+  },
+  "data_gates": {
+    "enough_prompts": true,
+    "enough_tokens": true,
+    "all_prompts_pair": true
+  },
+  "full_fit_diagnostic": {
+    "train_tokens": 772,
+    "scale": 2.2653135795584447,
+    "effective_rank": 772,
+    "rank_fraction_of_hidden_width": 0.376953125,
+    "in_sample_candidate_relative_rmse": 0.3472434102722905
+  },
+  "loto": {
+    "aggregate": {
+      "tokens": 772,
+      "candidate_median_cosine": 0.5581592321395874,
+      "baseline_median_cosine": 0.19249778985977173,
+      "median_cosine_lift_vs_embedding": 0.3656614422798157,
+      "candidate_relative_rmse": 0.9157792119206435,
+      "baseline_train_calibrated_relative_rmse": 0.9813715562967492,
+      "baseline_native_scale_relative_rmse_diagnostic": 1.006044569269214,
+      "nrmse_ratio_vs_train_calibrated_embedding": 0.9331625784798354,
+      "positive_prompt_rate": 1.0,
+      "prediction_cosine_vs_full_fit": {
+        "mean": 0.9970438679059347,
+        "median": 0.9969397485256195,
+        "min": 0.9960440993309021,
+        "max": 0.9981099367141724
+      },
+      "gates": {
+        "cosine_lift": true,
+        "nrmse_ratio": true,
+        "absolute_nrmse": true,
+        "positive_prompt_rate": true,
+        "median_prediction_stability": true,
+        "worst_prediction_stability": true,
+        "all_scales_in_contract": true
+      },
+      "decision": "pass"
+    },
+    "folds": [
+      {
+        "seed": 18,
+        "train_prompt_ids": [
+          "chinese-code-spec",
+          "cpp-lifetime",
+          "debug-stack",
+          "go-context",
+          "java-race",
+          "json-contract",
+          "python-async",
+          "react-state",
+          "rust-borrow",
+          "sql-transaction",
+          "typescript-types"
+        ],
+        "heldout_prompt_ids": [
+          "agent-tool"
+        ],
+        "train_tokens": 715,
+        "heldout_tokens": 57,
+        "scale": 2.270701968496769,
+        "raw_scale": 2.270701968496769,
+        "median_norm_scale_diagnostic": 2.394721269607544,
+        "raw_median_norm_scale_diagnostic": 2.394721269607544,
+        "baseline_train_scale": 0.4640133565095905,
+        "raw_baseline_train_scale": 0.4640133565095905,
+        "effective_rank": 715,
+        "candidate": {
+          "cosine": {
+            "mean": 0.5547987222671509,
+            "median": 0.5588266849517822,
+            "p05": 0.41740095615386963,
+            "p95": 0.6824854612350464,
+            "min": 0.37395429611206055,
+            "max": 0.7027735710144043
+          },
+          "relative_rmse": 0.918428520148617,
+          "scale": 2.270701968496769
+        },
+        "candidate_optimal_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.5547987222671509,
+            "median": 0.5588266849517822,
+            "p05": 0.41740095615386963,
+            "p95": 0.6824854612350464,
+            "min": 0.37395429611206055,
+            "max": 0.7027735710144043
+          },
+          "relative_rmse": 0.8326598670549656,
+          "scale": 1.3358598460976245
+        },
+        "baseline_train_calibrated": {
+          "cosine": {
+            "mean": 0.19519123435020447,
+            "median": 0.192464679479599,
+            "p05": 0.11802904307842255,
+            "p95": 0.2609405815601349,
+            "min": 0.0879022628068924,
+            "max": 0.30577972531318665
+          },
+          "relative_rmse": 0.9806416863324686,
+          "scale": 0.4640133565095905
+        },
+        "baseline_native_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.19519123435020447,
+            "median": 0.192464679479599,
+            "p05": 0.11802904307842255,
+            "p95": 0.2609405815601349,
+            "min": 0.0879022628068924,
+            "max": 0.30577972531318665
+          },
+          "relative_rmse": 1.0047291030832128,
+          "scale": 1.0
+        },
+        "median_cosine_lift_vs_embedding": 0.3663620054721832,
+        "nrmse_ratio_vs_train_calibrated_embedding": 0.9365587175714256,
+        "positive_prompt_rate": 1.0,
+        "per_prompt": [
+          {
+            "prompt_id": "agent-tool",
+            "tokens": 57,
+            "baseline_median_cosine": 0.192464679479599,
+            "activation_median_cosine": 0.5588266849517822,
+            "lift": 0.3663620054721832
+          }
+        ],
+        "gates": {
+          "cosine_lift": true,
+          "nrmse_ratio": true,
+          "absolute_nrmse": true,
+          "positive_prompt_rate": true,
+          "scale_in_contract": true
+        },
+        "decision": "pass",
+        "prediction_cosine_vs_full_fit": 0.997331440448761
+      },
+      {
+        "seed": 19,
+        "train_prompt_ids": [
+          "agent-tool",
+          "cpp-lifetime",
+          "debug-stack",
+          "go-context",
+          "java-race",
+          "json-contract",
+          "python-async",
+          "react-state",
+          "rust-borrow",
+          "sql-transaction",
+          "typescript-types"
+        ],
+        "heldout_prompt_ids": [
+          "chinese-code-spec"
+        ],
+        "train_tokens": 710,
+        "heldout_tokens": 62,
+        "scale": 2.2763554360620892,
+        "raw_scale": 2.2763554360620892,
+        "median_norm_scale_diagnostic": 2.403533458709717,
+        "raw_median_norm_scale_diagnostic": 2.403533458709717,
+        "baseline_train_scale": 0.45358663860131093,
+        "raw_baseline_train_scale": 0.45358663860131093,
+        "effective_rank": 710,
+        "candidate": {
+          "cosine": {
+            "mean": 0.5585025548934937,
+            "median": 0.5621286630630493,
+            "p05": 0.44118741154670715,
+            "p95": 0.6684868335723877,
+            "min": 0.219718337059021,
+            "max": 0.7005963325500488
+          },
+          "relative_rmse": 0.9278605282628037,
+          "scale": 2.2763554360620892
+        },
+        "candidate_optimal_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.5585025548934937,
+            "median": 0.5621286630630493,
+            "p05": 0.44118741154670715,
+            "p95": 0.6684868335723877,
+            "min": 0.219718337059021,
+            "max": 0.7005963325500488
+          },
+          "relative_rmse": 0.8278433138780031,
+          "scale": 1.3029942202221876
+        },
+        "baseline_train_calibrated": {
+          "cosine": {
+            "mean": 0.2409072369337082,
+            "median": 0.2516970634460449,
+            "p05": 0.16974079608917236,
+            "p95": 0.30935898423194885,
+            "min": 0.005177019163966179,
+            "max": 0.3258340656757355
+          },
+          "relative_rmse": 0.9710159666624067,
+          "scale": 0.45358663860131093
+        },
+        "baseline_native_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.2409072369337082,
+            "median": 0.2516970634460449,
+            "p05": 0.16974079608917236,
+            "p95": 0.30935898423194885,
+            "min": 0.005177019163966179,
+            "max": 0.3258340656757355
+          },
+          "relative_rmse": 0.9875864694846401,
+          "scale": 1.0
+        },
+        "median_cosine_lift_vs_embedding": 0.3104315996170044,
+        "nrmse_ratio_vs_train_calibrated_embedding": 0.9555564070198169,
+        "positive_prompt_rate": 1.0,
+        "per_prompt": [
+          {
+            "prompt_id": "chinese-code-spec",
+            "tokens": 62,
+            "baseline_median_cosine": 0.2516970634460449,
+            "activation_median_cosine": 0.5621286630630493,
+            "lift": 0.3104315996170044
+          }
+        ],
+        "gates": {
+          "cosine_lift": true,
+          "nrmse_ratio": false,
+          "absolute_nrmse": true,
+          "positive_prompt_rate": true,
+          "scale_in_contract": true
+        },
+        "decision": "fail",
+        "prediction_cosine_vs_full_fit": 0.9971374869346619
+      },
+      {
+        "seed": 20,
+        "train_prompt_ids": [
+          "agent-tool",
+          "chinese-code-spec",
+          "debug-stack",
+          "go-context",
+          "java-race",
+          "json-contract",
+          "python-async",
+          "react-state",
+          "rust-borrow",
+          "sql-transaction",
+          "typescript-types"
+        ],
+        "heldout_prompt_ids": [
+          "cpp-lifetime"
+        ],
+        "train_tokens": 712,
+        "heldout_tokens": 60,
+        "scale": 2.2692762356706395,
+        "raw_scale": 2.2692762356706395,
+        "median_norm_scale_diagnostic": 2.3935444355010986,
+        "raw_median_norm_scale_diagnostic": 2.3935444355010986,
+        "baseline_train_scale": 0.4624451166615916,
+        "raw_baseline_train_scale": 0.4624451166615916,
+        "effective_rank": 712,
+        "candidate": {
+          "cosine": {
+            "mean": 0.600571870803833,
+            "median": 0.6066399812698364,
+            "p05": 0.4060344994068146,
+            "p95": 0.7526183724403381,
+            "min": 0.2976410984992981,
+            "max": 0.7947472333908081
+          },
+          "relative_rmse": 0.8620671486113579,
+          "scale": 2.2692762356706395
+        },
+        "candidate_optimal_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.600571870803833,
+            "median": 0.6066399812698364,
+            "p05": 0.4060344994068146,
+            "p95": 0.7526183724403381,
+            "min": 0.2976410984992981,
+            "max": 0.7947472333908081
+          },
+          "relative_rmse": 0.7991973999549871,
+          "scale": 1.4757883297300773
+        },
+        "baseline_train_calibrated": {
+          "cosine": {
+            "mean": 0.19589248299598694,
+            "median": 0.20745213329792023,
+            "p05": 0.06542784720659256,
+            "p95": 0.2721196413040161,
+            "min": -0.001629626378417015,
+            "max": 0.29782235622406006
+          },
+          "relative_rmse": 0.9799004460110888,
+          "scale": 0.4624451166615916
+        },
+        "baseline_native_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.19589248299598694,
+            "median": 0.20745213329792023,
+            "p05": 0.06542784720659256,
+            "p95": 0.2721196413040161,
+            "min": -0.001629626378417015,
+            "max": 0.29782235622406006
+          },
+          "relative_rmse": 1.0015573512606049,
+          "scale": 1.0
+        },
+        "median_cosine_lift_vs_embedding": 0.3991878479719162,
+        "nrmse_ratio_vs_train_calibrated_embedding": 0.8797497257202009,
+        "positive_prompt_rate": 1.0,
+        "per_prompt": [
+          {
+            "prompt_id": "cpp-lifetime",
+            "tokens": 60,
+            "baseline_median_cosine": 0.20745213329792023,
+            "activation_median_cosine": 0.6066399812698364,
+            "lift": 0.3991878479719162
+          }
+        ],
+        "gates": {
+          "cosine_lift": true,
+          "nrmse_ratio": true,
+          "absolute_nrmse": true,
+          "positive_prompt_rate": true,
+          "scale_in_contract": true
+        },
+        "decision": "pass",
+        "prediction_cosine_vs_full_fit": 0.9973441362380981
+      },
+      {
+        "seed": 21,
+        "train_prompt_ids": [
+          "agent-tool",
+          "chinese-code-spec",
+          "cpp-lifetime",
+          "go-context",
+          "java-race",
+          "json-contract",
+          "python-async",
+          "react-state",
+          "rust-borrow",
+          "sql-transaction",
+          "typescript-types"
+        ],
+        "heldout_prompt_ids": [
+          "debug-stack"
+        ],
+        "train_tokens": 703,
+        "heldout_tokens": 69,
+        "scale": 2.2728512763299693,
+        "raw_scale": 2.2728512763299693,
+        "median_norm_scale_diagnostic": 2.398658514022827,
+        "raw_median_norm_scale_diagnostic": 2.398658514022827,
+        "baseline_train_scale": 0.47072941392865203,
+        "raw_baseline_train_scale": 0.47072941392865203,
+        "effective_rank": 703,
+        "candidate": {
+          "cosine": {
+            "mean": 0.5047643184661865,
+            "median": 0.5376946330070496,
+            "p05": 0.2763405442237854,
+            "p95": 0.6945145726203918,
+            "min": 0.21450385451316833,
+            "max": 0.8316067457199097
+          },
+          "relative_rmse": 0.9604494319737955,
+          "scale": 2.2728512763299693
+        },
+        "candidate_optimal_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.5047643184661865,
+            "median": 0.5376946330070496,
+            "p05": 0.2763405442237854,
+            "p95": 0.6945145726203918,
+            "min": 0.21450385451316833,
+            "max": 0.8316067457199097
+          },
+          "relative_rmse": 0.855686396946803,
+          "scale": 1.2333063512270703
+        },
+        "baseline_train_calibrated": {
+          "cosine": {
+            "mean": 0.16790935397148132,
+            "median": 0.1774824559688568,
+            "p05": 0.08734269440174103,
+            "p95": 0.23074252903461456,
+            "min": 0.042817264795303345,
+            "max": 0.2426954060792923
+          },
+          "relative_rmse": 0.9857345866851233,
+          "scale": 0.47072941392865203
+        },
+        "baseline_native_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.16790935397148132,
+            "median": 0.1774824559688568,
+            "p05": 0.08734269440174103,
+            "p95": 0.23074252903461456,
+            "min": 0.042817264795303345,
+            "max": 0.2426954060792923
+          },
+          "relative_rmse": 1.016369936000899,
+          "scale": 1.0
+        },
+        "median_cosine_lift_vs_embedding": 0.36021217703819275,
+        "nrmse_ratio_vs_train_calibrated_embedding": 0.9743489220598844,
+        "positive_prompt_rate": 1.0,
+        "per_prompt": [
+          {
+            "prompt_id": "debug-stack",
+            "tokens": 69,
+            "baseline_median_cosine": 0.1774824559688568,
+            "activation_median_cosine": 0.5376946330070496,
+            "lift": 0.36021217703819275
+          }
+        ],
+        "gates": {
+          "cosine_lift": true,
+          "nrmse_ratio": false,
+          "absolute_nrmse": false,
+          "positive_prompt_rate": true,
+          "scale_in_contract": true
+        },
+        "decision": "fail",
+        "prediction_cosine_vs_full_fit": 0.9967420101165771
+      },
+      {
+        "seed": 22,
+        "train_prompt_ids": [
+          "agent-tool",
+          "chinese-code-spec",
+          "cpp-lifetime",
+          "debug-stack",
+          "java-race",
+          "json-contract",
+          "python-async",
+          "react-state",
+          "rust-borrow",
+          "sql-transaction",
+          "typescript-types"
+        ],
+        "heldout_prompt_ids": [
+          "go-context"
+        ],
+        "train_tokens": 695,
+        "heldout_tokens": 77,
+        "scale": 2.270869292389496,
+        "raw_scale": 2.270869292389496,
+        "median_norm_scale_diagnostic": 2.394806385040283,
+        "raw_median_norm_scale_diagnostic": 2.394806385040283,
+        "baseline_train_scale": 0.46500747179705787,
+        "raw_baseline_train_scale": 0.46500747179705787,
+        "effective_rank": 695,
+        "candidate": {
+          "cosine": {
+            "mean": 0.5546864867210388,
+            "median": 0.5334491729736328,
+            "p05": 0.34780144691467285,
+            "p95": 0.7415417432785034,
+            "min": 0.28614217042922974,
+            "max": 0.8447980284690857
+          },
+          "relative_rmse": 0.915364260943467,
+          "scale": 2.270869292389496
+        },
+        "candidate_optimal_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.5546864867210388,
+            "median": 0.5334491729736328,
+            "p05": 0.34780144691467285,
+            "p95": 0.7415417432785034,
+            "min": 0.28614217042922974,
+            "max": 0.8447980284690857
+          },
+          "relative_rmse": 0.8329952510412603,
+          "scale": 1.34698827018712
+        },
+        "baseline_train_calibrated": {
+          "cosine": {
+            "mean": 0.1873374879360199,
+            "median": 0.18910403549671173,
+            "p05": 0.09311874955892563,
+            "p95": 0.2801036536693573,
+            "min": 0.00442857388406992,
+            "max": 0.3220148980617523
+          },
+          "relative_rmse": 0.981908390481504,
+          "scale": 0.46500747179705787
+        },
+        "baseline_native_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.1873374879360199,
+            "median": 0.18910403549671173,
+            "p05": 0.09311874955892563,
+            "p95": 0.2801036536693573,
+            "min": 0.00442857388406992,
+            "max": 0.3220148980617523
+          },
+          "relative_rmse": 1.0065559221684286,
+          "scale": 1.0
+        },
+        "median_cosine_lift_vs_embedding": 0.3443451374769211,
+        "nrmse_ratio_vs_train_calibrated_embedding": 0.9322297984383193,
+        "positive_prompt_rate": 1.0,
+        "per_prompt": [
+          {
+            "prompt_id": "go-context",
+            "tokens": 77,
+            "baseline_median_cosine": 0.18910403549671173,
+            "activation_median_cosine": 0.5334491729736328,
+            "lift": 0.3443451374769211
+          }
+        ],
+        "gates": {
+          "cosine_lift": true,
+          "nrmse_ratio": true,
+          "absolute_nrmse": true,
+          "positive_prompt_rate": true,
+          "scale_in_contract": true
+        },
+        "decision": "pass",
+        "prediction_cosine_vs_full_fit": 0.996563196182251
+      },
+      {
+        "seed": 23,
+        "train_prompt_ids": [
+          "agent-tool",
+          "chinese-code-spec",
+          "cpp-lifetime",
+          "debug-stack",
+          "go-context",
+          "json-contract",
+          "python-async",
+          "react-state",
+          "rust-borrow",
+          "sql-transaction",
+          "typescript-types"
+        ],
+        "heldout_prompt_ids": [
+          "java-race"
+        ],
+        "train_tokens": 699,
+        "heldout_tokens": 73,
+        "scale": 2.265759963745234,
+        "raw_scale": 2.265759963745234,
+        "median_norm_scale_diagnostic": 2.3753159046173096,
+        "raw_median_norm_scale_diagnostic": 2.3753159046173096,
+        "baseline_train_scale": 0.4612994322839897,
+        "raw_baseline_train_scale": 0.4612994322839897,
+        "effective_rank": 699,
+        "candidate": {
+          "cosine": {
+            "mean": 0.5665574669837952,
+            "median": 0.5583792328834534,
+            "p05": 0.3519032597541809,
+            "p95": 0.7796958684921265,
+            "min": 0.19850562512874603,
+            "max": 0.8421818017959595
+          },
+          "relative_rmse": 0.8854381857604491,
+          "scale": 2.265759963745234
+        },
+        "candidate_optimal_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.5665574669837952,
+            "median": 0.5583792328834534,
+            "p05": 0.3519032597541809,
+            "p95": 0.7796958684921265,
+            "min": 0.19850562512874603,
+            "max": 0.8421818017959595
+          },
+          "relative_rmse": 0.8234381106755664,
+          "scale": 1.4397992675847566
+        },
+        "baseline_train_calibrated": {
+          "cosine": {
+            "mean": 0.19636112451553345,
+            "median": 0.21318098902702332,
+            "p05": 0.06645412743091583,
+            "p95": 0.28758758306503296,
+            "min": -0.04634010046720505,
+            "max": 0.3097286522388458
+          },
+          "relative_rmse": 0.9803052498204445,
+          "scale": 0.4612994322839897
+        },
+        "baseline_native_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.19636112451553345,
+            "median": 0.21318098902702332,
+            "p05": 0.06645412743091583,
+            "p95": 0.28758758306503296,
+            "min": -0.04634010046720505,
+            "max": 0.3097286522388458
+          },
+          "relative_rmse": 0.9995575620524982,
+          "scale": 1.0
+        },
+        "median_cosine_lift_vs_embedding": 0.34519824385643005,
+        "nrmse_ratio_vs_train_calibrated_embedding": 0.9032270161999321,
+        "positive_prompt_rate": 1.0,
+        "per_prompt": [
+          {
+            "prompt_id": "java-race",
+            "tokens": 73,
+            "baseline_median_cosine": 0.21318098902702332,
+            "activation_median_cosine": 0.5583792328834534,
+            "lift": 0.34519824385643005
+          }
+        ],
+        "gates": {
+          "cosine_lift": true,
+          "nrmse_ratio": true,
+          "absolute_nrmse": true,
+          "positive_prompt_rate": true,
+          "scale_in_contract": true
+        },
+        "decision": "pass",
+        "prediction_cosine_vs_full_fit": 0.9966256618499756
+      },
+      {
+        "seed": 24,
+        "train_prompt_ids": [
+          "agent-tool",
+          "chinese-code-spec",
+          "cpp-lifetime",
+          "debug-stack",
+          "go-context",
+          "java-race",
+          "python-async",
+          "react-state",
+          "rust-borrow",
+          "sql-transaction",
+          "typescript-types"
+        ],
+        "heldout_prompt_ids": [
+          "json-contract"
+        ],
+        "train_tokens": 715,
+        "heldout_tokens": 57,
+        "scale": 2.2745479191756695,
+        "raw_scale": 2.2745479191756695,
+        "median_norm_scale_diagnostic": 2.399815082550049,
+        "raw_median_norm_scale_diagnostic": 2.399815082550049,
+        "baseline_train_scale": 0.4649316469308843,
+        "raw_baseline_train_scale": 0.4649316469308843,
+        "effective_rank": 715,
+        "candidate": {
+          "cosine": {
+            "mean": 0.5698105692863464,
+            "median": 0.5740640163421631,
+            "p05": 0.40272748470306396,
+            "p95": 0.7207257747650146,
+            "min": 0.35151195526123047,
+            "max": 0.7390738725662231
+          },
+          "relative_rmse": 0.9119521850609984,
+          "scale": 2.2745479191756695
+        },
+        "candidate_optimal_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.5698105692863464,
+            "median": 0.5740640163421631,
+            "p05": 0.40272748470306396,
+            "p95": 0.7207257747650146,
+            "min": 0.35151195526123047,
+            "max": 0.7390738725662231
+          },
+          "relative_rmse": 0.822434286805431,
+          "scale": 1.3437683517370664
+        },
+        "baseline_train_calibrated": {
+          "cosine": {
+            "mean": 0.19236084818840027,
+            "median": 0.19332708418369293,
+            "p05": 0.10243123024702072,
+            "p95": 0.26060816645622253,
+            "min": 0.05274798721075058,
+            "max": 0.3173951506614685
+          },
+          "relative_rmse": 0.9807674899922949,
+          "scale": 0.4649316469308843
+        },
+        "baseline_native_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.19236084818840027,
+            "median": 0.19332708418369293,
+            "p05": 0.10243123024702072,
+            "p95": 0.26060816645622253,
+            "min": 0.05274798721075058,
+            "max": 0.3173951506614685
+          },
+          "relative_rmse": 1.0069521008880555,
+          "scale": 1.0
+        },
+        "median_cosine_lift_vs_embedding": 0.38073693215847015,
+        "nrmse_ratio_vs_train_calibrated_embedding": 0.9298352508280662,
+        "positive_prompt_rate": 1.0,
+        "per_prompt": [
+          {
+            "prompt_id": "json-contract",
+            "tokens": 57,
+            "baseline_median_cosine": 0.19332708418369293,
+            "activation_median_cosine": 0.5740640163421631,
+            "lift": 0.38073693215847015
+          }
+        ],
+        "gates": {
+          "cosine_lift": true,
+          "nrmse_ratio": true,
+          "absolute_nrmse": true,
+          "positive_prompt_rate": true,
+          "scale_in_contract": true
+        },
+        "decision": "pass",
+        "prediction_cosine_vs_full_fit": 0.9974527359008789
+      },
+      {
+        "seed": 25,
+        "train_prompt_ids": [
+          "agent-tool",
+          "chinese-code-spec",
+          "cpp-lifetime",
+          "debug-stack",
+          "go-context",
+          "java-race",
+          "json-contract",
+          "react-state",
+          "rust-borrow",
+          "sql-transaction",
+          "typescript-types"
+        ],
+        "heldout_prompt_ids": [
+          "python-async"
+        ],
+        "train_tokens": 693,
+        "heldout_tokens": 79,
+        "scale": 2.277778540666981,
+        "raw_scale": 2.277778540666981,
+        "median_norm_scale_diagnostic": 2.3939454555511475,
+        "raw_median_norm_scale_diagnostic": 2.3939454555511475,
+        "baseline_train_scale": 0.46874331331091196,
+        "raw_baseline_train_scale": 0.46874331331091196,
+        "effective_rank": 693,
+        "candidate": {
+          "cosine": {
+            "mean": 0.5144325494766235,
+            "median": 0.49651846289634705,
+            "p05": 0.32437431812286377,
+            "p95": 0.735386073589325,
+            "min": 0.2860061526298523,
+            "max": 0.7905588150024414
+          },
+          "relative_rmse": 0.9589291865405322,
+          "scale": 2.277778540666981
+        },
+        "candidate_optimal_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.5144325494766235,
+            "median": 0.49651846289634705,
+            "p05": 0.32437431812286377,
+            "p95": 0.735386073589325,
+            "min": 0.2860061526298523,
+            "max": 0.7905588150024414
+          },
+          "relative_rmse": 0.8557109234794796,
+          "scale": 1.2403660487267092
+        },
+        "baseline_train_calibrated": {
+          "cosine": {
+            "mean": 0.17345836758613586,
+            "median": 0.16860252618789673,
+            "p05": 0.08726027607917786,
+            "p95": 0.25548967719078064,
+            "min": 0.02305169403553009,
+            "max": 0.27711430191993713
+          },
+          "relative_rmse": 0.9844658659565428,
+          "scale": 0.46874331331091196
+        },
+        "baseline_native_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.17345836758613586,
+            "median": 0.16860252618789673,
+            "p05": 0.08726027607917786,
+            "p95": 0.25548967719078064,
+            "min": 0.02305169403553009,
+            "max": 0.27711430191993713
+          },
+          "relative_rmse": 1.013258961832316,
+          "scale": 1.0
+        },
+        "median_cosine_lift_vs_embedding": 0.3279159367084503,
+        "nrmse_ratio_vs_train_calibrated_embedding": 0.9740603709086467,
+        "positive_prompt_rate": 1.0,
+        "per_prompt": [
+          {
+            "prompt_id": "python-async",
+            "tokens": 79,
+            "baseline_median_cosine": 0.16860252618789673,
+            "activation_median_cosine": 0.49651846289634705,
+            "lift": 0.3279159367084503
+          }
+        ],
+        "gates": {
+          "cosine_lift": true,
+          "nrmse_ratio": false,
+          "absolute_nrmse": false,
+          "positive_prompt_rate": true,
+          "scale_in_contract": true
+        },
+        "decision": "fail",
+        "prediction_cosine_vs_full_fit": 0.9960440993309021
+      },
+      {
+        "seed": 26,
+        "train_prompt_ids": [
+          "agent-tool",
+          "chinese-code-spec",
+          "cpp-lifetime",
+          "debug-stack",
+          "go-context",
+          "java-race",
+          "json-contract",
+          "python-async",
+          "rust-borrow",
+          "sql-transaction",
+          "typescript-types"
+        ],
+        "heldout_prompt_ids": [
+          "react-state"
+        ],
+        "train_tokens": 729,
+        "heldout_tokens": 43,
+        "scale": 2.2760927253179672,
+        "raw_scale": 2.2760927253179672,
+        "median_norm_scale_diagnostic": 2.403320789337158,
+        "raw_median_norm_scale_diagnostic": 2.403320789337158,
+        "baseline_train_scale": 0.4706135547692395,
+        "raw_baseline_train_scale": 0.4706135547692395,
+        "effective_rank": 729,
+        "candidate": {
+          "cosine": {
+            "mean": 0.5680525302886963,
+            "median": 0.5844389200210571,
+            "p05": 0.40629950165748596,
+            "p95": 0.7560921311378479,
+            "min": 0.3435174226760864,
+            "max": 0.8225557804107666
+          },
+          "relative_rmse": 0.9332701582780818,
+          "scale": 2.2760927253179672
+        },
+        "candidate_optimal_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.5680525302886963,
+            "median": 0.5844389200210571,
+            "p05": 0.40629950165748596,
+            "p95": 0.7560921311378479,
+            "min": 0.3435174226760864,
+            "max": 0.8225557804107666
+          },
+          "relative_rmse": 0.8282104685268344,
+          "scale": 1.2876604910960843
+        },
+        "baseline_train_calibrated": {
+          "cosine": {
+            "mean": 0.16628290712833405,
+            "median": 0.16471831500530243,
+            "p05": 0.10614541918039322,
+            "p95": 0.22634902596473694,
+            "min": 0.04360475763678551,
+            "max": 0.2932421565055847
+          },
+          "relative_rmse": 0.9871364913204685,
+          "scale": 0.4706135547692395
+        },
+        "baseline_native_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.16628290712833405,
+            "median": 0.16471831500530243,
+            "p05": 0.10614541918039322,
+            "p95": 0.22634902596473694,
+            "min": 0.04360475763678551,
+            "max": 0.2932421565055847
+          },
+          "relative_rmse": 1.022721718638639,
+          "scale": 1.0
+        },
+        "median_cosine_lift_vs_embedding": 0.4197206050157547,
+        "nrmse_ratio_vs_train_calibrated_embedding": 0.9454317275108217,
+        "positive_prompt_rate": 1.0,
+        "per_prompt": [
+          {
+            "prompt_id": "react-state",
+            "tokens": 43,
+            "baseline_median_cosine": 0.16471831500530243,
+            "activation_median_cosine": 0.5844389200210571,
+            "lift": 0.4197206050157547
+          }
+        ],
+        "gates": {
+          "cosine_lift": true,
+          "nrmse_ratio": true,
+          "absolute_nrmse": true,
+          "positive_prompt_rate": true,
+          "scale_in_contract": true
+        },
+        "decision": "pass",
+        "prediction_cosine_vs_full_fit": 0.9980617761611938
+      },
+      {
+        "seed": 27,
+        "train_prompt_ids": [
+          "agent-tool",
+          "chinese-code-spec",
+          "cpp-lifetime",
+          "debug-stack",
+          "go-context",
+          "java-race",
+          "json-contract",
+          "python-async",
+          "react-state",
+          "sql-transaction",
+          "typescript-types"
+        ],
+        "heldout_prompt_ids": [
+          "rust-borrow"
+        ],
+        "train_tokens": 698,
+        "heldout_tokens": 74,
+        "scale": 2.268746523603996,
+        "raw_scale": 2.268746523603996,
+        "median_norm_scale_diagnostic": 2.3935444355010986,
+        "raw_median_norm_scale_diagnostic": 2.3935444355010986,
+        "baseline_train_scale": 0.4643866304675492,
+        "raw_baseline_train_scale": 0.4643866304675492,
+        "effective_rank": 698,
+        "candidate": {
+          "cosine": {
+            "mean": 0.5628095865249634,
+            "median": 0.5324095487594604,
+            "p05": 0.35586780309677124,
+            "p95": 0.7712810039520264,
+            "min": 0.2540223002433777,
+            "max": 0.8467756509780884
+          },
+          "relative_rmse": 0.89961562888719,
+          "scale": 2.268746523603996
+        },
+        "candidate_optimal_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.5628095865249634,
+            "median": 0.5324095487594604,
+            "p05": 0.35586780309677124,
+            "p95": 0.7712810039520264,
+            "min": 0.2540223002433777,
+            "max": 0.8467756509780884
+          },
+          "relative_rmse": 0.8250586699146735,
+          "scale": 1.3879361063387634
+        },
+        "baseline_train_calibrated": {
+          "cosine": {
+            "mean": 0.18778647482395172,
+            "median": 0.1873004138469696,
+            "p05": 0.10219855606555939,
+            "p95": 0.27701500058174133,
+            "min": -0.024420015513896942,
+            "max": 0.30660176277160645
+          },
+          "relative_rmse": 0.9817592041637637,
+          "scale": 0.4643866304675492
+        },
+        "baseline_native_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.18778647482395172,
+            "median": 0.1873004138469696,
+            "p05": 0.10219855606555939,
+            "p95": 0.27701500058174133,
+            "min": -0.024420015513896942,
+            "max": 0.30660176277160645
+          },
+          "relative_rmse": 1.0054506363031364,
+          "scale": 1.0
+        },
+        "median_cosine_lift_vs_embedding": 0.34510913491249084,
+        "nrmse_ratio_vs_train_calibrated_embedding": 0.9163302213738436,
+        "positive_prompt_rate": 1.0,
+        "per_prompt": [
+          {
+            "prompt_id": "rust-borrow",
+            "tokens": 74,
+            "baseline_median_cosine": 0.1873004138469696,
+            "activation_median_cosine": 0.5324095487594604,
+            "lift": 0.34510913491249084
+          }
+        ],
+        "gates": {
+          "cosine_lift": true,
+          "nrmse_ratio": true,
+          "absolute_nrmse": true,
+          "positive_prompt_rate": true,
+          "scale_in_contract": true
+        },
+        "decision": "pass",
+        "prediction_cosine_vs_full_fit": 0.9966938495635986
+      },
+      {
+        "seed": 28,
+        "train_prompt_ids": [
+          "agent-tool",
+          "chinese-code-spec",
+          "cpp-lifetime",
+          "debug-stack",
+          "go-context",
+          "java-race",
+          "json-contract",
+          "python-async",
+          "react-state",
+          "rust-borrow",
+          "typescript-types"
+        ],
+        "heldout_prompt_ids": [
+          "sql-transaction"
+        ],
+        "train_tokens": 730,
+        "heldout_tokens": 42,
+        "scale": 2.276039506632592,
+        "raw_scale": 2.276039506632592,
+        "median_norm_scale_diagnostic": 2.39603590965271,
+        "raw_median_norm_scale_diagnostic": 2.39603590965271,
+        "baseline_train_scale": 0.4686238247050655,
+        "raw_baseline_train_scale": 0.4686238247050655,
+        "effective_rank": 730,
+        "candidate": {
+          "cosine": {
+            "mean": 0.5649271607398987,
+            "median": 0.5711612701416016,
+            "p05": 0.34602588415145874,
+            "p95": 0.7566186189651489,
+            "min": 0.3136165738105774,
+            "max": 0.837810218334198
+          },
+          "relative_rmse": 0.9262852909716672,
+          "scale": 2.276039506632592
+        },
+        "candidate_optimal_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.5649271607398987,
+            "median": 0.5711612701416016,
+            "p05": 0.34602588415145874,
+            "p95": 0.7566186189651489,
+            "min": 0.3136165738105774,
+            "max": 0.837810218334198
+          },
+          "relative_rmse": 0.8242947213298659,
+          "scale": 1.3033270791136065
+        },
+        "baseline_train_calibrated": {
+          "cosine": {
+            "mean": 0.17335903644561768,
+            "median": 0.17923018336296082,
+            "p05": 0.09339062869548798,
+            "p95": 0.2403518110513687,
+            "min": 0.05113238841295242,
+            "max": 0.2611796259880066
+          },
+          "relative_rmse": 0.9849417452129537,
+          "scale": 0.4686238247050655
+        },
+        "baseline_native_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.17335903644561768,
+            "median": 0.17923018336296082,
+            "p05": 0.09339062869548798,
+            "p95": 0.2403518110513687,
+            "min": 0.05113238841295242,
+            "max": 0.2611796259880066
+          },
+          "relative_rmse": 1.0180810153637787,
+          "scale": 1.0
+        },
+        "median_cosine_lift_vs_embedding": 0.39193108677864075,
+        "nrmse_ratio_vs_train_calibrated_embedding": 0.9404467781710233,
+        "positive_prompt_rate": 1.0,
+        "per_prompt": [
+          {
+            "prompt_id": "sql-transaction",
+            "tokens": 42,
+            "baseline_median_cosine": 0.17923018336296082,
+            "activation_median_cosine": 0.5711612701416016,
+            "lift": 0.39193108677864075
+          }
+        ],
+        "gates": {
+          "cosine_lift": true,
+          "nrmse_ratio": true,
+          "absolute_nrmse": true,
+          "positive_prompt_rate": true,
+          "scale_in_contract": true
+        },
+        "decision": "pass",
+        "prediction_cosine_vs_full_fit": 0.9981099367141724
+      },
+      {
+        "seed": 29,
+        "train_prompt_ids": [
+          "agent-tool",
+          "chinese-code-spec",
+          "cpp-lifetime",
+          "debug-stack",
+          "go-context",
+          "java-race",
+          "json-contract",
+          "python-async",
+          "react-state",
+          "rust-borrow",
+          "sql-transaction"
+        ],
+        "heldout_prompt_ids": [
+          "typescript-types"
+        ],
+        "train_tokens": 693,
+        "heldout_tokens": 79,
+        "scale": 2.2599906582170686,
+        "raw_scale": 2.2599906582170686,
+        "median_norm_scale_diagnostic": 2.3737430572509766,
+        "raw_median_norm_scale_diagnostic": 2.3737430572509766,
+        "baseline_train_scale": 0.460792565154183,
+        "raw_baseline_train_scale": 0.460792565154183,
+        "effective_rank": 693,
+        "candidate": {
+          "cosine": {
+            "mean": 0.5566573739051819,
+            "median": 0.5578691363334656,
+            "p05": 0.3242526352405548,
+            "p95": 0.7389437556266785,
+            "min": 0.23312833905220032,
+            "max": 0.8167035579681396
+          },
+          "relative_rmse": 0.8921397197595906,
+          "scale": 2.2599906582170686
+        },
+        "candidate_optimal_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.5566573739051819,
+            "median": 0.5578691363334656,
+            "p05": 0.3242526352405548,
+            "p95": 0.7389437556266785,
+            "min": 0.23312833905220032,
+            "max": 0.8167035579681396
+          },
+          "relative_rmse": 0.8303002547907369,
+          "scale": 1.4253195666584288
+        },
+        "baseline_train_calibrated": {
+          "cosine": {
+            "mean": 0.19170857965946198,
+            "median": 0.20601239800453186,
+            "p05": 0.07201284915208817,
+            "p95": 0.2851218283176422,
+            "min": -0.017267458140850067,
+            "max": 0.2990107834339142
+          },
+          "relative_rmse": 0.980733610480665,
+          "scale": 0.460792565154183
+        },
+        "baseline_native_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.19170857965946198,
+            "median": 0.20601239800453186,
+            "p05": 0.07201284915208817,
+            "p95": 0.2851218283176422,
+            "min": -0.017267458140850067,
+            "max": 0.2990107834339142
+          },
+          "relative_rmse": 0.9998110542505957,
+          "scale": 1.0
+        },
+        "median_cosine_lift_vs_embedding": 0.3518567383289337,
+        "nrmse_ratio_vs_train_calibrated_embedding": 0.9096656933398521,
+        "positive_prompt_rate": 1.0,
+        "per_prompt": [
+          {
+            "prompt_id": "typescript-types",
+            "tokens": 79,
+            "baseline_median_cosine": 0.20601239800453186,
+            "activation_median_cosine": 0.5578691363334656,
+            "lift": 0.3518567383289337
+          }
+        ],
+        "gates": {
+          "cosine_lift": true,
+          "nrmse_ratio": true,
+          "absolute_nrmse": true,
+          "positive_prompt_rate": true,
+          "scale_in_contract": true
+        },
+        "decision": "pass",
+        "prediction_cosine_vs_full_fit": 0.9964200854301453
+      }
+    ]
+  },
+  "multi_seed": {
+    "summary": {
+      "seeds": [
+        18,
+        19,
+        20,
+        21,
+        22
+      ],
+      "heldout_fraction": 0.25,
+      "heldout_prompts_per_seed": 3,
+      "unique_heldout_splits": 5,
+      "pass_rate": 0.4,
+      "cosine_lift": {
+        "mean": 0.3392919450998306,
+        "median": 0.3357671797275543,
+        "min": 0.32808396220207214,
+        "max": 0.3548121005296707
+      },
+      "nrmse_ratio": {
+        "mean": 0.954286205599769,
+        "median": 0.9604790589216687,
+        "min": 0.9359996026962618,
+        "max": 0.9641054729413223
+      },
+      "candidate_absolute_nrmse": {
+        "mean": 0.9373869620727742,
+        "median": 0.9423440638013431,
+        "min": 0.918770013669674,
+        "max": 0.9488159060786896
+      },
+      "scale": {
+        "mean": 2.2874618543236007,
+        "median": 2.286122915500846,
+        "min": 2.2822125297569293,
+        "max": 2.294154290501686
+      },
+      "prediction_cosine_vs_full_fit": {
+        "mean": 0.9903019547462464,
+        "median": 0.9900240302085876,
+        "min": 0.9895549416542053,
+        "max": 0.9914095401763916
+      },
+      "gates": {
+        "unique_heldout_splits": true,
+        "pass_rate": false,
+        "no_cosine_regression": true,
+        "no_nrmse_regression": true,
+        "worst_prediction_stability": true
+      },
+      "decision": "fail"
+    },
+    "runs": [
+      {
+        "seed": 18,
+        "train_prompt_ids": [
+          "chinese-code-spec",
+          "cpp-lifetime",
+          "debug-stack",
+          "go-context",
+          "json-contract",
+          "python-async",
+          "react-state",
+          "rust-borrow",
+          "typescript-types"
+        ],
+        "heldout_prompt_ids": [
+          "agent-tool",
+          "java-race",
+          "sql-transaction"
+        ],
+        "train_tokens": 600,
+        "heldout_tokens": 172,
+        "scale": 2.2822125297569293,
+        "raw_scale": 2.2822125297569293,
+        "median_norm_scale_diagnostic": 2.379991292953491,
+        "raw_median_norm_scale_diagnostic": 2.379991292953491,
+        "baseline_train_scale": 0.4647942806573965,
+        "raw_baseline_train_scale": 0.4647942806573965,
+        "effective_rank": 600,
+        "candidate": {
+          "cosine": {
+            "mean": 0.552635908126831,
+            "median": 0.549941897392273,
+            "p05": 0.3535771369934082,
+            "p95": 0.7302154302597046,
+            "min": 0.15759536623954773,
+            "max": 0.8540946245193481
+          },
+          "relative_rmse": 0.918770013669674,
+          "scale": 2.2822125297569293
+        },
+        "candidate_optimal_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.552635908126831,
+            "median": 0.549941897392273,
+            "p05": 0.3535771369934082,
+            "p95": 0.7302154302597046,
+            "min": 0.15759536623954773,
+            "max": 0.8540946245193481
+          },
+          "relative_rmse": 0.8334039563805897,
+          "scale": 1.3426411607955497
+        },
+        "baseline_train_calibrated": {
+          "cosine": {
+            "mean": 0.19035662710666656,
+            "median": 0.19512979686260223,
+            "p05": 0.0953591912984848,
+            "p95": 0.2677890956401825,
+            "min": -0.04634010046720505,
+            "max": 0.3097286522388458
+          },
+          "relative_rmse": 0.9815923116025308,
+          "scale": 0.4647942806573965
+        },
+        "baseline_native_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.19035662710666656,
+            "median": 0.19512979686260223,
+            "p05": 0.0953591912984848,
+            "p95": 0.2677890956401825,
+            "min": -0.04634010046720505,
+            "max": 0.3097286522388458
+          },
+          "relative_rmse": 1.0060833315610807,
+          "scale": 1.0
+        },
+        "median_cosine_lift_vs_embedding": 0.3548121005296707,
+        "nrmse_ratio_vs_train_calibrated_embedding": 0.9359996026962618,
+        "positive_prompt_rate": 1.0,
+        "per_prompt": [
+          {
+            "prompt_id": "agent-tool",
+            "tokens": 57,
+            "baseline_median_cosine": 0.192464679479599,
+            "activation_median_cosine": 0.5493193864822388,
+            "lift": 0.35685470700263977
+          },
+          {
+            "prompt_id": "java-race",
+            "tokens": 73,
+            "baseline_median_cosine": 0.21318098902702332,
+            "activation_median_cosine": 0.5473856329917908,
+            "lift": 0.33420464396476746
+          },
+          {
+            "prompt_id": "sql-transaction",
+            "tokens": 42,
+            "baseline_median_cosine": 0.17923018336296082,
+            "activation_median_cosine": 0.5649058222770691,
+            "lift": 0.3856756389141083
+          }
+        ],
+        "gates": {
+          "cosine_lift": true,
+          "nrmse_ratio": true,
+          "absolute_nrmse": true,
+          "positive_prompt_rate": true,
+          "scale_in_contract": true
+        },
+        "decision": "pass",
+        "prediction_cosine_vs_full_fit": 0.9914095401763916
+      },
+      {
+        "seed": 19,
+        "train_prompt_ids": [
+          "agent-tool",
+          "chinese-code-spec",
+          "cpp-lifetime",
+          "debug-stack",
+          "go-context",
+          "java-race",
+          "json-contract",
+          "sql-transaction",
+          "typescript-types"
+        ],
+        "heldout_prompt_ids": [
+          "python-async",
+          "react-state",
+          "rust-borrow"
+        ],
+        "train_tokens": 576,
+        "heldout_tokens": 196,
+        "scale": 2.294154290501686,
+        "raw_scale": 2.294154290501686,
+        "median_norm_scale_diagnostic": 2.39823579788208,
+        "raw_median_norm_scale_diagnostic": 2.39823579788208,
+        "baseline_train_scale": 0.4767218237824531,
+        "raw_baseline_train_scale": 0.4767218237824531,
+        "effective_rank": 576,
+        "candidate": {
+          "cosine": {
+            "mean": 0.5295366048812866,
+            "median": 0.5115722417831421,
+            "p05": 0.3303380012512207,
+            "p95": 0.7549684643745422,
+            "min": 0.24640114605426788,
+            "max": 0.8465210199356079
+          },
+          "relative_rmse": 0.9488159060786896,
+          "scale": 2.294154290501686
+        },
+        "candidate_optimal_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.5295366048812866,
+            "median": 0.5115722417831421,
+            "p05": 0.3303380012512207,
+            "p95": 0.7549684643745422,
+            "min": 0.24640114605426788,
+            "max": 0.8465210199356079
+          },
+          "relative_rmse": 0.8471404683138737,
+          "scale": 1.271568953604927
+        },
+        "baseline_train_calibrated": {
+          "cosine": {
+            "mean": 0.17729373276233673,
+            "median": 0.17937825620174408,
+            "p05": 0.09836185723543167,
+            "p95": 0.26331627368927,
+            "min": -0.02441999688744545,
+            "max": 0.30660176277160645
+          },
+          "relative_rmse": 0.9841411886025427,
+          "scale": 0.4767218237824531
+        },
+        "baseline_native_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.17729373276233673,
+            "median": 0.17937825620174408,
+            "p05": 0.09836185723543167,
+            "p95": 0.26331627368927,
+            "min": -0.02441999688744545,
+            "max": 0.30660176277160645
+          },
+          "relative_rmse": 1.0126073071016,
+          "scale": 1.0
+        },
+        "median_cosine_lift_vs_embedding": 0.332193985581398,
+        "nrmse_ratio_vs_train_calibrated_embedding": 0.9641054729413223,
+        "positive_prompt_rate": 1.0,
+        "per_prompt": [
+          {
+            "prompt_id": "python-async",
+            "tokens": 79,
+            "baseline_median_cosine": 0.16860252618789673,
+            "activation_median_cosine": 0.4869624376296997,
+            "lift": 0.318359911441803
+          },
+          {
+            "prompt_id": "react-state",
+            "tokens": 43,
+            "baseline_median_cosine": 0.16471831500530243,
+            "activation_median_cosine": 0.528160572052002,
+            "lift": 0.3634422570466995
+          },
+          {
+            "prompt_id": "rust-borrow",
+            "tokens": 74,
+            "baseline_median_cosine": 0.1873004138469696,
+            "activation_median_cosine": 0.513148307800293,
+            "lift": 0.32584789395332336
+          }
+        ],
+        "gates": {
+          "cosine_lift": true,
+          "nrmse_ratio": false,
+          "absolute_nrmse": true,
+          "positive_prompt_rate": true,
+          "scale_in_contract": true
+        },
+        "decision": "fail",
+        "prediction_cosine_vs_full_fit": 0.9900240302085876
+      },
+      {
+        "seed": 20,
+        "train_prompt_ids": [
+          "agent-tool",
+          "chinese-code-spec",
+          "cpp-lifetime",
+          "debug-stack",
+          "java-race",
+          "json-contract",
+          "python-async",
+          "sql-transaction",
+          "typescript-types"
+        ],
+        "heldout_prompt_ids": [
+          "go-context",
+          "react-state",
+          "rust-borrow"
+        ],
+        "train_tokens": 578,
+        "heldout_tokens": 194,
+        "scale": 2.286122915500846,
+        "raw_scale": 2.286122915500846,
+        "median_norm_scale_diagnostic": 2.401102066040039,
+        "raw_median_norm_scale_diagnostic": 2.401102066040039,
+        "baseline_train_scale": 0.4722787940199599,
+        "raw_baseline_train_scale": 0.4722787940199599,
+        "effective_rank": 578,
+        "candidate": {
+          "cosine": {
+            "mean": 0.5445640087127686,
+            "median": 0.5198335647583008,
+            "p05": 0.36128392815589905,
+            "p95": 0.7579739689826965,
+            "min": 0.22902098298072815,
+            "max": 0.8351521492004395
+          },
+          "relative_rmse": 0.9322948702360273,
+          "scale": 2.286122915500846
+        },
+        "candidate_optimal_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.5445640087127686,
+            "median": 0.5198335647583008,
+            "p05": 0.36128392815589905,
+            "p95": 0.7579739689826965,
+            "min": 0.22902098298072815,
+            "max": 0.8351521492004395
+          },
+          "relative_rmse": 0.8393076792276679,
+          "scale": 1.308922111672373
+        },
+        "baseline_train_calibrated": {
+          "cosine": {
+            "mean": 0.18284201622009277,
+            "median": 0.18406638503074646,
+            "p05": 0.10106724500656128,
+            "p95": 0.2769891619682312,
+            "min": -0.02441999688744545,
+            "max": 0.3220148980617523
+          },
+          "relative_rmse": 0.9831038035104206,
+          "scale": 0.4722787940199599
+        },
+        "baseline_native_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.18284201622009277,
+            "median": 0.18406638503074646,
+            "p05": 0.10106724500656128,
+            "p95": 0.2769891619682312,
+            "min": -0.02441999688744545,
+            "max": 0.3220148980617523
+          },
+          "relative_rmse": 1.0099957732601335,
+          "scale": 1.0
+        },
+        "median_cosine_lift_vs_embedding": 0.3357671797275543,
+        "nrmse_ratio_vs_train_calibrated_embedding": 0.9483178347057888,
+        "positive_prompt_rate": 1.0,
+        "per_prompt": [
+          {
+            "prompt_id": "go-context",
+            "tokens": 77,
+            "baseline_median_cosine": 0.18910403549671173,
+            "activation_median_cosine": 0.5204270482063293,
+            "lift": 0.3313230127096176
+          },
+          {
+            "prompt_id": "react-state",
+            "tokens": 43,
+            "baseline_median_cosine": 0.16471831500530243,
+            "activation_median_cosine": 0.5434283018112183,
+            "lift": 0.37870998680591583
+          },
+          {
+            "prompt_id": "rust-borrow",
+            "tokens": 74,
+            "baseline_median_cosine": 0.1873004138469696,
+            "activation_median_cosine": 0.5169349908828735,
+            "lift": 0.32963457703590393
+          }
+        ],
+        "gates": {
+          "cosine_lift": true,
+          "nrmse_ratio": true,
+          "absolute_nrmse": true,
+          "positive_prompt_rate": true,
+          "scale_in_contract": true
+        },
+        "decision": "pass",
+        "prediction_cosine_vs_full_fit": 0.9904998540878296
+      },
+      {
+        "seed": 21,
+        "train_prompt_ids": [
+          "agent-tool",
+          "chinese-code-spec",
+          "cpp-lifetime",
+          "debug-stack",
+          "go-context",
+          "json-contract",
+          "rust-borrow",
+          "sql-transaction",
+          "typescript-types"
+        ],
+        "heldout_prompt_ids": [
+          "java-race",
+          "python-async",
+          "react-state"
+        ],
+        "train_tokens": 577,
+        "heldout_tokens": 195,
+        "scale": 2.290156400961472,
+        "raw_scale": 2.290156400961472,
+        "median_norm_scale_diagnostic": 2.3883979320526123,
+        "raw_median_norm_scale_diagnostic": 2.3883979320526123,
+        "baseline_train_scale": 0.47285596841245703,
+        "raw_baseline_train_scale": 0.47285596841245703,
+        "effective_rank": 577,
+        "candidate": {
+          "cosine": {
+            "mean": 0.529926061630249,
+            "median": 0.5299718976020813,
+            "p05": 0.3337400555610657,
+            "p95": 0.7258716225624084,
+            "min": 0.15741968154907227,
+            "max": 0.8446784615516663
+          },
+          "relative_rmse": 0.9447099565781365,
+          "scale": 2.290156400961472
+        },
+        "candidate_optimal_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.529926061630249,
+            "median": 0.5299718976020813,
+            "p05": 0.3337400555610657,
+            "p95": 0.7258716225624084,
+            "min": 0.15741968154907227,
+            "max": 0.8446784615516663
+          },
+          "relative_rmse": 0.847909384159502,
+          "scale": 1.2824527322567878
+        },
+        "baseline_train_calibrated": {
+          "cosine": {
+            "mean": 0.1804499328136444,
+            "median": 0.18436940014362335,
+            "p05": 0.08813312649726868,
+            "p95": 0.26760223507881165,
+            "min": -0.04634010046720505,
+            "max": 0.3097286522388458
+          },
+          "relative_rmse": 0.9835820446088265,
+          "scale": 0.47285596841245703
+        },
+        "baseline_native_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.1804499328136444,
+            "median": 0.18436940014362335,
+            "p05": 0.08813312649726868,
+            "p95": 0.26760223507881165,
+            "min": -0.04634010046720505,
+            "max": 0.3097286522388458
+          },
+          "relative_rmse": 1.0105486770158498,
+          "scale": 1.0
+        },
+        "median_cosine_lift_vs_embedding": 0.34560249745845795,
+        "nrmse_ratio_vs_train_calibrated_embedding": 0.9604790589216687,
+        "positive_prompt_rate": 1.0,
+        "per_prompt": [
+          {
+            "prompt_id": "java-race",
+            "tokens": 73,
+            "baseline_median_cosine": 0.21318098902702332,
+            "activation_median_cosine": 0.5429065227508545,
+            "lift": 0.3297255337238312
+          },
+          {
+            "prompt_id": "python-async",
+            "tokens": 79,
+            "baseline_median_cosine": 0.16860252618789673,
+            "activation_median_cosine": 0.4871964752674103,
+            "lift": 0.31859394907951355
+          },
+          {
+            "prompt_id": "react-state",
+            "tokens": 43,
+            "baseline_median_cosine": 0.16471831500530243,
+            "activation_median_cosine": 0.5727365016937256,
+            "lift": 0.40801818668842316
+          }
+        ],
+        "gates": {
+          "cosine_lift": true,
+          "nrmse_ratio": false,
+          "absolute_nrmse": true,
+          "positive_prompt_rate": true,
+          "scale_in_contract": true
+        },
+        "decision": "fail",
+        "prediction_cosine_vs_full_fit": 0.9900214076042175
+      },
+      {
+        "seed": 22,
+        "train_prompt_ids": [
+          "agent-tool",
+          "cpp-lifetime",
+          "go-context",
+          "json-contract",
+          "python-async",
+          "react-state",
+          "rust-borrow",
+          "sql-transaction",
+          "typescript-types"
+        ],
+        "heldout_prompt_ids": [
+          "chinese-code-spec",
+          "debug-stack",
+          "java-race"
+        ],
+        "train_tokens": 568,
+        "heldout_tokens": 204,
+        "scale": 2.284663134897072,
+        "raw_scale": 2.284663134897072,
+        "median_norm_scale_diagnostic": 2.3955588340759277,
+        "raw_median_norm_scale_diagnostic": 2.3955588340759277,
+        "baseline_train_scale": 0.45433476062514166,
+        "raw_baseline_train_scale": 0.45433476062514166,
+        "effective_rank": 568,
+        "candidate": {
+          "cosine": {
+            "mean": 0.5292888879776001,
+            "median": 0.5334988832473755,
+            "p05": 0.29521292448043823,
+            "p95": 0.7052897810935974,
+            "min": 0.17241260409355164,
+            "max": 0.8426603078842163
+          },
+          "relative_rmse": 0.9423440638013431,
+          "scale": 2.284663134897072
+        },
+        "candidate_optimal_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.5292888879776001,
+            "median": 0.5334988832473755,
+            "p05": 0.29521292448043823,
+            "p95": 0.7052897810935974,
+            "min": 0.17241260409355164,
+            "max": 0.8426603078842163
+          },
+          "relative_rmse": 0.8459083931803447,
+          "scale": 1.2844974875543993
+        },
+        "baseline_train_calibrated": {
+          "cosine": {
+            "mean": 0.2002762407064438,
+            "median": 0.20541492104530334,
+            "p05": 0.08966716378927231,
+            "p95": 0.2941528260707855,
+            "min": -0.046340104192495346,
+            "max": 0.3258340060710907
+          },
+          "relative_rmse": 0.979029209820415,
+          "scale": 0.45433476062514166
+        },
+        "baseline_native_scale_diagnostic": {
+          "cosine": {
+            "mean": 0.2002762407064438,
+            "median": 0.20541492104530334,
+            "p05": 0.08966716378927231,
+            "p95": 0.2941528260707855,
+            "min": -0.046340104192495346,
+            "max": 0.3258340060710907
+          },
+          "relative_rmse": 1.0013606700819546,
+          "scale": 1.0
+        },
+        "median_cosine_lift_vs_embedding": 0.32808396220207214,
+        "nrmse_ratio_vs_train_calibrated_embedding": 0.9625290587338031,
+        "positive_prompt_rate": 1.0,
+        "per_prompt": [
+          {
+            "prompt_id": "chinese-code-spec",
+            "tokens": 62,
+            "baseline_median_cosine": 0.2516970634460449,
+            "activation_median_cosine": 0.5473029017448425,
+            "lift": 0.2956058382987976
+          },
+          {
+            "prompt_id": "debug-stack",
+            "tokens": 69,
+            "baseline_median_cosine": 0.1774824559688568,
+            "activation_median_cosine": 0.5084865689277649,
+            "lift": 0.3310041129589081
+          },
+          {
+            "prompt_id": "java-race",
+            "tokens": 73,
+            "baseline_median_cosine": 0.21318098902702332,
+            "activation_median_cosine": 0.5433667302131653,
+            "lift": 0.33018574118614197
+          }
+        ],
+        "gates": {
+          "cosine_lift": true,
+          "nrmse_ratio": false,
+          "absolute_nrmse": true,
+          "positive_prompt_rate": true,
+          "scale_in_contract": true
+        },
+        "decision": "fail",
+        "prediction_cosine_vs_full_fit": 0.9895549416542053
+      }
+    ]
+  },
+  "gates": {
+    "data_contract": true,
+    "loto": true,
+    "multi_seed": false
+  }
+}

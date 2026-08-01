@@ -1,0 +1,69 @@
+{
+  "format": "colorlm-v47-parallel-draft-contract-v1",
+  "status": "frozen-offline-prototype",
+  "encoding": "UTF-8-without-BOM",
+  "base_model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+  "vocab_size": 248320,
+  "hidden_size": 2048,
+  "draft_tokens": 4,
+  "first_token": {
+    "source": "v38-native-logits-argmax",
+    "trainable": false,
+    "extra_projection": false
+  },
+  "future_head": {
+    "positions": [2, 3, 4],
+    "architecture": "single-cascaded-block-with-layerwise-supervision",
+    "rank": 64,
+    "token_key": "stateless-rademacher-hash-v1",
+    "activation": "tanh",
+    "full_vocabulary_projection": false,
+    "loss_weights": [1.0, 0.7, 0.5]
+  },
+  "shortlist": {
+    "native_top_k": 32,
+    "recent_tokens": 96,
+    "train_frequent": 64,
+    "candidate_limit": 192,
+    "priority": [
+      "anchor_native_topk",
+      "anchor_recent_context_reverse_unique",
+      "train_only_frequent_v38_targets"
+    ]
+  },
+  "data_split": {
+    "allowed": ["train", "validation", "test"],
+    "unit": ["group_id", "template_cluster_id"],
+    "error_replay_training_split_only": true
+  },
+  "coverage_gate": {
+    "required_splits": ["validation", "test"],
+    "requires_complete_oracle_token_ids": true,
+    "minimum_token_coverage": 0.995,
+    "minimum_complete_trajectory_coverage": 0.995,
+    "oracle_teacher_forced_is_necessary_not_sufficient": true
+  },
+  "acceptance_gate": {
+    "requires_v38_free_greedy_validator_tokens": true,
+    "minimum_evaluation_anchors": 64,
+    "maximum_draft_tokens": 4,
+    "report_rejection_position": true,
+    "report_context_buckets": true
+  },
+  "cost": {
+    "base_active_parameters_per_token": 3000000000,
+    "verification_cost_factor_upper": 1.35,
+    "runtime_weight_dtype_bytes": 2,
+    "minimum_analytical_speedup_lower_bound": 1.08,
+    "confidence": 0.95,
+    "hard_gate_advance_definition": "accepted-draft-tokens-only",
+    "diagnostic_only_definition": "accepted-draft-tokens-plus-one"
+  },
+  "claim_limits": [
+    "oracle或teacher-forced覆盖只是必要条件，不是自由滚动命中、接受长度或加速证据",
+    "408/408来自已消费v36稀疏关键位置，不能宣称v38完整轨迹覆盖或可加速",
+    "只有v38自由贪心验证轨迹才能用于接受长度模拟",
+    "解析成本与加速下界不是端到端测速",
+    "加速下界不足1.08时停止，不改C++"
+  ]
+}

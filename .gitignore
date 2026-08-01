@@ -1,8 +1,19 @@
 # Model files (too large for git)
 models/
+*.gguf
 *.safetensors
 *.pt
 *.bin
+*.cnob
+*.npy
+*.npz
+*.f16
+*.f32
+*.q4_0
+*.q8_0
+*.mxfp4
+*.model
+*.onnx
 
 # Python
 __pycache__/
@@ -15,3 +26,24 @@ __pycache__/
 
 # Cache
 .cache/
+
+# Build products and nested local dependencies
+/build/
+/llama.cpp/
+**/build*/
+*.obj
+*.exe
+*.dll
+*.pdb
+.vs/
+
+# Large generated research payloads. Keep their manifests and reports in Git.
+fast16/research/biopsy_cache/
+fast16/research/**/source/
+fast16/research/**/full_shard/
+
+# Local assistant state
+.workbuddy/
+
+# Local runtime sessions, downloaded plugins, prompts and generated weights
+fast16/runtime/

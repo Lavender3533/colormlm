@@ -1,0 +1,377 @@
+{
+  "format": "colorlm-neural-block-runtime-v1",
+  "name": "ColorLM-v18-Coder-Neural-Block-L47",
+  "formal": true,
+  "source_abi": "D:\\project\\大模型ssd化\\fast16\\research\\v16_coder_neural_block_plan.json",
+  "source_abi_sha256": "3cbcf8c279f64c1c92d28779dc10e5497b360f8eea92078ba9de2a2b78ae7902",
+  "runtime_layout": "single-aligned-tensor-blob-v1",
+  "alignment": 64,
+  "weights": {
+    "file": "weights.bin",
+    "bytes": 940461184,
+    "sha256": "4caa8bb333ad145e9eb4c54392a7c656f63863291956a007ac569f9d3856a39a"
+  },
+  "interface": {
+    "input_width": 2048,
+    "output_width": 2048,
+    "input_transport": "colorlm-to-coder-2048x2048",
+    "output_transport": "coder-to-colorlm-2048x2048",
+    "residual_contract": "h_out=h_native+alpha*energy_gate*transport_out(block(transport_in(h_native))-transport_in(h_native))",
+    "hard_bypass": "alpha=0 does not load weights, allocate memory, or create graph nodes",
+    "transport": {
+      "method": "nullspace_anchored",
+      "bridge_report": "D:\\project\\大模型ssd化\\fast16\\research\\v18_activation_bridge\\candidate-nullspace-anchor-v1\\stability_report.json",
+      "bridge_report_sha256": "4f73687396f8b3668e7b073147970b87af6e7266c36c8376ac4f7d7f7f4ad3c7",
+      "shape": [
+        2048,
+        2048
+      ],
+      "runtime_dtype": "F16",
+      "input": {
+        "source_file": "coder_activation_input_weight_f32.npy",
+        "source_sha256": "7e0ebc6e87e04092b3adfc7083c8bddb55a7d2e13768708978a2d4581d0468da",
+        "contract": "donor_column = W_in @ colorlm_column"
+      },
+      "output": {
+        "source_file": "coder_activation_output_weight_f32.npy",
+        "source_sha256": "0e92b204277ff86ffc5711e2c721ab6bfd8b175272c861d2ae45000b49565c05",
+        "contract": "colorlm_delta_column = W_out @ donor_delta_column"
+      }
+    }
+  },
+  "attention": {
+    "type": "full_attention",
+    "query_heads": 16,
+    "kv_heads": 2,
+    "head_dim": 256,
+    "partial_rotary_factor": 0.25,
+    "rope_theta": 5000000.0,
+    "memory": "independent-sidecar-kv-required"
+  },
+  "moe": {
+    "expert_count": 512,
+    "experts_per_token": 10,
+    "expert_width": 512,
+    "shared_expert_width": 512,
+    "paging": "exact-top-k-only; cache miss must wait or take the whole block no-op path"
+  },
+  "target": {
+    "base": "ColorLM-v13-Causal-Sparse-L12",
+    "site": 35,
+    "site_policy": "L35 full-token residual station with native recurrent state plus donor KV",
+    "base_hidden_width": 2048,
+    "base_query_heads": 16,
+    "base_kv_heads": 2,
+    "base_rope_theta": 10000000.0,
+    "donor_rope_is_independent": true
+  },
+  "transport": {
+    "method": "nullspace_anchored",
+    "bridge_report": "D:\\project\\大模型ssd化\\fast16\\research\\v18_activation_bridge\\candidate-nullspace-anchor-v1\\stability_report.json",
+    "bridge_report_sha256": "4f73687396f8b3668e7b073147970b87af6e7266c36c8376ac4f7d7f7f4ad3c7",
+    "shape": [
+      2048,
+      2048
+    ],
+    "runtime_dtype": "F16",
+    "input": {
+      "source_file": "coder_activation_input_weight_f32.npy",
+      "source_sha256": "7e0ebc6e87e04092b3adfc7083c8bddb55a7d2e13768708978a2d4581d0468da",
+      "contract": "donor_column = W_in @ colorlm_column"
+    },
+    "output": {
+      "source_file": "coder_activation_output_weight_f32.npy",
+      "source_sha256": "0e92b204277ff86ffc5711e2c721ab6bfd8b175272c861d2ae45000b49565c05",
+      "contract": "colorlm_delta_column = W_out @ donor_delta_column"
+    }
+  },
+  "tensor_count": 18,
+  "tensors": [
+    {
+      "name": "model.layers.47.input_layernorm.weight",
+      "role": "input_norm",
+      "dtype": "F32",
+      "source_shape": [
+        2048
+      ],
+      "ggml_shape": [
+        2048
+      ],
+      "offset": 0,
+      "bytes": 8192,
+      "sha256": "9ac8fb8e5e9a963b3820ba0c0193014c9455d84f26a8b50bf6833263308f91ae"
+    },
+    {
+      "name": "model.layers.47.mlp.gate.weight",
+      "role": "expert_router",
+      "dtype": "Q4_0",
+      "source_shape": [
+        512,
+        2048
+      ],
+      "ggml_shape": [
+        2048,
+        512
+      ],
+      "offset": 8192,
+      "bytes": 589824,
+      "sha256": "90a117732c0a97f625c06a3214a8a7a2bba5068389a29569151afa4d9de8cf15"
+    },
+    {
+      "name": "model.layers.47.mlp.shared_expert.down_proj.weight",
+      "role": "shared_expert",
+      "dtype": "Q4_0",
+      "source_shape": [
+        2048,
+        512
+      ],
+      "ggml_shape": [
+        512,
+        2048
+      ],
+      "offset": 598016,
+      "bytes": 589824,
+      "sha256": "ba78b30155d70ae6318d93062489672dbc326ec040db89ff848f59d2f14d1b20"
+    },
+    {
+      "name": "model.layers.47.mlp.shared_expert.gate_proj.weight",
+      "role": "shared_expert",
+      "dtype": "Q4_0",
+      "source_shape": [
+        512,
+        2048
+      ],
+      "ggml_shape": [
+        2048,
+        512
+      ],
+      "offset": 1187840,
+      "bytes": 589824,
+      "sha256": "ee15dceb7945b537047e3bd7f7f82703d0459d16a076aa1465e5185895415b8e"
+    },
+    {
+      "name": "model.layers.47.mlp.shared_expert.up_proj.weight",
+      "role": "shared_expert",
+      "dtype": "Q4_0",
+      "source_shape": [
+        512,
+        2048
+      ],
+      "ggml_shape": [
+        2048,
+        512
+      ],
+      "offset": 1777664,
+      "bytes": 589824,
+      "sha256": "38d997d919eb971cac85d7ac1d5006cba57227145800e5bce1302bdfe27f7949"
+    },
+    {
+      "name": "model.layers.47.mlp.shared_expert_gate.weight",
+      "role": "shared_expert_gate",
+      "dtype": "Q4_0",
+      "source_shape": [
+        1,
+        2048
+      ],
+      "ggml_shape": [
+        2048,
+        1
+      ],
+      "offset": 2367488,
+      "bytes": 1152,
+      "sha256": "e20179f411d18b3a0e31a8c7814b5227a5ec438a7fc169b3078b3b1b1fa33323"
+    },
+    {
+      "name": "model.layers.47.post_attention_layernorm.weight",
+      "role": "post_attention_norm",
+      "dtype": "F32",
+      "source_shape": [
+        2048
+      ],
+      "ggml_shape": [
+        2048
+      ],
+      "offset": 2368640,
+      "bytes": 8192,
+      "sha256": "66f355314a6094432e7046b2c21e3ed96f5abc60d440c13a84c21fd721a3fd87"
+    },
+    {
+      "name": "model.layers.47.self_attn.k_norm.weight",
+      "role": "full_attention",
+      "dtype": "F32",
+      "source_shape": [
+        256
+      ],
+      "ggml_shape": [
+        256
+      ],
+      "offset": 2376832,
+      "bytes": 1024,
+      "sha256": "46150160142e9551b5610619029bfcf9d702b59e0a875a82adbe52e914c55961"
+    },
+    {
+      "name": "model.layers.47.self_attn.k_proj.weight",
+      "role": "full_attention",
+      "dtype": "Q4_0",
+      "source_shape": [
+        512,
+        2048
+      ],
+      "ggml_shape": [
+        2048,
+        512
+      ],
+      "offset": 2377856,
+      "bytes": 589824,
+      "sha256": "e8f2615d7ec9938737dbb4d1f3a9fd38d9b6e951489cd85a9fad2cdbda15db83"
+    },
+    {
+      "name": "model.layers.47.self_attn.o_proj.weight",
+      "role": "full_attention",
+      "dtype": "Q4_0",
+      "source_shape": [
+        2048,
+        4096
+      ],
+      "ggml_shape": [
+        4096,
+        2048
+      ],
+      "offset": 2967680,
+      "bytes": 4718592,
+      "sha256": "6bde6c0be342edb0b6187ed601136731f770c31ed77f7132cbd7a04233af3370"
+    },
+    {
+      "name": "model.layers.47.self_attn.q_norm.weight",
+      "role": "full_attention",
+      "dtype": "F32",
+      "source_shape": [
+        256
+      ],
+      "ggml_shape": [
+        256
+      ],
+      "offset": 7686272,
+      "bytes": 1024,
+      "sha256": "d21ff287ad053f29c0f282971c390c9193083ec1fdc5d410e273a3de7c69fe0f"
+    },
+    {
+      "name": "model.layers.47.self_attn.q_proj.weight",
+      "role": "full_attention",
+      "dtype": "Q4_0",
+      "source_shape": [
+        8192,
+        2048
+      ],
+      "ggml_shape": [
+        2048,
+        8192
+      ],
+      "offset": 7687296,
+      "bytes": 9437184,
+      "sha256": "aa1f312611aac037ed45c93e5eaca185a1a8fafa68ea89348e978bd090fe0132"
+    },
+    {
+      "name": "model.layers.47.self_attn.v_proj.weight",
+      "role": "full_attention",
+      "dtype": "Q4_0",
+      "source_shape": [
+        512,
+        2048
+      ],
+      "ggml_shape": [
+        2048,
+        512
+      ],
+      "offset": 17124480,
+      "bytes": 589824,
+      "sha256": "761cd36719d1def4f03068c4efd196222196d823efb8b4aff9729caff5300ddd"
+    },
+    {
+      "name": "model.layers.47.mlp.experts.gate_proj.weight",
+      "role": "routed_expert_bank",
+      "dtype": "Q4_0",
+      "source_shape": [
+        512,
+        512,
+        2048
+      ],
+      "ggml_shape": [
+        2048,
+        512,
+        512
+      ],
+      "offset": 17714304,
+      "bytes": 301989888,
+      "sha256": "79893172715d55e6abbf353d0d91d67c2139779361597be37fb33091d7d7fb4a"
+    },
+    {
+      "name": "model.layers.47.mlp.experts.up_proj.weight",
+      "role": "routed_expert_bank",
+      "dtype": "Q4_0",
+      "source_shape": [
+        512,
+        512,
+        2048
+      ],
+      "ggml_shape": [
+        2048,
+        512,
+        512
+      ],
+      "offset": 319704192,
+      "bytes": 301989888,
+      "sha256": "d5130abe68b46b31598505bbc59c1c596be001d1866e5700671945f887a52602"
+    },
+    {
+      "name": "model.layers.47.mlp.experts.down_proj.weight",
+      "role": "routed_expert_bank",
+      "dtype": "Q4_0",
+      "source_shape": [
+        512,
+        2048,
+        512
+      ],
+      "ggml_shape": [
+        512,
+        2048,
+        512
+      ],
+      "offset": 621694080,
+      "bytes": 301989888,
+      "sha256": "5f02de971947acb4e3eec1fbf260ff7817a8a8908a6397edd787cce55cca094f"
+    },
+    {
+      "name": "colorlm.neural_block.transport_in.weight",
+      "role": "input_transport",
+      "dtype": "F16",
+      "source_shape": [
+        2048,
+        2048
+      ],
+      "ggml_shape": [
+        2048,
+        2048
+      ],
+      "offset": 923683968,
+      "bytes": 8388608,
+      "sha256": "b1c0bb8cf8fabd588f5b166df174856abb1aa81fa7eec8f99d53b5695ce81e69"
+    },
+    {
+      "name": "colorlm.neural_block.transport_out.weight",
+      "role": "output_transport",
+      "dtype": "F16",
+      "source_shape": [
+        2048,
+        2048
+      ],
+      "ggml_shape": [
+        2048,
+        2048
+      ],
+      "offset": 932072576,
+      "bytes": 8388608,
+      "sha256": "bb9058f66e973f8f99a101bfb4aea26ff3d7f88cd1b66a121c612fd9e50d54b7"
+    }
+  ]
+}

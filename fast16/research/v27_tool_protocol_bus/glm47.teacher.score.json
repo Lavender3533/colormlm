@@ -1,0 +1,95 @@
+{
+  "format": "colorlm-multicap-short-gate-score-v1",
+  "selection": "full",
+  "tasks": "D:\\project\\大模型ssd化\\fast16\\research\\v27_tool_protocol_bus\\tool_protocol_gate_v1.json",
+  "responses": "D:\\project\\大模型ssd化\\fast16\\research\\v27_tool_protocol_bus\\glm47.teacher.responses.jsonl",
+  "complete": true,
+  "summary": {
+    "passed": 12,
+    "total": 12,
+    "per_dimension": {
+      "tools": {
+        "passed": 12,
+        "total": 12
+      }
+    }
+  },
+  "input_errors": {
+    "duplicates": [],
+    "unknown": []
+  },
+  "results": [
+    {
+      "id": "tool-read-range",
+      "dimension": "tools",
+      "passed": true,
+      "detail": "tool_call:openai"
+    },
+    {
+      "id": "tool-search-symbol",
+      "dimension": "tools",
+      "passed": true,
+      "detail": "tool_call:openai"
+    },
+    {
+      "id": "tool-write-note",
+      "dimension": "tools",
+      "passed": true,
+      "detail": "tool_call:openai"
+    },
+    {
+      "id": "tool-list-source",
+      "dimension": "tools",
+      "passed": true,
+      "detail": "tool_call:openai"
+    },
+    {
+      "id": "tool-run-check",
+      "dimension": "tools",
+      "passed": true,
+      "detail": "tool_call:openai"
+    },
+    {
+      "id": "tool-fetch-json",
+      "dimension": "tools",
+      "passed": true,
+      "detail": "tool_call:openai"
+    },
+    {
+      "id": "tool-move-artifact",
+      "dimension": "tools",
+      "passed": true,
+      "detail": "tool_call:openai"
+    },
+    {
+      "id": "tool-create-cache",
+      "dimension": "tools",
+      "passed": true,
+      "detail": "tool_call:openai"
+    },
+    {
+      "id": "tool-file-metadata",
+      "dimension": "tools",
+      "passed": true,
+      "detail": "tool_call:openai"
+    },
+    {
+      "id": "tool-replace-version",
+      "dimension": "tools",
+      "passed": true,
+      "detail": "tool_call:openai"
+    },
+    {
+      "id": "tool-git-diff",
+      "dimension": "tools",
+      "passed": true,
+      "detail": "tool_call:openai"
+    },
+    {
+      "id": "tool-ask-clarification",
+      "dimension": "tools",
+      "passed": true,
+      "detail": "tool_call:openai"
+    }
+  ]
+}

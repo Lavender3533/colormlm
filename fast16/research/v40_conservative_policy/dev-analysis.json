@@ -1,0 +1,678 @@
+{
+  "format": "colorlm-v40-conservative-policy-dev-analysis-v1",
+  "warning": "The v29 20-task set is consumed development data, not v40 holdout evidence.",
+  "sample_count": 192,
+  "task_count": 20,
+  "candidate_token_count": 16,
+  "old_weight_l2": 21.113917317800745,
+  "native_weight_l2": 81.11919530510207,
+  "native_norm_match_ratio": 0.26028262778480454,
+  "candidates": [
+    {
+      "name": "v38_old_cross_backbone",
+      "role": "consumed-development-only",
+      "mean_target_nll_delta": 0.3564531833999716,
+      "candidate_win_rate": 0.25675675675675674,
+      "improved_tasks": 3,
+      "regressed_tasks": 17,
+      "worst_task_mean_nll_regression": 0.8914094750282189,
+      "mean_abs_correction": 0.14017754002825444,
+      "active_fraction": 1.0,
+      "per_task": [
+        {
+          "task_id": "policy-activate-health",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": 0.4319437113822396
+        },
+        {
+          "task_id": "policy-activation-worker-health",
+          "split": "validation",
+          "family": "continue",
+          "mean_target_nll_delta": 0.10392108009590088
+        },
+        {
+          "task_id": "policy-command-error-read",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": 0.5490603670629634
+        },
+        {
+          "task_id": "policy-compile-failure-read",
+          "split": "test",
+          "family": "continue",
+          "mean_target_nll_delta": 0.6093261128763107
+        },
+        {
+          "task_id": "policy-config-missing-list",
+          "split": "validation",
+          "family": "continue",
+          "mean_target_nll_delta": -0.09522016337666628
+        },
+        {
+          "task_id": "policy-health-success-finish",
+          "split": "train",
+          "family": "finish",
+          "mean_target_nll_delta": 0.8914094750282189
+        },
+        {
+          "task_id": "policy-list-success-finish",
+          "split": "test",
+          "family": "finish",
+          "mean_target_nll_delta": 0.3599327884380553
+        },
+        {
+          "task_id": "policy-missing-env-ask",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": 0.06287220360035366
+        },
+        {
+          "task_id": "policy-missing-region-ask",
+          "split": "validation",
+          "family": "continue",
+          "mean_target_nll_delta": 0.45661779828014293
+        },
+        {
+          "task_id": "policy-missing-secret-ask",
+          "split": "test",
+          "family": "continue",
+          "mean_target_nll_delta": 0.6334593051997688
+        },
+        {
+          "task_id": "policy-read-missing-list",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": 0.4184822105522466
+        },
+        {
+          "task_id": "policy-read-success-finish",
+          "split": "train",
+          "family": "finish",
+          "mean_target_nll_delta": 0.48051876073208555
+        },
+        {
+          "task_id": "policy-read-version-finish",
+          "split": "validation",
+          "family": "finish",
+          "mean_target_nll_delta": -0.19959783472984288
+        },
+        {
+          "task_id": "policy-save-success-finish",
+          "split": "validation",
+          "family": "finish",
+          "mean_target_nll_delta": 0.3920914093938066
+        },
+        {
+          "task_id": "policy-search-empty-finish",
+          "split": "train",
+          "family": "finish",
+          "mean_target_nll_delta": 0.5899017116875104
+        },
+        {
+          "task_id": "policy-test-failure-read",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": 0.7055310722554435
+        },
+        {
+          "task_id": "policy-validate-activate",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -0.24997393494603756
+        },
+        {
+          "task_id": "policy-validation-production-activate",
+          "split": "test",
+          "family": "continue",
+          "mean_target_nll_delta": 0.5665776469724585
+        },
+        {
+          "task_id": "policy-write-log-finish",
+          "split": "test",
+          "family": "finish",
+          "mean_target_nll_delta": 0.45321216742090015
+        },
+        {
+          "task_id": "policy-write-success-finish",
+          "split": "train",
+          "family": "finish",
+          "mean_target_nll_delta": 0.3511850970348561
+        }
+      ]
+    },
+    {
+      "name": "v39_native_failed",
+      "role": "consumed-development-only",
+      "mean_target_nll_delta": -2.2455674504621226,
+      "candidate_win_rate": 0.8243243243243243,
+      "improved_tasks": 17,
+      "regressed_tasks": 3,
+      "worst_task_mean_nll_regression": 0.16057251038743026,
+      "mean_abs_correction": 0.4861206333279882,
+      "active_fraction": 1.0,
+      "per_task": [
+        {
+          "task_id": "policy-activate-health",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -3.833570284217373
+        },
+        {
+          "task_id": "policy-activation-worker-health",
+          "split": "validation",
+          "family": "continue",
+          "mean_target_nll_delta": -0.3320518135666853
+        },
+        {
+          "task_id": "policy-command-error-read",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -5.311539045321676
+        },
+        {
+          "task_id": "policy-compile-failure-read",
+          "split": "test",
+          "family": "continue",
+          "mean_target_nll_delta": -0.033757653996954996
+        },
+        {
+          "task_id": "policy-config-missing-list",
+          "split": "validation",
+          "family": "continue",
+          "mean_target_nll_delta": -0.9832090011904668
+        },
+        {
+          "task_id": "policy-health-success-finish",
+          "split": "train",
+          "family": "finish",
+          "mean_target_nll_delta": -3.654861074428014
+        },
+        {
+          "task_id": "policy-list-success-finish",
+          "split": "test",
+          "family": "finish",
+          "mean_target_nll_delta": 0.014484871973133551
+        },
+        {
+          "task_id": "policy-missing-env-ask",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -3.0155798700468694
+        },
+        {
+          "task_id": "policy-missing-region-ask",
+          "split": "validation",
+          "family": "continue",
+          "mean_target_nll_delta": -1.0374320340899306
+        },
+        {
+          "task_id": "policy-missing-secret-ask",
+          "split": "test",
+          "family": "continue",
+          "mean_target_nll_delta": -0.11753168510082812
+        },
+        {
+          "task_id": "policy-read-missing-list",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -4.28121844243872
+        },
+        {
+          "task_id": "policy-read-success-finish",
+          "split": "train",
+          "family": "finish",
+          "mean_target_nll_delta": -4.4213686453445735
+        },
+        {
+          "task_id": "policy-read-version-finish",
+          "split": "validation",
+          "family": "finish",
+          "mean_target_nll_delta": 0.025840128397591557
+        },
+        {
+          "task_id": "policy-save-success-finish",
+          "split": "validation",
+          "family": "finish",
+          "mean_target_nll_delta": -0.11976346591557388
+        },
+        {
+          "task_id": "policy-search-empty-finish",
+          "split": "train",
+          "family": "finish",
+          "mean_target_nll_delta": -4.033848771350753
+        },
+        {
+          "task_id": "policy-test-failure-read",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -5.168825470431146
+        },
+        {
+          "task_id": "policy-validate-activate",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -3.251997539252663
+        },
+        {
+          "task_id": "policy-validation-production-activate",
+          "split": "test",
+          "family": "continue",
+          "mean_target_nll_delta": 0.16057251038743026
+        },
+        {
+          "task_id": "policy-write-log-finish",
+          "split": "test",
+          "family": "finish",
+          "mean_target_nll_delta": -0.787519955640209
+        },
+        {
+          "task_id": "policy-write-success-finish",
+          "split": "train",
+          "family": "finish",
+          "mean_target_nll_delta": -4.594895095824703
+        }
+      ]
+    },
+    {
+      "name": "anchored_75_old_25_native",
+      "role": "consumed-development-only",
+      "mean_target_nll_delta": -0.327496233198505,
+      "candidate_win_rate": 0.6756756756756757,
+      "improved_tasks": 13,
+      "regressed_tasks": 7,
+      "worst_task_mean_nll_regression": 0.43733434829,
+      "mean_abs_correction": 0.2062816196519813,
+      "active_fraction": 1.0,
+      "per_task": [
+        {
+          "task_id": "policy-activate-health",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -0.6528133198916625
+        },
+        {
+          "task_id": "policy-activation-worker-health",
+          "split": "validation",
+          "family": "continue",
+          "mean_target_nll_delta": -0.009327527389303647
+        },
+        {
+          "task_id": "policy-command-error-read",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -0.9497724847815533
+        },
+        {
+          "task_id": "policy-compile-failure-read",
+          "split": "test",
+          "family": "continue",
+          "mean_target_nll_delta": 0.41141439024144183
+        },
+        {
+          "task_id": "policy-config-missing-list",
+          "split": "validation",
+          "family": "continue",
+          "mean_target_nll_delta": -0.3563061713344388
+        },
+        {
+          "task_id": "policy-health-success-finish",
+          "split": "train",
+          "family": "finish",
+          "mean_target_nll_delta": -0.2875385451582397
+        },
+        {
+          "task_id": "policy-list-success-finish",
+          "split": "test",
+          "family": "finish",
+          "mean_target_nll_delta": 0.273156713079009
+        },
+        {
+          "task_id": "policy-missing-env-ask",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -0.7758026158042176
+        },
+        {
+          "task_id": "policy-missing-region-ask",
+          "split": "validation",
+          "family": "continue",
+          "mean_target_nll_delta": 0.054764073552763325
+        },
+        {
+          "task_id": "policy-missing-secret-ask",
+          "split": "test",
+          "family": "continue",
+          "mean_target_nll_delta": 0.41185318009754096
+        },
+        {
+          "task_id": "policy-read-missing-list",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -0.768577781718898
+        },
+        {
+          "task_id": "policy-read-success-finish",
+          "split": "train",
+          "family": "finish",
+          "mean_target_nll_delta": -0.7620099353525223
+        },
+        {
+          "task_id": "policy-read-version-finish",
+          "split": "validation",
+          "family": "finish",
+          "mean_target_nll_delta": -0.16614998757417965
+        },
+        {
+          "task_id": "policy-save-success-finish",
+          "split": "validation",
+          "family": "finish",
+          "mean_target_nll_delta": 0.2132485072463087
+        },
+        {
+          "task_id": "policy-search-empty-finish",
+          "split": "train",
+          "family": "finish",
+          "mean_target_nll_delta": -0.641824426189865
+        },
+        {
+          "task_id": "policy-test-failure-read",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -0.8276978927662214
+        },
+        {
+          "task_id": "policy-validate-activate",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -1.0606229853717215
+        },
+        {
+          "task_id": "policy-validation-production-activate",
+          "split": "test",
+          "family": "continue",
+          "mean_target_nll_delta": 0.43733434829
+        },
+        {
+          "task_id": "policy-write-log-finish",
+          "split": "test",
+          "family": "finish",
+          "mean_target_nll_delta": 0.13781956281951685
+        },
+        {
+          "task_id": "policy-write-success-finish",
+          "split": "train",
+          "family": "finish",
+          "mean_target_nll_delta": -0.8895920948870668
+        }
+      ]
+    },
+    {
+      "name": "native_weight_norm_matched",
+      "role": "consumed-development-only",
+      "mean_target_nll_delta": -0.5871603473893078,
+      "candidate_win_rate": 0.8378378378378378,
+      "improved_tasks": 17,
+      "regressed_tasks": 3,
+      "worst_task_mean_nll_regression": 0.03767237445602101,
+      "mean_abs_correction": 0.12652875586302223,
+      "active_fraction": 1.0,
+      "per_task": [
+        {
+          "task_id": "policy-activate-health",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -1.0020517527459554
+        },
+        {
+          "task_id": "policy-activation-worker-health",
+          "split": "validation",
+          "family": "continue",
+          "mean_target_nll_delta": -0.08738898027166571
+        },
+        {
+          "task_id": "policy-command-error-read",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -1.3864745568988124
+        },
+        {
+          "task_id": "policy-compile-failure-read",
+          "split": "test",
+          "family": "continue",
+          "mean_target_nll_delta": -0.01057922964679466
+        },
+        {
+          "task_id": "policy-config-missing-list",
+          "split": "validation",
+          "family": "continue",
+          "mean_target_nll_delta": -0.25951133208487853
+        },
+        {
+          "task_id": "policy-health-success-finish",
+          "split": "train",
+          "family": "finish",
+          "mean_target_nll_delta": -0.9672467812862005
+        },
+        {
+          "task_id": "policy-list-success-finish",
+          "split": "test",
+          "family": "finish",
+          "mean_target_nll_delta": 0.00292690243718603
+        },
+        {
+          "task_id": "policy-missing-env-ask",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -0.7851716189677006
+        },
+        {
+          "task_id": "policy-missing-region-ask",
+          "split": "validation",
+          "family": "continue",
+          "mean_target_nll_delta": -0.27397413687423916
+        },
+        {
+          "task_id": "policy-missing-secret-ask",
+          "split": "test",
+          "family": "continue",
+          "mean_target_nll_delta": -0.03424516773102626
+        },
+        {
+          "task_id": "policy-read-missing-list",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -1.1145018929857764
+        },
+        {
+          "task_id": "policy-read-success-finish",
+          "split": "train",
+          "family": "finish",
+          "mean_target_nll_delta": -1.1531587997894301
+        },
+        {
+          "task_id": "policy-read-version-finish",
+          "split": "validation",
+          "family": "finish",
+          "mean_target_nll_delta": 0.0058112936463522325
+        },
+        {
+          "task_id": "policy-save-success-finish",
+          "split": "validation",
+          "family": "finish",
+          "mean_target_nll_delta": -0.03438654287735084
+        },
+        {
+          "task_id": "policy-search-empty-finish",
+          "split": "train",
+          "family": "finish",
+          "mean_target_nll_delta": -1.0501741710644794
+        },
+        {
+          "task_id": "policy-test-failure-read",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -1.349153546340516
+        },
+        {
+          "task_id": "policy-validate-activate",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -0.8465489875942049
+        },
+        {
+          "task_id": "policy-validation-production-activate",
+          "split": "test",
+          "family": "continue",
+          "mean_target_nll_delta": 0.03767237445602101
+        },
+        {
+          "task_id": "policy-write-log-finish",
+          "split": "test",
+          "family": "finish",
+          "mean_target_nll_delta": -0.20519239723875593
+        },
+        {
+          "task_id": "policy-write-success-finish",
+          "split": "train",
+          "family": "finish",
+          "mean_target_nll_delta": -1.1962120559176062
+        }
+      ]
+    },
+    {
+      "name": "positive_consensus_min",
+      "role": "consumed-development-only",
+      "mean_target_nll_delta": -0.037386355228106544,
+      "candidate_win_rate": 0.4391891891891892,
+      "improved_tasks": 8,
+      "regressed_tasks": 12,
+      "worst_task_mean_nll_regression": 0.153867341105666,
+      "mean_abs_correction": 0.03527122373540157,
+      "active_fraction": 0.3619791666666667,
+      "per_task": [
+        {
+          "task_id": "policy-activate-health",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -0.028301809419566837
+        },
+        {
+          "task_id": "policy-activation-worker-health",
+          "split": "validation",
+          "family": "continue",
+          "mean_target_nll_delta": 0.05160121154955366
+        },
+        {
+          "task_id": "policy-command-error-read",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -0.039980919101015054
+        },
+        {
+          "task_id": "policy-compile-failure-read",
+          "split": "test",
+          "family": "continue",
+          "mean_target_nll_delta": 0.015242752343762897
+        },
+        {
+          "task_id": "policy-config-missing-list",
+          "split": "validation",
+          "family": "continue",
+          "mean_target_nll_delta": -0.007656557109005331
+        },
+        {
+          "task_id": "policy-health-success-finish",
+          "split": "train",
+          "family": "finish",
+          "mean_target_nll_delta": 0.01638850069056552
+        },
+        {
+          "task_id": "policy-list-success-finish",
+          "split": "test",
+          "family": "finish",
+          "mean_target_nll_delta": 0.153867341105666
+        },
+        {
+          "task_id": "policy-missing-env-ask",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -0.414566157456572
+        },
+        {
+          "task_id": "policy-missing-region-ask",
+          "split": "validation",
+          "family": "continue",
+          "mean_target_nll_delta": 0.019905426536749832
+        },
+        {
+          "task_id": "policy-missing-secret-ask",
+          "split": "test",
+          "family": "continue",
+          "mean_target_nll_delta": 0.002963698507100728
+        },
+        {
+          "task_id": "policy-read-missing-list",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -0.014176912063059266
+        },
+        {
+          "task_id": "policy-read-success-finish",
+          "split": "train",
+          "family": "finish",
+          "mean_target_nll_delta": 0.08628880914349546
+        },
+        {
+          "task_id": "policy-read-version-finish",
+          "split": "validation",
+          "family": "finish",
+          "mean_target_nll_delta": 0.0130534101006528
+        },
+        {
+          "task_id": "policy-save-success-finish",
+          "split": "validation",
+          "family": "finish",
+          "mean_target_nll_delta": 0.008864945769837363
+        },
+        {
+          "task_id": "policy-search-empty-finish",
+          "split": "train",
+          "family": "finish",
+          "mean_target_nll_delta": -0.027698982554367646
+        },
+        {
+          "task_id": "policy-test-failure-read",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -0.0455194237412709
+        },
+        {
+          "task_id": "policy-validate-activate",
+          "split": "train",
+          "family": "continue",
+          "mean_target_nll_delta": -0.40925149473064
+        },
+        {
+          "task_id": "policy-validation-production-activate",
+          "split": "test",
+          "family": "continue",
+          "mean_target_nll_delta": 0.10045685307423098
+        },
+        {
+          "task_id": "policy-write-log-finish",
+          "split": "test",
+          "family": "finish",
+          "mean_target_nll_delta": 0.06416491634745328
+        },
+        {
+          "task_id": "policy-write-success-finish",
+          "split": "train",
+          "family": "finish",
+          "mean_target_nll_delta": 0.030221300796028316
+        }
+      ]
+    }
+  ],
+  "advancement_rule": "choose at most one rule here, then freeze a newly authored blind task set before runtime evaluation"
+}

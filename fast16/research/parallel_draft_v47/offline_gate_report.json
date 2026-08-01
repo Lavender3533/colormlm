@@ -1,0 +1,24 @@
+{
+  "format": "colorlm-v47-parallel-draft-offline-gate-v1",
+  "gates": {
+    "real_v38_dataset_contract": false,
+    "oracle_full_trajectory_coverage": false,
+    "free_roll_v38_acceptance": false,
+    "analytical_speedup_lower_bound_at_least_1_08": false
+  },
+  "passed": false,
+  "decision": "stop_no_cpp",
+  "failed_or_missing": [
+    "real_v38_dataset_contract",
+    "oracle_full_trajectory_coverage",
+    "free_roll_v38_acceptance",
+    "analytical_speedup_lower_bound_at_least_1_08"
+  ],
+  "reason": "现有真实资产不足以做v38完整轨迹自由滚动接受预测；按合同停止，不改C++。",
+  "inputs": {
+    "asset_audit": "D:\\project\\大模型ssd化\\fast16\\research\\parallel_draft_v47\\evidence_gap_report.json",
+    "acceptance": null,
+    "cost": "D:\\project\\大模型ssd化\\fast16\\research\\parallel_draft_v47\\cost_report.json"
+  },
+  "claim_limit": "只有全部硬门通过才允许讨论运行时；解析通过后仍需真实相邻A/B与零回归门。"
+}

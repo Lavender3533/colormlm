@@ -1,0 +1,42 @@
+{
+  "format": "colorlm-v30-grounded-independent-gate-contract-v1",
+  "date": "2026-08-01",
+  "status": "frozen_before_teacher_or_capture",
+  "tasks": "fast16/research/v30_dynamic_lexical_policy/grounded_independent_tasks_v1.jsonl",
+  "tasks_sha256": "16c91dd8923b177d7831d2905a43917c45146a8b46deb747131bd3d3b39e4ed1",
+  "task_count": 12,
+  "families": {
+    "continue_tool": 8,
+    "finish_json": 4
+  },
+  "labels": {
+    "grounded_only": true,
+    "arbitrary_unstated_json_values_forbidden": true,
+    "tool_arguments_must_appear_in_user_instruction_or_tool_result": true,
+    "extra_text_around_tool_call_forbidden": true
+  },
+  "teacher": {
+    "max_target_tokens": 32,
+    "max_prefix_tokens": 4096,
+    "target_is_never_added_to_dynamic_candidates": true
+  },
+  "candidate": {
+    "architecture": "low_rank_bilinear_dynamic_token_residual",
+    "weights": "fast16/research/v30_dynamic_lexical_policy/probe_weights.npz",
+    "weights_sha256": "78f13cb45a9145bf02b2692b7ff3ec6ff70f90fbe1292cbed33df9e03de42d7c",
+    "weights_are_frozen_before_new_tasks_are_evaluated": true,
+    "rank": 32,
+    "maximum_dynamic_tokens": 256,
+    "correction_min": -2.0,
+    "correction_max": 8.0
+  },
+  "pass_gate": {
+    "mean_target_nll_delta_max": -0.02,
+    "target_coverage_min": 0.75,
+    "task_wins_min": 9,
+    "task_regressions_max": 0,
+    "maximum_task_mean_nll_regression": 0.03
+  },
+  "failure_action": "停止v30动态词汇运行时实现，不扫描rank、学习率、裁剪、候选池或任务标签。",
+  "success_action": "只允许实现运行时原型并跑一次冻结真实生成门；不直接晋级正式入口。"
+}

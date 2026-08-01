@@ -1,0 +1,417 @@
+{
+  "format": "colorlm-multicap-short-gate-comparison-v1",
+  "baseline": {
+    "format": "colorlm-multicap-short-gate-score-v1",
+    "selection": "full",
+    "tasks": "D:\\project\\大模型ssd化\\fast16\\research\\parallel_b\\multicap_short_gate_v1.json",
+    "responses": "D:\\project\\大模型ssd化\\fast16\\research\\v31_qwen36_expert_pair\\ColorLM-v17-Coder-Neural-Island.full16.responses.jsonl",
+    "complete": true,
+    "summary": {
+      "passed": 10,
+      "total": 16,
+      "per_dimension": {
+        "coding": {
+          "passed": 2,
+          "total": 2
+        },
+        "communication": {
+          "passed": 2,
+          "total": 2
+        },
+        "computer_use": {
+          "passed": 0,
+          "total": 2
+        },
+        "knowledge": {
+          "passed": 2,
+          "total": 2
+        },
+        "long_context": {
+          "passed": 2,
+          "total": 2
+        },
+        "planning": {
+          "passed": 1,
+          "total": 2
+        },
+        "reasoning": {
+          "passed": 1,
+          "total": 2
+        },
+        "tools": {
+          "passed": 0,
+          "total": 2
+        }
+      }
+    },
+    "input_errors": {
+      "duplicates": [],
+      "unknown": []
+    },
+    "results": [
+      {
+        "id": "reasoning-state-transition",
+        "dimension": "reasoning",
+        "passed": false,
+        "detail": "JSON 不匹配: actual={'answer': 23}"
+      },
+      {
+        "id": "reasoning-constraint-order",
+        "dimension": "reasoning",
+        "passed": true,
+        "detail": "exact_json"
+      },
+      {
+        "id": "knowledge-frozen-fact",
+        "dimension": "knowledge",
+        "passed": true,
+        "detail": "exact_json"
+      },
+      {
+        "id": "knowledge-conflict",
+        "dimension": "knowledge",
+        "passed": true,
+        "detail": "exact_json"
+      },
+      {
+        "id": "long-context-two-markers",
+        "dimension": "long_context",
+        "passed": true,
+        "detail": "exact_json"
+      },
+      {
+        "id": "long-context-latest-revision",
+        "dimension": "long_context",
+        "passed": true,
+        "detail": "exact_json"
+      },
+      {
+        "id": "coding-python-clamp-fix",
+        "dimension": "coding",
+        "passed": true,
+        "detail": "exact_text"
+      },
+      {
+        "id": "coding-rust-boundary-fix",
+        "dimension": "coding",
+        "passed": true,
+        "detail": "exact_text"
+      },
+      {
+        "id": "tools-read-file",
+        "dimension": "tools",
+        "passed": false,
+        "detail": "tool_calls[0].function.arguments 不是合法 JSON"
+      },
+      {
+        "id": "tools-search-text",
+        "dimension": "tools",
+        "passed": false,
+        "detail": "tool_calls[0].function.arguments 不是合法 JSON"
+      },
+      {
+        "id": "planning-deploy-sequence",
+        "dimension": "planning",
+        "passed": false,
+        "detail": "JSON 不匹配: actual={'actions': ['验证新配置']}"
+      },
+      {
+        "id": "planning-budget-choice",
+        "dimension": "planning",
+        "passed": true,
+        "detail": "exact_json"
+      },
+      {
+        "id": "computer-use-save-dialog",
+        "dimension": "computer_use",
+        "passed": false,
+        "detail": "JSON 不匹配: actual={'actions': [{'action': 'type', 'value': 'report.txt'}]}"
+      },
+      {
+        "id": "computer-use-filter-menu",
+        "dimension": "computer_use",
+        "passed": false,
+        "detail": "output 不是纯 JSON: Expecting value"
+      },
+      {
+        "id": "communication-strict-format",
+        "dimension": "communication",
+        "passed": true,
+        "detail": "exact_json"
+      },
+      {
+        "id": "communication-preference-consistency",
+        "dimension": "communication",
+        "passed": true,
+        "detail": "exact_text"
+      }
+    ]
+  },
+  "candidate": {
+    "format": "colorlm-multicap-short-gate-score-v1",
+    "selection": "full",
+    "tasks": "D:\\project\\大模型ssd化\\fast16\\research\\parallel_b\\multicap_short_gate_v1.json",
+    "responses": "D:\\project\\大模型ssd化\\fast16\\research\\v31_qwen36_expert_pair\\ColorLM-v36-Qwen36-Global-Shared-Backbone.full16.responses.jsonl",
+    "complete": true,
+    "summary": {
+      "passed": 10,
+      "total": 16,
+      "per_dimension": {
+        "coding": {
+          "passed": 2,
+          "total": 2
+        },
+        "communication": {
+          "passed": 2,
+          "total": 2
+        },
+        "computer_use": {
+          "passed": 0,
+          "total": 2
+        },
+        "knowledge": {
+          "passed": 2,
+          "total": 2
+        },
+        "long_context": {
+          "passed": 2,
+          "total": 2
+        },
+        "planning": {
+          "passed": 1,
+          "total": 2
+        },
+        "reasoning": {
+          "passed": 1,
+          "total": 2
+        },
+        "tools": {
+          "passed": 0,
+          "total": 2
+        }
+      }
+    },
+    "input_errors": {
+      "duplicates": [],
+      "unknown": []
+    },
+    "results": [
+      {
+        "id": "reasoning-state-transition",
+        "dimension": "reasoning",
+        "passed": false,
+        "detail": "JSON 不匹配: actual={'answer': 26}"
+      },
+      {
+        "id": "reasoning-constraint-order",
+        "dimension": "reasoning",
+        "passed": true,
+        "detail": "exact_json"
+      },
+      {
+        "id": "knowledge-frozen-fact",
+        "dimension": "knowledge",
+        "passed": true,
+        "detail": "exact_json"
+      },
+      {
+        "id": "knowledge-conflict",
+        "dimension": "knowledge",
+        "passed": true,
+        "detail": "exact_json"
+      },
+      {
+        "id": "long-context-two-markers",
+        "dimension": "long_context",
+        "passed": true,
+        "detail": "exact_json"
+      },
+      {
+        "id": "long-context-latest-revision",
+        "dimension": "long_context",
+        "passed": true,
+        "detail": "exact_json"
+      },
+      {
+        "id": "coding-python-clamp-fix",
+        "dimension": "coding",
+        "passed": true,
+        "detail": "exact_text"
+      },
+      {
+        "id": "coding-rust-boundary-fix",
+        "dimension": "coding",
+        "passed": true,
+        "detail": "exact_text"
+      },
+      {
+        "id": "tools-read-file",
+        "dimension": "tools",
+        "passed": false,
+        "detail": "tool_calls[0].function.arguments 不是合法 JSON"
+      },
+      {
+        "id": "tools-search-text",
+        "dimension": "tools",
+        "passed": false,
+        "detail": "tool_calls[0].function.arguments 不是合法 JSON"
+      },
+      {
+        "id": "planning-deploy-sequence",
+        "dimension": "planning",
+        "passed": false,
+        "detail": "JSON 不匹配: actual={'actions': ['验证新配置']}"
+      },
+      {
+        "id": "planning-budget-choice",
+        "dimension": "planning",
+        "passed": true,
+        "detail": "exact_json"
+      },
+      {
+        "id": "computer-use-save-dialog",
+        "dimension": "computer_use",
+        "passed": false,
+        "detail": "JSON 不匹配: actual={'actions': [{'action': 'type', 'text': 'report.txt'}]}"
+      },
+      {
+        "id": "computer-use-filter-menu",
+        "dimension": "computer_use",
+        "passed": false,
+        "detail": "output 不是纯 JSON: Extra data"
+      },
+      {
+        "id": "communication-strict-format",
+        "dimension": "communication",
+        "passed": true,
+        "detail": "exact_json"
+      },
+      {
+        "id": "communication-preference-consistency",
+        "dimension": "communication",
+        "passed": true,
+        "detail": "exact_text"
+      }
+    ]
+  },
+  "paired": {
+    "wins": [],
+    "regressions": [],
+    "unchanged_pass": [
+      "reasoning-constraint-order",
+      "knowledge-frozen-fact",
+      "knowledge-conflict",
+      "long-context-two-markers",
+      "long-context-latest-revision",
+      "coding-python-clamp-fix",
+      "coding-rust-boundary-fix",
+      "planning-budget-choice",
+      "communication-strict-format",
+      "communication-preference-consistency"
+    ],
+    "unchanged_fail": [
+      "reasoning-state-transition",
+      "tools-read-file",
+      "tools-search-text",
+      "planning-deploy-sequence",
+      "computer-use-save-dialog",
+      "computer-use-filter-menu"
+    ],
+    "dimension_delta": {
+      "coding": 0,
+      "communication": 0,
+      "computer_use": 0,
+      "knowledge": 0,
+      "long_context": 0,
+      "planning": 0,
+      "reasoning": 0,
+      "tools": 0
+    }
+  },
+  "target_dimensions": [
+    "reasoning",
+    "knowledge",
+    "long_context",
+    "coding",
+    "tools",
+    "planning",
+    "computer_use",
+    "communication"
+  ],
+  "missing_target_dimensions": [],
+  "decision": {
+    "generation_gate_pass": false,
+    "multidimensional_claim": false,
+    "external_requirements_still_needed": [
+      "关键 token 反事实 NLL 门",
+      "leave-one-task-out 方向门",
+      "alpha=0 物理旁路逐 token 等价",
+      "能力通过后的相邻资源和速度检查"
+    ]
+  },
+  "runtime": [
+    {
+      "alias": "ColorLM-v17-Coder-Neural-Island",
+      "model": "ColorLM-v6-Q3Router-Fused-A1.gguf",
+      "model_bytes": 13731822496,
+      "load_seconds": 31.668925700003456,
+      "speed": {
+        "output": "1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 ",
+        "finish_reason": "length",
+        "usage": {
+          "completion_tokens": 96,
+          "prompt_tokens": 31,
+          "total_tokens": 127,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 31,
+          "prompt_ms": 566.152,
+          "prompt_per_token_ms": 18.262967741935487,
+          "prompt_per_second": 54.75561333352174,
+          "predicted_n": 96,
+          "predicted_ms": 4536.563,
+          "predicted_per_token_ms": 47.255864583333334,
+          "predicted_per_second": 21.16139465053169
+        }
+      }
+    },
+    {
+      "alias": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+      "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone.gguf",
+      "model_bytes": 13613857952,
+      "load_seconds": 16.196205899999768,
+      "speed": {
+        "output": "<think>\n\n</think>\n\n1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34",
+        "finish_reason": "length",
+        "usage": {
+          "completion_tokens": 96,
+          "prompt_tokens": 31,
+          "total_tokens": 127,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 31,
+          "prompt_ms": 531.184,
+          "prompt_per_token_ms": 17.134967741935483,
+          "prompt_per_second": 58.360191572035305,
+          "predicted_n": 96,
+          "predicted_ms": 3577.829,
+          "predicted_per_token_ms": 37.269052083333335,
+          "predicted_per_second": 26.831913990299704
+        }
+      }
+    }
+  ],
+  "speed": {
+    "v17_tokens_per_second": 21.16139465053169,
+    "v36_tokens_per_second": 26.831913990299704,
+    "relative_delta": 0.2679652940372499
+  }
+}

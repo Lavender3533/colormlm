@@ -1,0 +1,157 @@
+{
+  "format": "colorlm-rectangular-coordinate-transport-v1",
+  "source": "moonshotai/Kimi-K3",
+  "target": "ColorLM-v6-Q3Router-Fused-A1.gguf",
+  "method": "shared-token rectangular Procrustes",
+  "matched_tokens": 3968,
+  "train_tokens": 3072,
+  "test_tokens": 896,
+  "embedding_cosine": {
+    "train_unaligned_first2048": {
+      "mean": -0.0021256713662296534,
+      "median": -0.0021949410438537598,
+      "p05": -0.040196992456912994,
+      "p95": 0.03605698049068451,
+      "min": -0.10602344572544098,
+      "max": 0.07734251767396927
+    },
+    "train_after": {
+      "mean": 0.8377759456634521,
+      "median": 0.8429399728775024,
+      "p05": 0.7590108513832092,
+      "p95": 0.883834719657898,
+      "min": 0.666650652885437,
+      "max": 0.927001416683197
+    },
+    "test_unaligned_first2048": {
+      "mean": -0.001847797422669828,
+      "median": -0.002345507498830557,
+      "p05": -0.03987542912364006,
+      "p95": 0.036227259784936905,
+      "min": -0.06379233300685883,
+      "max": 0.07290925085544586
+    },
+    "test_after": {
+      "mean": 0.47558262944221497,
+      "median": 0.4661717414855957,
+      "p05": 0.24492384493350983,
+      "p95": 0.7177693843841553,
+      "min": 0.12195073813199997,
+      "max": 0.8385971188545227
+    }
+  },
+  "test_token_retrieval_top1": 0.9542410714285714,
+  "router_best_cosine": {
+    "after_transport": {
+      "mean": 0.03940312936902046,
+      "median": 0.03896902874112129,
+      "p05": 0.011767955496907234,
+      "p95": 0.06904114037752151,
+      "min": -0.014702661894261837,
+      "max": 0.1058565229177475
+    },
+    "shuffled_donor_axes": {
+      "mean": 0.037057459354400635,
+      "median": 0.03686383366584778,
+      "p05": 0.010102557018399239,
+      "p95": 0.06486620008945465,
+      "min": -0.013149110600352287,
+      "max": 0.09397397935390472
+    }
+  },
+  "top_unique_router_pairs": [
+    {
+      "donor_expert": 291,
+      "target_expert": 249,
+      "router_cosine": 0.1058565229177475
+    },
+    {
+      "donor_expert": 324,
+      "target_expert": 114,
+      "router_cosine": 0.10119535773992538
+    },
+    {
+      "donor_expert": 771,
+      "target_expert": 108,
+      "router_cosine": 0.09787137806415558
+    },
+    {
+      "donor_expert": 477,
+      "target_expert": 229,
+      "router_cosine": 0.08952238410711288
+    },
+    {
+      "donor_expert": 719,
+      "target_expert": 26,
+      "router_cosine": 0.08599643409252167
+    },
+    {
+      "donor_expert": 653,
+      "target_expert": 44,
+      "router_cosine": 0.08521570265293121
+    },
+    {
+      "donor_expert": 350,
+      "target_expert": 182,
+      "router_cosine": 0.08490148186683655
+    },
+    {
+      "donor_expert": 168,
+      "target_expert": 2,
+      "router_cosine": 0.08220124989748001
+    },
+    {
+      "donor_expert": 310,
+      "target_expert": 193,
+      "router_cosine": 0.08195006102323532
+    },
+    {
+      "donor_expert": 555,
+      "target_expert": 123,
+      "router_cosine": 0.08110852539539337
+    },
+    {
+      "donor_expert": 596,
+      "target_expert": 82,
+      "router_cosine": 0.08050128072500229
+    },
+    {
+      "donor_expert": 621,
+      "target_expert": 4,
+      "router_cosine": 0.08049079030752182
+    },
+    {
+      "donor_expert": 856,
+      "target_expert": 110,
+      "router_cosine": 0.08006903529167175
+    },
+    {
+      "donor_expert": 749,
+      "target_expert": 3,
+      "router_cosine": 0.0798521637916565
+    },
+    {
+      "donor_expert": 617,
+      "target_expert": 254,
+      "router_cosine": 0.07962934672832489
+    },
+    {
+      "donor_expert": 173,
+      "target_expert": 245,
+      "router_cosine": 0.07921765744686127
+    }
+  ],
+  "transport": {
+    "shape": [
+      7168,
+      2048
+    ],
+    "dtype": "float32",
+    "column_orthogonality_rmse": 8.367409520815272e-08,
+    "singular_value_min": 0.07935620844364166,
+    "singular_value_median": 0.5937008857727051,
+    "singular_value_max": 176.1912078857422,
+    "file": "kimi_k3_to_colorlm_semiorthogonal_f32.npy",
+    "bytes": 58720384
+  }
+}

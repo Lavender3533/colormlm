@@ -1,0 +1,13 @@
+{
+  "format": "colorlm-v47-parallel-draft-selftest-v1",
+  "passed": true,
+  "tests": 21,
+  "cpu_only": true,
+  "gpu_used": false,
+  "synthetic_only": true,
+  "synthetic_anchors": 144,
+  "fit_loss_before": 2.0903742407514203,
+  "fit_loss_after": 1.0277691381274527,
+  "perfect_mean_acceptance": 4.0,
+  "claim_limit": "合成自检只证明代码路径和停止门可运行，不是ColorLM真实接受率。"
+}

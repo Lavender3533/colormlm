@@ -1,0 +1,100 @@
+{
+  "format": "colormlm-v36-independent-short-gate-v1",
+  "date": "2026-08-01",
+  "frozen_before_generation": true,
+  "purpose": "独立验证Qwen3.6全深度router/shared expert是否在恢复ColorLM routed expert bank后仍有净收益。",
+  "dimensions": [
+    "reasoning",
+    "knowledge",
+    "long_context",
+    "coding",
+    "tools",
+    "planning",
+    "computer_use",
+    "communication"
+  ],
+  "items": [
+    {
+      "id": "reasoning-three-flags-v36",
+      "dimension": "reasoning",
+      "max_output_tokens": 32,
+      "prompt": "条件：X与Y真假相同；Y与Z恰有一个为真；Z为真。只输出{\"X\":布尔值,\"Y\":布尔值,\"Z\":布尔值}。",
+      "validator": {
+        "type": "exact_json",
+        "expected": {"X": false, "Y": false, "Z": true}
+      }
+    },
+    {
+      "id": "knowledge-current-signed-v36",
+      "dimension": "knowledge",
+      "max_output_tokens": 32,
+      "prompt": "只依据记录：R1草稿写版本V2；R2已签名旧记录写版本V3；R3已签名且标记current写版本V5。规则：已签名优先，且同级取current。只输出{\"version\":字符串,\"source\":字符串}。",
+      "validator": {
+        "type": "exact_json",
+        "expected": {"version": "V5", "source": "R3"}
+      }
+    },
+    {
+      "id": "long-context-active-fields-v36",
+      "dimension": "long_context",
+      "max_output_tokens": 36,
+      "prompt": "记录1 mode=slow rev2。记录2 limit=40 rev5。记录3 mode=fast rev7 state=cancelled。记录4 owner=Lin rev8。记录5 mode=turbo rev6 state=active。记录6 limit=64 rev9 state=active。规则：忽略cancelled；每字段取rev最大。只输出{\"mode\":字符串,\"limit\":整数}。",
+      "validator": {
+        "type": "exact_json",
+        "expected": {"mode": "turbo", "limit": 64}
+      }
+    },
+    {
+      "id": "coding-python-default-v36",
+      "dimension": "coding",
+      "max_output_tokens": 36,
+      "prompt": "Python中要从config读取timeout，键不存在时使用30。只输出合法JSON：{\"statement\":字符串,\"method\":字符串}；statement必须是完整赋值语句，method为get。",
+      "validator": {
+        "type": "exact_json",
+        "expected": {"statement": "timeout = config.get(\"timeout\", 30)", "method": "get"}
+      }
+    },
+    {
+      "id": "tools-move-file-v36",
+      "dimension": "tools",
+      "max_output_tokens": 72,
+      "prompt": "可用工具只有move_file(source:string,destination:string)。把tmp/a.txt移动到archive/a.txt。不要输出文本，只发起一次工具调用。",
+      "validator": {
+        "type": "tool_call",
+        "expected_name": "move_file",
+        "expected_arguments": {"source": "tmp/a.txt", "destination": "archive/a.txt"},
+        "expected_finish_reason": "tool_calls"
+      }
+    },
+    {
+      "id": "planning-dependent-budget-v36",
+      "dimension": "planning",
+      "max_output_tokens": 40,
+      "prompt": "预算8。A成本3价值4；B成本4价值7且依赖A；C成本5价值8；D成本1价值2。选中B必须同时选A。最大化价值，价值相同取成本更低。只输出{\"choose\":[按字母排序],\"cost\":整数,\"value\":整数}。",
+      "validator": {
+        "type": "exact_json",
+        "expected": {"choose": ["A", "B", "D"], "cost": 8, "value": 13}
+      }
+    },
+    {
+      "id": "computer-use-unsaved-dialog-v36",
+      "dimension": "computer_use",
+      "max_output_tokens": 72,
+      "prompt": "离线界面：关闭编辑器时出现未保存提示；目标是保留改动并关闭；按钮为Save、Don't Save、Cancel。只输出{\"actions\":[动作]}，动作格式{\"action\":\"click\",\"target\":标签}，不要解释。",
+      "validator": {
+        "type": "exact_json",
+        "expected": {"actions": [{"action": "click", "target": "Save"}]}
+      }
+    },
+    {
+      "id": "communication-capsule-term-v36",
+      "dimension": "communication",
+      "max_output_tokens": 32,
+      "prompt": "用户规定把adapter称为“胶囊”。事实：第二个胶囊已经启用。只输出合法JSON，字段只能是term和status；term为胶囊，status为enabled。",
+      "validator": {
+        "type": "exact_json",
+        "expected": {"term": "胶囊", "status": "enabled"}
+      }
+    }
+  ]
+}

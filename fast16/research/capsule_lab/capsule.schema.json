@@ -1,0 +1,363 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://colorlm.local/schemas/capsule-v1.schema.json",
+  "title": "ColorLM Capsule Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema_version",
+    "capsule_id",
+    "capsule_type",
+    "status",
+    "source",
+    "interface",
+    "placement",
+    "tensors",
+    "payloads",
+    "dependencies",
+    "token_mapping",
+    "extraction",
+    "integrity",
+    "budget",
+    "approval",
+    "acceptance_gates"
+  ],
+  "properties": {
+    "format": { "const": "colorlm-capsule" },
+    "schema_version": { "const": 1 },
+    "capsule_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$" },
+    "capsule_type": {
+      "enum": ["output_head", "terminal_layer", "shared_expert", "routed_expert", "dspark"]
+    },
+    "status": { "enum": ["dry_run", "planned", "extracted", "verified", "rejected"] },
+    "created_at": { "type": "string", "format": "date-time" },
+    "source": { "$ref": "#/$defs/source" },
+    "interface": { "$ref": "#/$defs/interface" },
+    "placement": { "$ref": "#/$defs/placement" },
+    "tensors": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/tensor" }
+    },
+    "payloads": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/payload" }
+    },
+    "dependencies": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dependency" }
+    },
+    "token_mapping": { "$ref": "#/$defs/tokenMapping" },
+    "extraction": { "$ref": "#/$defs/extraction" },
+    "integrity": { "$ref": "#/$defs/integrity" },
+    "budget": { "$ref": "#/$defs/budget" },
+    "approval": { "$ref": "#/$defs/approval" },
+    "acceptance_gates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status"],
+        "properties": {
+          "name": { "type": "string" },
+          "status": { "enum": ["pending", "passed", "failed", "not_applicable"] },
+          "evidence": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "verified" } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "payloads": {
+            "minItems": 1,
+            "items": {
+              "allOf": [
+                { "$ref": "#/$defs/payload" },
+                {
+                  "properties": {
+                    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                    "verification": { "const": "verified" }
+                  },
+                  "required": ["sha256", "verification"]
+                }
+              ]
+            }
+          },
+          "dependencies": {
+            "items": {
+              "allOf": [
+                { "$ref": "#/$defs/dependency" },
+                {
+                  "if": { "properties": { "required": { "const": true } }, "required": ["required"] },
+                  "then": {
+                    "properties": { "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" } },
+                    "required": ["sha256"]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "enum": ["extracted", "verified"] } },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "approval": {
+            "allOf": [
+              { "$ref": "#/$defs/approval" },
+              {
+                "properties": {
+                  "approved": { "const": true },
+                  "approval_id": { "type": "string", "minLength": 1 },
+                  "approved_scope": { "type": "string", "minLength": 1 }
+                },
+                "required": ["approved", "approval_id", "approved_scope"]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "dry_run" } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "payloads": { "maxItems": 0 },
+          "approval": {
+            "allOf": [
+              { "$ref": "#/$defs/approval" },
+              { "properties": { "approved": { "const": false } }, "required": ["approved"] }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "capsule_type": { "const": "output_head" } },
+        "required": ["capsule_type"]
+      },
+      "then": {
+        "properties": {
+          "token_mapping": {
+            "allOf": [
+              { "$ref": "#/$defs/tokenMapping" },
+              { "type": "object", "properties": { "shared_tokens": { "minimum": 1 } } }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model_id",
+        "revision",
+        "architecture",
+        "container_format",
+        "artifact_path",
+        "artifact_bytes",
+        "artifact_sha256",
+        "artifact_verification"
+      ],
+      "properties": {
+        "model_id": { "type": "string" },
+        "revision": { "type": "string" },
+        "architecture": { "type": "string" },
+        "container_format": { "enum": ["safetensors", "gguf", "derived"] },
+        "artifact_path": { "type": ["string", "null"] },
+        "artifact_bytes": { "type": ["integer", "null"], "minimum": 0 },
+        "artifact_sha256": { "$ref": "#/$defs/sha256" },
+        "artifact_verification": { "enum": ["pending", "recorded", "verified"] },
+        "config_sha256": { "$ref": "#/$defs/sha256" },
+        "index_sha256": { "$ref": "#/$defs/sha256" },
+        "license": { "type": ["string", "null"] }
+      }
+    },
+    "interface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_width", "output_width", "input_space", "output_space", "operator", "state"],
+      "properties": {
+        "input_width": { "type": "integer", "minimum": 1 },
+        "output_width": { "type": "integer", "minimum": 1 },
+        "input_space": { "type": "string" },
+        "output_space": { "type": "string" },
+        "operator": { "type": "string" },
+        "activation": { "type": ["string", "null"] },
+        "normalization": { "type": ["string", "null"] },
+        "state": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "scope", "reset"],
+          "properties": {
+            "kind": { "enum": ["none", "kv", "recurrent", "kv_and_recurrent"] },
+            "scope": { "enum": ["stateless", "context_sequence"] },
+            "reset": { "type": "string" },
+            "layout": { "type": ["string", "null"] },
+            "estimated_bytes_per_sequence": { "type": ["integer", "null"], "minimum": 0 }
+          }
+        }
+      }
+    },
+    "placement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source_layers": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
+        "source_experts": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
+        "target_sites": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
+        "residual_contract": { "type": ["string", "null"] },
+        "hard_bypass": { "type": ["string", "null"] }
+      }
+    },
+    "sourceLocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_shard", "byte_length"],
+      "properties": {
+        "source_shard": { "type": "string" },
+        "absolute_offset": { "type": ["integer", "null"], "minimum": 0 },
+        "byte_length": { "type": "integer", "minimum": 0 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "verification": { "enum": ["pending", "recorded", "verified"] }
+      }
+    },
+    "tensor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "logical_name",
+        "source_name",
+        "role",
+        "source_layer",
+        "source_shape",
+        "storage_shape",
+        "source_dtype",
+        "payload_dtype",
+        "source_location",
+        "payload_ref"
+      ],
+      "properties": {
+        "logical_name": { "type": "string" },
+        "source_name": { "type": "string" },
+        "role": { "type": "string" },
+        "source_layer": { "type": ["integer", "null"], "minimum": 0 },
+        "source_shape": { "$ref": "#/$defs/shape" },
+        "storage_shape": { "$ref": "#/$defs/shape" },
+        "source_dtype": { "type": "string" },
+        "payload_dtype": { "type": "string" },
+        "source_location": { "$ref": "#/$defs/sourceLocation" },
+        "payload_ref": { "type": ["string", "null"] }
+      }
+    },
+    "shape": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "integer", "minimum": 1 }
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "file", "bytes", "sha256", "verification"],
+      "properties": {
+        "id": { "type": "string" },
+        "file": { "type": "string", "pattern": "^(?![A-Za-z]:|/|.*\\.\\.)(?!.*\\\\).+$" },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "verification": { "enum": ["pending", "recorded", "verified"] }
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "sha256", "required"],
+      "properties": {
+        "kind": { "enum": ["projection", "token_map", "runtime_abi", "codec", "capsule"] },
+        "id": { "type": "string" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "required": { "type": "boolean" }
+      }
+    },
+    "tokenMapping": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["policy", "unmapped_policy", "base_vocab", "donor_vocab", "shared_tokens"],
+      "properties": {
+        "policy": { "enum": ["same_token_string_v1", "identity", "none"] },
+        "unmapped_policy": { "enum": ["mask", "reject", "not_applicable"] },
+        "base_vocab": { "type": "integer", "minimum": 0 },
+        "donor_vocab": { "type": "integer", "minimum": 0 },
+        "shared_tokens": { "type": "integer", "minimum": 0 },
+        "map_payload_ref": { "type": ["string", "null"] }
+      }
+    },
+    "extraction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "chunk_bytes", "peak_working_set_bytes", "atomic_commit", "resume_identity"],
+      "properties": {
+        "mode": { "const": "range_stream" },
+        "chunk_bytes": { "type": "integer", "minimum": 4096 },
+        "peak_working_set_bytes": { "type": "integer", "minimum": 4096 },
+        "atomic_commit": { "const": "part_then_rename_after_sha256" },
+        "resume_identity": { "type": "string" }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "manifest_sidecar", "content_root_sha256", "content_root_rule"],
+      "properties": {
+        "algorithm": { "const": "sha256" },
+        "manifest_sidecar": { "const": "capsule.json.sha256" },
+        "content_root_sha256": { "$ref": "#/$defs/sha256" },
+        "content_root_rule": {
+          "const": "sha256(sorted_utf8(path + NUL + bytes + NUL + sha256 + LF)); excludes capsule.json"
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_bytes", "expected_payload_bytes", "peak_extract_ram_bytes", "resident_bytes", "active_bytes_per_token", "estimated_flops_per_token"],
+      "properties": {
+        "source_bytes": { "type": "integer", "minimum": 0 },
+        "expected_payload_bytes": { "type": "integer", "minimum": 0 },
+        "peak_extract_ram_bytes": { "type": "integer", "minimum": 0 },
+        "resident_bytes": { "type": ["integer", "null"], "minimum": 0 },
+        "active_bytes_per_token": { "type": ["integer", "null"], "minimum": 0 },
+        "estimated_flops_per_token": { "type": ["number", "null"], "minimum": 0 }
+      }
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "approved", "approval_id", "approved_scope"],
+      "properties": {
+        "required": { "const": true },
+        "approved": { "type": "boolean" },
+        "approval_id": { "type": ["string", "null"] },
+        "approved_scope": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

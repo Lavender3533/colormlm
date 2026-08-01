@@ -1,0 +1,44 @@
+{
+  "format": "colorlm-k3-multi-smoke-report-v1",
+  "model": "ColorLM-v10-K3-Multi",
+  "date": "2026-07-29",
+  "gpu": "Vulkan0 / AMD Radeon RX 5700 XT",
+  "base": "ColorLM-v6-Q3Router-Fused-A1.gguf",
+  "site_plan_sha256": "ac72cb62519845496b68afa74c924be55b304f75bd99580252fe8a69c698a393",
+  "runtime": {
+    "llama_dll_sha256": "da37a682dad44acc15a28382832a74f8eb1b172ea9407ace8373f8ef1f0e0b46",
+    "llama_server_sha256": "6a9be8372f55c635a8610c68455068db48c6d1c08367091443334cffbb312ff5",
+    "k3_weight_bytes_including_routers": 381743104,
+    "k3_device": "Vulkan0"
+  },
+  "routing": {
+    "mode": "hidden-state cosine softmax",
+    "temperature": 0.2,
+    "no_op_bias": -0.05,
+    "prefill_mean_shares": [
+      {"colorlm_layer": 12, "expert_41": 0.364101, "expert_780": 0.353860, "no_op": 0.282039},
+      {"colorlm_layer": 28, "expert_539": 0.370784, "expert_752": 0.365839, "no_op": 0.263377}
+    ]
+  },
+  "residuals": [
+    {"colorlm_layer": 12, "prefill_raw_rms": 0.00364382, "prefill_applied_rms": 0.00005429, "finite": true, "nonzero": true},
+    {"colorlm_layer": 28, "prefill_raw_rms": 0.00368194, "prefill_applied_rms": 0.00005619, "finite": true, "nonzero": true}
+  ],
+  "request": {
+    "prompt": "只回复：你好",
+    "response": "你好",
+    "prompt_tokens": 16,
+    "completion_tokens": 2,
+    "prompt_tokens_per_second": 34.57,
+    "generation_tokens_per_second": 21.26,
+    "wall_seconds": 0.733
+  },
+  "gates": {
+    "four_manifest_and_tensor_sha256": "passed",
+    "four_capsules_on_vulkan": "passed",
+    "continuous_route_shares": "passed",
+    "finite_nonzero_residuals": "passed",
+    "long_benchmark": "not_run_by_design"
+  },
+  "known_cost": "All four candidates execute before soft mixing; this smoke is slower than v9 and motivates shared-bridge or lazy-expert execution."
+}

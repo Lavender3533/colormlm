@@ -1,0 +1,149 @@
+{
+  "format": "colorlm-v24-ngram-gate-report-v1",
+  "contract": "D:\\project\\大模型ssd化\\fast16\\research\\v24_speed_quality_bus\\ngram_gate_v1.json",
+  "contract_sha256": "e42a27c855825187cfb31b15b71d10f8ac10b61f00c9979f5992bb5f8f81fdaa",
+  "mode": "none",
+  "endpoint": "http://127.0.0.1:8110/v1",
+  "model": "ColorLM-v24-Cache-AB",
+  "tasks": [
+    {
+      "id": "code-patch-typescript",
+      "elapsed_seconds": 3.1559999999990396,
+      "completion_tokens": 46,
+      "client_tokens_per_second": 14.57541191381939,
+      "finish_reason": "stop",
+      "message_sha256": "0c97fc2f4baf9f1ad5b828f706229364be7b37e9b2778d4f9f4babb0a9cc5677",
+      "message": {
+        "content": "export function clampPage(page: number, totalPages: number): number {\n  if (totalPages === 0) return 1;\n  return Math.min(totalPages, Math.max(1, page));\n}",
+        "role": "assistant"
+      },
+      "usage": {
+        "completion_tokens": 46,
+        "prompt_tokens": 96,
+        "total_tokens": 142,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 96,
+        "prompt_ms": 1044.183,
+        "prompt_per_token_ms": 10.87690625,
+        "prompt_per_second": 91.93790743576557,
+        "predicted_n": 46,
+        "predicted_ms": 2084.389,
+        "predicted_per_token_ms": 45.31280434782609,
+        "predicted_per_second": 22.068817288903368
+      }
+    },
+    {
+      "id": "code-new-rust",
+      "elapsed_seconds": 4.578000000001339,
+      "completion_tokens": 78,
+      "client_tokens_per_second": 17.038007863690954,
+      "finish_reason": "stop",
+      "message_sha256": "491cd1a812dbbe212f8ca5b483f75472c651ecaa2a4aa77fe481d75df99aa564",
+      "message": {
+        "content": "fn dedup_sorted(values: &[i64]) -> Vec<i64> {\n    values.iter().cloned().fold(Vec::new(), |mut muts, v| {\n        if muts.is_empty() || muts.last() != Some(&v) {\n            muts.push(v);\n        }\n        muts\n    })\n}",
+        "role": "assistant"
+      },
+      "usage": {
+        "completion_tokens": 78,
+        "prompt_tokens": 74,
+        "total_tokens": 152,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 74,
+        "prompt_ms": 942.245,
+        "prompt_per_token_ms": 12.733040540540541,
+        "prompt_per_second": 78.53583728223552,
+        "predicted_n": 78,
+        "predicted_ms": 3606.93,
+        "predicted_per_token_ms": 46.24269230769231,
+        "predicted_per_second": 21.625038467616505
+      }
+    },
+    {
+      "id": "natural-chinese",
+      "elapsed_seconds": 2.7340000000003783,
+      "completion_tokens": 42,
+      "client_tokens_per_second": 15.362106803216601,
+      "finish_reason": "stop",
+      "message_sha256": "e3ebf794cc45d27eae65b4b70a0ddb766b9eade1b93b53382838b52a5a3a0ce6",
+      "message": {
+        "content": "互斥锁用于保护临界资源，确保同一时刻仅一个线程访问，如多线程写文件；信号量控制资源数量，允许多个线程按配额使用，如管理数据库连接池。",
+        "role": "assistant"
+      },
+      "usage": {
+        "completion_tokens": 42,
+        "prompt_tokens": 55,
+        "total_tokens": 97,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 55,
+        "prompt_ms": 793.533,
+        "prompt_per_token_ms": 14.427872727272728,
+        "prompt_per_second": 69.31028703280141,
+        "predicted_n": 42,
+        "predicted_ms": 1926.899,
+        "predicted_per_token_ms": 45.878547619047616,
+        "predicted_per_second": 21.79667953535707
+      }
+    },
+    {
+      "id": "tool-read-file",
+      "elapsed_seconds": 3.625,
+      "completion_tokens": 41,
+      "client_tokens_per_second": 11.310344827586206,
+      "finish_reason": "tool_calls",
+      "message_sha256": "a9abe992f1287688417449a91ef14223a8861d858171c6cedc4c9ec86f986425",
+      "message": {
+        "content": "I'll read the file `src/main.rs` as requested.\n\n",
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "function": {
+              "arguments": "{\"path\":\"src/main.rs\"}",
+              "name": "read_file"
+            },
+            "id": "WaRtAiIAgE00T0frY3XMIZC2NEudGpE0",
+            "type": "function"
+          }
+        ]
+      },
+      "usage": {
+        "completion_tokens": 41,
+        "prompt_tokens": 317,
+        "total_tokens": 358,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 317,
+        "prompt_ms": 1716.528,
+        "prompt_per_token_ms": 5.414914826498423,
+        "prompt_per_second": 184.67511162066685,
+        "predicted_n": 41,
+        "predicted_ms": 1870.877,
+        "predicted_per_token_ms": 45.63114634146341,
+        "predicted_per_second": 21.914855973963014
+      }
+    }
+  ],
+  "summary": {
+    "completion_tokens": 207,
+    "elapsed_seconds": 14.093000000000757,
+    "client_tokens_per_second": 14.688143049740217
+  }
+}

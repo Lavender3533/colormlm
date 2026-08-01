@@ -1,0 +1,224 @@
+{
+  "format": "colorlm-v19.1-paired-task-comparison-v1",
+  "baseline": "D:\\project\\大模型ssd化\\fast16\\research\\v19_dual_head\\nll-v17-independent60.jsonl",
+  "candidate": "D:\\project\\大模型ssd化\\fast16\\research\\v20_k3_coder_shared_dev60.jsonl",
+  "sample_count": 60,
+  "task_count": 10,
+  "overall_mean_delta": -0.10480892498368206,
+  "overall_median_delta": -3.1495786970481277e-05,
+  "token_wins": 30,
+  "token_losses": 27,
+  "token_equal": 3,
+  "task_wins": 4,
+  "task_losses": 6,
+  "task_equal": 0,
+  "worst_task": {
+    "task": "tool-glob-files",
+    "group": "tool",
+    "sample_count": 6,
+    "mean_delta": 0.09494194485407093,
+    "median_delta": -0.07878490991424769,
+    "improved_tokens": 4,
+    "regressed_tokens": 2,
+    "equal_tokens": 0,
+    "worst_regression": 2.0628719329833984,
+    "best_improvement": -0.8346061706542969
+  },
+  "best_task": {
+    "task": "tool-read-file",
+    "group": "tool",
+    "sample_count": 6,
+    "mean_delta": -0.9680095986598948,
+    "median_delta": -0.03533175587654114,
+    "improved_tokens": 4,
+    "regressed_tokens": 1,
+    "equal_tokens": 1,
+    "worst_regression": 0.0017092370544560254,
+    "best_improvement": -2.946958541870117
+  },
+  "groups": {
+    "code": {
+      "task_count": 5,
+      "mean_task_delta": 0.020139592901493114,
+      "median_task_delta": 0.013535561272874475,
+      "task_wins": 1,
+      "task_losses": 4,
+      "task_equal": 0
+    },
+    "tool": {
+      "task_count": 5,
+      "mean_task_delta": -0.22975744286885724,
+      "median_task_delta": -0.026905678135027717,
+      "task_wins": 3,
+      "task_losses": 2,
+      "task_equal": 0
+    }
+  },
+  "tasks": [
+    {
+      "task": "code-binary-search",
+      "group": "code",
+      "sample_count": 6,
+      "mean_delta": 0.013535561272874475,
+      "median_delta": 0.0002774342428892851,
+      "improved_tokens": 2,
+      "regressed_tokens": 4,
+      "equal_tokens": 0,
+      "worst_regression": 0.10000991821289062,
+      "best_improvement": -0.016632437705993652
+    },
+    {
+      "task": "code-java-add",
+      "group": "code",
+      "sample_count": 6,
+      "mean_delta": 0.01657447424562027,
+      "median_delta": 0.003289369633421302,
+      "improved_tokens": 3,
+      "regressed_tokens": 3,
+      "equal_tokens": 0,
+      "worst_regression": 0.1861275837291032,
+      "best_improvement": -0.10601168870925903
+    },
+    {
+      "task": "code-python-clamp",
+      "group": "code",
+      "sample_count": 6,
+      "mean_delta": 0.007810379659834628,
+      "median_delta": 0.003677263855934143,
+      "improved_tokens": 2,
+      "regressed_tokens": 4,
+      "equal_tokens": 0,
+      "worst_regression": 0.027806013822555542,
+      "best_improvement": -0.0006587277166545391
+    },
+    {
+      "task": "code-rust-max",
+      "group": "code",
+      "sample_count": 6,
+      "mean_delta": 0.0680776806063174,
+      "median_delta": -0.0005304265359882265,
+      "improved_tokens": 4,
+      "regressed_tokens": 2,
+      "equal_tokens": 0,
+      "worst_regression": 0.25769615173339844,
+      "best_improvement": -0.006043057888746262
+    },
+    {
+      "task": "code-typescript-unique",
+      "group": "code",
+      "sample_count": 6,
+      "mean_delta": -0.005300131277181208,
+      "median_delta": -0.0007663381984457374,
+      "improved_tokens": 4,
+      "regressed_tokens": 2,
+      "equal_tokens": 0,
+      "worst_regression": 0.023631691932678223,
+      "best_improvement": -0.05043613910675049
+    },
+    {
+      "task": "tool-glob-files",
+      "group": "tool",
+      "sample_count": 6,
+      "mean_delta": 0.09494194485407093,
+      "median_delta": -0.07878490991424769,
+      "improved_tokens": 4,
+      "regressed_tokens": 2,
+      "equal_tokens": 0,
+      "worst_regression": 2.0628719329833984,
+      "best_improvement": -0.8346061706542969
+    },
+    {
+      "task": "tool-read-file",
+      "group": "tool",
+      "sample_count": 6,
+      "mean_delta": -0.9680095986598948,
+      "median_delta": -0.03533175587654114,
+      "improved_tokens": 4,
+      "regressed_tokens": 1,
+      "equal_tokens": 1,
+      "worst_regression": 0.0017092370544560254,
+      "best_improvement": -2.946958541870117
+    },
+    {
+      "task": "tool-run-command",
+      "group": "tool",
+      "sample_count": 6,
+      "mean_delta": 0.04348089462534214,
+      "median_delta": 0.039891782216727734,
+      "improved_tokens": 2,
+      "regressed_tokens": 3,
+      "equal_tokens": 1,
+      "worst_regression": 0.5962982177734375,
+      "best_improvement": -0.5256099700927734
+    },
+    {
+      "task": "tool-search-text",
+      "group": "tool",
+      "sample_count": 6,
+      "mean_delta": -0.29229477702877676,
+      "median_delta": 3.6360252124723047e-06,
+      "improved_tokens": 2,
+      "regressed_tokens": 3,
+      "equal_tokens": 1,
+      "worst_regression": 0.31577301025390625,
+      "best_improvement": -2.08316707611084
+    },
+    {
+      "task": "tool-write-file",
+      "group": "tool",
+      "sample_count": 6,
+      "mean_delta": -0.026905678135027717,
+      "median_delta": -0.00023200712165305504,
+      "improved_tokens": 3,
+      "regressed_tokens": 3,
+      "equal_tokens": 0,
+      "worst_regression": 0.5758514404296875,
+      "best_improvement": -0.6984450817108154
+    }
+  ],
+  "leave_one_task_out": [
+    {
+      "left_out": "code-binary-search",
+      "remaining_task_mean_delta": -0.11795831234552168
+    },
+    {
+      "left_out": "code-java-add",
+      "remaining_task_mean_delta": -0.11829596934249344
+    },
+    {
+      "left_out": "code-python-clamp",
+      "remaining_task_mean_delta": -0.11732218105518391
+    },
+    {
+      "left_out": "code-rust-max",
+      "remaining_task_mean_delta": -0.12401854782701534
+    },
+    {
+      "left_out": "code-typescript-unique",
+      "remaining_task_mean_delta": -0.11586545761773771
+    },
+    {
+      "left_out": "tool-glob-files",
+      "remaining_task_mean_delta": -0.12700346607676574
+    },
+    {
+      "left_out": "tool-read-file",
+      "remaining_task_mean_delta": -0.008897739019658428
+    },
+    {
+      "left_out": "tool-run-command",
+      "remaining_task_mean_delta": -0.12128557160690698
+    },
+    {
+      "left_out": "tool-search-text",
+      "remaining_task_mean_delta": -0.08397716364533821
+    },
+    {
+      "left_out": "tool-write-file",
+      "remaining_task_mean_delta": -0.11346484130019921
+    }
+  ],
+  "all_loto_positive_direction": true,
+  "smoke_only": true,
+  "decision_note": "The first six consecutive target tokens per task are only a smoke test. Promotion also requires preselected decision-token and generation gates."
+}

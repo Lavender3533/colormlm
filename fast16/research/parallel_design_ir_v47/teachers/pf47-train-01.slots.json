@@ -1,0 +1,1 @@
+{"schema_version":"design-copy-slots-v1","task_id":"pf47-train-01","prompt_sha256":"58ca4253d79bd84aa7d025576d5846377d6735903e6fed69943bcc9f796545b1","slots":[{"id":0,"kind":"title","text":"边缘节点运维台"},{"id":1,"kind":"lede","text":"状态筛选、可排序表格、节点详情抽屉和告警确认"}]}

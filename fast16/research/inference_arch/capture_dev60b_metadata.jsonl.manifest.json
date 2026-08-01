@@ -1,0 +1,25 @@
+{
+  "format": "colorlm-v13-counterfactual-route-shard-manifest-v1",
+  "route": "cnob-capture-dev60",
+  "route_attestation": "process-level --force-path plus expected API alias",
+  "teacher": "D:\\project\\大模型ssd化\\fast16\\research\\v19_dual_head\\teacher_v19_independent_60.jsonl",
+  "teacher_sha256": "6b43aac70cae2d92912254fbba25ddc50183704ad8e5320ce40b271916778e1a",
+  "shard": "capture_dev60b_metadata.jsonl",
+  "shard_sha256": "d7b53d694433b02c3c7ee449999a9e885580e56713345a1958fc543f6d63cc58",
+  "sample_count": 60,
+  "exact_count": 60,
+  "exact_coverage": 1.0,
+  "n_probs": 1,
+  "elapsed_seconds": 166.027729,
+  "server": {
+    "endpoint": "http://127.0.0.1:8106",
+    "models": [
+      "ColorLM-v19-CNOB-Capture"
+    ],
+    "model_path": "fast16/models/ColorLM-v6-Q3Router-Fused-A1.gguf",
+    "context": 16384
+  },
+  "expected_model": "ColorLM-v19-CNOB-Capture",
+  "hidden": null,
+  "k3_features": null
+}

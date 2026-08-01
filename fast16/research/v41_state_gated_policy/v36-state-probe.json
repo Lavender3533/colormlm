@@ -1,0 +1,191 @@
+{
+  "format": "colorlm-v41-v36-state-probe-v1",
+  "role": "consumed-development-only",
+  "ridge_lambda": 0.01,
+  "train_samples": 10,
+  "weight_l2": 4.192050991488471,
+  "bias": 0.32253666169191586,
+  "metrics": {
+    "train": {
+      "correct": 10,
+      "total": 10,
+      "accuracy": 1.0,
+      "minimum_absolute_margin": 0.9553518924080948
+    },
+    "validation": {
+      "correct": 5,
+      "total": 5,
+      "accuracy": 1.0,
+      "minimum_absolute_margin": 0.025716256149865557
+    },
+    "test": {
+      "correct": 2,
+      "total": 5,
+      "accuracy": 0.4,
+      "minimum_absolute_margin": 0.3921571367720118
+    }
+  },
+  "rows": [
+    {
+      "task_id": "policy-read-success-finish",
+      "split": "train",
+      "expected": "finish",
+      "score": -0.9837094029750293,
+      "prediction": "finish",
+      "correct": true
+    },
+    {
+      "task_id": "policy-write-success-finish",
+      "split": "train",
+      "expected": "finish",
+      "score": -0.9812550335178005,
+      "prediction": "finish",
+      "correct": true
+    },
+    {
+      "task_id": "policy-read-missing-list",
+      "split": "train",
+      "expected": "continue",
+      "score": 0.9800363870481348,
+      "prediction": "continue",
+      "correct": true
+    },
+    {
+      "task_id": "policy-test-failure-read",
+      "split": "train",
+      "expected": "continue",
+      "score": 0.9938526187962193,
+      "prediction": "continue",
+      "correct": true
+    },
+    {
+      "task_id": "policy-validate-activate",
+      "split": "train",
+      "expected": "continue",
+      "score": 0.996345777317097,
+      "prediction": "continue",
+      "correct": true
+    },
+    {
+      "task_id": "policy-activate-health",
+      "split": "train",
+      "expected": "continue",
+      "score": 0.9617702658384453,
+      "prediction": "continue",
+      "correct": true
+    },
+    {
+      "task_id": "policy-missing-env-ask",
+      "split": "train",
+      "expected": "continue",
+      "score": 0.9891121832722907,
+      "prediction": "continue",
+      "correct": true
+    },
+    {
+      "task_id": "policy-search-empty-finish",
+      "split": "train",
+      "expected": "finish",
+      "score": -0.9553518924080948,
+      "prediction": "finish",
+      "correct": true
+    },
+    {
+      "task_id": "policy-health-success-finish",
+      "split": "train",
+      "expected": "finish",
+      "score": -0.9893755254428069,
+      "prediction": "finish",
+      "correct": true
+    },
+    {
+      "task_id": "policy-command-error-read",
+      "split": "train",
+      "expected": "continue",
+      "score": 0.9885746220715441,
+      "prediction": "continue",
+      "correct": true
+    },
+    {
+      "task_id": "policy-config-missing-list",
+      "split": "validation",
+      "expected": "continue",
+      "score": 1.128322584960086,
+      "prediction": "continue",
+      "correct": true
+    },
+    {
+      "task_id": "policy-missing-region-ask",
+      "split": "validation",
+      "expected": "continue",
+      "score": 0.025716256149865557,
+      "prediction": "continue",
+      "correct": true
+    },
+    {
+      "task_id": "policy-save-success-finish",
+      "split": "validation",
+      "expected": "finish",
+      "score": -0.297177575018274,
+      "prediction": "finish",
+      "correct": true
+    },
+    {
+      "task_id": "policy-activation-worker-health",
+      "split": "validation",
+      "expected": "continue",
+      "score": 0.5379246166478255,
+      "prediction": "continue",
+      "correct": true
+    },
+    {
+      "task_id": "policy-read-version-finish",
+      "split": "validation",
+      "expected": "finish",
+      "score": -0.08888843808053543,
+      "prediction": "finish",
+      "correct": true
+    },
+    {
+      "task_id": "policy-missing-secret-ask",
+      "split": "test",
+      "expected": "continue",
+      "score": -0.3921571367720118,
+      "prediction": "finish",
+      "correct": false
+    },
+    {
+      "task_id": "policy-compile-failure-read",
+      "split": "test",
+      "expected": "continue",
+      "score": -0.6349721977267158,
+      "prediction": "finish",
+      "correct": false
+    },
+    {
+      "task_id": "policy-list-success-finish",
+      "split": "test",
+      "expected": "finish",
+      "score": -0.4637057548026585,
+      "prediction": "finish",
+      "correct": true
+    },
+    {
+      "task_id": "policy-validation-production-activate",
+      "split": "test",
+      "expected": "continue",
+      "score": -0.39473844848688944,
+      "prediction": "finish",
+      "correct": false
+    },
+    {
+      "task_id": "policy-write-log-finish",
+      "split": "test",
+      "expected": "finish",
+      "score": -0.5724626328979094,
+      "prediction": "finish",
+      "correct": true
+    }
+  ],
+  "decision_rule": "continue iff normalized_hidden dot weight + bias >= 0"
+}

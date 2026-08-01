@@ -1,0 +1,27 @@
+{
+  "format": "colorlm-v20-k3-precision-summary-v1",
+  "date": "2026-08-01",
+  "status": "rejected_for_capability",
+  "first_f16_signal": {
+    "mean_nll_delta": -0.10480892498368206,
+    "reproducible": false
+  },
+  "current_runs": {
+    "f16": 0.003585849546471091,
+    "f16_separate_output": 0.00315469014682724,
+    "q4_0": 0.08766036510957444,
+    "q8_0": -0.014100177952089865,
+    "mxfp4": -0.01008845060569025,
+    "hybrid_f16_mxfp4": 0.003585849546471091
+  },
+  "all_current_loto_robust": false,
+  "engineering": {
+    "shared_transport_speed_before_tps": 13.29996,
+    "shared_transport_speed_after_tps": 14.43169,
+    "shared_transport_gain_percent": 8.51,
+    "q4_adjacent_f16_tps": 21.366593997990204,
+    "q4_adjacent_q4_tps": 21.52297224175544,
+    "q4_gain_percent": 0.731
+  },
+  "decision": "Keep v17 formal; retain v20 ABI and negative controls; stop tuning E41/E780."
+}

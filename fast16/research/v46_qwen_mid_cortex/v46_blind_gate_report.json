@@ -1,0 +1,2769 @@
+{
+  "format": "colorlm-v46-mid-cortex-blind-gate-report-v1",
+  "claim_scope": "one-shot formal promotion gate on newly frozen templates; no reuse or parameter scan",
+  "contract_sha256": "dd406c492f64b2c7a246ae3e3a3b0246b6993dbf3065a353b95f7c52b1f29a7b",
+  "dataset_sha256": "4f4114c4f9bb24ac975f1ded85db1a5dda06181a7a63d603ce181c36112aa721",
+  "split": "blind-v46",
+  "results": [
+    {
+      "id": "v38",
+      "alias": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+      "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone.gguf",
+      "model_bytes": 13613857952,
+      "load_seconds": 17.336602200004563,
+      "summary": {
+        "passed": 15,
+        "total": 24,
+        "wall_seconds": 83.67038170002343,
+        "by_capability": {
+          "code_debugging": {
+            "passed": 3,
+            "total": 4
+          },
+          "computer_operation": {
+            "passed": 2,
+            "total": 4
+          },
+          "continue_or_finish": {
+            "passed": 3,
+            "total": 4
+          },
+          "missing_parameter_clarification": {
+            "passed": 1,
+            "total": 4
+          },
+          "multi_step_planning": {
+            "passed": 4,
+            "total": 4
+          },
+          "tool_argument_repair": {
+            "passed": 2,
+            "total": 4
+          }
+        }
+      },
+      "rows": [
+        {
+          "id": "tool_argument_repair-unique-a",
+          "capability": "tool_argument_repair",
+          "template_cluster_id": "v46.tool_argument_repair.unique",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 3238.1234999993467,
+          "target": "<tool_call>\n{\"name\":\"deploy_package\",\"arguments\":{\"path\":\"dist/bundle.zip\",\"environment\":\"staging\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "deploy_package",
+                        "arguments": "{\"path\":\"dist/bundle.zip\",\"environment\":\"staging\"}"
+                      },
+                      "id": "NEjQfkby5FxM6aQSfsdXh0PfCrfkGcGT"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558689,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 42,
+              "prompt_tokens": 458,
+              "total_tokens": 500,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-dbBuZzvNwAJdrz20vDU9A3QmMQ8E2vkG",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 458,
+              "prompt_ms": 1694.611,
+              "prompt_per_token_ms": 3.700024017467249,
+              "prompt_per_second": 270.2685159012894,
+              "predicted_n": 42,
+              "predicted_ms": 1493.784,
+              "predicted_per_token_ms": 35.56628571428572,
+              "predicted_per_second": 28.116514837486545
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "tool_argument_repair-unique-b",
+          "capability": "tool_argument_repair",
+          "template_cluster_id": "v46.tool_argument_repair.unique",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 3112.563199996657,
+          "target": "<tool_call>\n{\"name\":\"deploy_package\",\"arguments\":{\"path\":\"release/app.tar\",\"environment\":\"production\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "deploy_package",
+                        "arguments": "{\"path\":\"release/app.tar\",\"environment\":\"production\"}"
+                      },
+                      "id": "XEiuPR7r7GXq9p1h8IImFK4MRWSZJkYm"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558692,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 40,
+              "prompt_tokens": 456,
+              "total_tokens": 496,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-A5bfJpd9wigUbUDHpqcnx74UwrItwLqT",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 456,
+              "prompt_ms": 1690.473,
+              "prompt_per_token_ms": 3.707177631578947,
+              "prompt_per_second": 269.74698797318854,
+              "predicted_n": 40,
+              "predicted_ms": 1393.343,
+              "predicted_per_token_ms": 34.833575,
+              "predicted_per_second": 28.70793480140927
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "tool_argument_repair-ambiguous-a",
+          "capability": "tool_argument_repair",
+          "template_cluster_id": "v46.tool_argument_repair.ambiguous",
+          "passed": false,
+          "reason": "工具参数与冻结目标不一致",
+          "wall_ms": 3891.1966000014218,
+          "target": "<tool_call>\n{\"name\":\"ask_user_question\",\"arguments\":{\"field\":\"path\",\"question\":\"请选择 dist/site.zip 或 backup/site.zip。\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "ask_user_question",
+                        "arguments": "{\"field\":\"path\",\"question\":\"manifest结果显示存在两份site.zip：dist/site.zip与backup/site.zip。请问应该部署哪一个路径？\"}"
+                      },
+                      "id": "V44zrci77P9rakDdJmPJ9wlrTbEJffhg"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558696,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 60,
+              "prompt_tokens": 460,
+              "total_tokens": 520,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-yqW9Bhhdhb3zveHgDJdg4XV72mWoGB8x",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 460,
+              "prompt_ms": 1716.102,
+              "prompt_per_token_ms": 3.7306565217391308,
+              "prompt_per_second": 268.04933506283425,
+              "predicted_n": 60,
+              "predicted_ms": 2146.49,
+              "predicted_per_token_ms": 35.774833333333326,
+              "predicted_per_second": 27.952611006806464
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "tool_argument_repair-ambiguous-b",
+          "capability": "tool_argument_repair",
+          "template_cluster_id": "v46.tool_argument_repair.ambiguous",
+          "passed": false,
+          "reason": "工具参数与冻结目标不一致",
+          "wall_ms": 3625.9856000033324,
+          "target": "<tool_call>\n{\"name\":\"ask_user_question\",\"arguments\":{\"field\":\"path\",\"question\":\"请选择 build/api.bin 或 cache/api.bin。\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "ask_user_question",
+                        "arguments": "{\"field\":\"path\",\"question\":\"请选择要部署的路径：build/api.bin还是cache/api.bin？\"}"
+                      },
+                      "id": "TVa6mOU7IzuRTxExjavaRE42dyd9gNUd"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558699,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 53,
+              "prompt_tokens": 459,
+              "total_tokens": 512,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-L6ER941llmnG6HDjU1FTg2cUbt5d0l4K",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 459,
+              "prompt_ms": 1699.708,
+              "prompt_per_token_ms": 3.703067538126362,
+              "prompt_per_second": 270.04638443779754,
+              "predicted_n": 53,
+              "predicted_ms": 1895.735,
+              "predicted_per_token_ms": 35.768584905660376,
+              "predicted_per_second": 27.957494059032516
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "continue_or_finish-ready-a",
+          "capability": "continue_or_finish",
+          "template_cluster_id": "v46.continue_or_finish.ready",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 2840.1823000021977,
+          "target": "<tool_call>\n{\"name\":\"commit_lease\",\"arguments\":{\"lease_id\":\"lease-701\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "commit_lease",
+                        "arguments": "{\"lease_id\":\"lease-701\"}"
+                      },
+                      "id": "Y0dMFBRLeo0k152sCjs1rWjXX65IStpH"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558702,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 33,
+              "prompt_tokens": 421,
+              "total_tokens": 454,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-ox35Q5mFcUo2UC4lHLHe0Zfhe43OAfma",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 421,
+              "prompt_ms": 1651.397,
+              "prompt_per_token_ms": 3.9225581947743464,
+              "prompt_per_second": 254.93566961790535,
+              "predicted_n": 33,
+              "predicted_ms": 1157.871,
+              "predicted_per_token_ms": 35.087,
+              "predicted_per_second": 28.50058426197737
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "continue_or_finish-ready-b",
+          "capability": "continue_or_finish",
+          "template_cluster_id": "v46.continue_or_finish.ready",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 2824.7546999991755,
+          "target": "<tool_call>\n{\"name\":\"commit_lease\",\"arguments\":{\"lease_id\":\"lease-884\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "commit_lease",
+                        "arguments": "{\"lease_id\":\"lease-884\"}"
+                      },
+                      "id": "7nOzHSpjGqlsoq1El7RR7OfGcodeCNqR"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558705,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 33,
+              "prompt_tokens": 421,
+              "total_tokens": 454,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-pQ2IQ8hLbvQPBKT6pE41xdB1kUvhOVOS",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 421,
+              "prompt_ms": 1643.374,
+              "prompt_per_token_ms": 3.903501187648456,
+              "prompt_per_second": 256.1802730236696,
+              "predicted_n": 33,
+              "predicted_ms": 1152.962,
+              "predicted_per_token_ms": 34.938242424242425,
+              "predicted_per_second": 28.621932032452065
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "continue_or_finish-expired",
+          "capability": "continue_or_finish",
+          "template_cluster_id": "v46.continue_or_finish.expired",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 2832.762300000468,
+          "target": "<tool_call>\n{\"name\":\"renew_lease\",\"arguments\":{\"lease_id\":\"lease-119\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "renew_lease",
+                        "arguments": "{\"lease_id\":\"lease-119\"}"
+                      },
+                      "id": "J81m5GhN5z7gCPD8pN8yKZijeL1wOV41"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558708,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 33,
+              "prompt_tokens": 417,
+              "total_tokens": 450,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-2l6wmX5X12Hca5e6WpQqs9JbqqSyjfzL",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 417,
+              "prompt_ms": 1638.276,
+              "prompt_per_token_ms": 3.9287194244604318,
+              "prompt_per_second": 254.53586575155833,
+              "predicted_n": 33,
+              "predicted_ms": 1165.299,
+              "predicted_per_token_ms": 35.312090909090905,
+              "predicted_per_second": 28.318912141862302
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "continue_or_finish-committed",
+          "capability": "continue_or_finish",
+          "template_cluster_id": "v46.continue_or_finish.committed",
+          "passed": false,
+          "reason": "输出不是裸JSON",
+          "wall_ms": 1888.1010000040988,
+          "target": "{\"status\":\"committed\",\"lease_id\":\"lease-552\",\"receipt\":\"rcpt-552\"}",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "容量租约已成功提交。"
+                }
+              }
+            ],
+            "created": 1785558710,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 7,
+              "prompt_tokens": 422,
+              "total_tokens": 429,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-gMBsGAM1QWO7Xlq4va7OQWGjivNDpLIY",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 422,
+              "prompt_ms": 1642.4,
+              "prompt_per_token_ms": 3.8919431279620853,
+              "prompt_per_second": 256.94106186069166,
+              "predicted_n": 7,
+              "predicted_ms": 219.379,
+              "predicted_per_token_ms": 31.33985714285714,
+              "predicted_per_second": 31.908250105980976
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "missing_parameter_clarification-complete-a",
+          "capability": "missing_parameter_clarification",
+          "template_cluster_id": "v46.missing_parameter_clarification.complete",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 3225.5586000028416,
+          "target": "<tool_call>\n{\"name\":\"start_backup\",\"arguments\":{\"tenant\":\"tenant-orchid\",\"region\":\"ap-northeast-1\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "start_backup",
+                        "arguments": "{\"tenant\":\"tenant-orchid\",\"region\":\"ap-northeast-1\"}"
+                      },
+                      "id": "ZxrVVESnLExqcNvvr2yRYbxe45RQnerH"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558713,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 46,
+              "prompt_tokens": 376,
+              "total_tokens": 422,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-Dgh7gZn86Kk7tmWMO3e8awR6GbQLPsqt",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 376,
+              "prompt_ms": 1543.096,
+              "prompt_per_token_ms": 4.103978723404255,
+              "prompt_per_second": 243.66598060004043,
+              "predicted_n": 46,
+              "predicted_ms": 1652.848,
+              "predicted_per_token_ms": 35.93147826086956,
+              "predicted_per_second": 27.83075031702855
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "missing_parameter_clarification-complete-b",
+          "capability": "missing_parameter_clarification",
+          "template_cluster_id": "v46.missing_parameter_clarification.complete",
+          "passed": false,
+          "reason": "工具调用前后含额外文本",
+          "wall_ms": 4470.722900005057,
+          "target": "<tool_call>\n{\"name\":\"start_backup\",\"arguments\":{\"tenant\":\"tenant-lotus\",\"region\":\"eu-west-1\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "用户要求为租户 \"tenant-lotus\" 在区域 \"eu-west-1\" 启动备份。这两个参数都已提供，可以直接调用 `start_backup` 函数。\n\n",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "start_backup",
+                        "arguments": "{\"tenant\":\"tenant-lotus\",\"region\":\"eu-west-1\"}"
+                      },
+                      "id": "gBfJSCw5Jn7Oz9f7Jk0B0Bn7UxGn4C50"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558718,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 82,
+              "prompt_tokens": 374,
+              "total_tokens": 456,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-y91O5v57zwS6Afyr8WI4guy26H4kv7LU",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 374,
+              "prompt_ms": 1537.127,
+              "prompt_per_token_ms": 4.109965240641711,
+              "prompt_per_second": 243.31106017915243,
+              "predicted_n": 82,
+              "predicted_ms": 2908.296,
+              "predicted_per_token_ms": 35.4670243902439,
+              "predicted_per_second": 28.195204339585793
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "missing_parameter_clarification-missing-region",
+          "capability": "missing_parameter_clarification",
+          "template_cluster_id": "v46.missing_parameter_clarification.missing",
+          "passed": false,
+          "reason": "工具参数与冻结目标不一致",
+          "wall_ms": 3307.010500000615,
+          "target": "<tool_call>\n{\"name\":\"ask_user_question\",\"arguments\":{\"field\":\"region\",\"question\":\"请提供 tenant-maple 的备份区域。\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "ask_user_question",
+                        "arguments": "{\"field\":\"region\",\"question\":\"请指定要为 tenant-maple 启动备份的区域。\"}"
+                      },
+                      "id": "RuFxlO5DxAFdZsiWMDtjpOvgdWKHWOkN"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558721,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 50,
+              "prompt_tokens": 372,
+              "total_tokens": 422,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-SIqFmI2cv3cP0qvdvnLwx2L3mBylJWk4",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 372,
+              "prompt_ms": 1526.269,
+              "prompt_per_token_ms": 4.102873655913979,
+              "prompt_per_second": 243.7316095655484,
+              "predicted_n": 50,
+              "predicted_ms": 1752.046,
+              "predicted_per_token_ms": 35.04092,
+              "predicted_per_second": 28.538063498332804
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "missing_parameter_clarification-missing-tenant",
+          "capability": "missing_parameter_clarification",
+          "template_cluster_id": "v46.missing_parameter_clarification.missing",
+          "passed": false,
+          "reason": "工具参数与冻结目标不一致",
+          "wall_ms": 3468.2356999983313,
+          "target": "<tool_call>\n{\"name\":\"ask_user_question\",\"arguments\":{\"field\":\"tenant\",\"question\":\"请提供要备份的租户。\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "ask_user_question",
+                        "arguments": "{\"field\":\"tenant\",\"question\":\"请在 us-east-2 区域启动备份，请指定租户名称。\"}"
+                      },
+                      "id": "KswAIeRUEDxaqkqmEJ5cz321FoRFoBZ6"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558724,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 54,
+              "prompt_tokens": 375,
+              "total_tokens": 429,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-iecMpZClPjboWMmEwsrmuqWX776Mslpk",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 375,
+              "prompt_ms": 1544.529,
+              "prompt_per_token_ms": 4.118744,
+              "prompt_per_second": 242.7924629450143,
+              "predicted_n": 54,
+              "predicted_ms": 1896.002,
+              "predicted_per_token_ms": 35.111148148148146,
+              "predicted_per_second": 28.480982614997245
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "multi_step_planning-need-scan",
+          "capability": "multi_step_planning",
+          "template_cluster_id": "v46.multi_step_planning.need",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 2880.446600000141,
+          "target": "<tool_call>\n{\"name\":\"run_security_scan\",\"arguments\":{\"artifact\":\"nova.tgz\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "run_security_scan",
+                        "arguments": "{\"artifact\":\"nova.tgz\"}"
+                      },
+                      "id": "fhDTHcWVVzZFsSbCqIteYj27GYuHoXYO"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558727,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 30,
+              "prompt_tokens": 514,
+              "total_tokens": 544,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-lvgtan4pdkxl1kY9h8XIpIqKMxwqXSxn",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 514,
+              "prompt_ms": 1799.399,
+              "prompt_per_token_ms": 3.5007762645914395,
+              "prompt_per_second": 285.6509312275933,
+              "predicted_n": 30,
+              "predicted_ms": 1054.287,
+              "predicted_per_token_ms": 35.142900000000004,
+              "predicted_per_second": 28.45524985132132
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "multi_step_planning-need-sign",
+          "capability": "multi_step_planning",
+          "template_cluster_id": "v46.multi_step_planning.need",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 3654.3630000014673,
+          "target": "<tool_call>\n{\"name\":\"sign_artifact\",\"arguments\":{\"artifact\":\"ember.tgz\",\"scan_id\":\"scan-203\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "sign_artifact",
+                        "arguments": "{\"artifact\":\"ember.tgz\",\"scan_id\":\"scan-203\"}"
+                      },
+                      "id": "eimaqCeVGzaIi1flVadTmoktcuC0dmmJ"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558731,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 47,
+              "prompt_tokens": 514,
+              "total_tokens": 561,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-8cYrvj7C1FLyOYDnak5IoKcBgtQYiL6R",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 514,
+              "prompt_ms": 1821.792,
+              "prompt_per_token_ms": 3.544342412451362,
+              "prompt_per_second": 282.139783246386,
+              "predicted_n": 47,
+              "predicted_ms": 1805.68,
+              "predicted_per_token_ms": 38.41872340425532,
+              "predicted_per_second": 26.028975233706966
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "multi_step_planning-need-publish",
+          "capability": "multi_step_planning",
+          "template_cluster_id": "v46.multi_step_planning.need",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 3770.1923999993596,
+          "target": "<tool_call>\n{\"name\":\"publish_artifact\",\"arguments\":{\"artifact\":\"cedar.tgz\",\"signature\":\"sig-778\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "publish_artifact",
+                        "arguments": "{\"artifact\":\"cedar.tgz\",\"signature\":\"sig-778\"}"
+                      },
+                      "id": "AxD7TqE3YgPlTAJMlNEfG6ddJ5ukCvaA"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558735,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 47,
+              "prompt_tokens": 517,
+              "total_tokens": 564,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-TgcDwaRXr3n1fziIJB59Hv2Z287LVoDE",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 517,
+              "prompt_ms": 1879.355,
+              "prompt_per_token_ms": 3.6351160541586074,
+              "prompt_per_second": 275.09438078489694,
+              "predicted_n": 47,
+              "predicted_ms": 1858.006,
+              "predicted_per_token_ms": 39.53204255319149,
+              "predicted_per_second": 25.295935535192026
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "multi_step_planning-need-verify",
+          "capability": "multi_step_planning",
+          "template_cluster_id": "v46.multi_step_planning.need",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 3343.6061999964295,
+          "target": "<tool_call>\n{\"name\":\"verify_publication\",\"arguments\":{\"publication_id\":\"pub-912\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "verify_publication",
+                        "arguments": "{\"publication_id\":\"pub-912\"}"
+                      },
+                      "id": "28zTAXak1JcSgtPOG1Ng9Ky3a2TBx4kR"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558738,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 33,
+              "prompt_tokens": 517,
+              "total_tokens": 550,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-OKctlRr1QRrUivTWgJkeDZHob5bgMRFF",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 517,
+              "prompt_ms": 1894.547,
+              "prompt_per_token_ms": 3.6645009671179882,
+              "prompt_per_second": 272.88845301805657,
+              "predicted_n": 33,
+              "predicted_ms": 1419.851,
+              "predicted_per_token_ms": 43.02578787878788,
+              "predicted_per_second": 23.24187537988141
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "computer_operation-focus",
+          "capability": "computer_operation",
+          "template_cluster_id": "v46.computer_operation.focus",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 2932.424999999057,
+          "target": "<tool_call>\n{\"name\":\"ui_focus\",\"arguments\":{\"window_id\":\"window-editor\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "ui_focus",
+                        "arguments": "{\"window_id\":\"window-editor\"}"
+                      },
+                      "id": "aTJFm80Ktuh4AyW0cLst6pxAsymNFkf4"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558741,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 29,
+              "prompt_tokens": 492,
+              "total_tokens": 521,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-pi7qKUBb2ndafF9XeEBhcp8gIKUcTdsI",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 492,
+              "prompt_ms": 1764.436,
+              "prompt_per_token_ms": 3.586252032520325,
+              "prompt_per_second": 278.84264433507366,
+              "predicted_n": 29,
+              "predicted_ms": 1135.017,
+              "predicted_per_token_ms": 39.13851724137931,
+              "predicted_per_second": 25.550278101561474
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "computer_operation-close",
+          "capability": "computer_operation",
+          "template_cluster_id": "v46.computer_operation.close",
+          "passed": false,
+          "reason": "工具调用前后含额外文本",
+          "wall_ms": 4459.406300004048,
+          "target": "<tool_call>\n{\"name\":\"ui_close_dialog\",\"arguments\":{\"dialog_id\":\"dialog-update\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "根据用户指令，我需要先关闭遮挡目标的可访问性状态中的模态对话框。对话框的ID是'dialog-update'。我将使用ui_close_dialog函数来关闭这个对话框。\n</think>\n\n",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "ui_close_dialog",
+                        "arguments": "{\"dialog_id\":\"dialog-update\"}"
+                      },
+                      "id": "puH4VqSQJyU5ZWfptbAUlJQq0ZYjFfM4"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558745,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 71,
+              "prompt_tokens": 491,
+              "total_tokens": 562,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-lDz3Z2qjjEJky1z13eSyey6aRVQmEgTa",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 491,
+              "prompt_ms": 1780.683,
+              "prompt_per_token_ms": 3.6266456211812628,
+              "prompt_per_second": 275.73689421418635,
+              "predicted_n": 71,
+              "predicted_ms": 2647.691,
+              "predicted_per_token_ms": 37.29142253521127,
+              "predicted_per_second": 26.815818008974613
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "computer_operation-select",
+          "capability": "computer_operation",
+          "template_cluster_id": "v46.computer_operation.select",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 3200.5848999979207,
+          "target": "<tool_call>\n{\"name\":\"ui_select\",\"arguments\":{\"element_id\":\"select-theme\",\"value\":\"dark\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "ui_select",
+                        "arguments": "{\"element_id\":\"select-theme\",\"value\":\"dark\"}"
+                      },
+                      "id": "OmzTomEsYyzMdcH8h5Y8JMzbREkFpWiF"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558749,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 40,
+              "prompt_tokens": 489,
+              "total_tokens": 529,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-wyneZLMggDRkuFFNri3QigVaQowD9HP9",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 489,
+              "prompt_ms": 1758.172,
+              "prompt_per_token_ms": 3.595443762781186,
+              "prompt_per_second": 278.1297847992119,
+              "predicted_n": 40,
+              "predicted_ms": 1413.382,
+              "predicted_per_token_ms": 35.33455,
+              "predicted_per_second": 28.300912279907344
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "computer_operation-click",
+          "capability": "computer_operation",
+          "template_cluster_id": "v46.computer_operation.click",
+          "passed": false,
+          "reason": "工具调用前后含额外文本",
+          "wall_ms": 4121.344600003795,
+          "target": "<tool_call>\n{\"name\":\"ui_click\",\"arguments\":{\"element_id\":\"menu-export\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "用户指示我点击一个名为“menu-export”的菜单项。根据提供的工具，我应该使用`ui_click`函数，并将元素ID设置为\"menu-export\"。\n\n",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "ui_click",
+                        "arguments": "{\"element_id\":\"menu-export\"}"
+                      },
+                      "id": "99b8HumZONE0xlwtcte8XaQaPelJraf0"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558753,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 65,
+              "prompt_tokens": 490,
+              "total_tokens": 555,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-TQ2WnS3Erfb8F1QFlqe9RrlkfC4M4FfY",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 490,
+              "prompt_ms": 1767.455,
+              "prompt_per_token_ms": 3.607051020408163,
+              "prompt_per_second": 277.2347810835354,
+              "predicted_n": 65,
+              "predicted_ms": 2321.812,
+              "predicted_per_token_ms": 35.72018461538461,
+              "predicted_per_second": 27.995376025276812
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "code_debugging-inspect-config",
+          "capability": "code_debugging",
+          "template_cluster_id": "v46.code_debugging.inspect",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 3429.2425000021467,
+          "target": "<tool_call>\n{\"name\":\"read_file\",\"arguments\":{\"path\":\"toolchain.toml\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "read_file",
+                        "arguments": "{\"path\":\"toolchain.toml\"}"
+                      },
+                      "id": "F4zx0jDLsquXY1jD97t2LlKuTwWpqaxt"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558756,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 28,
+              "prompt_tokens": 569,
+              "total_tokens": 597,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-iWDlg3sl8cE9CEndQJTppjR10nlVvlOw",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 569,
+              "prompt_ms": 2413.071,
+              "prompt_per_token_ms": 4.240898066783831,
+              "prompt_per_second": 235.79911241733046,
+              "predicted_n": 28,
+              "predicted_ms": 986.66,
+              "predicted_per_token_ms": 35.237857142857145,
+              "predicted_per_second": 28.37857012547382
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "code_debugging-inspect-ci",
+          "capability": "code_debugging",
+          "template_cluster_id": "v46.code_debugging.inspect",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 3496.363600002951,
+          "target": "<tool_call>\n{\"name\":\"read_file\",\"arguments\":{\"path\":\".ci/build.yml\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "read_file",
+                        "arguments": "{\"path\":\".ci/build.yml\"}"
+                      },
+                      "id": "yxZS9nYAAzGaKPmQweZIRyjC5qexhFd7"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558760,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 27,
+              "prompt_tokens": 565,
+              "total_tokens": 592,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-HlCvpi3d08QjQIjlJfoDfSrNkRL6aghU",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 565,
+              "prompt_ms": 2422.871,
+              "prompt_per_token_ms": 4.288267256637169,
+              "prompt_per_second": 233.1944209988893,
+              "predicted_n": 27,
+              "predicted_ms": 1036.136,
+              "predicted_per_token_ms": 38.37540740740741,
+              "predicted_per_second": 26.058355273825057
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "code_debugging-apply-known-fix",
+          "capability": "code_debugging",
+          "template_cluster_id": "v46.code_debugging.apply",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 6055.701500001305,
+          "target": "<tool_call>\n{\"name\":\"edit_file\",\"arguments\":{\"path\":\"toolchain.toml\",\"old\":\"channel = \\\"1.78\\\"\",\"new\":\"channel = \\\"1.80\\\"\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "edit_file",
+                        "arguments": "{\"path\":\"toolchain.toml\",\"old\":\"channel = \\\"1.78\\\"\",\"new\":\"channel = \\\"1.80\\\"\"}"
+                      },
+                      "id": "KQM9UWeO1aa9RoNuJrETfm3HjN0NODQ5"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558766,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 66,
+              "prompt_tokens": 570,
+              "total_tokens": 636,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-xg9p3pMiiz4LWsHmaQ8KLUD80QAHYOKu",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 570,
+              "prompt_ms": 2454.1,
+              "prompt_per_token_ms": 4.305438596491228,
+              "prompt_per_second": 232.26437390489386,
+              "predicted_n": 66,
+              "predicted_ms": 3568.434,
+              "predicted_per_token_ms": 54.06718181818182,
+              "predicted_per_second": 18.495508113643126
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "code_debugging-verify-fix",
+          "capability": "code_debugging",
+          "template_cluster_id": "v46.code_debugging.verify",
+          "passed": false,
+          "reason": "工具参数与冻结目标不一致",
+          "wall_ms": 3601.5082000012626,
+          "target": "<tool_call>\n{\"name\":\"run_tests\",\"arguments\":{\"target\":\"compiler-smoke\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "run_tests",
+                        "arguments": "{\"target\":\"compiler_unit_tests\"}"
+                      },
+                      "id": "BrDD1m9zZ22PLy6Xr6i5PVC84a9z5h59"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558769,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-v46-Control",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 28,
+              "prompt_tokens": 562,
+              "total_tokens": 590,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-FzfK6bF7WF9kkIE0QpFuw5Ykkh6ANIvY",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 562,
+              "prompt_ms": 2449.142,
+              "prompt_per_token_ms": 4.357903914590747,
+              "prompt_per_second": 229.46811577278902,
+              "predicted_n": 28,
+              "predicted_ms": 1115.701,
+              "predicted_per_token_ms": 39.84646428571428,
+              "predicted_per_second": 25.096329572170323
+            }
+          },
+          "error": null
+        }
+      ]
+    },
+    {
+      "id": "v46",
+      "alias": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+      "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31.gguf",
+      "model_bytes": 16930078176,
+      "load_seconds": 21.349518700000772,
+      "summary": {
+        "passed": 13,
+        "total": 24,
+        "wall_seconds": 94.44186400000035,
+        "by_capability": {
+          "code_debugging": {
+            "passed": 3,
+            "total": 4
+          },
+          "computer_operation": {
+            "passed": 2,
+            "total": 4
+          },
+          "continue_or_finish": {
+            "passed": 3,
+            "total": 4
+          },
+          "missing_parameter_clarification": {
+            "passed": 2,
+            "total": 4
+          },
+          "multi_step_planning": {
+            "passed": 1,
+            "total": 4
+          },
+          "tool_argument_repair": {
+            "passed": 2,
+            "total": 4
+          }
+        }
+      },
+      "rows": [
+        {
+          "id": "tool_argument_repair-unique-a",
+          "capability": "tool_argument_repair",
+          "template_cluster_id": "v46.tool_argument_repair.unique",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 3433.7687000006554,
+          "target": "<tool_call>\n{\"name\":\"deploy_package\",\"arguments\":{\"path\":\"dist/bundle.zip\",\"environment\":\"staging\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "deploy_package",
+                        "arguments": "{\"path\":\"dist/bundle.zip\",\"environment\":\"staging\"}"
+                      },
+                      "id": "6kca6fcIvWWMpDWE32giHlC6bISiLZcF"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558796,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 42,
+              "prompt_tokens": 458,
+              "total_tokens": 500,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-O4b44iej26CiKBjbBnYzHaAORRR0cHj0",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 458,
+              "prompt_ms": 1805.241,
+              "prompt_per_token_ms": 3.94157423580786,
+              "prompt_per_second": 253.70573790424655,
+              "predicted_n": 42,
+              "predicted_ms": 1595.118,
+              "predicted_per_token_ms": 37.979,
+              "predicted_per_second": 26.330340451302035
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "tool_argument_repair-unique-b",
+          "capability": "tool_argument_repair",
+          "template_cluster_id": "v46.tool_argument_repair.unique",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 3319.6525999956066,
+          "target": "<tool_call>\n{\"name\":\"deploy_package\",\"arguments\":{\"path\":\"release/app.tar\",\"environment\":\"production\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "deploy_package",
+                        "arguments": "{\"path\":\"release/app.tar\",\"environment\":\"production\"}"
+                      },
+                      "id": "ZBjEuqpKNqajoXQqpEVcI8pSHY9C0vIT"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558799,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 40,
+              "prompt_tokens": 456,
+              "total_tokens": 496,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-3s3Kdf5boDeQSxS1TqSZRU5aVzr4gg6q",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 456,
+              "prompt_ms": 1775.454,
+              "prompt_per_token_ms": 3.8935394736842106,
+              "prompt_per_second": 256.8357163857808,
+              "predicted_n": 40,
+              "predicted_ms": 1509.093,
+              "predicted_per_token_ms": 37.727325,
+              "predicted_per_second": 26.505987371222318
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "tool_argument_repair-ambiguous-a",
+          "capability": "tool_argument_repair",
+          "template_cluster_id": "v46.tool_argument_repair.ambiguous",
+          "passed": false,
+          "reason": "工具参数与冻结目标不一致",
+          "wall_ms": 4223.173600003065,
+          "target": "<tool_call>\n{\"name\":\"ask_user_question\",\"arguments\":{\"field\":\"path\",\"question\":\"请选择 dist/site.zip 或 backup/site.zip。\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "ask_user_question",
+                        "arguments": "{\"field\":\"path\",\"question\":\"manifest结果显示存在两份site.zip：dist/site.zip与backup/site.zip。请指定需要部署的具体路径。\"}"
+                      },
+                      "id": "tWPwSaJFe0SMlEJ8GraRQPM2TYVJ55Dq"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558803,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 61,
+              "prompt_tokens": 460,
+              "total_tokens": 521,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-wNlpLLWvImMS79JgmQP7ypkdhbwpiPct",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 460,
+              "prompt_ms": 1796.857,
+              "prompt_per_token_ms": 3.9062108695652173,
+              "prompt_per_second": 256.0025644778633,
+              "predicted_n": 61,
+              "predicted_ms": 2388.189,
+              "predicted_per_token_ms": 39.150639344262295,
+              "predicted_per_second": 25.542367040464555
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "tool_argument_repair-ambiguous-b",
+          "capability": "tool_argument_repair",
+          "template_cluster_id": "v46.tool_argument_repair.ambiguous",
+          "passed": false,
+          "reason": "工具参数与冻结目标不一致",
+          "wall_ms": 3743.7042000019574,
+          "target": "<tool_call>\n{\"name\":\"ask_user_question\",\"arguments\":{\"field\":\"path\",\"question\":\"请选择 build/api.bin 或 cache/api.bin。\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "ask_user_question",
+                        "arguments": "{\"field\":\"path\",\"question\":\"请选择要部署的包路径：build/api.bin还是cache/api.bin？\"}"
+                      },
+                      "id": "5p2uboGdb9ATIzn6GTJqicybaf5ikxAb"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558807,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 54,
+              "prompt_tokens": 459,
+              "total_tokens": 513,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-h2LnJXHYfLcvthapCGqcRke7c9dqI1sv",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 459,
+              "prompt_ms": 1773.261,
+              "prompt_per_token_ms": 3.863313725490196,
+              "prompt_per_second": 258.84514462338035,
+              "predicted_n": 54,
+              "predicted_ms": 1938.668,
+              "predicted_per_token_ms": 35.901259259259255,
+              "predicted_per_second": 27.854176166316257
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "continue_or_finish-ready-a",
+          "capability": "continue_or_finish",
+          "template_cluster_id": "v46.continue_or_finish.ready",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 2908.078399996157,
+          "target": "<tool_call>\n{\"name\":\"commit_lease\",\"arguments\":{\"lease_id\":\"lease-701\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "commit_lease",
+                        "arguments": "{\"lease_id\":\"lease-701\"}"
+                      },
+                      "id": "zOTe05HhCWHc2ibxXuZNsYAr4MMP3tW0"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558810,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 33,
+              "prompt_tokens": 421,
+              "total_tokens": 454,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-LLh7EAmT6GUNmbjDvWFO57e0En6mV0ZR",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 421,
+              "prompt_ms": 1703.324,
+              "prompt_per_token_ms": 4.0459002375296915,
+              "prompt_per_second": 247.16378093656874,
+              "predicted_n": 33,
+              "predicted_ms": 1171.462,
+              "predicted_per_token_ms": 35.49884848484849,
+              "predicted_per_second": 28.169927833766696
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "continue_or_finish-ready-b",
+          "capability": "continue_or_finish",
+          "template_cluster_id": "v46.continue_or_finish.ready",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 2964.0918000004604,
+          "target": "<tool_call>\n{\"name\":\"commit_lease\",\"arguments\":{\"lease_id\":\"lease-884\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "commit_lease",
+                        "arguments": "{\"lease_id\":\"lease-884\"}"
+                      },
+                      "id": "jBYnXwzIk9sOk6DByy9Bo2IaAJcEBP3M"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558813,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 33,
+              "prompt_tokens": 421,
+              "total_tokens": 454,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-adajU25qFe5T94avfLvqfZVuXJE1NXPK",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 421,
+              "prompt_ms": 1732.236,
+              "prompt_per_token_ms": 4.114574821852732,
+              "prompt_per_second": 243.0384774360999,
+              "predicted_n": 33,
+              "predicted_ms": 1195.549,
+              "predicted_per_token_ms": 36.22875757575758,
+              "predicted_per_second": 27.602381834621585
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "continue_or_finish-expired",
+          "capability": "continue_or_finish",
+          "template_cluster_id": "v46.continue_or_finish.expired",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 3425.563000004331,
+          "target": "<tool_call>\n{\"name\":\"renew_lease\",\"arguments\":{\"lease_id\":\"lease-119\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "renew_lease",
+                        "arguments": "{\"lease_id\":\"lease-119\"}"
+                      },
+                      "id": "kxjBiaaJjgqeJoCnrii9LdFzVJWG2kKI"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558816,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 33,
+              "prompt_tokens": 417,
+              "total_tokens": 450,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-T3jfXFBndt528vAiBXGbitybk0PyQAED",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 417,
+              "prompt_ms": 1716.572,
+              "prompt_per_token_ms": 4.116479616306954,
+              "prompt_per_second": 242.92601766777045,
+              "predicted_n": 33,
+              "predicted_ms": 1676.731,
+              "predicted_per_token_ms": 50.8100303030303,
+              "predicted_per_second": 19.681153387156318
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "continue_or_finish-committed",
+          "capability": "continue_or_finish",
+          "template_cluster_id": "v46.continue_or_finish.committed",
+          "passed": false,
+          "reason": "结束任务错误地产生工具调用",
+          "wall_ms": 3357.4799000052735,
+          "target": "{\"status\":\"committed\",\"lease_id\":\"lease-552\",\"receipt\":\"rcpt-552\"}",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "commit_lease",
+                        "arguments": "{\"lease_id\":\"lease-552\"}"
+                      },
+                      "id": "D8CD7XEPLEcofLmfQoa1K4IOOsAHG0W2"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558820,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 33,
+              "prompt_tokens": 422,
+              "total_tokens": 455,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-35qr78TWLxUU6NZ1yvJ2P7NriOMJqEbW",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 422,
+              "prompt_ms": 1754.585,
+              "prompt_per_token_ms": 4.157784360189574,
+              "prompt_per_second": 240.51271383261567,
+              "predicted_n": 33,
+              "predicted_ms": 1567.613,
+              "predicted_per_token_ms": 47.503424242424245,
+              "predicted_per_second": 21.05111401857474
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "missing_parameter_clarification-complete-a",
+          "capability": "missing_parameter_clarification",
+          "template_cluster_id": "v46.missing_parameter_clarification.complete",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 3568.9056999981403,
+          "target": "<tool_call>\n{\"name\":\"start_backup\",\"arguments\":{\"tenant\":\"tenant-orchid\",\"region\":\"ap-northeast-1\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "start_backup",
+                        "arguments": "{\"tenant\":\"tenant-orchid\",\"region\":\"ap-northeast-1\"}"
+                      },
+                      "id": "zuv89zLC7Qb19fAONMrHXNxEsd9D80QU"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558823,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 46,
+              "prompt_tokens": 376,
+              "total_tokens": 422,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-1Guv4t0UCKA5a0RCBoRCHNnbpgQtkhPn",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 376,
+              "prompt_ms": 1615.335,
+              "prompt_per_token_ms": 4.296103723404255,
+              "prompt_per_second": 232.76905409713774,
+              "predicted_n": 46,
+              "predicted_ms": 1924.421,
+              "predicted_per_token_ms": 41.835239130434786,
+              "predicted_per_second": 23.90329351009992
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "missing_parameter_clarification-complete-b",
+          "capability": "missing_parameter_clarification",
+          "template_cluster_id": "v46.missing_parameter_clarification.complete",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 3303.034300006402,
+          "target": "<tool_call>\n{\"name\":\"start_backup\",\"arguments\":{\"tenant\":\"tenant-lotus\",\"region\":\"eu-west-1\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "start_backup",
+                        "arguments": "{\"tenant\":\"tenant-lotus\",\"region\":\"eu-west-1\"}"
+                      },
+                      "id": "VV1VJWcoNKhbDH0p3tqbNdgWvYrZJYmc"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558827,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 44,
+              "prompt_tokens": 374,
+              "total_tokens": 418,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-gopOopDhTyt0X3am0oI4ppxPDcjShUfX",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 374,
+              "prompt_ms": 1611.29,
+              "prompt_per_token_ms": 4.308262032085562,
+              "prompt_per_second": 232.11215858101272,
+              "predicted_n": 44,
+              "predicted_ms": 1658.819,
+              "predicted_per_token_ms": 37.70043181818182,
+              "predicted_per_second": 26.52489512116753
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "missing_parameter_clarification-missing-region",
+          "capability": "missing_parameter_clarification",
+          "template_cluster_id": "v46.missing_parameter_clarification.missing",
+          "passed": false,
+          "reason": "结束原因不是tool_calls: length",
+          "wall_ms": 5371.264900000824,
+          "target": "<tool_call>\n{\"name\":\"ask_user_question\",\"arguments\":{\"field\":\"region\",\"question\":\"请提供 tenant-maple 的备份区域。\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "length",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "用户希望为租户 \"tenant-maple\" 启动备份，但区域（region）由用户决定。这意味着我需要先询问用户想要备份的区域。\n\n根据工具定义，`start_backup` 需要 `tenant` 和 `region` 两个参数。\n`tenant` 已知为 \"tenant-maple\"。\n`region` 未知，需要询问。\n\n因此，我应该调用 `ask_user_question` 来询问区域。\n\n参数：\n"
+                }
+              }
+            ],
+            "created": 1785558832,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 96,
+              "prompt_tokens": 372,
+              "total_tokens": 468,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-iyu4c7wbikj3A4Hy1R0G2fHzGsFslqGH",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 372,
+              "prompt_ms": 1598.565,
+              "prompt_per_token_ms": 4.2972177419354844,
+              "prompt_per_second": 232.70871062484164,
+              "predicted_n": 96,
+              "predicted_ms": 3744.117,
+              "predicted_per_token_ms": 39.00121875,
+              "predicted_per_second": 25.640224384013635
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "missing_parameter_clarification-missing-tenant",
+          "capability": "missing_parameter_clarification",
+          "template_cluster_id": "v46.missing_parameter_clarification.missing",
+          "passed": false,
+          "reason": "工具参数与冻结目标不一致",
+          "wall_ms": 3312.7415999988443,
+          "target": "<tool_call>\n{\"name\":\"ask_user_question\",\"arguments\":{\"field\":\"tenant\",\"question\":\"请提供要备份的租户。\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "ask_user_question",
+                        "arguments": "{\"field\":\"tenant\",\"question\":\"请输入需要启动备份的租户名称。\"}"
+                      },
+                      "id": "AcUyyZN4kYLrXtpOKTACX31UDKZ9GWxl"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558835,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 47,
+              "prompt_tokens": 375,
+              "total_tokens": 422,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-R9glL4IswXSWkx8nEAQZ2TzrUkEhwcSC",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 375,
+              "prompt_ms": 1591.497,
+              "prompt_per_token_ms": 4.243992,
+              "prompt_per_second": 235.6272113613786,
+              "predicted_n": 47,
+              "predicted_ms": 1693.166,
+              "predicted_per_token_ms": 36.024808510638294,
+              "predicted_per_second": 27.758648590864688
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "multi_step_planning-need-scan",
+          "capability": "multi_step_planning",
+          "template_cluster_id": "v46.multi_step_planning.need",
+          "passed": false,
+          "reason": "工具调用前后含额外文本",
+          "wall_ms": 4130.499400002009,
+          "target": "<tool_call>\n{\"name\":\"run_security_scan\",\"arguments\":{\"artifact\":\"nova.tgz\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "根据当前状态，产物 `nova.tgz` 尚未进行扫描。因此，发布链中的下一个未完成步骤是执行安全扫描。\n\n",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "run_security_scan",
+                        "arguments": "{\"artifact\":\"nova.tgz\"}"
+                      },
+                      "id": "zfWz7WNOjiPkRQat7hF2sKMHqfC0H4gQ"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558839,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 59,
+              "prompt_tokens": 514,
+              "total_tokens": 573,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-eLdujz8zOisVLS8DkkpLBS3p8rnYs4lp",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 514,
+              "prompt_ms": 1870.724,
+              "prompt_per_token_ms": 3.6395408560311284,
+              "prompt_per_second": 274.7599325181053,
+              "predicted_n": 59,
+              "predicted_ms": 2225.369,
+              "predicted_per_token_ms": 37.7181186440678,
+              "predicted_per_second": 26.51245703521528
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "multi_step_planning-need-sign",
+          "capability": "multi_step_planning",
+          "template_cluster_id": "v46.multi_step_planning.need",
+          "passed": false,
+          "reason": "工具调用前后含额外文本",
+          "wall_ms": 4589.014199998928,
+          "target": "<tool_call>\n{\"name\":\"sign_artifact\",\"arguments\":{\"artifact\":\"ember.tgz\",\"scan_id\":\"scan-203\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "根据当前状态，产物 `ember.tgz` 的扫描已完成，下一步是对其进行签名。\n\n",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "sign_artifact",
+                        "arguments": "{\"artifact\":\"ember.tgz\",\"scan_id\":\"scan-203\"}"
+                      },
+                      "id": "EN4kmv2z1vscDubzZjLJXbfas7rvyut9"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558844,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 68,
+              "prompt_tokens": 514,
+              "total_tokens": 582,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-uhjPS6PWnUzjMoo4rtb4qGHKpDIqjYCp",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 514,
+              "prompt_ms": 1877.029,
+              "prompt_per_token_ms": 3.651807392996109,
+              "prompt_per_second": 273.8370051821256,
+              "predicted_n": 68,
+              "predicted_ms": 2681.517,
+              "predicted_per_token_ms": 39.43407352941176,
+              "predicted_per_second": 25.358780123340633
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "multi_step_planning-need-publish",
+          "capability": "multi_step_planning",
+          "template_cluster_id": "v46.multi_step_planning.need",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 3695.2506000016,
+          "target": "<tool_call>\n{\"name\":\"publish_artifact\",\"arguments\":{\"artifact\":\"cedar.tgz\",\"signature\":\"sig-778\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "publish_artifact",
+                        "arguments": "{\"artifact\":\"cedar.tgz\",\"signature\":\"sig-778\"}"
+                      },
+                      "id": "gqbqineAI4qWQ80NlHVsoSF0rK3boPxO"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558848,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 47,
+              "prompt_tokens": 517,
+              "total_tokens": 564,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-TqXosfPjyE7oKmVUJyCRGCEKdWpGmz9U",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 517,
+              "prompt_ms": 1920.595,
+              "prompt_per_token_ms": 3.7148839458413927,
+              "prompt_per_second": 269.1874132755735,
+              "predicted_n": 47,
+              "predicted_ms": 1745.798,
+              "predicted_per_token_ms": 37.14463829787234,
+              "predicted_per_second": 26.92178591108479
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "multi_step_planning-need-verify",
+          "capability": "multi_step_planning",
+          "template_cluster_id": "v46.multi_step_planning.need",
+          "passed": false,
+          "reason": "工具调用前后含额外文本",
+          "wall_ms": 4672.42869999609,
+          "target": "<tool_call>\n{\"name\":\"verify_publication\",\"arguments\":{\"publication_id\":\"pub-912\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "根据当前状态，产物 `iris.tgz` 已经发布，唯一的未完成步骤是核验发布回执。因此，下一个步骤是调用 `verify_publication`。\n\n",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "verify_publication",
+                        "arguments": "{\"publication_id\":\"pub-912\"}"
+                      },
+                      "id": "hdioFBOZ6GbL7DWtGpsw2jnC1VbNM6Fh"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558852,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 68,
+              "prompt_tokens": 517,
+              "total_tokens": 585,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-mlbgKuxJsuYaQAEW1fqYVWuRrzekmQTv",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 517,
+              "prompt_ms": 1995.092,
+              "prompt_per_token_ms": 3.8589787234042556,
+              "prompt_per_second": 259.13591954656727,
+              "predicted_n": 68,
+              "predicted_ms": 2642.958,
+              "predicted_per_token_ms": 38.867029411764705,
+              "predicted_per_second": 25.728747865081473
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "computer_operation-focus",
+          "capability": "computer_operation",
+          "template_cluster_id": "v46.computer_operation.focus",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 3028.9755999983754,
+          "target": "<tool_call>\n{\"name\":\"ui_focus\",\"arguments\":{\"window_id\":\"window-editor\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "ui_focus",
+                        "arguments": "{\"window_id\":\"window-editor\"}"
+                      },
+                      "id": "Cglrwv4K4LJT64DsSBycBpFeWnxrG0eA"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558855,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 29,
+              "prompt_tokens": 492,
+              "total_tokens": 521,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-Ex88ACcZ18OyR3wkbya9iFyHdeDQddQd",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 492,
+              "prompt_ms": 1807.935,
+              "prompt_per_token_ms": 3.674664634146341,
+              "prompt_per_second": 272.1336773722507,
+              "predicted_n": 29,
+              "predicted_ms": 1189.904,
+              "predicted_per_token_ms": 41.0311724137931,
+              "predicted_per_second": 24.37171402062687
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "computer_operation-close",
+          "capability": "computer_operation",
+          "template_cluster_id": "v46.computer_operation.close",
+          "passed": false,
+          "reason": "结束原因不是tool_calls: length",
+          "wall_ms": 5461.310899998352,
+          "target": "<tool_call>\n{\"name\":\"ui_close_dialog\",\"arguments\":{\"dialog_id\":\"dialog-update\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "length",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "用户指出有一个模态对话框 `dialog-update` 遮挡了目标，需要先关闭它。根据工具列表，我可以使用 `ui_close_dialog` 函数来关闭这个对话框。\n\n1.  **识别对话框ID**: 用户明确给出了对话框的ID是 `dialog-update`。\n2.  **选择工具**: 使用 `ui_close_dialog`。\n3.  **执行操作**: 调用工具关闭该对话框。\n</think>\n\n"
+                }
+              }
+            ],
+            "created": 1785558861,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 96,
+              "prompt_tokens": 491,
+              "total_tokens": 587,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-e5uv24ZFxqM3ireFtLhYyjWPB739JIwX",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 491,
+              "prompt_ms": 1838.323,
+              "prompt_per_token_ms": 3.7440386965376784,
+              "prompt_per_second": 267.0912565419679,
+              "predicted_n": 96,
+              "predicted_ms": 3584.398,
+              "predicted_per_token_ms": 37.33747916666667,
+              "predicted_per_second": 26.78274008634086
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "computer_operation-select",
+          "capability": "computer_operation",
+          "template_cluster_id": "v46.computer_operation.select",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 3475.0923000028706,
+          "target": "<tool_call>\n{\"name\":\"ui_select\",\"arguments\":{\"element_id\":\"select-theme\",\"value\":\"dark\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "ui_select",
+                        "arguments": "{\"element_id\":\"select-theme\",\"value\":\"dark\"}"
+                      },
+                      "id": "yx3f8dAoQtj7D6Jmvvm7xmj3UA9IAAoB"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558864,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 40,
+              "prompt_tokens": 489,
+              "total_tokens": 529,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-vtYyU3XySir2wFSuZ2GKBAe8FFRIcxU1",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 489,
+              "prompt_ms": 1851.153,
+              "prompt_per_token_ms": 3.785588957055215,
+              "prompt_per_second": 264.15968858327756,
+              "predicted_n": 40,
+              "predicted_ms": 1591.091,
+              "predicted_per_token_ms": 39.777274999999996,
+              "predicted_per_second": 25.13998256542209
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "computer_operation-click",
+          "capability": "computer_operation",
+          "template_cluster_id": "v46.computer_operation.click",
+          "passed": false,
+          "reason": "工具调用前后含额外文本",
+          "wall_ms": 4908.224499995413,
+          "target": "<tool_call>\n{\"name\":\"ui_click\",\"arguments\":{\"element_id\":\"menu-export\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "根据提供的可访问性状态，菜单已打开且“menu-export”选项可用。我需要执行点击操作来响应这个指令。\n\n我将调用 `ui_click` 函数，并将元素 ID 设置为 \"menu-export\"。\n</think>\n\n",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "ui_click",
+                        "arguments": "{\"element_id\":\"menu-export\"}"
+                      },
+                      "id": "EA8PodPdGpnokwT4IwoBgpXWKN4tHgup"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558869,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 79,
+              "prompt_tokens": 490,
+              "total_tokens": 569,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-hnp366JxhnhYNHswu1gg5Pqsw5VHz2sX",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 490,
+              "prompt_ms": 1854.074,
+              "prompt_per_token_ms": 3.7838244897959186,
+              "prompt_per_second": 264.28287112596365,
+              "predicted_n": 79,
+              "predicted_ms": 3012.186,
+              "predicted_per_token_ms": 38.12893670886076,
+              "predicted_per_second": 26.22680007144313
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "code_debugging-inspect-config",
+          "capability": "code_debugging",
+          "template_cluster_id": "v46.code_debugging.inspect",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 3609.13850000361,
+          "target": "<tool_call>\n{\"name\":\"read_file\",\"arguments\":{\"path\":\"toolchain.toml\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "read_file",
+                        "arguments": "{\"path\":\"toolchain.toml\"}"
+                      },
+                      "id": "lZTfV6szcglznUc4jHzTuju2vrnWwLTt"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558873,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 28,
+              "prompt_tokens": 569,
+              "total_tokens": 597,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-Z3uOosWZPMGVM18uD6kTYMdAhelTZcde",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 569,
+              "prompt_ms": 2528.001,
+              "prompt_per_token_ms": 4.442884007029877,
+              "prompt_per_second": 225.07902488962623,
+              "predicted_n": 28,
+              "predicted_ms": 1040.939,
+              "predicted_per_token_ms": 37.17639285714286,
+              "predicted_per_second": 26.89879041903512
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "code_debugging-inspect-ci",
+          "capability": "code_debugging",
+          "template_cluster_id": "v46.code_debugging.inspect",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 3533.307399993646,
+          "target": "<tool_call>\n{\"name\":\"read_file\",\"arguments\":{\"path\":\".ci/build.yml\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "read_file",
+                        "arguments": "{\"path\":\".ci/build.yml\"}"
+                      },
+                      "id": "kBwzSrjtSvU9i348iySbqqsIpr2PJ2eQ"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558876,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 27,
+              "prompt_tokens": 565,
+              "total_tokens": 592,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-aB9iMkyy37VZwpphvUapecrq0RzqaDrE",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 565,
+              "prompt_ms": 2512.304,
+              "prompt_per_token_ms": 4.446555752212389,
+              "prompt_per_second": 224.89316579522222,
+              "predicted_n": 27,
+              "predicted_ms": 990.258,
+              "predicted_per_token_ms": 36.67622222222222,
+              "predicted_per_second": 27.265621686469583
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "code_debugging-apply-known-fix",
+          "capability": "code_debugging",
+          "template_cluster_id": "v46.code_debugging.apply",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 6525.004099996295,
+          "target": "<tool_call>\n{\"name\":\"edit_file\",\"arguments\":{\"path\":\"toolchain.toml\",\"old\":\"channel = \\\"1.78\\\"\",\"new\":\"channel = \\\"1.80\\\"\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "edit_file",
+                        "arguments": "{\"path\":\"toolchain.toml\",\"old\":\"channel = \\\"1.78\\\"\",\"new\":\"channel = \\\"1.80\\\"\"}"
+                      },
+                      "id": "LiKHfwfUlDai7pj4CLGwPNWNCLs78y2S"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558883,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 66,
+              "prompt_tokens": 570,
+              "total_tokens": 636,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-oSkWU8EmuBXY1LXcSnJtEUVMsbop37pI",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 570,
+              "prompt_ms": 2649.894,
+              "prompt_per_token_ms": 4.648936842105263,
+              "prompt_per_second": 215.10294374039114,
+              "predicted_n": 66,
+              "predicted_ms": 3842.502,
+              "predicted_per_token_ms": 58.21972727272727,
+              "predicted_per_second": 17.17630856145293
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "code_debugging-verify-fix",
+          "capability": "code_debugging",
+          "template_cluster_id": "v46.code_debugging.verify",
+          "passed": false,
+          "reason": "工具参数与冻结目标不一致",
+          "wall_ms": 3882.159100001445,
+          "target": "<tool_call>\n{\"name\":\"run_tests\",\"arguments\":{\"target\":\"compiler-smoke\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "run_tests",
+                        "arguments": "{\"target\":\"compiler_unit_tests\"}"
+                      },
+                      "id": "K746r6TtejEs9OBIOouKF6fKjYqkbov6"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785558887,
+            "model": "ColorLM-v46-Qwen36-Mid-Cortex-L16-L31",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 28,
+              "prompt_tokens": 562,
+              "total_tokens": 590,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-fTYCJxmmIaonS3SVmt9mxiCGeYxbbBM6",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 562,
+              "prompt_ms": 2673.599,
+              "prompt_per_token_ms": 4.75729359430605,
+              "prompt_per_second": 210.2035495973779,
+              "predicted_n": 28,
+              "predicted_ms": 1173.023,
+              "predicted_per_token_ms": 41.893678571428566,
+              "predicted_per_second": 23.869949694081022
+            }
+          },
+          "error": null
+        }
+      ]
+    }
+  ],
+  "comparison": {
+    "score_gain": -2,
+    "wins": [
+      "missing_parameter_clarification-complete-b"
+    ],
+    "regressions": [
+      "multi_step_planning-need-scan",
+      "multi_step_planning-need-sign",
+      "multi_step_planning-need-verify"
+    ],
+    "capability_score_deltas": {
+      "code_debugging": 0,
+      "computer_operation": 0,
+      "continue_or_finish": 0,
+      "missing_parameter_clarification": 1,
+      "multi_step_planning": -3,
+      "tool_argument_repair": 0
+    },
+    "speed_regression": 0.1287371000480797,
+    "gate_passed": false
+  },
+  "decision": "retain v38 as formal; consume this blind and stop direct layer splicing without scanning ranges"
+}

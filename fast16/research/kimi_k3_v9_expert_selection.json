@@ -1,0 +1,671 @@
+{
+  "format": "colorlm-kimi-k3-hidden-route-selection-v1",
+  "selection_input": "real ColorLM attn_post_norm hidden states",
+  "prohibited_inputs": [
+    "text keywords",
+    "host task classifier",
+    "expert id prior"
+  ],
+  "hidden_dump": {
+    "file": "fast16\\research\\v9_hidden_states.bin",
+    "sha256": "d61c776890e2e99276e11a8570df743133ff02800699e3b854136f45b4f69563",
+    "records_by_layer": {
+      "12": 1201,
+      "28": 1201,
+      "39": 10
+    }
+  },
+  "transport": {
+    "file": "fast16\\research\\kimi_k3_to_colorlm_semiorthogonal_f32.npy",
+    "sha256": "8ff9eb4760979135b05e31675b229128f275a951f3101fba98bbb63b41303c3b",
+    "shape": [
+      7168,
+      2048
+    ]
+  },
+  "experts_per_layer": 24,
+  "stations": [
+    {
+      "colorlm_layer": 12,
+      "k3_layer": 28,
+      "experts": [
+        41,
+        780,
+        784,
+        715,
+        755,
+        864,
+        664,
+        646,
+        869,
+        739,
+        778,
+        172,
+        838,
+        695,
+        514,
+        552,
+        539,
+        156,
+        206,
+        248,
+        197,
+        629,
+        284,
+        841
+      ],
+      "evidence": {
+        "tokens": 1201,
+        "state_rms_mean": 0.8875611424446106,
+        "native_top_k": 16,
+        "selected_experts": [
+          {
+            "expert": 41,
+            "top16_count": 417,
+            "top1_count": 10,
+            "normalized_weight_mass": 26.878931518644094,
+            "rank_score": 867.0629042983055
+          },
+          {
+            "expert": 780,
+            "top16_count": 319,
+            "top1_count": 93,
+            "normalized_weight_mass": 19.908056747168303,
+            "rank_score": 823.5289079546928
+          },
+          {
+            "expert": 784,
+            "top16_count": 257,
+            "top1_count": 37,
+            "normalized_weight_mass": 16.201674439013004,
+            "rank_score": 590.2267910242081
+          },
+          {
+            "expert": 715,
+            "top16_count": 265,
+            "top1_count": 22,
+            "normalized_weight_mass": 16.850536856800318,
+            "rank_score": 578.6085897088051
+          },
+          {
+            "expert": 755,
+            "top16_count": 192,
+            "top1_count": 54,
+            "normalized_weight_mass": 11.81543593853712,
+            "rank_score": 489.04697501659393
+          },
+          {
+            "expert": 864,
+            "top16_count": 177,
+            "top1_count": 51,
+            "normalized_weight_mass": 11.107839617878199,
+            "rank_score": 456.7254338860512
+          },
+          {
+            "expert": 664,
+            "top16_count": 214,
+            "top1_count": 2,
+            "normalized_weight_mass": 13.91542687267065,
+            "rank_score": 440.6468299627304
+          },
+          {
+            "expert": 646,
+            "top16_count": 171,
+            "top1_count": 46,
+            "normalized_weight_mass": 10.510355025529861,
+            "rank_score": 431.1656804084778
+          },
+          {
+            "expert": 869,
+            "top16_count": 181,
+            "top1_count": 17,
+            "normalized_weight_mass": 11.441942676901817,
+            "rank_score": 398.0710828304291
+          },
+          {
+            "expert": 739,
+            "top16_count": 172,
+            "top1_count": 28,
+            "normalized_weight_mass": 10.55296915397048,
+            "rank_score": 396.8475064635277
+          },
+          {
+            "expert": 778,
+            "top16_count": 171,
+            "top1_count": 19,
+            "normalized_weight_mass": 10.821264192461967,
+            "rank_score": 382.1402270793915
+          },
+          {
+            "expert": 172,
+            "top16_count": 136,
+            "top1_count": 49,
+            "normalized_weight_mass": 8.203982938081026,
+            "rank_score": 365.2637270092964
+          },
+          {
+            "expert": 838,
+            "top16_count": 166,
+            "top1_count": 1,
+            "normalized_weight_mass": 10.767248764634132,
+            "rank_score": 340.2759802341461
+          },
+          {
+            "expert": 695,
+            "top16_count": 144,
+            "top1_count": 18,
+            "normalized_weight_mass": 9.010361816734076,
+            "rank_score": 324.1657890677452
+          },
+          {
+            "expert": 514,
+            "top16_count": 144,
+            "top1_count": 9,
+            "normalized_weight_mass": 9.062674440443516,
+            "rank_score": 307.00279104709625
+          },
+          {
+            "expert": 552,
+            "top16_count": 125,
+            "top1_count": 28,
+            "normalized_weight_mass": 7.67294804379344,
+            "rank_score": 303.76716870069504
+          },
+          {
+            "expert": 539,
+            "top16_count": 147,
+            "top1_count": 0,
+            "normalized_weight_mass": 9.537122495472431,
+            "rank_score": 299.5939599275589
+          },
+          {
+            "expert": 156,
+            "top16_count": 138,
+            "top1_count": 10,
+            "normalized_weight_mass": 8.773392669856548,
+            "rank_score": 298.3742827177048
+          },
+          {
+            "expert": 206,
+            "top16_count": 125,
+            "top1_count": 25,
+            "normalized_weight_mass": 7.5815686993300915,
+            "rank_score": 296.30509918928146
+          },
+          {
+            "expert": 248,
+            "top16_count": 141,
+            "top1_count": 0,
+            "normalized_weight_mass": 8.96264335513115,
+            "rank_score": 284.4022936820984
+          },
+          {
+            "expert": 197,
+            "top16_count": 139,
+            "top1_count": 0,
+            "normalized_weight_mass": 8.85900692269206,
+            "rank_score": 280.74411076307297
+          },
+          {
+            "expert": 629,
+            "top16_count": 96,
+            "top1_count": 44,
+            "normalized_weight_mass": 6.018539160490036,
+            "rank_score": 280.2966265678406
+          },
+          {
+            "expert": 284,
+            "top16_count": 129,
+            "top1_count": 10,
+            "normalized_weight_mass": 7.970025040209293,
+            "rank_score": 276.5204006433487
+          },
+          {
+            "expert": 841,
+            "top16_count": 131,
+            "top1_count": 6,
+            "normalized_weight_mass": 8.218817915767431,
+            "rank_score": 274.5010866522789
+          }
+        ],
+        "token_coverage": 0.9825145711906744
+      },
+      "gate": {
+        "file": "fast16\\research\\biopsy_cache\\moonshotai_Kimi-K3\\master\\extracted\\language_model.model.layers.28.block_sparse_moe.gate.weight.bin",
+        "sha256": "d0e051d8bb5eec9cd4c1bae9aaf3d60dcb3aac1c694aa9f85307656c1ee11c2b"
+      },
+      "correction_bias": {
+        "file": "fast16\\research\\biopsy_cache\\moonshotai_Kimi-K3\\master\\extracted\\language_model.model.layers.28.block_sparse_moe.gate.e_score_correction_bias.bin",
+        "sha256": "6d92a66cdf39b920625579bd908145a74c11aa15715129572f61b3f3f36df8a6"
+      }
+    },
+    {
+      "colorlm_layer": 28,
+      "k3_layer": 65,
+      "experts": [
+        539,
+        780,
+        752,
+        361,
+        691,
+        228,
+        889,
+        223,
+        486,
+        378,
+        768,
+        821,
+        600,
+        824,
+        789,
+        122,
+        20,
+        113,
+        234,
+        342,
+        677,
+        861,
+        763,
+        790
+      ],
+      "evidence": {
+        "tokens": 1201,
+        "state_rms_mean": 1.0892162322998047,
+        "native_top_k": 16,
+        "selected_experts": [
+          {
+            "expert": 539,
+            "top16_count": 465,
+            "top1_count": 215,
+            "normalized_weight_mass": 29.060367565602064,
+            "rank_score": 1359.965881049633
+          },
+          {
+            "expert": 780,
+            "top16_count": 519,
+            "top1_count": 4,
+            "normalized_weight_mass": 32.44129402562976,
+            "rank_score": 1046.0607044100761
+          },
+          {
+            "expert": 752,
+            "top16_count": 345,
+            "top1_count": 156,
+            "normalized_weight_mass": 21.553216751664877,
+            "rank_score": 1001.851468026638
+          },
+          {
+            "expert": 361,
+            "top16_count": 452,
+            "top1_count": 1,
+            "normalized_weight_mass": 28.25637299194932,
+            "rank_score": 906.1019678711891
+          },
+          {
+            "expert": 691,
+            "top16_count": 403,
+            "top1_count": 43,
+            "normalized_weight_mass": 25.182108599692583,
+            "rank_score": 891.9137375950813
+          },
+          {
+            "expert": 228,
+            "top16_count": 284,
+            "top1_count": 116,
+            "normalized_weight_mass": 17.74516535550356,
+            "rank_score": 799.922645688057
+          },
+          {
+            "expert": 889,
+            "top16_count": 367,
+            "top1_count": 31,
+            "normalized_weight_mass": 22.938251592218876,
+            "rank_score": 796.012025475502
+          },
+          {
+            "expert": 223,
+            "top16_count": 384,
+            "top1_count": 5,
+            "normalized_weight_mass": 24.00290174782276,
+            "rank_score": 778.0464279651642
+          },
+          {
+            "expert": 486,
+            "top16_count": 381,
+            "top1_count": 0,
+            "normalized_weight_mass": 23.818025838583708,
+            "rank_score": 762.0884134173393
+          },
+          {
+            "expert": 378,
+            "top16_count": 377,
+            "top1_count": 0,
+            "normalized_weight_mass": 23.570148181170225,
+            "rank_score": 754.1223708987236
+          },
+          {
+            "expert": 768,
+            "top16_count": 309,
+            "top1_count": 34,
+            "normalized_weight_mass": 19.312729470431805,
+            "rank_score": 686.0036715269089
+          },
+          {
+            "expert": 821,
+            "top16_count": 315,
+            "top1_count": 2,
+            "normalized_weight_mass": 19.6859267950058,
+            "rank_score": 633.9748287200928
+          },
+          {
+            "expert": 600,
+            "top16_count": 303,
+            "top1_count": 11,
+            "normalized_weight_mass": 18.93703443184495,
+            "rank_score": 627.9925509095192
+          },
+          {
+            "expert": 824,
+            "top16_count": 308,
+            "top1_count": 0,
+            "normalized_weight_mass": 19.253587570041418,
+            "rank_score": 616.0574011206627
+          },
+          {
+            "expert": 789,
+            "top16_count": 257,
+            "top1_count": 38,
+            "normalized_weight_mass": 16.054612327367067,
+            "rank_score": 589.8737972378731
+          },
+          {
+            "expert": 122,
+            "top16_count": 291,
+            "top1_count": 0,
+            "normalized_weight_mass": 18.194379583001137,
+            "rank_score": 582.1100733280182
+          },
+          {
+            "expert": 20,
+            "top16_count": 287,
+            "top1_count": 4,
+            "normalized_weight_mass": 17.93983170390129,
+            "rank_score": 582.0373072624207
+          },
+          {
+            "expert": 113,
+            "top16_count": 267,
+            "top1_count": 0,
+            "normalized_weight_mass": 16.692050255835056,
+            "rank_score": 534.0728040933609
+          },
+          {
+            "expert": 234,
+            "top16_count": 260,
+            "top1_count": 7,
+            "normalized_weight_mass": 16.249639868736267,
+            "rank_score": 533.9942378997803
+          },
+          {
+            "expert": 342,
+            "top16_count": 258,
+            "top1_count": 2,
+            "normalized_weight_mass": 16.117682620882988,
+            "rank_score": 519.8829219341278
+          },
+          {
+            "expert": 677,
+            "top16_count": 248,
+            "top1_count": 2,
+            "normalized_weight_mass": 15.501908000558615,
+            "rank_score": 500.03052800893784
+          },
+          {
+            "expert": 861,
+            "top16_count": 217,
+            "top1_count": 6,
+            "normalized_weight_mass": 13.560590852051973,
+            "rank_score": 445.9694536328316
+          },
+          {
+            "expert": 763,
+            "top16_count": 222,
+            "top1_count": 0,
+            "normalized_weight_mass": 13.877195958048105,
+            "rank_score": 444.0351353287697
+          },
+          {
+            "expert": 790,
+            "top16_count": 213,
+            "top1_count": 0,
+            "normalized_weight_mass": 13.31612690538168,
+            "rank_score": 426.0580304861069
+          }
+        ],
+        "token_coverage": 0.9966694421315571
+      },
+      "gate": {
+        "file": "fast16\\research\\biopsy_cache\\moonshotai_Kimi-K3\\master\\extracted\\language_model.model.layers.65.block_sparse_moe.gate.weight.bin",
+        "sha256": "62c53b86520a010eed42c3316d1754987ab1148ef3c639c76a170481ac6050d9"
+      },
+      "correction_bias": {
+        "file": "fast16\\research\\biopsy_cache\\moonshotai_Kimi-K3\\master\\extracted\\language_model.model.layers.65.block_sparse_moe.gate.e_score_correction_bias.bin",
+        "sha256": "0db41a0be5c328c88cd8a78d4d06958245cc97c68634dc04ab82663a57fdeca5"
+      }
+    },
+    {
+      "colorlm_layer": 39,
+      "k3_layer": 92,
+      "experts": [
+        645,
+        840,
+        517,
+        811,
+        5,
+        71,
+        629,
+        571,
+        192,
+        794,
+        646,
+        712,
+        123,
+        97,
+        63,
+        668,
+        808,
+        384,
+        8,
+        204,
+        580,
+        777,
+        866,
+        706
+      ],
+      "evidence": {
+        "tokens": 10,
+        "state_rms_mean": 1.3249599933624268,
+        "native_top_k": 16,
+        "selected_experts": [
+          {
+            "expert": 645,
+            "top16_count": 7,
+            "top1_count": 3,
+            "normalized_weight_mass": 0.43819474428892136,
+            "rank_score": 20.01111590862274
+          },
+          {
+            "expert": 840,
+            "top16_count": 7,
+            "top1_count": 2,
+            "normalized_weight_mass": 0.4373883828520775,
+            "rank_score": 17.99821412563324
+          },
+          {
+            "expert": 517,
+            "top16_count": 7,
+            "top1_count": 1,
+            "normalized_weight_mass": 0.4382469356060028,
+            "rank_score": 16.011950969696045
+          },
+          {
+            "expert": 811,
+            "top16_count": 7,
+            "top1_count": 1,
+            "normalized_weight_mass": 0.43621522560715675,
+            "rank_score": 15.979443609714508
+          },
+          {
+            "expert": 5,
+            "top16_count": 5,
+            "top1_count": 1,
+            "normalized_weight_mass": 0.3132423236966133,
+            "rank_score": 12.011877179145813
+          },
+          {
+            "expert": 71,
+            "top16_count": 6,
+            "top1_count": 0,
+            "normalized_weight_mass": 0.3751726448535919,
+            "rank_score": 12.00276231765747
+          },
+          {
+            "expert": 629,
+            "top16_count": 5,
+            "top1_count": 1,
+            "normalized_weight_mass": 0.3124762289226055,
+            "rank_score": 11.999619662761688
+          },
+          {
+            "expert": 571,
+            "top16_count": 4,
+            "top1_count": 1,
+            "normalized_weight_mass": 0.25013599917292595,
+            "rank_score": 10.002175986766815
+          },
+          {
+            "expert": 192,
+            "top16_count": 5,
+            "top1_count": 0,
+            "normalized_weight_mass": 0.3113602586090565,
+            "rank_score": 9.981764137744904
+          },
+          {
+            "expert": 794,
+            "top16_count": 4,
+            "top1_count": 0,
+            "normalized_weight_mass": 0.25027014315128326,
+            "rank_score": 8.004322290420532
+          },
+          {
+            "expert": 646,
+            "top16_count": 4,
+            "top1_count": 0,
+            "normalized_weight_mass": 0.25011131539940834,
+            "rank_score": 8.001781046390533
+          },
+          {
+            "expert": 712,
+            "top16_count": 4,
+            "top1_count": 0,
+            "normalized_weight_mass": 0.24928121641278267,
+            "rank_score": 7.988499462604523
+          },
+          {
+            "expert": 123,
+            "top16_count": 3,
+            "top1_count": 0,
+            "normalized_weight_mass": 0.188003808259964,
+            "rank_score": 6.008060932159424
+          },
+          {
+            "expert": 97,
+            "top16_count": 3,
+            "top1_count": 0,
+            "normalized_weight_mass": 0.18780408799648285,
+            "rank_score": 6.004865407943726
+          },
+          {
+            "expert": 63,
+            "top16_count": 3,
+            "top1_count": 0,
+            "normalized_weight_mass": 0.187799833714962,
+            "rank_score": 6.004797339439392
+          },
+          {
+            "expert": 668,
+            "top16_count": 3,
+            "top1_count": 0,
+            "normalized_weight_mass": 0.18751804158091545,
+            "rank_score": 6.000288665294647
+          },
+          {
+            "expert": 808,
+            "top16_count": 3,
+            "top1_count": 0,
+            "normalized_weight_mass": 0.18751299753785133,
+            "rank_score": 6.000207960605621
+          },
+          {
+            "expert": 384,
+            "top16_count": 3,
+            "top1_count": 0,
+            "normalized_weight_mass": 0.1875077523291111,
+            "rank_score": 6.000124037265778
+          },
+          {
+            "expert": 8,
+            "top16_count": 2,
+            "top1_count": 0,
+            "normalized_weight_mass": 0.12583015114068985,
+            "rank_score": 4.013282418251038
+          },
+          {
+            "expert": 204,
+            "top16_count": 2,
+            "top1_count": 0,
+            "normalized_weight_mass": 0.12537196278572083,
+            "rank_score": 4.005951404571533
+          },
+          {
+            "expert": 580,
+            "top16_count": 2,
+            "top1_count": 0,
+            "normalized_weight_mass": 0.1253252550959587,
+            "rank_score": 4.005204081535339
+          },
+          {
+            "expert": 777,
+            "top16_count": 2,
+            "top1_count": 0,
+            "normalized_weight_mass": 0.12527324259281158,
+            "rank_score": 4.004371881484985
+          },
+          {
+            "expert": 866,
+            "top16_count": 2,
+            "top1_count": 0,
+            "normalized_weight_mass": 0.12523414194583893,
+            "rank_score": 4.003746271133423
+          },
+          {
+            "expert": 706,
+            "top16_count": 2,
+            "top1_count": 0,
+            "normalized_weight_mass": 0.12520694732666016,
+            "rank_score": 4.0033111572265625
+          }
+        ],
+        "token_coverage": 1.0
+      },
+      "gate": {
+        "file": "fast16\\research\\biopsy_cache\\moonshotai_Kimi-K3\\master\\extracted\\language_model.model.layers.92.block_sparse_moe.gate.weight.bin",
+        "sha256": "6552c0764b3da758e962401125814865718e93569a659968696d59f679aeb5a5"
+      },
+      "correction_bias": {
+        "file": "fast16\\research\\biopsy_cache\\moonshotai_Kimi-K3\\master\\extracted\\language_model.model.layers.92.block_sparse_moe.gate.e_score_correction_bias.bin",
+        "sha256": "4ebb33e9321892c72d5e4806e05a284b35b58596a440473c2f331b6c93b3e82e"
+      }
+    }
+  ]
+}

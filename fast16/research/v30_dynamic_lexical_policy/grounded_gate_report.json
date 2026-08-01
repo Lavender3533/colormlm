@@ -1,0 +1,246 @@
+{
+  "format": "colorlm-v30-grounded-independent-gate-report-v1",
+  "status": "passed_for_runtime_prototype",
+  "contract": "D:/project/大模型ssd化/fast16/research/v30_dynamic_lexical_policy/grounded_gate_contract.json",
+  "contract_sha256": "e32ff03efe1b4d491dcb717e469efb5fcf24b24cd3b9f22b0d6cfea78673390b",
+  "tasks_sha256": "16c91dd8923b177d7831d2905a43917c45146a8b46deb747131bd3d3b39e4ed1",
+  "teacher_sha256": "f26ea3fb4830e5ff68a3776376d74c08a5914c2d7bdde9cfe209925cd8026c03",
+  "capture_sha256": "9a021ec3d1f3adaf25297b5a6fca0ce9a688166301f57cecd5d5ceabe087f8da",
+  "weights_sha256": "78f13cb45a9145bf02b2692b7ff3ec6ff70f90fbe1292cbed33df9e03de42d7c",
+  "sample_count": 178,
+  "task_count": 12,
+  "candidate_pool": {
+    "static_tokens": 16,
+    "union_tokens": 357,
+    "mean_tokens_per_sample": 177.02247191011236,
+    "target_coverage": 0.9325842696629213
+  },
+  "metrics": {
+    "mean_target_nll_delta": -0.6728404362327723,
+    "task_wins": 12,
+    "task_regressions": 0,
+    "maximum_task_mean_nll_regression": -0.000897105129558895
+  },
+  "per_task": [
+    {
+      "task_id": "v30-grounded-activation-health",
+      "family": "continue_tool",
+      "samples": 16,
+      "mean_target_nll_delta": -0.7278832266781325
+    },
+    {
+      "task_id": "v30-grounded-compiler-read-exact",
+      "family": "continue_tool",
+      "samples": 21,
+      "mean_target_nll_delta": -0.6125024687922492
+    },
+    {
+      "task_id": "v30-grounded-missing-manifest-list",
+      "family": "continue_tool",
+      "samples": 21,
+      "mean_target_nll_delta": -0.5546627601021534
+    },
+    {
+      "task_id": "v30-grounded-missing-namespace-ask",
+      "family": "continue_tool",
+      "samples": 20,
+      "mean_target_nll_delta": -0.7407844347635443
+    },
+    {
+      "task_id": "v30-grounded-missing-profile-list",
+      "family": "continue_tool",
+      "samples": 21,
+      "mean_target_nll_delta": -0.8386611782088599
+    },
+    {
+      "task_id": "v30-grounded-missing-region-ask",
+      "family": "continue_tool",
+      "samples": 19,
+      "mean_target_nll_delta": -0.8645106310492165
+    },
+    {
+      "task_id": "v30-grounded-read-echo-json",
+      "family": "finish_json",
+      "samples": 8,
+      "mean_target_nll_delta": -0.021297754324059337
+    },
+    {
+      "task_id": "v30-grounded-save-explicit-json",
+      "family": "finish_json",
+      "samples": 5,
+      "mean_target_nll_delta": -0.0019839872702156923
+    },
+    {
+      "task_id": "v30-grounded-search-empty-json",
+      "family": "finish_json",
+      "samples": 5,
+      "mean_target_nll_delta": -0.01983320236699484
+    },
+    {
+      "task_id": "v30-grounded-test-read-exact",
+      "family": "continue_tool",
+      "samples": 20,
+      "mean_target_nll_delta": -1.0091709073331534
+    },
+    {
+      "task_id": "v30-grounded-validation-activate",
+      "family": "continue_tool",
+      "samples": 17,
+      "mean_target_nll_delta": -0.8404911254776147
+    },
+    {
+      "task_id": "v30-grounded-write-explicit-json",
+      "family": "finish_json",
+      "samples": 5,
+      "mean_target_nll_delta": -0.000897105129558895
+    }
+  ],
+  "worst_samples": [
+    {
+      "sample_id": "v30-grounded-missing-manifest-list:0020",
+      "task_id": "v30-grounded-missing-manifest-list",
+      "family": "continue_tool",
+      "token_index": 20,
+      "target_token_id": 248059,
+      "target_in_dynamic_pool": true,
+      "candidate_count": 177,
+      "native_target_nll": 2.176013725138624,
+      "corrected_target_nll": 8.02578974267681,
+      "target_nll_delta": 5.849776017538186
+    },
+    {
+      "sample_id": "v30-grounded-missing-namespace-ask:0019",
+      "task_id": "v30-grounded-missing-namespace-ask",
+      "family": "continue_tool",
+      "token_index": 19,
+      "target_token_id": 248059,
+      "target_in_dynamic_pool": true,
+      "candidate_count": 180,
+      "native_target_nll": 2.246595590999192,
+      "corrected_target_nll": 7.869009202387161,
+      "target_nll_delta": 5.6224136113879695
+    },
+    {
+      "sample_id": "v30-grounded-test-read-exact:0019",
+      "task_id": "v30-grounded-test-read-exact",
+      "family": "continue_tool",
+      "token_index": 19,
+      "target_token_id": 248059,
+      "target_in_dynamic_pool": true,
+      "candidate_count": 186,
+      "native_target_nll": 3.3310655338891664,
+      "corrected_target_nll": 8.699832673006451,
+      "target_nll_delta": 5.368767139117285
+    },
+    {
+      "sample_id": "v30-grounded-compiler-read-exact:0020",
+      "task_id": "v30-grounded-compiler-read-exact",
+      "family": "continue_tool",
+      "token_index": 20,
+      "target_token_id": 248059,
+      "target_in_dynamic_pool": true,
+      "candidate_count": 185,
+      "native_target_nll": 0.22834626724276674,
+      "corrected_target_nll": 5.3842200425197575,
+      "target_nll_delta": 5.155873775276991
+    },
+    {
+      "sample_id": "v30-grounded-missing-profile-list:0020",
+      "task_id": "v30-grounded-missing-profile-list",
+      "family": "continue_tool",
+      "token_index": 20,
+      "target_token_id": 248059,
+      "target_in_dynamic_pool": true,
+      "candidate_count": 179,
+      "native_target_nll": 0.010681580889063014,
+      "corrected_target_nll": 2.543004835276978,
+      "target_nll_delta": 2.532323254387915
+    },
+    {
+      "sample_id": "v30-grounded-activation-health:0015",
+      "task_id": "v30-grounded-activation-health",
+      "family": "continue_tool",
+      "token_index": 15,
+      "target_token_id": 248059,
+      "target_in_dynamic_pool": true,
+      "candidate_count": 172,
+      "native_target_nll": 0.03888444246021194,
+      "corrected_target_nll": 2.2382551860707736,
+      "target_nll_delta": 2.1993707436105616
+    },
+    {
+      "sample_id": "v30-grounded-missing-manifest-list:0019",
+      "task_id": "v30-grounded-missing-manifest-list",
+      "family": "continue_tool",
+      "token_index": 19,
+      "target_token_id": 198,
+      "target_in_dynamic_pool": true,
+      "candidate_count": 177,
+      "native_target_nll": 0.0023419772930708405,
+      "corrected_target_nll": 2.169694147833507,
+      "target_nll_delta": 2.167352170540436
+    },
+    {
+      "sample_id": "v30-grounded-compiler-read-exact:0019",
+      "task_id": "v30-grounded-compiler-read-exact",
+      "family": "continue_tool",
+      "token_index": 19,
+      "target_token_id": 198,
+      "target_in_dynamic_pool": true,
+      "candidate_count": 185,
+      "native_target_nll": 0.007123674128365565,
+      "corrected_target_nll": 1.8719593561496737,
+      "target_nll_delta": 1.8648356820213081
+    },
+    {
+      "sample_id": "v30-grounded-missing-region-ask:0018",
+      "task_id": "v30-grounded-missing-region-ask",
+      "family": "continue_tool",
+      "token_index": 18,
+      "target_token_id": 248059,
+      "target_in_dynamic_pool": true,
+      "candidate_count": 187,
+      "native_target_nll": 0.10818435956306871,
+      "corrected_target_nll": 1.8950623991144901,
+      "target_nll_delta": 1.7868780395514214
+    },
+    {
+      "sample_id": "v30-grounded-validation-activate:0016",
+      "task_id": "v30-grounded-validation-activate",
+      "family": "continue_tool",
+      "token_index": 16,
+      "target_token_id": 248059,
+      "target_in_dynamic_pool": true,
+      "candidate_count": 166,
+      "native_target_nll": 0.0031191055626997866,
+      "corrected_target_nll": 1.4395346311633332,
+      "target_nll_delta": 1.4364155256006335
+    },
+    {
+      "sample_id": "v30-grounded-validation-activate:0015",
+      "task_id": "v30-grounded-validation-activate",
+      "family": "continue_tool",
+      "token_index": 15,
+      "target_token_id": 198,
+      "target_in_dynamic_pool": true,
+      "candidate_count": 166,
+      "native_target_nll": 0.002388718824345659,
+      "corrected_target_nll": 1.1470394265560806,
+      "target_nll_delta": 1.144650707731735
+    },
+    {
+      "sample_id": "v30-grounded-missing-namespace-ask:0013",
+      "task_id": "v30-grounded-missing-namespace-ask",
+      "family": "continue_tool",
+      "token_index": 13,
+      "target_token_id": 97622,
+      "target_in_dynamic_pool": true,
+      "candidate_count": 179,
+      "native_target_nll": 0.13403244931479463,
+      "corrected_target_nll": 0.8166518942100289,
+      "target_nll_delta": 0.6826194448952343
+    }
+  ],
+  "gate_passed": true,
+  "decision": "只允许实现运行时原型并跑一次冻结真实生成门；不直接晋级正式入口。"
+}

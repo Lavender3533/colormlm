@@ -1,0 +1,382 @@
+{
+  "format": "colormlm-qwen36-expert-pair-audit-v1",
+  "models": {
+    "pre_router_base": {
+      "path": "D:/project/大模型ssd化/fast16/models/ColorLM-v5-GLM-SynapticGraft.gguf",
+      "bytes": 13731822240,
+      "architecture": "colorlmv4",
+      "name": "ColorLM-v5-GLM-graft32-e0.03-depth",
+      "tensor_count": 733
+    },
+    "base": {
+      "path": "D:/project/大模型ssd化/fast16/models/ColorLM-v6-Q3Router-Fused-A1.gguf",
+      "bytes": 13731822496,
+      "architecture": "colorlmv4",
+      "name": "ColorLM-v6-Q3Router-Fused-alpha1",
+      "tensor_count": 733
+    },
+    "donor": {
+      "path": "D:/project/大模型ssd化/fast16/models/Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
+      "bytes": 22134528992,
+      "architecture": "qwen35moe",
+      "name": "Qwen3.6-35B-A3B",
+      "tensor_count": 733
+    }
+  },
+  "tokenizer": {
+    "key_sets_equal": false,
+    "all_fields_equal": false,
+    "token_identity_fields": [
+      "tokenizer.ggml.model",
+      "tokenizer.ggml.pre",
+      "tokenizer.ggml.tokens",
+      "tokenizer.ggml.merges",
+      "tokenizer.ggml.token_type",
+      "tokenizer.ggml.eos_token_id",
+      "tokenizer.ggml.padding_token_id"
+    ],
+    "token_identity_equal": true,
+    "token_identity_mismatches": [],
+    "operational_metadata_mismatches": [
+      "tokenizer.chat_template",
+      "tokenizer.ggml.add_bos_token",
+      "tokenizer.ggml.bos_token_id"
+    ],
+    "field_count_base": 8,
+    "field_count_donor": 10,
+    "mismatches": [
+      "tokenizer.chat_template",
+      "tokenizer.ggml.add_bos_token",
+      "tokenizer.ggml.bos_token_id"
+    ],
+    "base": {
+      "tokenizer.chat_template": {
+        "count": 7817,
+        "sha256": "311c30ebb1781138bfb1cd86acafda07eb623f3c82717b2960261ec4ab0da660"
+      },
+      "tokenizer.ggml.eos_token_id": {
+        "count": null,
+        "sha256": "6b94910aad26d386c6641f9dad2c179b05f6d0273b2167472c8b3d3ab0cc0f2b"
+      },
+      "tokenizer.ggml.merges": {
+        "count": 247587,
+        "sha256": "007b011cde20291d103f71f3811bec8ce9f1fcd2d06a64590d8b5ab7ba8ca338"
+      },
+      "tokenizer.ggml.model": {
+        "count": 4,
+        "sha256": "469976562d86d1b72c9df6f7ad7ef388145cd1ccbb31c88e4e5927f729f9bb0e"
+      },
+      "tokenizer.ggml.padding_token_id": {
+        "count": null,
+        "sha256": "2bf7669a2582a028c00d8e5bc9554c3afccb690243e7d82e3c4fda60830e8640"
+      },
+      "tokenizer.ggml.pre": {
+        "count": 6,
+        "sha256": "fb2ee0091a969945c24ae66a75c9aa7d95d35626440d24450d5a8b75b9b4a004"
+      },
+      "tokenizer.ggml.token_type": {
+        "count": 248320,
+        "sha256": "6308d6c133b3867d0165f8226d5a38b4526ac845f0c0accae58784b8f0aceac4"
+      },
+      "tokenizer.ggml.tokens": {
+        "count": 248320,
+        "sha256": "3c94d7b657ef6cc125581e900f9a1d9012883b9ad4230aee408e0a1c42342b4f"
+      }
+    },
+    "donor": {
+      "tokenizer.chat_template": {
+        "count": 8057,
+        "sha256": "a20febba9a11047d2aac6a5b5ae8c432b9816405a02fa63cef06fb0ab7b6a3c4"
+      },
+      "tokenizer.ggml.add_bos_token": {
+        "count": null,
+        "sha256": "3350f5ae6c9d79d0f446cfc30afc1f02cd8a4153fb7b923faa752de38bc3d903"
+      },
+      "tokenizer.ggml.bos_token_id": {
+        "count": null,
+        "sha256": "41b95b4e05e69134043e116285cde882c2d665e8e2849015a4c2ccd34a0ccbc1"
+      },
+      "tokenizer.ggml.eos_token_id": {
+        "count": null,
+        "sha256": "6b94910aad26d386c6641f9dad2c179b05f6d0273b2167472c8b3d3ab0cc0f2b"
+      },
+      "tokenizer.ggml.merges": {
+        "count": 247587,
+        "sha256": "007b011cde20291d103f71f3811bec8ce9f1fcd2d06a64590d8b5ab7ba8ca338"
+      },
+      "tokenizer.ggml.model": {
+        "count": 4,
+        "sha256": "469976562d86d1b72c9df6f7ad7ef388145cd1ccbb31c88e4e5927f729f9bb0e"
+      },
+      "tokenizer.ggml.padding_token_id": {
+        "count": null,
+        "sha256": "2bf7669a2582a028c00d8e5bc9554c3afccb690243e7d82e3c4fda60830e8640"
+      },
+      "tokenizer.ggml.pre": {
+        "count": 6,
+        "sha256": "fb2ee0091a969945c24ae66a75c9aa7d95d35626440d24450d5a8b75b9b4a004"
+      },
+      "tokenizer.ggml.token_type": {
+        "count": 248320,
+        "sha256": "6308d6c133b3867d0165f8226d5a38b4526ac845f0c0accae58784b8f0aceac4"
+      },
+      "tokenizer.ggml.tokens": {
+        "count": 248320,
+        "sha256": "3c94d7b657ef6cc125581e900f9a1d9012883b9ad4230aee408e0a1c42342b4f"
+      }
+    }
+  },
+  "layer": 39,
+  "closed_moe_tensor_count": 9,
+  "closed_moe_tensors": [
+    {
+      "name": "blk.39.post_attention_norm.weight",
+      "shape": [
+        2048
+      ],
+      "pre_router_base": {
+        "type": 0,
+        "bytes": 8192,
+        "sha256": "30cf662a7538adc8b340bddc101de02fd8a36f291f63f79e2f436156a886e77d"
+      },
+      "v6": {
+        "type": 0,
+        "bytes": 8192,
+        "sha256": "30cf662a7538adc8b340bddc101de02fd8a36f291f63f79e2f436156a886e77d"
+      },
+      "qwen36": {
+        "type": 0,
+        "bytes": 8192,
+        "sha256": "1fabea44acda7dc3728597eb7d51ad44f45deabacb31b99359a368a2ff7a521e"
+      },
+      "pre_router_base_equals_v6": true,
+      "v6_equals_qwen36": false
+    },
+    {
+      "name": "blk.39.ffn_gate_inp.weight",
+      "shape": [
+        2048,
+        256
+      ],
+      "pre_router_base": {
+        "type": 0,
+        "bytes": 2097152,
+        "sha256": "6b3e2bbdf020840280cc33b6458e6bc790e0553b1d09389adb7da940aea372cb"
+      },
+      "v6": {
+        "type": 0,
+        "bytes": 2097152,
+        "sha256": "1e24089073b5c4bf4d6f329aaa1d94fff96a5bebbc1f85e8d384aad8cb534557"
+      },
+      "qwen36": {
+        "type": 0,
+        "bytes": 2097152,
+        "sha256": "638777347c51049bc8529b4e88b6d60fc3ff54a6a328fb10ce836f2d59925254"
+      },
+      "pre_router_base_equals_v6": false,
+      "v6_equals_qwen36": false
+    },
+    {
+      "name": "blk.39.ffn_gate_exps.weight",
+      "shape": [
+        2048,
+        512,
+        256
+      ],
+      "pre_router_base": {
+        "type": 22,
+        "bytes": 85983232,
+        "sha256": "0331f1a4464402c32227c95785dee448295e0e5bb86218d714bfd058268120dd"
+      },
+      "v6": {
+        "type": 22,
+        "bytes": 85983232,
+        "sha256": "0331f1a4464402c32227c95785dee448295e0e5bb86218d714bfd058268120dd"
+      },
+      "qwen36": {
+        "type": 12,
+        "bytes": 150994944,
+        "sha256": "91ae3e391eb951531024b3380801889633df72567224a31df770c9e52184065d"
+      },
+      "pre_router_base_equals_v6": true,
+      "v6_equals_qwen36": false
+    },
+    {
+      "name": "blk.39.ffn_up_exps.weight",
+      "shape": [
+        2048,
+        512,
+        256
+      ],
+      "pre_router_base": {
+        "type": 22,
+        "bytes": 85983232,
+        "sha256": "813793dc93c9e5baa392f34f4eeb486276482d3869576140071a88911ddf67b7"
+      },
+      "v6": {
+        "type": 22,
+        "bytes": 85983232,
+        "sha256": "813793dc93c9e5baa392f34f4eeb486276482d3869576140071a88911ddf67b7"
+      },
+      "qwen36": {
+        "type": 12,
+        "bytes": 150994944,
+        "sha256": "a20636f3dbe024c33390483d65d391d936f7ea4cd220eb562cd403cb2c8ddfbe"
+      },
+      "pre_router_base_equals_v6": true,
+      "v6_equals_qwen36": false
+    },
+    {
+      "name": "blk.39.ffn_down_exps.weight",
+      "shape": [
+        512,
+        2048,
+        256
+      ],
+      "pre_router_base": {
+        "type": 21,
+        "bytes": 115343360,
+        "sha256": "18ba7c59c5a224e361739f99f7603a0deef564c053baf279193a3e244d6c93ac"
+      },
+      "v6": {
+        "type": 21,
+        "bytes": 115343360,
+        "sha256": "18ba7c59c5a224e361739f99f7603a0deef564c053baf279193a3e244d6c93ac"
+      },
+      "qwen36": {
+        "type": 14,
+        "bytes": 220200960,
+        "sha256": "a3ae850453cbbfb1c909e42764f9d7b00bebae18ecfcaccc7129c71676419fc8"
+      },
+      "pre_router_base_equals_v6": true,
+      "v6_equals_qwen36": false
+    },
+    {
+      "name": "blk.39.ffn_gate_shexp.weight",
+      "shape": [
+        2048,
+        512
+      ],
+      "pre_router_base": {
+        "type": 1,
+        "bytes": 2097152,
+        "sha256": "23d053e4f862a148cb5767f5fdc4b80059dae263c524adb340b9e61f0d731dad"
+      },
+      "v6": {
+        "type": 1,
+        "bytes": 2097152,
+        "sha256": "23d053e4f862a148cb5767f5fdc4b80059dae263c524adb340b9e61f0d731dad"
+      },
+      "qwen36": {
+        "type": 8,
+        "bytes": 1114112,
+        "sha256": "f1af1b932f9113b75f81d94017938530f50e16018f6c2f4389ef48abde0c4a5f"
+      },
+      "pre_router_base_equals_v6": true,
+      "v6_equals_qwen36": false
+    },
+    {
+      "name": "blk.39.ffn_up_shexp.weight",
+      "shape": [
+        2048,
+        512
+      ],
+      "pre_router_base": {
+        "type": 1,
+        "bytes": 2097152,
+        "sha256": "7efa1c95bed3995fec7783f75eec45aa816eaf35bd1a5b6ca032eeb85d291f4a"
+      },
+      "v6": {
+        "type": 1,
+        "bytes": 2097152,
+        "sha256": "7efa1c95bed3995fec7783f75eec45aa816eaf35bd1a5b6ca032eeb85d291f4a"
+      },
+      "qwen36": {
+        "type": 8,
+        "bytes": 1114112,
+        "sha256": "bab5422467f708e686c5e4035e1df3807c0835eca4bb670a22242743d1269156"
+      },
+      "pre_router_base_equals_v6": true,
+      "v6_equals_qwen36": false
+    },
+    {
+      "name": "blk.39.ffn_down_shexp.weight",
+      "shape": [
+        512,
+        2048
+      ],
+      "pre_router_base": {
+        "type": 1,
+        "bytes": 2097152,
+        "sha256": "9eb06508ef8cfbec7c2190376de1e90566937190f205d3ba810e67328e1fb100"
+      },
+      "v6": {
+        "type": 1,
+        "bytes": 2097152,
+        "sha256": "9eb06508ef8cfbec7c2190376de1e90566937190f205d3ba810e67328e1fb100"
+      },
+      "qwen36": {
+        "type": 8,
+        "bytes": 1114112,
+        "sha256": "77f0cab291c00b6a91de1f8d24eaceee8013568eef2f57c797fb4e4ff5056f40"
+      },
+      "pre_router_base_equals_v6": true,
+      "v6_equals_qwen36": false
+    },
+    {
+      "name": "blk.39.ffn_gate_inp_shexp.weight",
+      "shape": [
+        2048
+      ],
+      "pre_router_base": {
+        "type": 0,
+        "bytes": 8192,
+        "sha256": "0f4575234b6fd11367146a1584f23d1a7cdead326e5e5d7863080ffd4e6559ec"
+      },
+      "v6": {
+        "type": 0,
+        "bytes": 8192,
+        "sha256": "0f4575234b6fd11367146a1584f23d1a7cdead326e5e5d7863080ffd4e6559ec"
+      },
+      "qwen36": {
+        "type": 0,
+        "bytes": 8192,
+        "sha256": "39902429cba0b3c06944afb1e7e0fd347c2e75db717112e270064cfd3b7bfc33"
+      },
+      "pre_router_base_equals_v6": true,
+      "v6_equals_qwen36": false
+    }
+  ],
+  "router": {
+    "pre_router_base_vs_v6": {
+      "cosine": 0.991180956363678,
+      "rmse": 0.0015740643996617846,
+      "max_abs": 0.034423828125,
+      "exact": false
+    },
+    "v6_vs_qwen36": {
+      "cosine": 0.9991217255592346,
+      "rmse": 0.0004965724882106013,
+      "max_abs": 0.005706787109375,
+      "exact": false
+    },
+    "pre_router_base_vs_qwen36": {
+      "cosine": 0.991889476776123,
+      "rmse": 0.001508131181758476,
+      "max_abs": 0.034423828125,
+      "exact": false
+    }
+  },
+  "bytes": {
+    "replaced_base_payload": 295714816,
+    "qwen36_pair_payload": 527646720,
+    "estimated_model_delta": 231931904,
+    "estimated_output": 13963754400
+  },
+  "conclusion": {
+    "v6_only_changed_router_inside_l39_moe": true,
+    "v6_router_is_not_exact_qwen36": true,
+    "closed_pair_is_shape_compatible": true,
+    "prototype_allowed": true
+  }
+}

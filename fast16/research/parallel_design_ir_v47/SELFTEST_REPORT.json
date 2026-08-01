@@ -1,0 +1,635 @@
+{
+  "schema_version": "parallel-design-genome-selftest-v1",
+  "ok": false,
+  "cpu_static_only": true,
+  "splits_read": [
+    "train"
+  ],
+  "model_or_gpu_used": false,
+  "checks": [
+    {
+      "name": "schemas_parse",
+      "passed": true,
+      "evidence": [
+        "ColorLM v47 Design Genome 闭集动作 IR",
+        "Design Genome v1（llama.cpp grammar 兼容）",
+        "Design Genome 用户文案 copy slots"
+      ]
+    },
+    {
+      "name": "llamacpp_schema_no_boolean_subschema_or_prefixitems",
+      "passed": true,
+      "evidence": []
+    },
+    {
+      "name": "llamacpp_schema_converts_to_grammar",
+      "passed": false,
+      "evidence": {
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"D:\\project\\��ģ��ssd��\\llama.cpp\\examples\\json_schema_to_grammar.py\", line 839, in <module>\r\n    main()\r\n  File \"D:\\project\\��ģ��ssd��\\llama.cpp\\examples\\json_schema_to_grammar.py\", line 827, in main\r\n    schema = json.load(f)\r\n             ^^^^^^^^^^^^\r\n  File \"C:\\Users\\Kangnaixi\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\json\\__init__.py\", line 293, in load\r\n    return loads(fp.read(),\r\n                 ^^^^^^^^^\r\nUnicodeDecodeError: 'gbk' codec can't decode byte 0xae in position 111: illegal multibyte sequence\r\n",
+        "grammar_bytes": 0
+      }
+    },
+    {
+      "name": "bounded_role_ordered_gbnf",
+      "passed": true,
+      "evidence": {
+        "errors": [],
+        "bytes": 3260,
+        "lines": 20
+      }
+    },
+    {
+      "name": "train_only_exactly_8",
+      "passed": true,
+      "evidence": [
+        "pf47-train-01",
+        "pf47-train-02",
+        "pf47-train-03",
+        "pf47-train-04",
+        "pf47-train-05",
+        "pf47-train-06",
+        "pf47-train-07",
+        "pf47-train-08"
+      ]
+    },
+    {
+      "name": "genome_preferred_150_to_600_bytes",
+      "passed": true,
+      "evidence": {
+        "sizes": [
+          282,
+          291,
+          295,
+          286,
+          289,
+          289,
+          315,
+          270
+        ],
+        "hard_max": 1200
+      }
+    },
+    {
+      "name": "compile_deterministic_and_all_train_static_gates",
+      "passed": true,
+      "evidence": [
+        {
+          "task_id": "pf47-train-01",
+          "passed": true,
+          "final_score": 91.0,
+          "template_penalty": 0.0,
+          "critical": {
+            "valid_utf8": true,
+            "no_bom": true,
+            "single_html": true,
+            "task_signals": true,
+            "no_forbidden": true
+          },
+          "score_checks": {
+            "final": true,
+            "structure": true,
+            "responsive": true,
+            "interaction": true,
+            "visual_complexity": true,
+            "dependency_safety": true,
+            "accessibility": true,
+            "max_template_penalty": true
+          },
+          "failed_required": [],
+          "failed_any": [],
+          "matched_forbidden": []
+        },
+        {
+          "task_id": "pf47-train-02",
+          "passed": true,
+          "final_score": 91.5,
+          "template_penalty": 0.0,
+          "critical": {
+            "valid_utf8": true,
+            "no_bom": true,
+            "single_html": true,
+            "task_signals": true,
+            "no_forbidden": true
+          },
+          "score_checks": {
+            "final": true,
+            "structure": true,
+            "responsive": true,
+            "interaction": true,
+            "visual_complexity": true,
+            "dependency_safety": true,
+            "accessibility": true,
+            "max_template_penalty": true
+          },
+          "failed_required": [],
+          "failed_any": [],
+          "matched_forbidden": []
+        },
+        {
+          "task_id": "pf47-train-03",
+          "passed": true,
+          "final_score": 91.5,
+          "template_penalty": 0.0,
+          "critical": {
+            "valid_utf8": true,
+            "no_bom": true,
+            "single_html": true,
+            "task_signals": true,
+            "no_forbidden": true
+          },
+          "score_checks": {
+            "final": true,
+            "structure": true,
+            "responsive": true,
+            "interaction": true,
+            "visual_complexity": true,
+            "dependency_safety": true,
+            "accessibility": true,
+            "max_template_penalty": true
+          },
+          "failed_required": [],
+          "failed_any": [],
+          "matched_forbidden": []
+        },
+        {
+          "task_id": "pf47-train-04",
+          "passed": true,
+          "final_score": 92.0,
+          "template_penalty": 0.0,
+          "critical": {
+            "valid_utf8": true,
+            "no_bom": true,
+            "single_html": true,
+            "task_signals": true,
+            "no_forbidden": true
+          },
+          "score_checks": {
+            "final": true,
+            "structure": true,
+            "responsive": true,
+            "interaction": true,
+            "visual_complexity": true,
+            "dependency_safety": true,
+            "accessibility": true,
+            "max_template_penalty": true
+          },
+          "failed_required": [],
+          "failed_any": [],
+          "matched_forbidden": []
+        },
+        {
+          "task_id": "pf47-train-05",
+          "passed": true,
+          "final_score": 91.5,
+          "template_penalty": 0.0,
+          "critical": {
+            "valid_utf8": true,
+            "no_bom": true,
+            "single_html": true,
+            "task_signals": true,
+            "no_forbidden": true
+          },
+          "score_checks": {
+            "final": true,
+            "structure": true,
+            "responsive": true,
+            "interaction": true,
+            "visual_complexity": true,
+            "dependency_safety": true,
+            "accessibility": true,
+            "max_template_penalty": true
+          },
+          "failed_required": [],
+          "failed_any": [],
+          "matched_forbidden": []
+        },
+        {
+          "task_id": "pf47-train-06",
+          "passed": true,
+          "final_score": 91.5,
+          "template_penalty": 0.0,
+          "critical": {
+            "valid_utf8": true,
+            "no_bom": true,
+            "single_html": true,
+            "task_signals": true,
+            "no_forbidden": true
+          },
+          "score_checks": {
+            "final": true,
+            "structure": true,
+            "responsive": true,
+            "interaction": true,
+            "visual_complexity": true,
+            "dependency_safety": true,
+            "accessibility": true,
+            "max_template_penalty": true
+          },
+          "failed_required": [],
+          "failed_any": [],
+          "matched_forbidden": []
+        },
+        {
+          "task_id": "pf47-train-07",
+          "passed": true,
+          "final_score": 91.5,
+          "template_penalty": 0.0,
+          "critical": {
+            "valid_utf8": true,
+            "no_bom": true,
+            "single_html": true,
+            "task_signals": true,
+            "no_forbidden": true
+          },
+          "score_checks": {
+            "final": true,
+            "structure": true,
+            "responsive": true,
+            "interaction": true,
+            "visual_complexity": true,
+            "dependency_safety": true,
+            "accessibility": true,
+            "max_template_penalty": true
+          },
+          "failed_required": [],
+          "failed_any": [],
+          "matched_forbidden": []
+        },
+        {
+          "task_id": "pf47-train-08",
+          "passed": true,
+          "final_score": 92.5,
+          "template_penalty": 0.0,
+          "critical": {
+            "valid_utf8": true,
+            "no_bom": true,
+            "single_html": true,
+            "task_signals": true,
+            "no_forbidden": true
+          },
+          "score_checks": {
+            "final": true,
+            "structure": true,
+            "responsive": true,
+            "interaction": true,
+            "visual_complexity": true,
+            "dependency_safety": true,
+            "accessibility": true,
+            "max_template_penalty": true
+          },
+          "failed_required": [],
+          "failed_any": [],
+          "matched_forbidden": []
+        }
+      ]
+    },
+    {
+      "name": "compiler_expansion_measured",
+      "passed": true,
+      "evidence": {
+        "per_task": [
+          72.301,
+          64.976,
+          59.637,
+          63.535,
+          64.218,
+          67.512,
+          58.527,
+          73.974
+        ],
+        "min": 58.527,
+        "max": 73.974
+      }
+    },
+    {
+      "name": "decoder_repeat_truncation_recovery",
+      "passed": true,
+      "evidence": {
+        "canonical": {
+          "schema_version": "design-genome-decode-report-v1",
+          "status": "ok",
+          "genome": {
+            "v": "dg1",
+            "q": [
+              0,
+              1
+            ],
+            "y": [
+              "dark",
+              "cyan",
+              "compact",
+              "soft"
+            ],
+            "l": [
+              "dashboard",
+              "cards",
+              0
+            ],
+            "c": [
+              [
+                "metrics",
+                "ops"
+              ],
+              [
+                "filters",
+                "status"
+              ],
+              [
+                "table",
+                "ops"
+              ],
+              [
+                "drawer",
+                "detail"
+              ],
+              [
+                "dialog",
+                "confirm"
+              ]
+            ],
+            "x": [
+              "filter",
+              "open",
+              "confirm",
+              "sort"
+            ],
+            "r": [
+              "table>cards",
+              "drawer>full"
+            ],
+            "a": 255,
+            "z": "inline"
+          },
+          "canonical": "{\"v\":\"dg1\",\"q\":[0,1],\"y\":[\"dark\",\"cyan\",\"compact\",\"soft\"],\"l\":[\"dashboard\",\"cards\",0],\"c\":[[\"metrics\",\"ops\"],[\"filters\",\"status\"],[\"table\",\"ops\"],[\"drawer\",\"detail\"],[\"dialog\",\"confirm\"]],\"x\":[\"filter\",\"open\",\"confirm\",\"sort\"],\"r\":[\"table>cards\",\"drawer>full\"],\"a\":255,\"z\":\"inline\"}",
+          "source_bytes": 282,
+          "complete_objects": 1,
+          "repeated_roots": 1,
+          "recovered_closure": false,
+          "resume_prefix": null,
+          "errors": []
+        },
+        "fenced": {
+          "schema_version": "design-genome-decode-report-v1",
+          "status": "ok",
+          "genome": {
+            "v": "dg1",
+            "q": [
+              0,
+              1
+            ],
+            "y": [
+              "dark",
+              "cyan",
+              "compact",
+              "soft"
+            ],
+            "l": [
+              "dashboard",
+              "cards",
+              0
+            ],
+            "c": [
+              [
+                "metrics",
+                "ops"
+              ],
+              [
+                "filters",
+                "status"
+              ],
+              [
+                "table",
+                "ops"
+              ],
+              [
+                "drawer",
+                "detail"
+              ],
+              [
+                "dialog",
+                "confirm"
+              ]
+            ],
+            "x": [
+              "filter",
+              "open",
+              "confirm",
+              "sort"
+            ],
+            "r": [
+              "table>cards",
+              "drawer>full"
+            ],
+            "a": 255,
+            "z": "inline"
+          },
+          "canonical": "{\"v\":\"dg1\",\"q\":[0,1],\"y\":[\"dark\",\"cyan\",\"compact\",\"soft\"],\"l\":[\"dashboard\",\"cards\",0],\"c\":[[\"metrics\",\"ops\"],[\"filters\",\"status\"],[\"table\",\"ops\"],[\"drawer\",\"detail\"],[\"dialog\",\"confirm\"]],\"x\":[\"filter\",\"open\",\"confirm\",\"sort\"],\"r\":[\"table>cards\",\"drawer>full\"],\"a\":255,\"z\":\"inline\"}",
+          "source_bytes": 294,
+          "complete_objects": 1,
+          "repeated_roots": 1,
+          "recovered_closure": false,
+          "resume_prefix": null,
+          "errors": []
+        },
+        "duplicate": {
+          "schema_version": "design-genome-decode-report-v1",
+          "status": "recovered_duplicate_or_wrapper",
+          "genome": {
+            "v": "dg1",
+            "q": [
+              0,
+              1
+            ],
+            "y": [
+              "dark",
+              "cyan",
+              "compact",
+              "soft"
+            ],
+            "l": [
+              "dashboard",
+              "cards",
+              0
+            ],
+            "c": [
+              [
+                "metrics",
+                "ops"
+              ],
+              [
+                "filters",
+                "status"
+              ],
+              [
+                "table",
+                "ops"
+              ],
+              [
+                "drawer",
+                "detail"
+              ],
+              [
+                "dialog",
+                "confirm"
+              ]
+            ],
+            "x": [
+              "filter",
+              "open",
+              "confirm",
+              "sort"
+            ],
+            "r": [
+              "table>cards",
+              "drawer>full"
+            ],
+            "a": 255,
+            "z": "inline"
+          },
+          "canonical": "{\"v\":\"dg1\",\"q\":[0,1],\"y\":[\"dark\",\"cyan\",\"compact\",\"soft\"],\"l\":[\"dashboard\",\"cards\",0],\"c\":[[\"metrics\",\"ops\"],[\"filters\",\"status\"],[\"table\",\"ops\"],[\"drawer\",\"detail\"],[\"dialog\",\"confirm\"]],\"x\":[\"filter\",\"open\",\"confirm\",\"sort\"],\"r\":[\"table>cards\",\"drawer>full\"],\"a\":255,\"z\":\"inline\"}",
+          "source_bytes": 564,
+          "complete_objects": 2,
+          "repeated_roots": 2,
+          "recovered_closure": false,
+          "resume_prefix": null,
+          "errors": []
+        },
+        "closure": {
+          "schema_version": "design-genome-decode-report-v1",
+          "status": "recovered_closure",
+          "genome": {
+            "v": "dg1",
+            "q": [
+              0,
+              1
+            ],
+            "y": [
+              "dark",
+              "cyan",
+              "compact",
+              "soft"
+            ],
+            "l": [
+              "dashboard",
+              "cards",
+              0
+            ],
+            "c": [
+              [
+                "metrics",
+                "ops"
+              ],
+              [
+                "filters",
+                "status"
+              ],
+              [
+                "table",
+                "ops"
+              ],
+              [
+                "drawer",
+                "detail"
+              ],
+              [
+                "dialog",
+                "confirm"
+              ]
+            ],
+            "x": [
+              "filter",
+              "open",
+              "confirm",
+              "sort"
+            ],
+            "r": [
+              "table>cards",
+              "drawer>full"
+            ],
+            "a": 255,
+            "z": "inline"
+          },
+          "canonical": "{\"v\":\"dg1\",\"q\":[0,1],\"y\":[\"dark\",\"cyan\",\"compact\",\"soft\"],\"l\":[\"dashboard\",\"cards\",0],\"c\":[[\"metrics\",\"ops\"],[\"filters\",\"status\"],[\"table\",\"ops\"],[\"drawer\",\"detail\"],[\"dialog\",\"confirm\"]],\"x\":[\"filter\",\"open\",\"confirm\",\"sort\"],\"r\":[\"table>cards\",\"drawer>full\"],\"a\":255,\"z\":\"inline\"}",
+          "source_bytes": 281,
+          "complete_objects": 0,
+          "repeated_roots": 1,
+          "recovered_closure": true,
+          "resume_prefix": null,
+          "errors": []
+        },
+        "early_truncation": {
+          "schema_version": "design-genome-decode-report-v1",
+          "status": "needs_resume",
+          "genome": null,
+          "canonical": null,
+          "source_bytes": 110,
+          "complete_objects": 0,
+          "repeated_roots": 1,
+          "recovered_closure": false,
+          "resume_prefix": "{\"v\":\"dg1\",\"q\":[0,1],\"y\":[\"dark\",\"cyan\",\"compact\",\"soft\"],\"l\":[\"dashboard\",\"cards\",0],\"c\":[[\"metrics\",\"ops\"],[",
+          "errors": [
+            "$: 缺少字段 ['a', 'r', 'x', 'z']",
+            "$.c: 生成契约固定为 primary/controls/content/detail/support 五槽",
+            "$.c[1]: 必须为 [family,variant]",
+            "$.x: 必须按 data/view/commit/state 固定四槽",
+            "$.r: 必须按 main/overlay 固定两槽",
+            "$.a: 无障碍位图必须为 15..255",
+            "$.z: 资产策略必须为 inline/none",
+            "$: 规范序列为 113 字节，要求 150..1200",
+            "截断发生在完整槽位之前；禁止猜测缺失基因，应携带 resume_prefix 继续受约束生成"
+          ]
+        }
+      }
+    },
+    {
+      "name": "semantic_role_mismatch_rejected",
+      "passed": true,
+      "evidence": [
+        "$.c[1]: 不属于 controls 角色槽",
+        "$.c[1]: dashboard 的 controls 槽不允许 sidebar",
+        "$.x: 动作 filter 没有对应组件"
+      ]
+    },
+    {
+      "name": "compiler_has_no_task_id_or_title_special_case",
+      "passed": true,
+      "evidence": []
+    },
+    {
+      "name": "all_text_utf8_without_bom",
+      "passed": true,
+      "evidence": {
+        "checked": 43,
+        "errors": []
+      }
+    }
+  ],
+  "teacher_summary": {
+    "count": 8,
+    "genome_bytes": [
+      282,
+      291,
+      295,
+      286,
+      289,
+      289,
+      315,
+      270
+    ],
+    "min_bytes": 270,
+    "max_bytes": 315,
+    "mean_bytes": 289.62,
+    "compile_expansion_ratios": [
+      72.301,
+      64.976,
+      59.637,
+      63.535,
+      64.218,
+      67.512,
+      58.527,
+      73.974
+    ],
+    "train_static_gate_passes": 8
+  }
+}

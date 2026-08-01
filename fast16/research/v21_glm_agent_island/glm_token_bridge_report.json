@@ -1,0 +1,29 @@
+{
+  "format": "colorlm-gguf-token-transport-v1",
+  "source": "D:\\project\\大模型ssd化\\fast16\\models\\GLM-4.7-Flash-Q5_K_M.gguf",
+  "target": "D:\\project\\大模型ssd化\\fast16\\models\\ColorLM-v6-Q3Router-Fused-A1.gguf",
+  "contract": "donor_row @ T = colorlm_row",
+  "shared_unique_tokens": 143045,
+  "sampled_tokens": 4096,
+  "train_tokens": 3072,
+  "heldout_tokens": 1024,
+  "heldout_cosine_before": {
+    "mean": -0.00026535202050581574,
+    "median": -0.0005992569494992495,
+    "p10": -0.02795233204960823,
+    "p90": 0.027089253067970276
+  },
+  "heldout_cosine_after": {
+    "mean": 0.26664242148399353,
+    "median": 0.2623378038406372,
+    "p10": 0.19498327374458313,
+    "p90": 0.343953400850296
+  },
+  "orthogonality_rmse": 8.170353993364188e-08,
+  "singular_values": {
+    "min": 2.549353303038515e-05,
+    "median": 0.5817701816558838,
+    "max": 64.23735046386719
+  },
+  "matrix": "D:\\project\\大模型ssd化\\fast16\\research\\v21_glm_agent_island\\glm_to_colorlm_token_orthogonal_f32.npy"
+}

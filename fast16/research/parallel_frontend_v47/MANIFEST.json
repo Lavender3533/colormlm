@@ -1,0 +1,83 @@
+{
+  "schema_version": "parallel-frontend-manifest-v1",
+  "encoding": "UTF-8 without BOM",
+  "scorer_version": "parallel-frontend-static-v1.0.0",
+  "gate_counts": {
+    "train": 8,
+    "validation": 8,
+    "blind": 8,
+    "total": 24
+  },
+  "files": [
+    {
+      "path": "score_html.py",
+      "bytes": 33171,
+      "sha256": "3029838222c3a47295d7dc7b5211ad63981ab04896921db67edbbce039303d44"
+    },
+    {
+      "path": "validate_gates.py",
+      "bytes": 12860,
+      "sha256": "416927bc6f9f6e078a0663e26acb260dd6434de27500252023f3bcf9613d52c6"
+    },
+    {
+      "path": "selftest.py",
+      "bytes": 4113,
+      "sha256": "f194f469855dab0ad6ee97dad7172d1b4f3012c8822a9967465baf0dbb882be6"
+    },
+    {
+      "path": "scoring_contract.json",
+      "bytes": 2698,
+      "sha256": "d0eb0d44d866d61c828b886034cf4dcb3b7bc916f52ed4e0ae967db8c8a1bb07"
+    },
+    {
+      "path": "audit_report.schema.json",
+      "bytes": 2400,
+      "sha256": "72dca4b793af7577a846d029729a6cf7881feafe9551e9d2636635edc3be6b84"
+    },
+    {
+      "path": "gate.schema.json",
+      "bytes": 1994,
+      "sha256": "3380d5184f78c8c2b555c2fa695e18f7d5faf02fb6798e0e36d28c533617a517"
+    },
+    {
+      "path": "data/train.jsonl",
+      "bytes": 7130,
+      "sha256": "82ff801e45489f40823489655670db7d2482667883ce9b4281cdaadb9879289f"
+    },
+    {
+      "path": "data/validation.jsonl",
+      "bytes": 7181,
+      "sha256": "8f39f43ce7b66721393741c444db11ac4545209b3600158e266798c3ce1fe0eb"
+    },
+    {
+      "path": "data/blind.jsonl",
+      "bytes": 7236,
+      "sha256": "2e9885dad761c4dddff1a3b62f44afaf5c63ee63496fa1319dddb7626135e708"
+    },
+    {
+      "path": "fixtures/ordinary_three_cards.html",
+      "bytes": 1129,
+      "sha256": "36385b64610b8a79e02d19c158c45f3e10e0c09a6f7af3809aea41a8f695e1a3"
+    },
+    {
+      "path": "fixtures/advanced_reference.html",
+      "bytes": 4855,
+      "sha256": "aaec5be48d7570ad9e621b38b5faef4efc17ba1ad9696f4e69b7039c9237787a"
+    },
+    {
+      "path": "sample_audit_report.json",
+      "bytes": 86741,
+      "sha256": "bf7f9b2d1728c6e5ec0c9befab450aa5107d70cd6fe8268fc8b99563824c3f3a"
+    },
+    {
+      "path": "RESEARCH_NOTES.md",
+      "bytes": 5795,
+      "sha256": "9347af8ad01db7bc8f2c14aeda77cd3dc83816c3e3e475275cf43d235d1590fe"
+    },
+    {
+      "path": "DISTILLATION_PLAN.md",
+      "bytes": 5425,
+      "sha256": "52d1876c4d35bd09ef8673af986b12d0acaf5219b03ba1d60e98e60f9ceb8009"
+    }
+  ]
+}

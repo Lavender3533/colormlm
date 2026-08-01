@@ -1,0 +1,1 @@
+{"schema_version":"design-copy-slots-v1","task_id":"pf47-train-05","prompt_sha256":"8110865498a82498f34b756656f56ab54cccbd097a601d1d55a7db9948a8ccbf","slots":[{"id":0,"kind":"title","text":"API 文档工作台"},{"id":1,"kind":"lede","text":"可折叠侧栏、锚点目录、语言切换、代码复制反馈和响应示例标签页"}]}

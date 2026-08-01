@@ -1,0 +1,25 @@
+{
+  "format": "colorlm-kimi-k3-range-source-v1",
+  "plan_identity": {
+    "repo": "moonshotai/Kimi-K3",
+    "revision": "master",
+    "layer": 92,
+    "expert": 291,
+    "source_shard": "model-00093-of-000096.safetensors",
+    "http_range": {
+      "start": 4600273128,
+      "end_inclusive": 4617820391,
+      "bytes": 17547264
+    }
+  },
+  "etag": "\"DA15EF95A922CBBF3305A6A8D013678E-400\"",
+  "last_modified": "Mon, 27 Jul 2026 17:08:14 GMT",
+  "validator": {
+    "header": "ETag",
+    "value": "\"DA15EF95A922CBBF3305A6A8D013678E-400\""
+  },
+  "shard_bytes": 16567507176,
+  "header_tensors_sha256": "eb6fb897d049743afec3986ff01e6d2d3b7ffd5400685bbdb9a8c87cfa7b71b3",
+  "header_validation_bytes": 823016,
+  "raw_sha256": "07d5aab872d00b75ec595800b5f074847b3b01a00a96d229a01d8b9a49462eea"
+}

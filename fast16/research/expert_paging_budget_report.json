@@ -1,0 +1,69 @@
+{
+  "format": "colorlm-expert-paging-budget-v1",
+  "model": "ColorLM-v6-Q3Router-Fused-A1.gguf",
+  "architecture": "colorlmv4",
+  "layers": 40,
+  "experts_per_layer": 256,
+  "active_experts_per_token": 8,
+  "full_expert_bank_gib": 10.703125,
+  "mean_expert_mib_per_layer": 1.0703125,
+  "slot_pool": [
+    {
+      "hot_experts_per_layer": 8,
+      "all_layer_pool_gib": 0.33447265625,
+      "rolling_two_layer_pool_mib": 17.125,
+      "fraction_of_full_expert_bank": 0.03125
+    },
+    {
+      "hot_experts_per_layer": 16,
+      "all_layer_pool_gib": 0.6689453125,
+      "rolling_two_layer_pool_mib": 34.25,
+      "fraction_of_full_expert_bank": 0.0625
+    },
+    {
+      "hot_experts_per_layer": 32,
+      "all_layer_pool_gib": 1.337890625,
+      "rolling_two_layer_pool_mib": 68.5,
+      "fraction_of_full_expert_bank": 0.125
+    },
+    {
+      "hot_experts_per_layer": 64,
+      "all_layer_pool_gib": 2.67578125,
+      "rolling_two_layer_pool_mib": 137.0,
+      "fraction_of_full_expert_bank": 0.25
+    }
+  ],
+  "ssd_assumption_gib_per_second": 3.5,
+  "cache_miss_budget": [
+    {
+      "cache_hit_rate": 0.0,
+      "ssd_read_mib_per_token": 342.5,
+      "ideal_ssd_time_ms_per_token": 95.56361607142857
+    },
+    {
+      "cache_hit_rate": 0.5,
+      "ssd_read_mib_per_token": 171.25,
+      "ideal_ssd_time_ms_per_token": 47.781808035714285
+    },
+    {
+      "cache_hit_rate": 0.9,
+      "ssd_read_mib_per_token": 34.24999999999999,
+      "ideal_ssd_time_ms_per_token": 9.556361607142854
+    },
+    {
+      "cache_hit_rate": 0.95,
+      "ssd_read_mib_per_token": 17.125000000000014,
+      "ideal_ssd_time_ms_per_token": 4.778180803571432
+    },
+    {
+      "cache_hit_rate": 0.99,
+      "ssd_read_mib_per_token": 3.425000000000003,
+      "ideal_ssd_time_ms_per_token": 0.9556361607142866
+    }
+  ],
+  "notes": [
+    "all_layer_pool keeps K hot experts for every layer",
+    "rolling pool is a lower bound and requires correct asynchronous prefetch",
+    "SSD times exclude random I/O, synchronization, decompression and GPU upload"
+  ]
+}

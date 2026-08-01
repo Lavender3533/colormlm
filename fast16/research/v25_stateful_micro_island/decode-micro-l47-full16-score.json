@@ -1,0 +1,147 @@
+{
+  "format": "colorlm-multicap-short-gate-score-v1",
+  "selection": "full",
+  "tasks": "D:\\project\\大模型ssd化\\fast16\\research\\parallel_b\\multicap_short_gate_v1.json",
+  "responses": "D:\\project\\大模型ssd化\\fast16\\research\\v25_stateful_micro_island\\decode-micro-l47-full16-responses.jsonl",
+  "complete": true,
+  "summary": {
+    "passed": 9,
+    "total": 16,
+    "per_dimension": {
+      "coding": {
+        "passed": 2,
+        "total": 2
+      },
+      "communication": {
+        "passed": 2,
+        "total": 2
+      },
+      "computer_use": {
+        "passed": 0,
+        "total": 2
+      },
+      "knowledge": {
+        "passed": 2,
+        "total": 2
+      },
+      "long_context": {
+        "passed": 2,
+        "total": 2
+      },
+      "planning": {
+        "passed": 1,
+        "total": 2
+      },
+      "reasoning": {
+        "passed": 0,
+        "total": 2
+      },
+      "tools": {
+        "passed": 0,
+        "total": 2
+      }
+    }
+  },
+  "input_errors": {
+    "duplicates": [],
+    "unknown": []
+  },
+  "results": [
+    {
+      "id": "reasoning-state-transition",
+      "dimension": "reasoning",
+      "passed": false,
+      "detail": "JSON 不匹配: actual={'answer': 26}"
+    },
+    {
+      "id": "reasoning-constraint-order",
+      "dimension": "reasoning",
+      "passed": false,
+      "detail": "output 不是纯 JSON: Extra data"
+    },
+    {
+      "id": "knowledge-frozen-fact",
+      "dimension": "knowledge",
+      "passed": true,
+      "detail": "exact_json"
+    },
+    {
+      "id": "knowledge-conflict",
+      "dimension": "knowledge",
+      "passed": true,
+      "detail": "exact_json"
+    },
+    {
+      "id": "long-context-two-markers",
+      "dimension": "long_context",
+      "passed": true,
+      "detail": "exact_json"
+    },
+    {
+      "id": "long-context-latest-revision",
+      "dimension": "long_context",
+      "passed": true,
+      "detail": "exact_json"
+    },
+    {
+      "id": "coding-python-clamp-fix",
+      "dimension": "coding",
+      "passed": true,
+      "detail": "exact_text"
+    },
+    {
+      "id": "coding-rust-boundary-fix",
+      "dimension": "coding",
+      "passed": true,
+      "detail": "exact_text"
+    },
+    {
+      "id": "tools-read-file",
+      "dimension": "tools",
+      "passed": false,
+      "detail": "tool_calls[0].function.arguments 不是合法 JSON"
+    },
+    {
+      "id": "tools-search-text",
+      "dimension": "tools",
+      "passed": false,
+      "detail": "tool_calls[0].function.arguments 不是合法 JSON"
+    },
+    {
+      "id": "planning-deploy-sequence",
+      "dimension": "planning",
+      "passed": false,
+      "detail": "JSON 不匹配: actual={'actions': ['验证新配置']}"
+    },
+    {
+      "id": "planning-budget-choice",
+      "dimension": "planning",
+      "passed": true,
+      "detail": "exact_json"
+    },
+    {
+      "id": "computer-use-save-dialog",
+      "dimension": "computer_use",
+      "passed": false,
+      "detail": "JSON 不匹配: actual={'actions': [{'action': 'type', 'value': 'report.txt'}]}"
+    },
+    {
+      "id": "computer-use-filter-menu",
+      "dimension": "computer_use",
+      "passed": false,
+      "detail": "output 不是纯 JSON: Expecting value"
+    },
+    {
+      "id": "communication-strict-format",
+      "dimension": "communication",
+      "passed": true,
+      "detail": "exact_json"
+    },
+    {
+      "id": "communication-preference-consistency",
+      "dimension": "communication",
+      "passed": true,
+      "detail": "exact_text"
+    }
+  ]
+}

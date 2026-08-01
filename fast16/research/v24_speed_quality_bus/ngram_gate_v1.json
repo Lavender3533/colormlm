@@ -1,0 +1,53 @@
+{
+  "format": "colorlm-v24-ngram-gate-v1",
+  "temperature": 0,
+  "seed": 18,
+  "tasks": [
+    {
+      "id": "code-patch-typescript",
+      "max_tokens": 128,
+      "system": "You are a coding assistant. Follow the requested output format exactly.",
+      "user": "Return only the complete corrected TypeScript code, without Markdown. Preserve the API and fix all edge cases.\n\nexport function clampPage(page: number, totalPages: number): number {\n  if (totalPages === 0) return 1;\n  return Math.min(totalPages, Math.max(0, page));\n}"
+    },
+    {
+      "id": "code-new-rust",
+      "max_tokens": 128,
+      "system": "You are a coding assistant. Follow the requested output format exactly.",
+      "user": "只输出可编译的Rust函数，不要Markdown和解释：实现fn dedup_sorted(values: &[i64]) -> Vec<i64>，输入已排序，输出去重后的新Vec。"
+    },
+    {
+      "id": "natural-chinese",
+      "max_tokens": 96,
+      "system": "你是表达自然、准确、简洁的中文助手。",
+      "user": "用不超过80个汉字说明互斥锁和信号量的核心区别，并各举一个适用场景。不要列标题。"
+    },
+    {
+      "id": "tool-read-file",
+      "max_tokens": 64,
+      "system": "You are a coding agent. Use the provided tool when needed and do not describe a tool call in prose.",
+      "user": "Read src/main.rs once, then stop and wait for the tool result.",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "description": "Read a UTF-8 text file from the workspace.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto"
+    }
+  ]
+}

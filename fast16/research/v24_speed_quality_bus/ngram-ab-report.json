@@ -1,0 +1,42 @@
+{
+  "format": "colorlm-v24-ngram-ab-report-v1",
+  "contract_sha256": "e42a27c855825187cfb31b15b71d10f8ac10b61f00c9979f5992bb5f8f81fdaa",
+  "output_exact": false,
+  "tasks": [
+    {
+      "id": "code-patch-typescript",
+      "output_exact": true,
+      "baseline_tokens_per_second": 14.015843997565693,
+      "candidate_tokens_per_second": 15.022860875236514,
+      "relative_percent": 7.184846505467113
+    },
+    {
+      "id": "code-new-rust",
+      "output_exact": false,
+      "baseline_tokens_per_second": 16.585158409521114,
+      "candidate_tokens_per_second": 16.2943053922455,
+      "relative_percent": -1.7536945387789715
+    },
+    {
+      "id": "natural-chinese",
+      "output_exact": false,
+      "baseline_tokens_per_second": 14.773126978558764,
+      "candidate_tokens_per_second": 14.257294429710011,
+      "relative_percent": -3.4916950866083707
+    },
+    {
+      "id": "tool-read-file",
+      "output_exact": false,
+      "baseline_tokens_per_second": 11.069114470837723,
+      "candidate_tokens_per_second": 8.907951171222749,
+      "relative_percent": -19.52426551652976
+    }
+  ],
+  "summary": {
+    "baseline_tokens_per_second": 14.244426094137818,
+    "candidate_tokens_per_second": 14.141548267160783,
+    "relative_percent": -0.7222321650387498,
+    "decision": "reject",
+    "claim_limit": "single adjacent short A/B; not a stable broad speed claim"
+  }
+}

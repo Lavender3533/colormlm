@@ -1,0 +1,183 @@
+{
+  "format": "colorlm-tool-protocol-gate-v1",
+  "date": "2026-08-01",
+  "purpose": "在任何v27候选结果产生前冻结，用于验证GLM工具协议互补是否跨未见schema泛化。",
+  "split_policy": {
+    "train": [
+      "tool-read-range",
+      "tool-search-symbol",
+      "tool-write-note",
+      "tool-list-source",
+      "tool-run-check",
+      "tool-fetch-json"
+    ],
+    "validation": [
+      "tool-move-artifact",
+      "tool-create-cache",
+      "tool-file-metadata"
+    ],
+    "test": [
+      "tool-replace-version",
+      "tool-git-diff",
+      "tool-ask-clarification"
+    ]
+  },
+  "items": [
+    {
+      "id": "tool-read-range",
+      "dimension": "tools",
+      "split": "train",
+      "max_output_tokens": 80,
+      "prompt": "可用工具只有 read_range(path:string,start:string,end:string)。读取 src/router.rs 的第 20 到 45 行。不要输出文本，只发起一次工具调用。",
+      "validator": {
+        "type": "tool_call",
+        "expected_name": "read_range",
+        "expected_arguments": {"path": "src/router.rs", "start": "20", "end": "45"},
+        "expected_finish_reason": "tool_calls"
+      }
+    },
+    {
+      "id": "tool-search-symbol",
+      "dimension": "tools",
+      "split": "train",
+      "max_output_tokens": 80,
+      "prompt": "可用工具只有 search_text(query:string,path:string,glob:string)。在 lib 下所有 TypeScript 文件中搜索 createRouter。不要输出文本，只发起一次工具调用。",
+      "validator": {
+        "type": "tool_call",
+        "expected_name": "search_text",
+        "expected_arguments": {"query": "createRouter", "path": "lib", "glob": "*.ts"},
+        "expected_finish_reason": "tool_calls"
+      }
+    },
+    {
+      "id": "tool-write-note",
+      "dimension": "tools",
+      "split": "train",
+      "max_output_tokens": 80,
+      "prompt": "可用工具只有 write_file(path:string,content:string)。把内容 ready 写入 notes/status.txt。不要输出文本，只发起一次工具调用。",
+      "validator": {
+        "type": "tool_call",
+        "expected_name": "write_file",
+        "expected_arguments": {"path": "notes/status.txt", "content": "ready"},
+        "expected_finish_reason": "tool_calls"
+      }
+    },
+    {
+      "id": "tool-list-source",
+      "dimension": "tools",
+      "split": "train",
+      "max_output_tokens": 80,
+      "prompt": "可用工具只有 list_files(path:string,glob:string)。列出 src/components 下的全部 Vue 文件。不要输出文本，只发起一次工具调用。",
+      "validator": {
+        "type": "tool_call",
+        "expected_name": "list_files",
+        "expected_arguments": {"path": "src/components", "glob": "*.vue"},
+        "expected_finish_reason": "tool_calls"
+      }
+    },
+    {
+      "id": "tool-run-check",
+      "dimension": "tools",
+      "split": "train",
+      "max_output_tokens": 80,
+      "prompt": "可用工具只有 run_command(command:string,cwd:string)。在 backend 目录运行 cargo check。不要输出文本，只发起一次工具调用。",
+      "validator": {
+        "type": "tool_call",
+        "expected_name": "run_command",
+        "expected_arguments": {"command": "cargo check", "cwd": "backend"},
+        "expected_finish_reason": "tool_calls"
+      }
+    },
+    {
+      "id": "tool-fetch-json",
+      "dimension": "tools",
+      "split": "train",
+      "max_output_tokens": 96,
+      "prompt": "可用工具只有 fetch_url(url:string,method:string,accept:string)。用 GET 请求 https://example.test/api/health 并接收 application/json。不要输出文本，只发起一次工具调用。",
+      "validator": {
+        "type": "tool_call",
+        "expected_name": "fetch_url",
+        "expected_arguments": {"url": "https://example.test/api/health", "method": "GET", "accept": "application/json"},
+        "expected_finish_reason": "tool_calls"
+      }
+    },
+    {
+      "id": "tool-move-artifact",
+      "dimension": "tools",
+      "split": "validation",
+      "max_output_tokens": 80,
+      "prompt": "可用工具只有 move_file(source:string,destination:string)。把 dist/app.zip 移到 release/app.zip。不要输出文本，只发起一次工具调用。",
+      "validator": {
+        "type": "tool_call",
+        "expected_name": "move_file",
+        "expected_arguments": {"source": "dist/app.zip", "destination": "release/app.zip"},
+        "expected_finish_reason": "tool_calls"
+      }
+    },
+    {
+      "id": "tool-create-cache",
+      "dimension": "tools",
+      "split": "validation",
+      "max_output_tokens": 64,
+      "prompt": "可用工具只有 create_directory(path:string)。创建 .cache/build。不要输出文本，只发起一次工具调用。",
+      "validator": {
+        "type": "tool_call",
+        "expected_name": "create_directory",
+        "expected_arguments": {"path": ".cache/build"},
+        "expected_finish_reason": "tool_calls"
+      }
+    },
+    {
+      "id": "tool-file-metadata",
+      "dimension": "tools",
+      "split": "validation",
+      "max_output_tokens": 64,
+      "prompt": "可用工具只有 file_info(path:string)。查看 config/prod.yaml 的文件信息。不要输出文本，只发起一次工具调用。",
+      "validator": {
+        "type": "tool_call",
+        "expected_name": "file_info",
+        "expected_arguments": {"path": "config/prod.yaml"},
+        "expected_finish_reason": "tool_calls"
+      }
+    },
+    {
+      "id": "tool-replace-version",
+      "dimension": "tools",
+      "split": "test",
+      "max_output_tokens": 96,
+      "prompt": "可用工具只有 replace_text(path:string,old_text:string,new_text:string)。在 package.json 中把 1.4.2 替换为 1.4.3。不要输出文本，只发起一次工具调用。",
+      "validator": {
+        "type": "tool_call",
+        "expected_name": "replace_text",
+        "expected_arguments": {"path": "package.json", "old_text": "1.4.2", "new_text": "1.4.3"},
+        "expected_finish_reason": "tool_calls"
+      }
+    },
+    {
+      "id": "tool-git-diff",
+      "dimension": "tools",
+      "split": "test",
+      "max_output_tokens": 64,
+      "prompt": "可用工具只有 git_diff(path:string,staged:string)。查看 src 目录中未暂存的差异。不要输出文本，只发起一次工具调用。",
+      "validator": {
+        "type": "tool_call",
+        "expected_name": "git_diff",
+        "expected_arguments": {"path": "src", "staged": "false"},
+        "expected_finish_reason": "tool_calls"
+      }
+    },
+    {
+      "id": "tool-ask-clarification",
+      "dimension": "tools",
+      "split": "test",
+      "max_output_tokens": 80,
+      "prompt": "用户要求部署，但没有说明测试环境还是生产环境。可用工具只有 ask_user_question(question:string)。询问“部署到测试环境还是生产环境？”。不要输出文本，只发起一次工具调用。",
+      "validator": {
+        "type": "tool_call",
+        "expected_name": "ask_user_question",
+        "expected_arguments": {"question": "部署到测试环境还是生产环境？"},
+        "expected_finish_reason": "tool_calls"
+      }
+    }
+  ]
+}

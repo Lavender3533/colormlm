@@ -1,0 +1,32 @@
+{
+  "format": "colorlm-v13-counterfactual-teacher-manifest-v1",
+  "purpose": "v44-critical-semantic-span-dev-only",
+  "source_tasks": "D:\\project\\大模型ssd化\\fast16\\research\\v43_policy_dataset\\trajectory_tasks_v1.jsonl",
+  "source_tasks_sha256": "a4ee853502a1326800b89d7cacd27fdf7b48266ad664d5b23cb14f8f6c2b2fcb",
+  "source_oracle": "D:\\project\\大模型ssd化\\fast16\\research\\v43_policy_dataset\\trajectory_oracle_v1.jsonl",
+  "source_oracle_sha256": "bd1d18c03e2dd8643079b741230678aa9d2fa92271e4585b777e96054b3bbf02",
+  "source_teacher": "D:\\project\\大模型ssd化\\fast16\\research\\v43_policy_dataset\\teacher.jsonl",
+  "source_teacher_sha256": "1d2be3d8a67ac9e75a5d01c58a4dea656bb373001cb9417db56270d23b9271f9",
+  "teacher": "critical-teacher-dev-v1.jsonl",
+  "teacher_sha256": "eb53164aa60c47881fc2ef11985ddf0f040c197fbcdaff9f83f932313d84b6aa",
+  "sample_count": 408,
+  "task_count": 96,
+  "splits": [
+    "train",
+    "validation"
+  ],
+  "role_counts": {
+    "argument_key": 128,
+    "argument_value": 128,
+    "finish_key": 40,
+    "finish_value": 40,
+    "tool_name": 72
+  },
+  "minimum_samples_per_task": 2,
+  "maximum_samples_per_task": 7,
+  "selection": "first-token-overlapping-each-semantic-field",
+  "test_leakage_count": 0,
+  "load_seconds": 16.728074700004072,
+  "tokenizer_endpoint": "http://127.0.0.1:8144/tokenize",
+  "model": "D:\\project\\大模型ssd化\\fast16\\models\\ColorLM-v36-Qwen36-Global-Shared-Backbone.gguf"
+}

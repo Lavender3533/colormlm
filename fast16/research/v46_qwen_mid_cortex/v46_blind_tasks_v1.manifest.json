@@ -1,0 +1,33 @@
+{
+  "format": "colorlm-v46-one-shot-blind-manifest-v1",
+  "tasks": "v46_blind_tasks_v1.jsonl",
+  "tasks_sha256": "4f4114c4f9bb24ac975f1ded85db1a5dda06181a7a63d603ce181c36112aa721",
+  "task_count": 24,
+  "capability_counts": {
+    "code_debugging": 4,
+    "computer_operation": 4,
+    "continue_or_finish": 4,
+    "missing_parameter_clarification": 4,
+    "multi_step_planning": 4,
+    "tool_argument_repair": 4
+  },
+  "template_clusters": [
+    "v46.code_debugging.apply",
+    "v46.code_debugging.inspect",
+    "v46.code_debugging.verify",
+    "v46.computer_operation.click",
+    "v46.computer_operation.close",
+    "v46.computer_operation.focus",
+    "v46.computer_operation.select",
+    "v46.continue_or_finish.committed",
+    "v46.continue_or_finish.expired",
+    "v46.continue_or_finish.ready",
+    "v46.missing_parameter_clarification.complete",
+    "v46.missing_parameter_clarification.missing",
+    "v46.multi_step_planning.need",
+    "v46.tool_argument_repair.ambiguous",
+    "v46.tool_argument_repair.unique"
+  ],
+  "old_v44_blind_reused": false,
+  "one_shot": true
+}

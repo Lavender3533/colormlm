@@ -1,0 +1,186 @@
+{
+  "format": "colorlm-v29-sequence-policy-report-v1",
+  "contract": "fast16/research/v29_sequence_policy_head/policy_head_contract.json",
+  "contract_sha256": "9e1dac2b61fdc3198678e1056db5c315dadf4b1a8d80eeacdbd87c538b81aa61",
+  "tasks": "fast16/research/v29_sequence_policy_head/policy_tasks_v1.jsonl",
+  "tasks_sha256": "e3bcee8a77ac696ad16661b4b492168ddd381bc75706f4601f3f2cd43c06625c",
+  "teacher": "fast16/research/v29_sequence_policy_head/policy-teacher.jsonl",
+  "teacher_sha256": "82757d28663f0d1ce7d892a59573f443606217306e20c48b08a73a19d2a0c563",
+  "capture": "fast16/research/v29_sequence_policy_head/policy-states.cnob",
+  "capture_sha256": "b2a2069bdfcd1e32b4a2205c579f94584b24214a80ca1752b20a424810ae0b75",
+  "candidate_token_count": 16,
+  "candidate_token_ids": [
+    15,
+    92,
+    198,
+    591,
+    763,
+    851,
+    2129,
+    2267,
+    2378,
+    2738,
+    3147,
+    4754,
+    8934,
+    15889,
+    21624,
+    248058
+  ],
+  "fit": {
+    "family": "centered multi-output dual ridge",
+    "hidden_normalization": "per-sample-l2",
+    "ridge_lambda": 0.1,
+    "fit_split": "train",
+    "parameter_scan_allowed": false,
+    "train_sample_count": 96,
+    "weight_l2": 21.11391732659315
+  },
+  "metrics": {
+    "train": {
+      "sample_count": 96,
+      "candidate_target_count": 78,
+      "mean_target_nll_delta": -1.1428068949406303,
+      "selected_token_win_rate": 1.0
+    },
+    "validation": {
+      "sample_count": 50,
+      "candidate_target_count": 35,
+      "mean_target_nll_delta": -0.8811669906931183,
+      "selected_token_win_rate": 1.0
+    },
+    "test": {
+      "sample_count": 46,
+      "candidate_target_count": 35,
+      "mean_target_nll_delta": -1.152184594033367,
+      "selected_token_win_rate": 1.0
+    }
+  },
+  "maximum_heldout_task_mean_nll_regression": -0.07314423712949605,
+  "per_task": [
+    {
+      "task_id": "policy-activate-health",
+      "split": "train",
+      "family": "continue",
+      "mean_target_nll_delta": -0.9154079487517658
+    },
+    {
+      "task_id": "policy-activation-worker-health",
+      "split": "validation",
+      "family": "continue",
+      "mean_target_nll_delta": -0.902506166695594
+    },
+    {
+      "task_id": "policy-command-error-read",
+      "split": "train",
+      "family": "continue",
+      "mean_target_nll_delta": -1.2989141888900766
+    },
+    {
+      "task_id": "policy-compile-failure-read",
+      "split": "test",
+      "family": "continue",
+      "mean_target_nll_delta": -1.3470569107232642
+    },
+    {
+      "task_id": "policy-config-missing-list",
+      "split": "validation",
+      "family": "continue",
+      "mean_target_nll_delta": -1.3101208146246044
+    },
+    {
+      "task_id": "policy-health-success-finish",
+      "split": "train",
+      "family": "finish",
+      "mean_target_nll_delta": -0.10553883561173372
+    },
+    {
+      "task_id": "policy-list-success-finish",
+      "split": "test",
+      "family": "finish",
+      "mean_target_nll_delta": -0.07314423712949605
+    },
+    {
+      "task_id": "policy-missing-env-ask",
+      "split": "train",
+      "family": "continue",
+      "mean_target_nll_delta": -1.4993479650494292
+    },
+    {
+      "task_id": "policy-missing-region-ask",
+      "split": "validation",
+      "family": "continue",
+      "mean_target_nll_delta": -1.333549231294522
+    },
+    {
+      "task_id": "policy-missing-secret-ask",
+      "split": "test",
+      "family": "continue",
+      "mean_target_nll_delta": -1.3702574377996557
+    },
+    {
+      "task_id": "policy-read-missing-list",
+      "split": "train",
+      "family": "continue",
+      "mean_target_nll_delta": -1.6786253920600647
+    },
+    {
+      "task_id": "policy-read-success-finish",
+      "split": "train",
+      "family": "finish",
+      "mean_target_nll_delta": -0.08409727745837792
+    },
+    {
+      "task_id": "policy-read-version-finish",
+      "split": "validation",
+      "family": "finish",
+      "mean_target_nll_delta": -0.07535184838108894
+    },
+    {
+      "task_id": "policy-save-success-finish",
+      "split": "validation",
+      "family": "finish",
+      "mean_target_nll_delta": -0.16521366956989425
+    },
+    {
+      "task_id": "policy-search-empty-finish",
+      "split": "train",
+      "family": "finish",
+      "mean_target_nll_delta": -0.5219981315077113
+    },
+    {
+      "task_id": "policy-test-failure-read",
+      "split": "train",
+      "family": "continue",
+      "mean_target_nll_delta": -1.7597781420942777
+    },
+    {
+      "task_id": "policy-validate-activate",
+      "split": "train",
+      "family": "continue",
+      "mean_target_nll_delta": -1.5943702007744631
+    },
+    {
+      "task_id": "policy-validation-production-activate",
+      "split": "test",
+      "family": "continue",
+      "mean_target_nll_delta": -1.6212273659149992
+    },
+    {
+      "task_id": "policy-write-log-finish",
+      "split": "test",
+      "family": "finish",
+      "mean_target_nll_delta": -0.11445391332647503
+    },
+    {
+      "task_id": "policy-write-success-finish",
+      "split": "train",
+      "family": "finish",
+      "mean_target_nll_delta": -0.16722679439672133
+    }
+  ],
+  "gate_passed": true,
+  "decision": "allow v29 runtime sequence policy prototype",
+  "weights": "fast16/research/v29_sequence_policy_head/policy-head-weights.npz",
+  "weights_sha256": "ecc14dee2860332f245de90c76ba8d1690e980b2d6b1e0a72f45d5df6116f7c1"
+}

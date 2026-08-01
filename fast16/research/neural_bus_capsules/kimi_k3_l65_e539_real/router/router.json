@@ -1,0 +1,33 @@
+{
+  "format": "colorlm-kimi-k3-router-prior-v1",
+  "layer": 65,
+  "expert": 539,
+  "source_router": {
+    "file": "fast16\\research\\biopsy_cache\\moonshotai_Kimi-K3\\master\\extracted\\language_model.model.layers.65.block_sparse_moe.gate.weight.bin",
+    "sha256": "62c53b86520a010eed42c3316d1754987ab1148ef3c639c76a170481ac6050d9",
+    "row": {
+      "file": "router_kimi_f32.npy",
+      "shape": [
+        7168
+      ],
+      "dtype": "float32",
+      "bytes": 28800,
+      "sha256": "0bb0f0a40462a44dcd6449872761c3a34cdb63a434e172c526c02e50d7ffc3a6",
+      "orientation": "vector"
+    }
+  },
+  "transport_sha256": "8ff9eb4760979135b05e31675b229128f275a951f3101fba98bbb63b41303c3b",
+  "mapped_row": {
+    "file": "router_colorlm_f32.npy",
+    "shape": [
+      2048
+    ],
+    "dtype": "float32",
+    "bytes": 8320,
+    "sha256": "01d313285f4290d89013defaef3a795e9d4115e945551bfb950c33333126b2c4",
+    "orientation": "vector"
+  },
+  "mapped_l2_norm": 2.60658597946167,
+  "contract": "score = router_colorlm_f32 @ hidden_state",
+  "warning": "router prior is not a capability label; calibrate against forced-route NLL"
+}

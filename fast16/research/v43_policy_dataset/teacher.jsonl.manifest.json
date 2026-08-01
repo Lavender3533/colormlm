@@ -1,0 +1,20 @@
+{
+  "format": "colorlm-v13-counterfactual-teacher-manifest-v1",
+  "source_tasks": "D:\\project\\大模型ssd化\\fast16\\research\\v43_policy_dataset\\trajectory_tasks_v1.jsonl",
+  "source_tasks_sha256": "a4ee853502a1326800b89d7cacd27fdf7b48266ad664d5b23cb14f8f6c2b2fcb",
+  "teacher": "teacher.jsonl",
+  "teacher_sha256": "1d2be3d8a67ac9e75a5d01c58a4dea656bb373001cb9417db56270d23b9271f9",
+  "sample_count": 720,
+  "task_count": 120,
+  "boundary_fallbacks": 0,
+  "max_target_tokens": 6,
+  "max_prefix_tokens": 4096,
+  "tokenizer_endpoint": {
+    "endpoint": "http://127.0.0.1:8143",
+    "models": [
+      "ColorLM-v43-V36-Capture"
+    ],
+    "model_path": "fast16\\models\\ColorLM-v36-Qwen36-Global-Shared-Backbone.gguf",
+    "context": 4096
+  }
+}

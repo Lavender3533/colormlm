@@ -1,0 +1,38 @@
+{
+  "format": "colorlm-v45-backbone-screen-contract-v1",
+  "date": "2026-08-01",
+  "claim_scope": "one-shot blind backbone promotion gate; no parameter or decoding scan allowed",
+  "dataset": "fast16/research/v44_critical_action_bus/dataset/trajectory_tasks_v1.jsonl",
+  "dataset_sha256": "7527c3473f5ee613f7c1611d4e5171bf78a0bd56844f04b68cc3001f1bee0477",
+  "allowed_split": "blind",
+  "forbidden_splits": [
+    "train",
+    "validation"
+  ],
+  "task_count": 60,
+  "seed": 3407,
+  "temperature": 0,
+  "maximum_output_tokens": 96,
+  "variants": [
+    {
+      "id": "v38",
+      "alias": "ColorLM-v38-Qwen36-Shared-Sequence-Policy-Blind",
+      "model": "fast16/models/ColorLM-v36-Qwen36-Global-Shared-Backbone.gguf",
+      "policy": "fast16/research/v29_sequence_policy_head/runtime-v1"
+    },
+    {
+      "id": "qwen36",
+      "alias": "Qwen3.6-35B-A3B-Full-Blind",
+      "model": "fast16/models/Qwen3.6-35B-A3B-UD-Q4_K_M.gguf"
+    }
+  ],
+  "promotion_gate": {
+    "baseline_id": "v38",
+    "minimum_score_gain": 4,
+    "minimum_paired_net_wins": 4,
+    "maximum_per_capability_regression": 1,
+    "minimum_passes_per_capability": 1
+  },
+  "selection": "qwen36 is promoted only when every frozen gate passes; this split is consumed after one run",
+  "failure_action": "retain v38; blind is consumed and must never be used for parameter or decoding scans"
+}

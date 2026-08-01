@@ -1,0 +1,52 @@
+{
+  "format": "colorlm-intelligence-router-v1",
+  "status": "rejected_control",
+  "deployable": false,
+  "runtime_layout": "two-headerless-f32-le-row-major-v1",
+  "input_width": 2048,
+  "input_transform": "per-token-l2-unit",
+  "route_count": 3,
+  "routes": [
+    "no_op",
+    "coder",
+    "k3"
+  ],
+  "tensors": {
+    "weight": {
+      "file": "weight.f32",
+      "dtype": "float32-le",
+      "ggml_shape": [
+        2048,
+        3
+      ],
+      "bytes": 24576,
+      "sha256": "18da1ff9ea10981d1434f1f789b8c941bc3c14f7a0f690f5afa0cdcbdb9c0460"
+    },
+    "bias": {
+      "file": "bias.f32",
+      "dtype": "float32-le",
+      "ggml_shape": [
+        3
+      ],
+      "bytes": 12,
+      "sha256": "3f99ff0b4bc5ced902ae3d9fbbc08c7225f4142833cbaa10505015cc0d46def1"
+    }
+  },
+  "artifact_fit_scope": "train_tasks_only",
+  "heldout_used_in_fit": false,
+  "independent_final_test_required_before_full_data_refit": true,
+  "calibration": {
+    "site": 28,
+    "train_accuracy": 1.0,
+    "heldout_accuracy": 0.36363636363636365,
+    "majority_route": "k3",
+    "majority_heldout_accuracy": 0.2727272727272727,
+    "always_no_op_heldout_accuracy": 0.45454545454545453,
+    "required_lift": 0.1,
+    "promotable": false,
+    "train_loss": 0.3770548701286316,
+    "artifact_fit_scope": "train_tasks_only",
+    "heldout_used_in_fit": false,
+    "independent_final_test_required_before_full_data_refit": true
+  }
+}

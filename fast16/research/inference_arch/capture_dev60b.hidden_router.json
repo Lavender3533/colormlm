@@ -1,0 +1,224 @@
+{
+  "alpha_grid": [
+    0.0,
+    3e-05,
+    0.0001,
+    0.0003,
+    0.001,
+    0.003,
+    0.01,
+    0.02,
+    0.03
+  ],
+  "capture": "D:\\project\\大模型ssd化\\fast16\\research\\inference_arch\\capture_dev60b.npz",
+  "capture_sha256": "dd0a6eca652cf60efbd5d9768903cfd6e6ef50a4389f109d2756b6d2bca66914",
+  "development_signal": false,
+  "exact_no_op_rate": 0.8166666666666667,
+  "feature_contract": "continuous base-logit summary and/or donor hidden only; text, task id and label are forbidden at inference",
+  "final_model": {
+    "feature": "base-only",
+    "feature_count": 2,
+    "l2": 10.0,
+    "mean": [
+      0.02887993567365096,
+      0.82055106036294
+    ],
+    "scale": [
+      0.043361616968579056,
+      0.285871754928391
+    ],
+    "shrink": 0.5,
+    "target_mean": 0.31666666666666665,
+    "threshold": 0.5,
+    "weights": [
+      0.052287915922865025,
+      -0.08606622671207062
+    ]
+  },
+  "folds": [
+    {
+      "active_rate": 0.16666666666666666,
+      "config": {
+        "feature": "base-only",
+        "inner_mean_delta": -0.0010120640591821507,
+        "inner_task_losses": 2,
+        "inner_task_wins": 3,
+        "inner_worst_task_delta": 0.00024091466563606426,
+        "l2": 0.1,
+        "shrink": 1.0,
+        "threshold": 0.5
+      },
+      "held_out_task": "code-binary-search",
+      "mean_alpha": 0.004419044960125217,
+      "sample_count": 6
+    },
+    {
+      "active_rate": 0.5,
+      "config": {
+        "feature": "hidden-unit",
+        "inner_mean_delta": 0.0009039955572720948,
+        "inner_task_losses": 6,
+        "inner_task_wins": 3,
+        "inner_worst_task_delta": 0.009378115565557057,
+        "l2": 10.0,
+        "shrink": 0.5,
+        "threshold": 0.3
+      },
+      "held_out_task": "code-java-add",
+      "mean_alpha": 0.0033236451592216416,
+      "sample_count": 6
+    },
+    {
+      "active_rate": 0.16666666666666666,
+      "config": {
+        "feature": "base-only",
+        "inner_mean_delta": 0.000424894569592666,
+        "inner_task_losses": 2,
+        "inner_task_wins": 3,
+        "inner_worst_task_delta": 0.007817429385084201,
+        "l2": 10.0,
+        "shrink": 0.5,
+        "threshold": 0.5
+      },
+      "held_out_task": "code-python-clamp",
+      "mean_alpha": 0.0012647791368614705,
+      "sample_count": 6
+    },
+    {
+      "active_rate": 0.3333333333333333,
+      "config": {
+        "feature": "base-only",
+        "inner_mean_delta": -0.0003106652164485577,
+        "inner_task_losses": 2,
+        "inner_task_wins": 5,
+        "inner_worst_task_delta": 0.008386841528794061,
+        "l2": 10.0,
+        "shrink": 1.0,
+        "threshold": 0.5
+      },
+      "held_out_task": "code-rust-max",
+      "mean_alpha": 0.005597079646377825,
+      "sample_count": 6
+    },
+    {
+      "active_rate": 0.3333333333333333,
+      "config": {
+        "feature": "base-only",
+        "inner_mean_delta": 0.0008676562469602522,
+        "inner_task_losses": 2,
+        "inner_task_wins": 1,
+        "inner_worst_task_delta": 0.007778105904930342,
+        "l2": 10.0,
+        "shrink": 0.5,
+        "threshold": 0.5
+      },
+      "held_out_task": "code-typescript-unique",
+      "mean_alpha": 0.0026701243620256103,
+      "sample_count": 6
+    },
+    {
+      "active_rate": 0.0,
+      "config": {
+        "feature": "base-only",
+        "inner_mean_delta": 0.000425899441730425,
+        "inner_task_losses": 2,
+        "inner_task_wins": 3,
+        "inner_worst_task_delta": 0.007812741976858495,
+        "l2": 10.0,
+        "shrink": 0.5,
+        "threshold": 0.5
+      },
+      "held_out_task": "tool-glob-files",
+      "mean_alpha": 0.0,
+      "sample_count": 6
+    },
+    {
+      "active_rate": 0.3333333333333333,
+      "config": {
+        "feature": "hidden-unit",
+        "inner_mean_delta": 0.0007676150574737838,
+        "inner_task_losses": 4,
+        "inner_task_wins": 2,
+        "inner_worst_task_delta": 0.011306785969524615,
+        "l2": 10.0,
+        "shrink": 0.5,
+        "threshold": 0.5
+      },
+      "held_out_task": "tool-read-file",
+      "mean_alpha": 0.0038763368646501637,
+      "sample_count": 6
+    },
+    {
+      "active_rate": 0.0,
+      "config": {
+        "feature": "base-only",
+        "inner_mean_delta": 0.0004826841044724736,
+        "inner_task_losses": 3,
+        "inner_task_wins": 3,
+        "inner_worst_task_delta": 0.008210063075635626,
+        "l2": 10.0,
+        "shrink": 0.5,
+        "threshold": 0.5
+      },
+      "held_out_task": "tool-run-command",
+      "mean_alpha": 0.0,
+      "sample_count": 6
+    },
+    {
+      "active_rate": 0.0,
+      "config": {
+        "feature": "base-only",
+        "inner_mean_delta": 0.0004219419161386441,
+        "inner_task_losses": 2,
+        "inner_task_wins": 3,
+        "inner_worst_task_delta": 0.007990546836837023,
+        "l2": 10.0,
+        "shrink": 0.5,
+        "threshold": 0.5
+      },
+      "held_out_task": "tool-search-text",
+      "mean_alpha": 0.0,
+      "sample_count": 6
+    },
+    {
+      "active_rate": 0.0,
+      "config": {
+        "feature": "base-only",
+        "inner_mean_delta": 0.0004642623783026323,
+        "inner_task_losses": 2,
+        "inner_task_wins": 4,
+        "inner_worst_task_delta": 0.008407261567883906,
+        "l2": 10.0,
+        "shrink": 0.5,
+        "threshold": 0.5
+      },
+      "held_out_task": "tool-write-file",
+      "mean_alpha": 0.0,
+      "sample_count": 6
+    }
+  ],
+  "format": "colorlm-hidden-dynamic-alpha-nested-loto-v1",
+  "mean_active_alpha": 0.011536914615961054,
+  "mean_delta": 0.001672476393474002,
+  "median_delta": 0.0,
+  "sample_count": 60,
+  "task_count": 10,
+  "task_losses": 5,
+  "task_mean_delta": {
+    "code-binary-search": 0.0020697139317622515,
+    "code-java-add": 0.00014070015905609523,
+    "code-python-clamp": 0.00022619500973182957,
+    "code-rust-max": 0.01623576852297563,
+    "code-typescript-unique": -0.0032859581565129283,
+    "tool-glob-files": 0.0,
+    "tool-read-file": 0.0013383444677271446,
+    "tool-run-command": 0.0,
+    "tool-search-text": 0.0,
+    "tool-write-file": 0.0
+  },
+  "task_wins": 1,
+  "token_equal": 49,
+  "token_losses": 8,
+  "token_wins": 3,
+  "worst_task_delta": 0.01623576852297563
+}

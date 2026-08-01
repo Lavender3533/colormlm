@@ -1,0 +1,30 @@
+{
+  "format": "colorlm-v46-mid-cortex-blind-contract-v1",
+  "date": "2026-08-01",
+  "claim_scope": "one-shot formal promotion gate on newly frozen templates; no reuse or parameter scan",
+  "base": "fast16/models/ColorLM-v36-Qwen36-Global-Shared-Backbone.gguf",
+  "formal_baseline": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+  "candidate": "fast16/models/ColorLM-v46-Qwen36-Mid-Cortex-L16-L31.gguf",
+  "policy": "fast16/research/v29_sequence_policy_head/runtime-v1",
+  "dataset": "fast16/research/v46_qwen_mid_cortex/v46_blind_tasks_v1.jsonl",
+  "dataset_sha256": "4f4114c4f9bb24ac975f1ded85db1a5dda06181a7a63d603ce181c36112aa721",
+  "split": "blind-v46",
+  "task_count": 24,
+  "seed": 3407,
+  "maximum_output_tokens": 96,
+  "frozen_layer_range": [
+    16,
+    31
+  ],
+  "old_v44_blind_reused": false,
+  "one_shot": true,
+  "development_gate": {
+    "minimum_score_gain_over_v38": 2,
+    "minimum_paired_net_wins": 2,
+    "maximum_regressions": 1,
+    "maximum_per_capability_regression": 1,
+    "minimum_passes_per_capability": 1,
+    "maximum_speed_regression": 0.3
+  },
+  "failure_action": "retain v38 as formal; consume this blind and stop direct layer splicing without scanning ranges"
+}

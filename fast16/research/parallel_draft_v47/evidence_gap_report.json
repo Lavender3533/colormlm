@@ -1,0 +1,93 @@
+{
+  "format": "colorlm-v47-parallel-draft-evidence-gap-v1",
+  "decision": "insufficient_real_assets_stop_before_training",
+  "existing_assets": {
+    "teacher": {
+      "path": "D:\\project\\大模型ssd化\\fast16\\research\\v44_critical_action_bus\\critical-teacher-dev-v1.jsonl",
+      "sha256": "eb53164aa60c47881fc2ef11985ddf0f040c197fbcdaff9f83f932313d84b6aa",
+      "manifest_sha256_matches": true,
+      "samples": 408,
+      "tasks": 96,
+      "splits": {
+        "train": 72,
+        "validation": 24
+      },
+      "selection": "每个语义字段首个判别token的稀疏teacher-forced位置",
+      "has_validator_token_ids": false,
+      "has_oracle_full_token_ids": false,
+      "four_consecutive_sparse_windows": 0,
+      "tasks_with_any_four_consecutive_sparse_window": 0
+    },
+    "capture": {
+      "path": "D:\\project\\大模型ssd化\\fast16\\research\\v44_critical_action_bus\\critical-states-dev-v1.cnob",
+      "declared_sha256": "e41b9da7f9c7042418f1fcca866524d2b079b18740f43d757c4e6fc09e7a53b9",
+      "hash_cross_manifest_consistent": true,
+      "source_model": "D:\\project\\大模型ssd化\\fast16\\models\\ColorLM-v36-Qwen36-Global-Shared-Backbone.gguf",
+      "source_is_v38": false,
+      "scan": {
+        "bytes": 408652800,
+        "tensor_records": 816,
+        "logical_records": 408,
+        "kinds": {
+          "1": 408,
+          "4": 408
+        },
+        "shapes": {
+          "4": {
+            "(2048, 1, 1, 1)": 408
+          },
+          "1": {
+            "(248320, 1, 1, 1)": 408
+          }
+        }
+      }
+    },
+    "span_audit": {
+      "tasks": 120,
+      "critical_token_occurrences": 2654,
+      "rows_store_complete_target_token_ids": false
+    },
+    "shortlist_408": {
+      "overall_covered": 408,
+      "overall_samples": 408,
+      "splits": [
+        "train",
+        "validation"
+      ],
+      "gate_passed": false,
+      "status": "development_feasibility_only",
+      "warning": "teacher-forced v43 states and consumed same-template splits; not a v47 ability or speed result"
+    }
+  },
+  "proof_boundaries": {
+    "actually_proven": [
+      "v36在408个稀疏teacher-forced关键位置上，冻结shortlist能包含该位置oracle target token",
+      "408条记录各有一份2048维terminal hidden和一份248320维原生logits",
+      "现有shortlist报告自身因无test而gate=false"
+    ],
+    "not_proven": [
+      "v38原生首token复用",
+      "同一anchor的一次性4-token完整轨迹shortlist覆盖",
+      "v38自由贪心validator轨迹",
+      "自由滚动候选命中与首拒绝位置",
+      "平均接受长度",
+      "解析或端到端加速"
+    ]
+  },
+  "contract_gates": {
+    "v38_anchor_capture": false,
+    "train_validation_test_present": false,
+    "full_oracle_token_sequences": false,
+    "v38_free_roll_validator_sequences": false,
+    "complete_trajectory_shortlist_gate": false,
+    "acceptance_prediction_allowed": false
+  },
+  "minimum_collection": [
+    "只启动一次v38采集会话；每个anchor保存一次terminal hidden和原生top-32 token/logit，不保存未来完整词表投影",
+    "每个anchor保存最近96个已提交token，并由v38温度0自由滚动最多4 token作为validator_token_ids",
+    "同时保存完整oracle_token_ids与是否提前EOS；oracle只用于必要覆盖，不得喂入自由滚动head",
+    "train/validation/test按group_id与template_cluster_id双重隔离，至少64个validation+test anchor并覆盖短/中/长上下文桶",
+    "收集后先跑完整轨迹shortlist覆盖；未过0.995立即停止，禁止训练或改C++"
+  ],
+  "claim_limit": "本审计没有重新采集、训练或模拟；不得把408/408写成v47接受率或加速。"
+}

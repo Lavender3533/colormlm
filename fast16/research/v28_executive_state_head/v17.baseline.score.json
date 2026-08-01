@@ -1,0 +1,71 @@
+{
+  "format": "colorlm-agent-state-gate-score-v1",
+  "summary": {
+    "passed": 4,
+    "total": 8
+  },
+  "per_split": {
+    "test": {
+      "passed": 1,
+      "total": 2
+    },
+    "train": {
+      "passed": 1,
+      "total": 4
+    },
+    "validation": {
+      "passed": 2,
+      "total": 2
+    }
+  },
+  "results": [
+    {
+      "id": "state-read-success-finish",
+      "split": "train",
+      "passed": false,
+      "detail": "输出不是纯JSON: Expecting value"
+    },
+    {
+      "id": "state-read-missing-recover",
+      "split": "train",
+      "passed": false,
+      "detail": "工具调用附带额外文本"
+    },
+    {
+      "id": "state-test-failure-inspect",
+      "split": "train",
+      "passed": false,
+      "detail": "工具调用不匹配: actual={'name': 'read_file', 'arguments': {'path': 'backend/tests/test_api.py'}}"
+    },
+    {
+      "id": "state-validation-activate",
+      "split": "train",
+      "passed": true,
+      "detail": "exact_tool_call"
+    },
+    {
+      "id": "state-activation-health",
+      "split": "validation",
+      "passed": true,
+      "detail": "exact_tool_call"
+    },
+    {
+      "id": "state-health-finish",
+      "split": "validation",
+      "passed": true,
+      "detail": "actual={'status': 'deployed'}"
+    },
+    {
+      "id": "state-missing-target-ask",
+      "split": "test",
+      "passed": false,
+      "detail": "缺少唯一合法工具调用"
+    },
+    {
+      "id": "state-write-success-finish",
+      "split": "test",
+      "passed": true,
+      "detail": "actual={'status': 'done'}"
+    }
+  ]
+}

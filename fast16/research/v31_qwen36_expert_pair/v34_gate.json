@@ -1,0 +1,70 @@
+{
+  "format": "colormlm-v34-independent-short-gate-v1",
+  "date": "2026-08-01",
+  "frozen_before_generation": true,
+  "purpose": "独立检查IQ3_S压缩后的40层Qwen3.6 MoE核心是否保留净能力并恢复速度。",
+  "dimensions": ["reasoning", "knowledge", "long_context", "coding", "tools", "planning", "computer_use", "communication"],
+  "items": [
+    {
+      "id": "reasoning-inplace-swap-v34",
+      "dimension": "reasoning",
+      "max_output_tokens": 24,
+      "prompt": "初始x=4,y=7。严格依次执行x=x+y；y=x-y；x=x-y，每一步使用已更新值。只输出{\"x\":整数,\"y\":整数}。",
+      "validator": {"type": "exact_json", "expected": {"x": 7, "y": 4}}
+    },
+    {
+      "id": "knowledge-current-signed-v34",
+      "dimension": "knowledge",
+      "max_output_tokens": 32,
+      "prompt": "仅依据事实：R1草稿称航线为A2；R2已签名但标记obsolete，称航线为B4；R3已签名且标记current，称航线为C7。只输出{\"route\":字符串,\"source\":字符串}。",
+      "validator": {"type": "exact_json", "expected": {"route": "C7", "source": "R3"}}
+    },
+    {
+      "id": "long-context-active-latest-v34",
+      "dimension": "long_context",
+      "max_output_tokens": 36,
+      "prompt": "事件1 color=red rev1。事件2 size=small rev8。事件3 color=blue rev6 state=cancelled。事件4 owner=Yu rev9。事件5 color=green rev5 state=active。事件6 size=large rev7。规则：忽略cancelled；每字段取rev最大。只输出{\"color\":字符串,\"size\":字符串}。",
+      "validator": {"type": "exact_json", "expected": {"color": "green", "size": "small"}}
+    },
+    {
+      "id": "coding-sql-parameter-v34",
+      "dimension": "coding",
+      "max_output_tokens": 40,
+      "prompt": "Python sqlite代码cur.execute(f\"SELECT * FROM users WHERE name='{name}'\")存在注入风险。只输出合法JSON：{\"sql\":字符串,\"params\":[字符串]}；sql使用?占位符，params只含name。",
+      "validator": {"type": "exact_json", "expected": {"sql": "SELECT * FROM users WHERE name=?", "params": ["name"]}}
+    },
+    {
+      "id": "tools-run-command-v34",
+      "dimension": "tools",
+      "max_output_tokens": 64,
+      "prompt": "可用工具只有run_command(command:string,cwd:string)。在backend目录执行精确命令npm test。不要输出文本，只发起一次工具调用。",
+      "validator": {
+        "type": "tool_call",
+        "expected_name": "run_command",
+        "expected_arguments": {"command": "npm test", "cwd": "backend"},
+        "expected_finish_reason": "tool_calls"
+      }
+    },
+    {
+      "id": "planning-budget-v34",
+      "dimension": "planning",
+      "max_output_tokens": 40,
+      "prompt": "预算8。A成本3价值4；B成本2价值5且依赖A；C成本5价值8；D成本1价值2。选B必须同时选A。最大化价值，价值相同取成本更低。只输出{\"choose\":[按字母排序],\"cost\":整数,\"value\":整数}。",
+      "validator": {"type": "exact_json", "expected": {"choose": ["A", "C"], "cost": 8, "value": 12}}
+    },
+    {
+      "id": "computer-use-discard-dialog-v34",
+      "dimension": "computer_use",
+      "max_output_tokens": 48,
+      "prompt": "离线界面：关闭文档后已弹出未保存确认框，按钮是Save、Don't Save、Cancel；目标是丢弃修改并完成关闭。只输出{\"actions\":[动作]}，动作格式{\"action\":\"click\",\"target\":标签}，不要解释。",
+      "validator": {"type": "exact_json", "expected": {"actions": [{"action": "click", "target": "Don't Save"}]}}
+    },
+    {
+      "id": "communication-no-overclaim-v34",
+      "dimension": "communication",
+      "max_output_tokens": 32,
+      "prompt": "事实：候选已压缩完成，但独立能力验证尚未出结果。只输出合法JSON，字段只能是stage和claim；stage为compressed，claim为pending。",
+      "validator": {"type": "exact_json", "expected": {"stage": "compressed", "claim": "pending"}}
+    }
+  ]
+}

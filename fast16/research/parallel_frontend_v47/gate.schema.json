@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://colorlm.local/schemas/parallel-frontend-gate-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "split", "template_family", "title", "prompt", "required_regex", "required_any_regex", "forbidden_regex", "min_scores", "critical"],
+  "properties": {
+    "schema_version": {"const": "parallel-frontend-gate-v1"},
+    "id": {"type": "string", "pattern": "^pf47-(train|validation|blind)-[0-9]{2}$"},
+    "split": {"enum": ["train", "validation", "blind"]},
+    "template_family": {"type": "string", "minLength": 3},
+    "title": {"type": "string", "minLength": 3},
+    "prompt": {"type": "string", "minLength": 40},
+    "required_regex": {"type": "array", "items": {"type": "string"}},
+    "required_any_regex": {"type": "array", "items": {"type": "array", "minItems": 2, "items": {"type": "string"}}},
+    "forbidden_regex": {"type": "array", "items": {"type": "string"}},
+    "min_scores": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["final", "structure", "responsive", "interaction", "visual_complexity", "dependency_safety", "accessibility", "max_template_penalty"],
+      "properties": {
+        "final": {"type": "number", "minimum": 0, "maximum": 100},
+        "structure": {"type": "number", "minimum": 0, "maximum": 18},
+        "responsive": {"type": "number", "minimum": 0, "maximum": 16},
+        "interaction": {"type": "number", "minimum": 0, "maximum": 16},
+        "visual_complexity": {"type": "number", "minimum": 0, "maximum": 20},
+        "dependency_safety": {"type": "number", "minimum": 0, "maximum": 10},
+        "accessibility": {"type": "number", "minimum": 0, "maximum": 20},
+        "max_template_penalty": {"type": "number", "minimum": 0, "maximum": 20}
+      }
+    },
+    "critical": {"type": "array", "items": {"enum": ["valid_utf8", "no_bom", "single_html", "task_signals", "no_forbidden"]}}
+  }
+}

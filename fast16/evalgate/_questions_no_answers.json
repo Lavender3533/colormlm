@@ -1,0 +1,362 @@
+[
+ {
+  "id": "q000",
+  "family": "divisibility",
+  "question": "1 到 320 之间(含两端)能被 9 或 11 整除、但不能被 7 整除的整数有多少个?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q001",
+  "family": "divisibility",
+  "question": "1 到 480 之间(含两端)能被 6 或 8 整除、但不能被 2 整除的整数有多少个?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q002",
+  "family": "divisibility",
+  "question": "1 到 800 之间(含两端)能被 4 或 9 整除、但不能被 7 整除的整数有多少个?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q003",
+  "family": "divisibility",
+  "question": "1 到 360 之间(含两端)能被 3 或 11 整除、但不能被 7 整除的整数有多少个?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q004",
+  "family": "divisibility",
+  "question": "1 到 290 之间(含两端)能被 6 或 13 整除、但不能被 2 整除的整数有多少个?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q005",
+  "family": "divisibility",
+  "question": "1 到 400 之间(含两端)能被 6 或 7 整除、但不能被 2 整除的整数有多少个?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q006",
+  "family": "divisibility",
+  "question": "1 到 680 之间(含两端)能被 4 或 6 整除、但不能被 5 整除的整数有多少个?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q007",
+  "family": "divisibility",
+  "question": "1 到 400 之间(含两端)能被 7 或 11 整除、但不能被 2 整除的整数有多少个?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q008",
+  "family": "divisibility",
+  "question": "1 到 220 之间(含两端)能被 8 或 13 整除、但不能被 5 整除的整数有多少个?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q009",
+  "family": "divisibility",
+  "question": "1 到 640 之间(含两端)能被 3 或 13 整除、但不能被 5 整除的整数有多少个?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q010",
+  "family": "bayes",
+  "question": "某疾病的患病率为 1/100。一种检测方法对患病者的阳性检出率为 95%,对未患病者的误报(假阳性)率为 1%。某人检测结果为阳性,那么这个人真正患病的概率是多少?请用最简分数作答。",
+  "answer_type": "fraction"
+ },
+ {
+  "id": "q011",
+  "family": "bayes",
+  "question": "某疾病的患病率为 1/1000。一种检测方法对患病者的阳性检出率为 80%,对未患病者的误报(假阳性)率为 10%。某人检测结果为阳性,那么这个人真正患病的概率是多少?请用最简分数作答。",
+  "answer_type": "fraction"
+ },
+ {
+  "id": "q012",
+  "family": "bayes",
+  "question": "某疾病的患病率为 1/20。一种检测方法对患病者的阳性检出率为 80%,对未患病者的误报(假阳性)率为 1%。某人检测结果为阳性,那么这个人真正患病的概率是多少?请用最简分数作答。",
+  "answer_type": "fraction"
+ },
+ {
+  "id": "q013",
+  "family": "bayes",
+  "question": "某疾病的患病率为 1/50。一种检测方法对患病者的阳性检出率为 99%,对未患病者的误报(假阳性)率为 10%。某人检测结果为阳性,那么这个人真正患病的概率是多少?请用最简分数作答。",
+  "answer_type": "fraction"
+ },
+ {
+  "id": "q014",
+  "family": "bayes",
+  "question": "某疾病的患病率为 1/200。一种检测方法对患病者的阳性检出率为 99%,对未患病者的误报(假阳性)率为 5%。某人检测结果为阳性,那么这个人真正患病的概率是多少?请用最简分数作答。",
+  "answer_type": "fraction"
+ },
+ {
+  "id": "q015",
+  "family": "bayes",
+  "question": "某疾病的患病率为 1/1000。一种检测方法对患病者的阳性检出率为 99%,对未患病者的误报(假阳性)率为 2%。某人检测结果为阳性,那么这个人真正患病的概率是多少?请用最简分数作答。",
+  "answer_type": "fraction"
+ },
+ {
+  "id": "q016",
+  "family": "bayes",
+  "question": "某疾病的患病率为 1/200。一种检测方法对患病者的阳性检出率为 80%,对未患病者的误报(假阳性)率为 1%。某人检测结果为阳性,那么这个人真正患病的概率是多少?请用最简分数作答。",
+  "answer_type": "fraction"
+ },
+ {
+  "id": "q017",
+  "family": "bayes",
+  "question": "某疾病的患病率为 1/1000。一种检测方法对患病者的阳性检出率为 99%,对未患病者的误报(假阳性)率为 1%。某人检测结果为阳性,那么这个人真正患病的概率是多少?请用最简分数作答。",
+  "answer_type": "fraction"
+ },
+ {
+  "id": "q018",
+  "family": "bayes",
+  "question": "某疾病的患病率为 1/20。一种检测方法对患病者的阳性检出率为 95%,对未患病者的误报(假阳性)率为 5%。某人检测结果为阳性,那么这个人真正患病的概率是多少?请用最简分数作答。",
+  "answer_type": "fraction"
+ },
+ {
+  "id": "q019",
+  "family": "bayes",
+  "question": "某疾病的患病率为 1/200。一种检测方法对患病者的阳性检出率为 90%,对未患病者的误报(假阳性)率为 5%。某人检测结果为阳性,那么这个人真正患病的概率是多少?请用最简分数作答。",
+  "answer_type": "fraction"
+ },
+ {
+  "id": "q020",
+  "family": "truthteller",
+  "question": "甲、乙、丙三人,每人要么永远说真话(诚实者),要么永远说假话(骗子)。甲说:「乙是诚实的」。乙说:「丙是骗子」。丙说:「乙和甲中恰好有一个骗子」。骗子是谁?按顺序列出所有骗子,如「甲」或「甲,丙」。",
+  "answer_type": "names"
+ },
+ {
+  "id": "q021",
+  "family": "truthteller",
+  "question": "甲、乙、丙三人,每人要么永远说真话(诚实者),要么永远说假话(骗子)。甲说:「乙和丙都是骗子」。乙说:「甲和丙中恰好有一个骗子」。丙说:「甲是骗子」。骗子是谁?按顺序列出所有骗子,如「甲」或「甲,丙」。",
+  "answer_type": "names"
+ },
+ {
+  "id": "q022",
+  "family": "truthteller",
+  "question": "甲、乙、丙三人,每人要么永远说真话(诚实者),要么永远说假话(骗子)。甲说:「丙是诚实的」。乙说:「甲和丙中恰好有一个骗子」。丙说:「乙是诚实的」。骗子是谁?按顺序列出所有骗子,如「甲」或「甲,丙」。",
+  "answer_type": "names"
+ },
+ {
+  "id": "q023",
+  "family": "truthteller",
+  "question": "甲、乙、丙三人,每人要么永远说真话(诚实者),要么永远说假话(骗子)。甲说:「乙是诚实的」。乙说:「丙和甲都是骗子」。丙说:「乙是骗子」。骗子是谁?按顺序列出所有骗子,如「甲」或「甲,丙」。",
+  "answer_type": "names"
+ },
+ {
+  "id": "q024",
+  "family": "truthteller",
+  "question": "甲、乙、丙三人,每人要么永远说真话(诚实者),要么永远说假话(骗子)。甲说:「乙和丙中恰好有一个骗子」。乙说:「甲是诚实的」。丙说:「甲和乙都是骗子」。骗子是谁?按顺序列出所有骗子,如「甲」或「甲,丙」。",
+  "answer_type": "names"
+ },
+ {
+  "id": "q025",
+  "family": "truthteller",
+  "question": "甲、乙、丙三人,每人要么永远说真话(诚实者),要么永远说假话(骗子)。甲说:「丙和乙都是骗子」。乙说:「甲是诚实的」。丙说:「甲和乙都是骗子」。骗子是谁?按顺序列出所有骗子,如「甲」或「甲,丙」。",
+  "answer_type": "names"
+ },
+ {
+  "id": "q026",
+  "family": "truthteller",
+  "question": "甲、乙、丙三人,每人要么永远说真话(诚实者),要么永远说假话(骗子)。甲说:「乙是骗子」。乙说:「甲和丙都是骗子」。丙说:「甲是骗子」。骗子是谁?按顺序列出所有骗子,如「甲」或「甲,丙」。",
+  "answer_type": "names"
+ },
+ {
+  "id": "q027",
+  "family": "truthteller",
+  "question": "甲、乙、丙三人,每人要么永远说真话(诚实者),要么永远说假话(骗子)。甲说:「丙是骗子」。乙说:「甲是骗子」。丙说:「甲和乙都是骗子」。骗子是谁?按顺序列出所有骗子,如「甲」或「甲,丙」。",
+  "answer_type": "names"
+ },
+ {
+  "id": "q028",
+  "family": "truthteller",
+  "question": "甲、乙、丙三人,每人要么永远说真话(诚实者),要么永远说假话(骗子)。甲说:「乙和丙中恰好有一个骗子」。乙说:「甲是骗子」。丙说:「乙是诚实的」。骗子是谁?按顺序列出所有骗子,如「甲」或「甲,丙」。",
+  "answer_type": "names"
+ },
+ {
+  "id": "q029",
+  "family": "truthteller",
+  "question": "甲、乙、丙三人,每人要么永远说真话(诚实者),要么永远说假话(骗子)。甲说:「乙和丙都是骗子」。乙说:「丙是诚实的」。丙说:「甲和乙都是骗子」。骗子是谁?按顺序列出所有骗子,如「甲」或「甲,丙」。",
+  "answer_type": "names"
+ },
+ {
+  "id": "q030",
+  "family": "ages",
+  "question": "今年,父亲的年龄是儿子的 4 倍;40 年后,父亲的年龄将是儿子的 2 倍。儿子今年多少岁?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q031",
+  "family": "ages",
+  "question": "今年,父亲的年龄是儿子的 6 倍;12 年后,父亲的年龄将是儿子的 3 倍。儿子今年多少岁?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q032",
+  "family": "ages",
+  "question": "今年,父亲的年龄是儿子的 3 倍;6 年后,父亲的年龄将是儿子的 2 倍。儿子今年多少岁?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q033",
+  "family": "ages",
+  "question": "今年,父亲的年龄是儿子的 4 倍;8 年后,父亲的年龄将是儿子的 3 倍。儿子今年多少岁?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q034",
+  "family": "ages",
+  "question": "今年,父亲的年龄是儿子的 7 倍;34 年后,父亲的年龄将是儿子的 3 倍。儿子今年多少岁?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q035",
+  "family": "ages",
+  "question": "今年,父亲的年龄是儿子的 4 倍;36 年后,父亲的年龄将是儿子的 2 倍。儿子今年多少岁?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q036",
+  "family": "ages",
+  "question": "今年,父亲的年龄是儿子的 4 倍;12 年后,父亲的年龄将是儿子的 2 倍。儿子今年多少岁?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q037",
+  "family": "ages",
+  "question": "今年,父亲的年龄是儿子的 5 倍;15 年后,父亲的年龄将是儿子的 3 倍。儿子今年多少岁?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q038",
+  "family": "ages",
+  "question": "今年,父亲的年龄是儿子的 7 倍;12 年后,父亲的年龄将是儿子的 3 倍。儿子今年多少岁?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q039",
+  "family": "ages",
+  "question": "今年,父亲的年龄是儿子的 5 倍;26 年后,父亲的年龄将是儿子的 3 倍。儿子今年多少岁?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q040",
+  "family": "remainder",
+  "question": "一个正整数除以 7 余 2,除以 11 余 3。满足条件的最小正整数是多少?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q041",
+  "family": "remainder",
+  "question": "一个正整数除以 5 余 4,除以 11 余 5。满足条件的最小正整数是多少?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q042",
+  "family": "remainder",
+  "question": "一个正整数除以 6 余 4,除以 7 余 4。满足条件的最小正整数是多少?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q043",
+  "family": "remainder",
+  "question": "一个正整数除以 7 余 5,除以 11 余 8。满足条件的最小正整数是多少?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q044",
+  "family": "remainder",
+  "question": "一个正整数除以 5 余 2,除以 6 余 4。满足条件的最小正整数是多少?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q045",
+  "family": "remainder",
+  "question": "一个正整数除以 12 余 6,除以 13 余 11。满足条件的最小正整数是多少?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q046",
+  "family": "remainder",
+  "question": "一个正整数除以 7 余 1,除以 8 余 4。满足条件的最小正整数是多少?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q047",
+  "family": "remainder",
+  "question": "一个正整数除以 8 余 5,除以 9 余 3。满足条件的最小正整数是多少?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q048",
+  "family": "remainder",
+  "question": "一个正整数除以 6 余 3,除以 11 余 1。满足条件的最小正整数是多少?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q049",
+  "family": "remainder",
+  "question": "一个正整数除以 11 余 8,除以 12 余 11。满足条件的最小正整数是多少?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q050",
+  "family": "combinatorics",
+  "question": "从 5 名男生和 5 名女生中选出 6 人组成小组,要求其中至少有 5 名女生,共有多少种不同的选法?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q051",
+  "family": "combinatorics",
+  "question": "从 6 名男生和 5 名女生中选出 3 人组成小组,要求其中至少有 3 名女生,共有多少种不同的选法?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q052",
+  "family": "combinatorics",
+  "question": "从 7 名男生和 3 名女生中选出 6 人组成小组,要求其中至少有 2 名女生,共有多少种不同的选法?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q053",
+  "family": "combinatorics",
+  "question": "从 8 名男生和 5 名女生中选出 6 人组成小组,要求其中至少有 5 名女生,共有多少种不同的选法?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q054",
+  "family": "combinatorics",
+  "question": "从 8 名男生和 4 名女生中选出 6 人组成小组,要求其中至少有 3 名女生,共有多少种不同的选法?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q055",
+  "family": "combinatorics",
+  "question": "从 6 名男生和 6 名女生中选出 4 人组成小组,要求其中至少有 1 名女生,共有多少种不同的选法?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q056",
+  "family": "combinatorics",
+  "question": "从 6 名男生和 4 名女生中选出 4 人组成小组,要求其中至少有 1 名女生,共有多少种不同的选法?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q057",
+  "family": "combinatorics",
+  "question": "从 7 名男生和 7 名女生中选出 3 人组成小组,要求其中至少有 3 名女生,共有多少种不同的选法?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q058",
+  "family": "combinatorics",
+  "question": "从 4 名男生和 4 名女生中选出 3 人组成小组,要求其中至少有 3 名女生,共有多少种不同的选法?",
+  "answer_type": "int"
+ },
+ {
+  "id": "q059",
+  "family": "combinatorics",
+  "question": "从 6 名男生和 3 名女生中选出 6 人组成小组,要求其中至少有 3 名女生,共有多少种不同的选法?",
+  "answer_type": "int"
+ }
+]

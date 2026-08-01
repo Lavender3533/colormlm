@@ -1,0 +1,92 @@
+{
+  "schema_version": "design-genome-component-catalog-v1",
+  "components": {
+    "hero": {
+      "plain": {"label": "概览", "text": "关键信息与主要操作集中呈现。"},
+      "editorial": {"label": "本期精选", "text": "独立视角、限量发行与清晰价格信息。"},
+      "story": {"label": "数据导读", "text": "沿年份与街区逐步阅读变化、比较与方法。"}
+    },
+    "filters": {
+      "status": {"label": "状态筛选", "fields": [{"label": "状态", "options": ["全部状态", "运行中", "警告", "离线"]}, {"label": "区域", "options": ["全部区域", "华东", "华北", "美西"]}]},
+      "catalog": {"label": "商品筛选", "fields": [{"label": "主题", "options": ["全部主题", "设计", "文化", "城市"]}, {"label": "价格", "options": ["全部价格", "¥0–80", "¥81–150"]}]},
+      "project": {"label": "项目筛选", "fields": [{"label": "阶段", "options": ["全部项目", "研究", "原型", "验证", "结果"]}]},
+      "date-stage": {"label": "日期与舞台筛选", "fields": [{"label": "日期", "options": ["全部日期", "周五", "周六"]}, {"label": "舞台", "options": ["全部舞台", "河岸", "仓库", "花园"]}]},
+      "year": {"label": "年份切换", "fields": [{"label": "年份", "options": ["2020", "2022", "2024"]}]},
+      "generic": {"label": "筛选", "fields": [{"label": "类别", "options": ["全部", "重点", "其他"]}]}
+    },
+    "table": {
+      "ops": {"label": "可排序节点表格", "cols": ["节点 ID", "区域", "状态", "CPU", "告警"], "rows": [["node-0001", "华东", "警告", "67%", "2"], ["node-0002", "华北", "运行中", "24%", "0"], ["node-0003", "美西", "离线", "0%", "1"]]},
+      "devices": {"label": "会话设备表", "cols": ["设备", "位置", "最近活动", "状态"], "rows": [["Windows 工作站", "东京", "刚刚", "当前设备"], ["移动设备", "上海", "2 小时前", "已验证"], ["浏览器会话", "北京", "昨天", "可撤销"]]},
+      "data": {"label": "数据表替代", "cols": ["年份", "街区", "覆盖率", "变化"], "rows": [["2020", "北岸", "31%", "+1.2%"], ["2022", "中央", "36%", "+2.4%"], ["2024", "南园", "42%", "+3.1%"]]},
+      "generic": {"label": "数据表", "cols": ["项目", "值", "状态"], "rows": [["项目 A", "24", "正常"], ["项目 B", "18", "关注"]]}
+    },
+    "drawer": {
+      "detail": {"label": "详情抽屉", "fields": ["运行时间：14 天", "负载：0.8", "网络：稳定", "最近告警：待确认"]},
+      "navigation": {"label": "目录抽屉", "fields": ["概览", "认证", "请求", "响应", "错误"]}
+    },
+    "dialog": {
+      "confirm": {"label": "告警确认对话框", "text": "确认后将记录操作人与时间。"},
+      "preview": {"label": "快速预览对话框", "text": "查看内容简介、价格与库存后加入购物袋。"},
+      "danger": {"label": "危险操作确认对话框", "text": "此操作会撤销选中会话，请再次确认。"},
+      "success": {"label": "成功反馈", "text": "提交已保存，可继续查看其他时段。"}
+    },
+    "products": {
+      "magazine": {"label": "杂志目录", "items": [["《界面与城市》", "¥68", "设计季刊"], ["《慢速出版》", "¥92", "文化专题"], ["《街角观察》", "¥54", "城市影像"], ["《材料实验》", "¥118", "工艺年刊"]]},
+      "catalog": {"label": "商品目录", "items": [["精选一", "¥68", "现货"], ["精选二", "¥88", "少量"]]}
+    },
+    "timeline": {
+      "case-study": {"label": "案例时间线", "items": [["研究", "访谈与现场观察建立真实约束"], ["原型", "用低保真模型验证握持与流程"], ["验证", "跨场景测试并记录失败模式"], ["结果", "操作时间下降 28%，错误率降低"]]},
+      "process": {"label": "过程时间线", "items": [["发现", "定义问题"], ["实验", "比较方案"], ["交付", "复核结果"]]}
+    },
+    "compare": {
+      "before-after": {"label": "前后对比滑块", "min": 0, "max": 100, "value": 52},
+      "range": {"label": "范围比较", "min": 0, "max": 100, "value": 50}
+    },
+    "form": {
+      "booking": {"label": "工坊预约表单", "fields": [{"id": "date", "label": "日期", "type": "date"}, {"id": "slot", "label": "可用时段", "type": "select", "options": ["10:00", "14:00", "18:30"]}, {"id": "people", "label": "参与人数", "type": "number"}]},
+      "search": {"label": "搜索表单", "fields": [{"id": "query", "label": "搜索", "type": "search"}]},
+      "generic": {"label": "信息表单", "fields": [{"id": "name", "label": "名称", "type": "text"}]}
+    },
+    "sidebar": {
+      "docs": {"label": "API 文档侧栏", "items": ["概览", "认证", "请求参数", "响应示例", "错误处理"]},
+      "settings": {"label": "设置目录", "items": ["隐私", "会话设备", "通知", "危险操作"]},
+      "generic": {"label": "目录", "items": ["概览", "详情", "帮助"]}
+    },
+    "code": {
+      "request": {"label": "请求示例", "text": "curl -X POST /v1/items -H 'Content-Type: application/json' -d '{\"name\":\"demo\"}'"},
+      "response": {"label": "响应示例", "text": "{\n  \"id\": \"item_01\",\n  \"status\": \"ready\"\n}"},
+      "generic": {"label": "代码示例", "text": "const result = await client.run();"}
+    },
+    "tabs": {
+      "response": {"label": "响应示例标签页", "items": ["200 成功", "400 错误", "429 限流"]},
+      "language": {"label": "语言切换", "items": ["Shell", "JavaScript", "Python"]},
+      "generic": {"label": "标签页", "items": ["概览", "详情"]}
+    },
+    "toggles": {
+      "privacy": {"label": "隐私开关", "items": ["允许个性化建议", "隐藏公开活动", "登录异常提醒", "自动清理历史"]},
+      "generic": {"label": "设置开关", "items": ["启用选项", "发送提醒"]}
+    },
+    "schedule": {
+      "stages": {"label": "多舞台音乐节日程", "items": [["14:00", "河岸舞台", "潮汐乐队", "已收藏"], ["14:30", "仓库舞台", "回声组合", "时间冲突"], ["16:00", "花园舞台", "青苔电台", "当前时段"]]},
+      "generic": {"label": "日程", "items": [["10:00", "场地 A", "活动一", "可用"], ["11:00", "场地 B", "活动二", "关注"]]}
+    },
+    "chart": {
+      "year-series": {"label": "树冠覆盖率年份图", "values": [31, 36, 42, 38, 47], "caption": "2020 至 2024 年街区树冠覆盖率变化"},
+      "spark": {"label": "趋势图", "values": [22, 35, 30, 46, 41], "caption": "最近五期趋势"},
+      "generic": {"label": "数据图", "values": [20, 40, 30, 50], "caption": "数据变化"}
+    },
+    "note": {
+      "source": {"label": "来源注释", "text": "来源：城市公开数据与现场抽样；更新于 2024 年。"},
+      "method": {"label": "方法说明", "text": "方法：统一边界、校正缺失值，并以数据表提供等价替代。"},
+      "generic": {"label": "说明", "text": "数据仅供复核。"}
+    },
+    "metrics": {
+      "ops": {"label": "运行指标", "items": [["在线", "42"], ["警告", "6"], ["离线", "2"], ["告警", "9"]]},
+      "story": {"label": "覆盖率摘要", "items": [["当前覆盖率", "42%"], ["五年变化", "+8.4%"], ["街区", "12"]]},
+      "generic": {"label": "关键指标", "items": [["当前", "42"], ["变化", "+8%"]]}
+    },
+    "bag": {
+      "counter": {"label": "购物袋数量", "value": 0}
+    }
+  }
+}

@@ -1,0 +1,3760 @@
+{
+  "format": "colormlm-qwen36-route-attribution-v1",
+  "model": "ColorLM-v33-Qwen36-Global-MoE-Pair.gguf",
+  "dump": "fast16/research/v31_qwen36_expert_pair/v33_long_hidden.bin",
+  "top_k": 8,
+  "expert_count": 256,
+  "layers_observed": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39
+  ],
+  "hidden_tokens_across_layers": 79,
+  "global_distinct_experts": 216,
+  "global_experts_for_50pct_slots": 63,
+  "global_experts_for_75pct_slots": 113,
+  "global_experts_for_90pct_slots": 159,
+  "global_experts_for_95pct_slots": 185,
+  "global_top_experts": [
+    {
+      "expert": 191,
+      "count": 10
+    },
+    {
+      "expert": 108,
+      "count": 8
+    },
+    {
+      "expert": 25,
+      "count": 8
+    },
+    {
+      "expert": 103,
+      "count": 7
+    },
+    {
+      "expert": 125,
+      "count": 7
+    },
+    {
+      "expert": 175,
+      "count": 7
+    },
+    {
+      "expert": 64,
+      "count": 7
+    },
+    {
+      "expert": 20,
+      "count": 7
+    },
+    {
+      "expert": 112,
+      "count": 6
+    },
+    {
+      "expert": 166,
+      "count": 6
+    },
+    {
+      "expert": 217,
+      "count": 6
+    },
+    {
+      "expert": 163,
+      "count": 6
+    },
+    {
+      "expert": 127,
+      "count": 6
+    },
+    {
+      "expert": 46,
+      "count": 6
+    },
+    {
+      "expert": 221,
+      "count": 6
+    },
+    {
+      "expert": 72,
+      "count": 6
+    },
+    {
+      "expert": 43,
+      "count": 6
+    },
+    {
+      "expert": 87,
+      "count": 5
+    },
+    {
+      "expert": 26,
+      "count": 5
+    },
+    {
+      "expert": 42,
+      "count": 5
+    },
+    {
+      "expert": 198,
+      "count": 5
+    },
+    {
+      "expert": 88,
+      "count": 5
+    },
+    {
+      "expert": 18,
+      "count": 5
+    },
+    {
+      "expert": 15,
+      "count": 5
+    },
+    {
+      "expert": 65,
+      "count": 5
+    },
+    {
+      "expert": 182,
+      "count": 5
+    },
+    {
+      "expert": 91,
+      "count": 5
+    },
+    {
+      "expert": 39,
+      "count": 5
+    },
+    {
+      "expert": 92,
+      "count": 5
+    },
+    {
+      "expert": 203,
+      "count": 5
+    },
+    {
+      "expert": 149,
+      "count": 5
+    },
+    {
+      "expert": 167,
+      "count": 5
+    },
+    {
+      "expert": 57,
+      "count": 5
+    },
+    {
+      "expert": 218,
+      "count": 5
+    },
+    {
+      "expert": 83,
+      "count": 5
+    },
+    {
+      "expert": 113,
+      "count": 4
+    },
+    {
+      "expert": 142,
+      "count": 4
+    },
+    {
+      "expert": 100,
+      "count": 4
+    },
+    {
+      "expert": 41,
+      "count": 4
+    },
+    {
+      "expert": 219,
+      "count": 4
+    },
+    {
+      "expert": 6,
+      "count": 4
+    },
+    {
+      "expert": 211,
+      "count": 4
+    },
+    {
+      "expert": 151,
+      "count": 4
+    },
+    {
+      "expert": 82,
+      "count": 4
+    },
+    {
+      "expert": 206,
+      "count": 4
+    },
+    {
+      "expert": 172,
+      "count": 4
+    },
+    {
+      "expert": 17,
+      "count": 4
+    },
+    {
+      "expert": 56,
+      "count": 4
+    },
+    {
+      "expert": 24,
+      "count": 4
+    },
+    {
+      "expert": 210,
+      "count": 4
+    },
+    {
+      "expert": 202,
+      "count": 4
+    },
+    {
+      "expert": 226,
+      "count": 4
+    },
+    {
+      "expert": 63,
+      "count": 4
+    },
+    {
+      "expert": 105,
+      "count": 4
+    },
+    {
+      "expert": 229,
+      "count": 4
+    },
+    {
+      "expert": 36,
+      "count": 4
+    },
+    {
+      "expert": 14,
+      "count": 4
+    },
+    {
+      "expert": 174,
+      "count": 4
+    },
+    {
+      "expert": 95,
+      "count": 4
+    },
+    {
+      "expert": 136,
+      "count": 4
+    },
+    {
+      "expert": 38,
+      "count": 4
+    },
+    {
+      "expert": 180,
+      "count": 4
+    },
+    {
+      "expert": 120,
+      "count": 4
+    },
+    {
+      "expert": 96,
+      "count": 4
+    }
+  ],
+  "layers": [
+    {
+      "layer": 0,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 15,
+      "experts_for_50pct_slots": 7,
+      "experts_for_75pct_slots": 11,
+      "experts_for_90pct_slots": 14,
+      "experts_for_95pct_slots": 15,
+      "topk_boundary_margin_mean": 0.04191935062408447,
+      "top_experts": [
+        {
+          "expert": 112,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 97,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 113,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 142,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 166,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 205,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 150,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 200,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 103,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 248,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 137,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 130,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 100,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 125,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 71,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 1,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 15,
+      "experts_for_50pct_slots": 7,
+      "experts_for_75pct_slots": 11,
+      "experts_for_90pct_slots": 14,
+      "experts_for_95pct_slots": 15,
+      "topk_boundary_margin_mean": 0.02147388458251953,
+      "top_experts": [
+        {
+          "expert": 250,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 214,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 34,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 19,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 87,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 26,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 108,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 125,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 191,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 160,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 121,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 161,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 110,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 74,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 103,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 2,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 16,
+      "experts_for_50pct_slots": 8,
+      "experts_for_75pct_slots": 12,
+      "experts_for_90pct_slots": 15,
+      "experts_for_95pct_slots": 16,
+      "topk_boundary_margin_mean": 0.08323633670806885,
+      "top_experts": [
+        {
+          "expert": 42,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 217,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 25,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 11,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 133,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 175,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 197,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 41,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 198,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 87,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 88,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 32,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 219,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 18,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 6,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 153,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 3,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 13,
+      "experts_for_50pct_slots": 5,
+      "experts_for_75pct_slots": 9,
+      "experts_for_90pct_slots": 12,
+      "experts_for_95pct_slots": 13,
+      "topk_boundary_margin_mean": 0.012927532196044922,
+      "top_experts": [
+        {
+          "expert": 163,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 69,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 6,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 8,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 211,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 113,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 196,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 87,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 151,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 82,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 224,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 104,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 25,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 4,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 12,
+      "experts_for_50pct_slots": 4,
+      "experts_for_75pct_slots": 8,
+      "experts_for_90pct_slots": 11,
+      "experts_for_95pct_slots": 12,
+      "topk_boundary_margin_mean": 0.06743931770324707,
+      "top_experts": [
+        {
+          "expert": 206,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 88,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 163,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 108,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 161,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 172,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 195,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 154,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 129,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 15,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 90,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 17,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 5,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 14,
+      "experts_for_50pct_slots": 6,
+      "experts_for_75pct_slots": 10,
+      "experts_for_90pct_slots": 13,
+      "experts_for_95pct_slots": 14,
+      "topk_boundary_margin_mean": 0.06539523601531982,
+      "top_experts": [
+        {
+          "expert": 64,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 205,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 110,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 15,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 13,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 166,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 56,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 159,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 65,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 182,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 44,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 216,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 127,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 50,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 6,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 15,
+      "experts_for_50pct_slots": 7,
+      "experts_for_75pct_slots": 11,
+      "experts_for_90pct_slots": 14,
+      "experts_for_95pct_slots": 15,
+      "topk_boundary_margin_mean": 0.1653064489364624,
+      "top_experts": [
+        {
+          "expert": 138,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 110,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 46,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 40,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 24,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 91,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 173,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 254,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 210,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 202,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 143,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 31,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 226,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 22,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 155,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 7,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 16,
+      "experts_for_50pct_slots": 8,
+      "experts_for_75pct_slots": 12,
+      "experts_for_90pct_slots": 15,
+      "experts_for_95pct_slots": 16,
+      "topk_boundary_margin_mean": 0.11091125011444092,
+      "top_experts": [
+        {
+          "expert": 221,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 191,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 112,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 200,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 142,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 39,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 241,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 63,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 125,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 91,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 105,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 229,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 117,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 64,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 36,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 14,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 8,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 14,
+      "experts_for_50pct_slots": 6,
+      "experts_for_75pct_slots": 10,
+      "experts_for_90pct_slots": 13,
+      "experts_for_95pct_slots": 14,
+      "topk_boundary_margin_mean": 0.07214021682739258,
+      "top_experts": [
+        {
+          "expert": 175,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 123,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 217,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 127,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 17,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 223,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 92,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 78,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 99,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 174,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 141,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 220,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 191,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 20,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 9,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 15,
+      "experts_for_50pct_slots": 7,
+      "experts_for_75pct_slots": 11,
+      "experts_for_90pct_slots": 14,
+      "experts_for_95pct_slots": 15,
+      "topk_boundary_margin_mean": 0.02943897247314453,
+      "top_experts": [
+        {
+          "expert": 95,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 72,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 246,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 210,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 122,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 232,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 136,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 71,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 2,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 38,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 170,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 45,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 142,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 180,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 169,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 10,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 16,
+      "experts_for_50pct_slots": 8,
+      "experts_for_75pct_slots": 12,
+      "experts_for_90pct_slots": 15,
+      "experts_for_95pct_slots": 16,
+      "topk_boundary_margin_mean": 0.08348488807678223,
+      "top_experts": [
+        {
+          "expert": 175,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 120,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 14,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 100,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 249,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 179,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 183,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 203,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 125,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 79,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 25,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 27,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 243,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 70,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 65,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 198,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 11,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 16,
+      "experts_for_50pct_slots": 8,
+      "experts_for_75pct_slots": 12,
+      "experts_for_90pct_slots": 15,
+      "experts_for_95pct_slots": 16,
+      "topk_boundary_margin_mean": 0.0312809944152832,
+      "top_experts": [
+        {
+          "expert": 180,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 41,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 246,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 96,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 149,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 152,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 143,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 162,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 99,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 39,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 108,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 63,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 206,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 86,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 128,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 19,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 12,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 16,
+      "experts_for_50pct_slots": 8,
+      "experts_for_75pct_slots": 12,
+      "experts_for_90pct_slots": 15,
+      "experts_for_95pct_slots": 16,
+      "topk_boundary_margin_mean": 0.07849717140197754,
+      "top_experts": [
+        {
+          "expert": 4,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 124,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 68,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 24,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 52,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 77,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 216,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 167,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 221,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 101,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 1,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 223,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 209,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 93,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 20,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 145,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 13,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 16,
+      "experts_for_50pct_slots": 8,
+      "experts_for_75pct_slots": 12,
+      "experts_for_90pct_slots": 15,
+      "experts_for_95pct_slots": 16,
+      "topk_boundary_margin_mean": 0.013899564743041992,
+      "top_experts": [
+        {
+          "expert": 231,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 119,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 132,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 221,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 167,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 177,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 64,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 114,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 182,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 202,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 220,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 171,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 56,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 103,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 47,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 108,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 14,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 16,
+      "experts_for_50pct_slots": 8,
+      "experts_for_75pct_slots": 12,
+      "experts_for_90pct_slots": 15,
+      "experts_for_95pct_slots": 16,
+      "topk_boundary_margin_mean": 0.14409160614013672,
+      "top_experts": [
+        {
+          "expert": 217,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 57,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 244,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 211,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 123,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 136,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 191,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 181,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 103,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 6,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 137,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 149,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 64,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 226,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 28,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 105,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 15,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 15,
+      "experts_for_50pct_slots": 7,
+      "experts_for_75pct_slots": 11,
+      "experts_for_90pct_slots": 14,
+      "experts_for_95pct_slots": 15,
+      "topk_boundary_margin_mean": 0.008392572402954102,
+      "top_experts": [
+        {
+          "expert": 218,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 225,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 247,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 191,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 117,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 82,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 48,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 83,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 65,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 23,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 242,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 46,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 185,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 18,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 188,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 16,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 16,
+      "experts_for_50pct_slots": 8,
+      "experts_for_75pct_slots": 12,
+      "experts_for_90pct_slots": 15,
+      "experts_for_95pct_slots": 16,
+      "topk_boundary_margin_mean": 0.015783071517944336,
+      "top_experts": [
+        {
+          "expert": 89,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 245,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 166,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 88,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 203,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 16,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 107,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 227,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 61,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 130,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 40,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 238,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 229,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 43,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 38,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 105,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 17,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 16,
+      "experts_for_50pct_slots": 8,
+      "experts_for_75pct_slots": 12,
+      "experts_for_90pct_slots": 15,
+      "experts_for_95pct_slots": 16,
+      "topk_boundary_margin_mean": 0.18730223178863525,
+      "top_experts": [
+        {
+          "expert": 96,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 106,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 26,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 171,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 150,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 125,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 25,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 86,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 248,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 46,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 64,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 37,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 5,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 198,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 0,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 35,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 18,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 16,
+      "experts_for_50pct_slots": 8,
+      "experts_for_75pct_slots": 12,
+      "experts_for_90pct_slots": 15,
+      "experts_for_95pct_slots": 16,
+      "topk_boundary_margin_mean": 0.04319119453430176,
+      "top_experts": [
+        {
+          "expert": 100,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 201,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 174,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 94,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 141,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 75,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 44,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 172,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 43,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 134,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 163,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 170,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 254,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 195,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 197,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 203,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 19,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 16,
+      "experts_for_50pct_slots": 8,
+      "experts_for_75pct_slots": 12,
+      "experts_for_90pct_slots": 15,
+      "experts_for_95pct_slots": 16,
+      "topk_boundary_margin_mean": 0.06858277320861816,
+      "top_experts": [
+        {
+          "expert": 41,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 204,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 221,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 44,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 142,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 207,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 238,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 173,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 36,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 57,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 121,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 201,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 35,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 20,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 219,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 239,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 20,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 15,
+      "experts_for_50pct_slots": 7,
+      "experts_for_75pct_slots": 11,
+      "experts_for_90pct_slots": 14,
+      "experts_for_95pct_slots": 15,
+      "topk_boundary_margin_mean": 0.061524391174316406,
+      "top_experts": [
+        {
+          "expert": 175,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 17,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 127,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 217,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 18,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 223,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 11,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 8,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 99,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 225,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 237,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 191,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 172,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 83,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 91,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 21,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 16,
+      "experts_for_50pct_slots": 8,
+      "experts_for_75pct_slots": 12,
+      "experts_for_90pct_slots": 15,
+      "experts_for_95pct_slots": 16,
+      "topk_boundary_margin_mean": 0.07249724864959717,
+      "top_experts": [
+        {
+          "expert": 72,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 246,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 184,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 232,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 210,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 113,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 127,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 122,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 95,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 180,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 2,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 170,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 38,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 69,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 169,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 39,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 22,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 16,
+      "experts_for_50pct_slots": 8,
+      "experts_for_75pct_slots": 12,
+      "experts_for_90pct_slots": 15,
+      "experts_for_95pct_slots": 16,
+      "topk_boundary_margin_mean": 0.18066167831420898,
+      "top_experts": [
+        {
+          "expert": 120,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 175,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 100,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 50,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 192,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 231,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 82,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 90,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 125,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 65,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 25,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 243,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 167,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 27,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 150,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 198,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 23,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 16,
+      "experts_for_50pct_slots": 8,
+      "experts_for_75pct_slots": 12,
+      "experts_for_90pct_slots": 15,
+      "experts_for_95pct_slots": 16,
+      "topk_boundary_margin_mean": 0.13498592376708984,
+      "top_experts": [
+        {
+          "expert": 180,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 41,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 87,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 152,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 213,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 96,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 132,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 92,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 206,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 22,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 108,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 128,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 86,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 19,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 135,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 144,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 24,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 16,
+      "experts_for_50pct_slots": 8,
+      "experts_for_75pct_slots": 12,
+      "experts_for_90pct_slots": 15,
+      "experts_for_95pct_slots": 16,
+      "topk_boundary_margin_mean": 0.07509374618530273,
+      "top_experts": [
+        {
+          "expert": 53,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 216,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 124,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 4,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 167,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 24,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 58,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 62,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 221,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 151,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 101,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 20,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 1,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 232,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 93,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 235,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 25,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 16,
+      "experts_for_50pct_slots": 8,
+      "experts_for_75pct_slots": 12,
+      "experts_for_90pct_slots": 15,
+      "experts_for_95pct_slots": 16,
+      "topk_boundary_margin_mean": 0.0755622386932373,
+      "top_experts": [
+        {
+          "expert": 167,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 52,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 236,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 221,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 132,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 231,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 242,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 119,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 182,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 171,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 202,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 56,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 103,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 220,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 243,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 134,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 26,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 16,
+      "experts_for_50pct_slots": 8,
+      "experts_for_75pct_slots": 12,
+      "experts_for_90pct_slots": 15,
+      "experts_for_95pct_slots": 16,
+      "topk_boundary_margin_mean": 0.06606578826904297,
+      "top_experts": [
+        {
+          "expert": 217,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 81,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 57,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 136,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 181,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 244,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 211,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 230,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 103,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 226,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 105,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 229,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 28,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 137,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 46,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 32,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 27,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 15,
+      "experts_for_50pct_slots": 7,
+      "experts_for_75pct_slots": 11,
+      "experts_for_90pct_slots": 14,
+      "experts_for_95pct_slots": 15,
+      "topk_boundary_margin_mean": 0.03980600833892822,
+      "top_experts": [
+        {
+          "expert": 218,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 247,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 191,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 225,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 83,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 82,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 108,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 48,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 23,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 185,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 46,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 242,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 85,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 65,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 165,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 28,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 16,
+      "experts_for_50pct_slots": 8,
+      "experts_for_75pct_slots": 12,
+      "experts_for_90pct_slots": 15,
+      "experts_for_95pct_slots": 16,
+      "topk_boundary_margin_mean": 0.04651832580566406,
+      "top_experts": [
+        {
+          "expert": 158,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 107,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 166,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 88,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 93,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 218,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 18,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 89,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 61,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 229,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 130,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 238,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 17,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 35,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 40,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 217,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 29,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 16,
+      "experts_for_50pct_slots": 8,
+      "experts_for_75pct_slots": 12,
+      "experts_for_90pct_slots": 15,
+      "experts_for_95pct_slots": 16,
+      "topk_boundary_margin_mean": 0.056723833084106445,
+      "top_experts": [
+        {
+          "expert": 106,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 96,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 171,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 25,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 86,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 125,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 112,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 42,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 46,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 248,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 87,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 64,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 37,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 198,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 0,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 241,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 30,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 16,
+      "experts_for_50pct_slots": 8,
+      "experts_for_75pct_slots": 12,
+      "experts_for_90pct_slots": 15,
+      "experts_for_95pct_slots": 16,
+      "topk_boundary_margin_mean": 0.03183269500732422,
+      "top_experts": [
+        {
+          "expert": 31,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 174,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 75,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 94,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 32,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 160,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 141,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 172,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 43,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 134,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 163,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 254,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 15,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 89,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 85,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 203,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 31,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 13,
+      "experts_for_50pct_slots": 5,
+      "experts_for_75pct_slots": 9,
+      "experts_for_90pct_slots": 12,
+      "experts_for_95pct_slots": 13,
+      "topk_boundary_margin_mean": 0.007447957992553711,
+      "top_experts": [
+        {
+          "expert": 20,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 57,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 36,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 35,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 241,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 15,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 166,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 118,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 219,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 121,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 26,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 154,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 162,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 32,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 11,
+      "experts_for_50pct_slots": 4,
+      "experts_for_75pct_slots": 7,
+      "experts_for_90pct_slots": 10,
+      "experts_for_95pct_slots": 11,
+      "topk_boundary_margin_mean": 0.1007833480834961,
+      "top_experts": [
+        {
+          "expert": 252,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 191,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 112,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 149,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 25,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 2,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 202,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 237,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 53,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 250,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 38,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 33,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 13,
+      "experts_for_50pct_slots": 5,
+      "experts_for_75pct_slots": 9,
+      "experts_for_90pct_slots": 12,
+      "experts_for_95pct_slots": 13,
+      "topk_boundary_margin_mean": 0.03965282440185547,
+      "top_experts": [
+        {
+          "expert": 127,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 129,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 92,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 147,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 39,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 191,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 235,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 29,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 43,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 164,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 210,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 0,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 9,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 34,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 11,
+      "experts_for_50pct_slots": 4,
+      "experts_for_75pct_slots": 7,
+      "experts_for_90pct_slots": 10,
+      "experts_for_95pct_slots": 11,
+      "topk_boundary_margin_mean": 0.06954145431518555,
+      "top_experts": [
+        {
+          "expert": 63,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 85,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 26,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 133,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 91,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 226,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 15,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 186,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 92,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 42,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 113,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 35,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 12,
+      "experts_for_50pct_slots": 4,
+      "experts_for_75pct_slots": 8,
+      "experts_for_90pct_slots": 11,
+      "experts_for_95pct_slots": 12,
+      "topk_boundary_margin_mean": 0.04408764839172363,
+      "top_experts": [
+        {
+          "expert": 72,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 42,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 43,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 119,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 97,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 203,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 95,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 8,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 18,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 84,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 174,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 77,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 36,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 12,
+      "experts_for_50pct_slots": 4,
+      "experts_for_75pct_slots": 8,
+      "experts_for_90pct_slots": 11,
+      "experts_for_95pct_slots": 12,
+      "topk_boundary_margin_mean": 0.04453754425048828,
+      "top_experts": [
+        {
+          "expert": 73,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 45,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 83,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 14,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 207,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 55,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 136,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 59,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 20,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 102,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 103,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 56,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 37,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 14,
+      "experts_for_50pct_slots": 6,
+      "experts_for_75pct_slots": 10,
+      "experts_for_90pct_slots": 13,
+      "experts_for_95pct_slots": 14,
+      "topk_boundary_margin_mean": 0.13347768783569336,
+      "top_experts": [
+        {
+          "expert": 72,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 182,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 109,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 219,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 145,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 89,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 104,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 156,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 24,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 116,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 111,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 176,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 149,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 39,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 38,
+      "hidden_tokens": 2,
+      "selected_slots": 16,
+      "distinct_experts": 13,
+      "experts_for_50pct_slots": 5,
+      "experts_for_75pct_slots": 9,
+      "experts_for_90pct_slots": 12,
+      "experts_for_95pct_slots": 13,
+      "topk_boundary_margin_mean": 0.0194246768951416,
+      "top_experts": [
+        {
+          "expert": 209,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 151,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 120,
+          "count": 2,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 71,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 249,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 28,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 27,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 204,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 144,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 139,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 195,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 124,
+          "count": 1,
+          "slot_share": 0.0625
+        },
+        {
+          "expert": 255,
+          "count": 1,
+          "slot_share": 0.0625
+        }
+      ]
+    },
+    {
+      "layer": 39,
+      "hidden_tokens": 1,
+      "selected_slots": 8,
+      "distinct_experts": 8,
+      "experts_for_50pct_slots": 4,
+      "experts_for_75pct_slots": 6,
+      "experts_for_90pct_slots": 8,
+      "experts_for_95pct_slots": 8,
+      "topk_boundary_margin_mean": 0.08142948150634766,
+      "top_experts": [
+        {
+          "expert": 162,
+          "count": 1,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 238,
+          "count": 1,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 108,
+          "count": 1,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 211,
+          "count": 1,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 166,
+          "count": 1,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 235,
+          "count": 1,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 47,
+          "count": 1,
+          "slot_share": 0.125
+        },
+        {
+          "expert": 222,
+          "count": 1,
+          "slot_share": 0.125
+        }
+      ]
+    }
+  ]
+}

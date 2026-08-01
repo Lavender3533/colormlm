@@ -1,0 +1,174 @@
+{
+  "format": "colorlm-v30-dynamic-lexical-probe-report-v1",
+  "status": "stopped_offline",
+  "retrospective_only": true,
+  "contract": "D:/project/大模型ssd化/fast16/research/v30_dynamic_lexical_policy/probe_contract.json",
+  "contract_sha256": "5bb3351246e0f325140f667628af2cdc8d3decf56f32682ea5d7836b948d5d71",
+  "candidate_pool": {
+    "static_tokens": 16,
+    "maximum_tokens_per_sample": 256,
+    "union_tokens": 360,
+    "mean_tokens_per_sample": 167.93229166666666
+  },
+  "fit": {
+    "split": "train",
+    "seed": 3407,
+    "optimizer": "adam",
+    "learning_rate": 0.02,
+    "steps": 300,
+    "l2_delta": 0.0005,
+    "missing_target_zero_penalty": 0.05,
+    "parameter_scan_allowed": false,
+    "initial_loss": 2.2312510013580322,
+    "final_loss": 0.6295702457427979,
+    "parameter_count": 131072
+  },
+  "metrics": {
+    "train": {
+      "samples": 96,
+      "target_coverage": 0.9583333333333334,
+      "mean_target_nll_delta": -1.5377849413538096,
+      "covered_target_win_rate": 0.9347826086956522
+    },
+    "validation": {
+      "samples": 50,
+      "target_coverage": 0.98,
+      "mean_target_nll_delta": -1.2034639133555336,
+      "covered_target_win_rate": 0.8367346938775511
+    },
+    "test": {
+      "samples": 46,
+      "target_coverage": 0.9347826086956522,
+      "mean_target_nll_delta": -1.687281046784935,
+      "covered_target_win_rate": 0.8837209302325582
+    }
+  },
+  "maximum_heldout_task_mean_nll_regression": 0.4973327527907202,
+  "per_task": [
+    {
+      "task_id": "policy-activate-health",
+      "split": "train",
+      "family": "continue",
+      "mean_target_nll_delta": -1.236822167983065
+    },
+    {
+      "task_id": "policy-activation-worker-health",
+      "split": "validation",
+      "family": "continue",
+      "mean_target_nll_delta": -1.207404954060122
+    },
+    {
+      "task_id": "policy-command-error-read",
+      "split": "train",
+      "family": "continue",
+      "mean_target_nll_delta": -1.7074975742741278
+    },
+    {
+      "task_id": "policy-compile-failure-read",
+      "split": "test",
+      "family": "continue",
+      "mean_target_nll_delta": -1.7872556583546098
+    },
+    {
+      "task_id": "policy-config-missing-list",
+      "split": "validation",
+      "family": "continue",
+      "mean_target_nll_delta": -1.6139607583184838
+    },
+    {
+      "task_id": "policy-health-success-finish",
+      "split": "train",
+      "family": "finish",
+      "mean_target_nll_delta": -0.25722587395638463
+    },
+    {
+      "task_id": "policy-list-success-finish",
+      "split": "test",
+      "family": "finish",
+      "mean_target_nll_delta": -0.9196224337461899
+    },
+    {
+      "task_id": "policy-missing-env-ask",
+      "split": "train",
+      "family": "continue",
+      "mean_target_nll_delta": -2.0818000445644884
+    },
+    {
+      "task_id": "policy-missing-region-ask",
+      "split": "validation",
+      "family": "continue",
+      "mean_target_nll_delta": -1.960323915837946
+    },
+    {
+      "task_id": "policy-missing-secret-ask",
+      "split": "test",
+      "family": "continue",
+      "mean_target_nll_delta": -2.229546797692361
+    },
+    {
+      "task_id": "policy-read-missing-list",
+      "split": "train",
+      "family": "continue",
+      "mean_target_nll_delta": -2.0941536578116464
+    },
+    {
+      "task_id": "policy-read-success-finish",
+      "split": "train",
+      "family": "finish",
+      "mean_target_nll_delta": -0.2166790497302422
+    },
+    {
+      "task_id": "policy-read-version-finish",
+      "split": "validation",
+      "family": "finish",
+      "mean_target_nll_delta": -0.12514847381670752
+    },
+    {
+      "task_id": "policy-save-success-finish",
+      "split": "validation",
+      "family": "finish",
+      "mean_target_nll_delta": -0.33331677296553863
+    },
+    {
+      "task_id": "policy-search-empty-finish",
+      "split": "train",
+      "family": "finish",
+      "mean_target_nll_delta": -0.7990417291361475
+    },
+    {
+      "task_id": "policy-test-failure-read",
+      "split": "train",
+      "family": "continue",
+      "mean_target_nll_delta": -2.3194786668644
+    },
+    {
+      "task_id": "policy-validate-activate",
+      "split": "train",
+      "family": "continue",
+      "mean_target_nll_delta": -2.071492531116953
+    },
+    {
+      "task_id": "policy-validation-production-activate",
+      "split": "test",
+      "family": "continue",
+      "mean_target_nll_delta": -2.2751541895638354
+    },
+    {
+      "task_id": "policy-write-log-finish",
+      "split": "test",
+      "family": "finish",
+      "mean_target_nll_delta": 0.4973327527907202
+    },
+    {
+      "task_id": "policy-write-success-finish",
+      "split": "train",
+      "family": "finish",
+      "mean_target_nll_delta": -0.4440844742657184
+    }
+  ],
+  "gate_passed": false,
+  "decision": "停止动态词汇头；不得进入运行时",
+  "weights": "D:/project/大模型ssd化/fast16/research/v30_dynamic_lexical_policy/probe_weights.npz",
+  "weights_sha256": "78f13cb45a9145bf02b2692b7ff3ec6ff70f90fbe1292cbed33df9e03de42d7c",
+  "claim_boundary": "通过只允许实现v30运行时原型；必须建立全新冻结任务后才能晋级。"
+}

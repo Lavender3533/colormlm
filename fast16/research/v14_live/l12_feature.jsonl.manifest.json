@@ -1,0 +1,38 @@
+{
+  "format": "colorlm-v13-counterfactual-route-shard-manifest-v1",
+  "route": "k3",
+  "route_attestation": "process-level --force-path plus expected API alias",
+  "teacher": "D:\\project\\大模型ssd化\\fast16\\research\\v13_live\\teacher_v2.jsonl",
+  "teacher_sha256": "f078f7fc6ad3f6a7331139b4d3626a1ef773cb176fdaa0a02003140ccc306382",
+  "shard": "l12_feature.jsonl",
+  "shard_sha256": "44cf8ca2743d9eb8b0328ad43d54bdc0edb16b17c25968b2038bd9292b8631af",
+  "sample_count": 72,
+  "exact_count": 72,
+  "exact_coverage": 1.0,
+  "n_probs": 1,
+  "elapsed_seconds": 119.774226,
+  "server": {
+    "endpoint": "http://127.0.0.1:8110",
+    "models": [
+      "ColorLM-v14-Calibrate-L12"
+    ],
+    "model_path": "fast16/models/ColorLM-v6-Q3Router-Fused-A1.gguf",
+    "context": 4096
+  },
+  "expected_model": "ColorLM-v14-Calibrate-L12",
+  "hidden": {
+    "file": "l12_feature.hidden.npz",
+    "sha256": "346dda958aafa6c21f35321595508af9d72d18413320e715b980e3d10d21338b",
+    "sites": [
+      12,
+      28
+    ],
+    "n_embd": 2048,
+    "byte_start_offset": 65760,
+    "byte_end_offset": 158933088,
+    "records_before_start": 4,
+    "records_appended": 144,
+    "prefix_sha256_at_start": "c275425091fcc3bf18cb2f3b581a237e8b2d382f0d576eafadb7d105c5a3e3f4",
+    "alignment": "strict-appended-byte-range-v1"
+  }
+}

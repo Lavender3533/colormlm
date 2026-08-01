@@ -1,0 +1,27 @@
+{
+  "format": "colorlm-intelligence-site-plan-v1",
+  "status": "candidate",
+  "name": "ColorLM-v13-Intelligence-Router",
+  "input_width": 2048,
+  "input_transform": "per-token-l2-unit",
+  "routes": [
+    "no_op",
+    "coder",
+    "k3"
+  ],
+  "routing": "counterfactual-next-token-NLL calibrated linear softmax",
+  "execution": "dense-residual-v1",
+  "supervision_sites": [
+    28
+  ],
+  "sites": [
+    {
+      "site": 28,
+      "temperature": 1.0,
+      "router": "layer_28",
+      "manifest_sha256": "9a5232d48042c1e8db88e005fb69d7742c09616b8c0367a7a484c6eb27e4943e"
+    }
+  ],
+  "calibration_report": "calibration_report.json",
+  "calibration_report_sha256": "95600cfd4395554ed6fca6bc8364874ea3201d31e43fe782e98be9a13f93505a"
+}

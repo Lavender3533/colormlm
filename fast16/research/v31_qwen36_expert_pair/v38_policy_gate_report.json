@@ -1,0 +1,2106 @@
+{
+  "format": "colormlm-v38-policy-composition-gate-v1",
+  "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone.gguf",
+  "policy_manifest_sha256": "c647b614aaf9d28e2fb451df0c3e70b79cd3ae387c9407316307f9f88bbc914f",
+  "models": [
+    {
+      "alias": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+      "load_seconds": 8.148195500005386,
+      "summary": {
+        "passed": 7,
+        "total": 20,
+        "by_split": {
+          "train": {
+            "passed": 4,
+            "total": 10
+          },
+          "validation": {
+            "passed": 1,
+            "total": 5
+          },
+          "test": {
+            "passed": 2,
+            "total": 5
+          }
+        },
+        "by_family": {
+          "finish": {
+            "passed": 3,
+            "total": 8
+          },
+          "continue": {
+            "passed": 4,
+            "total": 12
+          }
+        }
+      },
+      "rows": [
+        {
+          "id": "policy-read-success-finish",
+          "split": "train",
+          "family": "finish",
+          "passed": false,
+          "reason": "输出不是裸JSON",
+          "wall_ms": 1999.3278000038117,
+          "target": "{\"port\":9000}",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "```json\n{\"port\":9000}\n```"
+                }
+              }
+            ],
+            "created": 1785547230,
+            "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 14,
+              "prompt_tokens": 332,
+              "total_tokens": 346,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-JCvqCrCNMomxVIjzOoHcVMrcO37oHMlb",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 332,
+              "prompt_ms": 1494.487,
+              "prompt_per_token_ms": 4.50146686746988,
+              "prompt_per_second": 222.14980792740252,
+              "predicted_n": 14,
+              "predicted_ms": 471.98,
+              "predicted_per_token_ms": 33.712857142857146,
+              "predicted_per_second": 29.662273825162085
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-write-success-finish",
+          "split": "train",
+          "family": "finish",
+          "passed": false,
+          "reason": "JSON与冻结目标不一致",
+          "wall_ms": 2056.128300006094,
+          "target": "{\"status\":\"done\"}",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"status\": \"success\", \"message\": \"File written successfully\"}"
+                }
+              }
+            ],
+            "created": 1785547232,
+            "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 15,
+              "prompt_tokens": 357,
+              "total_tokens": 372,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-S5EfoXfnPC6qbPyjxKYB0qMPCAGoeM4C",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 357,
+              "prompt_ms": 1523.539,
+              "prompt_per_token_ms": 4.2676162464986,
+              "prompt_per_second": 234.32284962839807,
+              "predicted_n": 15,
+              "predicted_ms": 500.315,
+              "predicted_per_token_ms": 33.35433333333334,
+              "predicted_per_second": 29.98111189950331
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-read-missing-list",
+          "split": "train",
+          "family": "continue",
+          "passed": false,
+          "reason": "工具调用前后含额外文本",
+          "wall_ms": 3742.088999999396,
+          "target": "<tool_call>\n{\"name\":\"list_files\",\"arguments\":{\"path\":\"config\",\"glob\":\"*.yaml\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "文件 `config/app.yaml` 不存在。正在列出 `config` 目录下的 YAML 文件：\n\n",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "list_files",
+                        "arguments": "{\"path\":\"config\",\"glob\":\"*.yaml\"}"
+                      },
+                      "id": "6mhyxGJKNRKPcUAPEeHrTxduACZed498"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785547236,
+            "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 60,
+              "prompt_tokens": 404,
+              "total_tokens": 464,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-LRlyAMXQVy8TKSiDta20nDBByr0dw2u0",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 404,
+              "prompt_ms": 1620.892,
+              "prompt_per_token_ms": 4.012108910891089,
+              "prompt_per_second": 249.24547718169993,
+              "predicted_n": 60,
+              "predicted_ms": 2084.987,
+              "predicted_per_token_ms": 34.74978333333333,
+              "predicted_per_second": 28.77715784319039
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-test-failure-read",
+          "split": "train",
+          "family": "continue",
+          "passed": false,
+          "reason": "工具调用前后含额外文本",
+          "wall_ms": 3305.07889999717,
+          "target": "<tool_call>\n{\"name\":\"read_file\",\"arguments\":{\"path\":\"tests/test_auth.py\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "测试失败了。现在我将读取报错的源文件 `tests/test_auth.py`。\n\n",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "read_file",
+                        "arguments": "{\"path\":\"backend/tests/test_auth.py\"}"
+                      },
+                      "id": "LqlvstdcXrWdypG8pVPU3OFjWNY3SZZx"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785547239,
+            "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 47,
+              "prompt_tokens": 419,
+              "total_tokens": 466,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-C5gYtP56fBvyV7q1a3BCqndNIV2vbkyi",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 419,
+              "prompt_ms": 1651.498,
+              "prompt_per_token_ms": 3.9415226730310264,
+              "prompt_per_second": 253.7090568683704,
+              "predicted_n": 47,
+              "predicted_ms": 1622.561,
+              "predicted_per_token_ms": 34.522574468085104,
+              "predicted_per_second": 28.9665534916715
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-validate-activate",
+          "split": "train",
+          "family": "continue",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 2562.0493999958853,
+          "target": "<tool_call>\n{\"name\":\"activate_config\",\"arguments\":{\"environment\":\"staging\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "activate_config",
+                        "arguments": "{\"environment\":\"staging\"}"
+                      },
+                      "id": "DGgejqT9SUOxi8btZfUv4yvFTaAJjaJU"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785547242,
+            "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 28,
+              "prompt_tokens": 386,
+              "total_tokens": 414,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-byw9e9RxJllJS8ENIWcIB6CTMGC7Ef78",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 386,
+              "prompt_ms": 1567.763,
+              "prompt_per_token_ms": 4.061562176165803,
+              "prompt_per_second": 246.21068363011506,
+              "predicted_n": 28,
+              "predicted_ms": 964.858,
+              "predicted_per_token_ms": 34.45921428571428,
+              "predicted_per_second": 29.019814314645267
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-activate-health",
+          "split": "train",
+          "family": "continue",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 2528.723399998853,
+          "target": "<tool_call>\n{\"name\":\"health_check\",\"arguments\":{\"service\":\"api\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "health_check",
+                        "arguments": "{\"service\":\"api\"}"
+                      },
+                      "id": "Q59NrWV2hzGKQeGS9qs61Jk2uolHntKM"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785547245,
+            "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 27,
+              "prompt_tokens": 390,
+              "total_tokens": 417,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-WIjQEiZTD6ttiAJmVZ9QY8WiA5gaZTaH",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 390,
+              "prompt_ms": 1578.678,
+              "prompt_per_token_ms": 4.047892307692308,
+              "prompt_per_second": 247.0421453900035,
+              "predicted_n": 27,
+              "predicted_ms": 915.257,
+              "predicted_per_token_ms": 33.898407407407404,
+              "predicted_per_second": 29.499910953972492
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-missing-env-ask",
+          "split": "train",
+          "family": "continue",
+          "passed": false,
+          "reason": "结束原因不是tool_calls: stop",
+          "wall_ms": 3188.364699999511,
+          "target": "<tool_call>\n{\"name\":\"ask_user_question\",\"arguments\":{\"question\":\"部署到哪个环境？\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "发布请求已读取，版本为 `2.0.0`。\n\n当前请求中缺少目标环境信息。请问您希望发布到哪个环境？（例如：开发环境、测试环境、生产环境）"
+                }
+              }
+            ],
+            "created": 1785547248,
+            "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 45,
+              "prompt_tokens": 393,
+              "total_tokens": 438,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-ZVzzRyaoVyJwg99A1EQmfYk0rmneIGU5",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 393,
+              "prompt_ms": 1606.63,
+              "prompt_per_token_ms": 4.0881170483460565,
+              "prompt_per_second": 244.61139154628012,
+              "predicted_n": 45,
+              "predicted_ms": 1554.211,
+              "predicted_per_token_ms": 34.538022222222224,
+              "predicted_per_second": 28.953597677535416
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-search-empty-finish",
+          "split": "train",
+          "family": "finish",
+          "passed": true,
+          "reason": "严格JSON匹配",
+          "wall_ms": 1765.875099998084,
+          "target": "{\"count\":0}",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"count\": 0}"
+                }
+              }
+            ],
+            "created": 1785547250,
+            "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 7,
+              "prompt_tokens": 351,
+              "total_tokens": 358,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-hGhH7RRz2d0AyS6jT9jdgU0nM7ppCLWb",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 351,
+              "prompt_ms": 1510.301,
+              "prompt_per_token_ms": 4.302851851851852,
+              "prompt_per_second": 232.4040042349174,
+              "predicted_n": 7,
+              "predicted_ms": 212.849,
+              "predicted_per_token_ms": 30.407,
+              "predicted_per_second": 32.88716413983622
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-health-success-finish",
+          "split": "train",
+          "family": "finish",
+          "passed": true,
+          "reason": "严格JSON匹配",
+          "wall_ms": 1716.0560999982408,
+          "target": "{\"status\":\"deployed\"}",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"status\":\"deployed\"}"
+                }
+              }
+            ],
+            "created": 1785547251,
+            "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 7,
+              "prompt_tokens": 332,
+              "total_tokens": 339,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-A43y67udzzoIuBtRNFURM5ZK9ql80uPC",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 332,
+              "prompt_ms": 1477.375,
+              "prompt_per_token_ms": 4.449924698795181,
+              "prompt_per_second": 224.72290379896774,
+              "predicted_n": 7,
+              "predicted_ms": 211.298,
+              "predicted_per_token_ms": 30.18542857142857,
+              "predicted_per_second": 33.128567236793536
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-command-error-read",
+          "split": "train",
+          "family": "continue",
+          "passed": false,
+          "reason": "工具参数与冻结目标不一致",
+          "wall_ms": 2638.431199993647,
+          "target": "<tool_call>\n{\"name\":\"read_file\",\"arguments\":{\"path\":\"src/lib.rs\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "read_file",
+                        "arguments": "{\"path\":\"app/src/lib.rs\"}"
+                      },
+                      "id": "D6vR8OnvJIH4Qw7rNdXBy3MO3bPQDtl0"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785547254,
+            "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 28,
+              "prompt_tokens": 423,
+              "total_tokens": 451,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-guh7C1Jlq80KDiaWorMVOiTL5zy8SHQw",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 423,
+              "prompt_ms": 1657.781,
+              "prompt_per_token_ms": 3.9191040189125292,
+              "prompt_per_second": 255.1603619537201,
+              "predicted_n": 28,
+              "predicted_ms": 947.958,
+              "predicted_per_token_ms": 33.855642857142854,
+              "predicted_per_second": 29.537173587859378
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-config-missing-list",
+          "split": "validation",
+          "family": "continue",
+          "passed": false,
+          "reason": "工具调用前后含额外文本",
+          "wall_ms": 3919.9176999973133,
+          "target": "<tool_call>\n{\"name\":\"list_files\",\"arguments\":{\"path\":\"conf\",\"glob\":\"*.toml\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "文件 `conf/prod.toml` 未找到。正在列出 `conf` 目录下的 TOML 文件。\n\n",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "list_files",
+                        "arguments": "{\"path\":\"conf\",\"glob\":\"*.toml\"}"
+                      },
+                      "id": "fnaNA578AkE8xZks798ThxFOZBxloMBC"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785547258,
+            "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 65,
+              "prompt_tokens": 409,
+              "total_tokens": 474,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-eqLuE303q71RNj0OxuUhhOuUgWrSf6Bt",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 409,
+              "prompt_ms": 1635.576,
+              "prompt_per_token_ms": 3.9989633251833743,
+              "prompt_per_second": 250.06480897249654,
+              "predicted_n": 65,
+              "predicted_ms": 2247.926,
+              "predicted_per_token_ms": 34.58347692307692,
+              "predicted_per_second": 28.915542593483952
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-missing-region-ask",
+          "split": "validation",
+          "family": "continue",
+          "passed": false,
+          "reason": "结束原因不是tool_calls: stop",
+          "wall_ms": 2945.172800005821,
+          "target": "<tool_call>\n{\"name\":\"ask_user_question\",\"arguments\":{\"question\":\"部署到哪个区域？\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "读取到的上线单内容如下：\n\n```json\n{\"service\":\"web\"}\n```\n\n该上线单中缺少“区域”信息。请问该服务部署在哪个区域？"
+                }
+              }
+            ],
+            "created": 1785547261,
+            "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 38,
+              "prompt_tokens": 390,
+              "total_tokens": 428,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-i23vEZZzomfvmokOEwHKBSooLKDOr0mB",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 390,
+              "prompt_ms": 1611.38,
+              "prompt_per_token_ms": 4.13174358974359,
+              "prompt_per_second": 242.02857178319204,
+              "predicted_n": 38,
+              "predicted_ms": 1298.131,
+              "predicted_per_token_ms": 34.16134210526316,
+              "predicted_per_second": 29.272854588635504
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-save-success-finish",
+          "split": "validation",
+          "family": "finish",
+          "passed": false,
+          "reason": "JSON与冻结目标不一致",
+          "wall_ms": 1726.2935999970068,
+          "target": "{\"status\":\"complete\"}",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"status\":\"success\"}"
+                }
+              }
+            ],
+            "created": 1785547262,
+            "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 6,
+              "prompt_tokens": 357,
+              "total_tokens": 363,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-TSJY6mIhqFT1GQgriPRz2AFBehMPO9BT",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 357,
+              "prompt_ms": 1513.524,
+              "prompt_per_token_ms": 4.239563025210083,
+              "prompt_per_second": 235.8733657345374,
+              "predicted_n": 6,
+              "predicted_ms": 179.739,
+              "predicted_per_token_ms": 29.956500000000002,
+              "predicted_per_second": 33.381736851768395
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-activation-worker-health",
+          "split": "validation",
+          "family": "continue",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 2525.1160000043456,
+          "target": "<tool_call>\n{\"name\":\"health_check\",\"arguments\":{\"service\":\"worker\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "health_check",
+                        "arguments": "{\"service\":\"worker\"}"
+                      },
+                      "id": "3PL2ClCxjJAHJyu03KAQaUd7RufZWmDm"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785547265,
+            "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 27,
+              "prompt_tokens": 386,
+              "total_tokens": 413,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-DNYqW0vhgyqDbJ4hjTUGuKLlQfFQ1TdQ",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 386,
+              "prompt_ms": 1577.229,
+              "prompt_per_token_ms": 4.086085492227979,
+              "prompt_per_second": 244.73300960101543,
+              "predicted_n": 27,
+              "predicted_ms": 918.051,
+              "predicted_per_token_ms": 34.00188888888889,
+              "predicted_per_second": 29.410130809726258
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-read-version-finish",
+          "split": "validation",
+          "family": "finish",
+          "passed": false,
+          "reason": "输出不是裸JSON",
+          "wall_ms": 2030.4982000016025,
+          "target": "{\"version\":\"4.1.0\"}",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "```json\n{\"version\":\"4.1.0\"}\n```"
+                }
+              }
+            ],
+            "created": 1785547267,
+            "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 15,
+              "prompt_tokens": 333,
+              "total_tokens": 348,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-Bhl5jWsEWMLxMpU4jNRp8Ibowdy1P1bf",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 333,
+              "prompt_ms": 1503.539,
+              "prompt_per_token_ms": 4.515132132132132,
+              "prompt_per_second": 221.4774608440486,
+              "predicted_n": 15,
+              "predicted_ms": 495.461,
+              "predicted_per_token_ms": 33.03073333333334,
+              "predicted_per_second": 30.274834951691457
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-missing-secret-ask",
+          "split": "test",
+          "family": "continue",
+          "passed": false,
+          "reason": "结束原因不是tool_calls: stop",
+          "wall_ms": 3033.9506000018446,
+          "target": "<tool_call>\n{\"name\":\"ask_user_question\",\"arguments\":{\"question\":\"使用哪个密钥？\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "任务配置文件已读取，内容为：\n```json\n{\"image\":\"worker:v3\"}\n```\n\n该配置中缺少密钥名称（secret name）。请问您希望使用哪个密钥名称？"
+                }
+              }
+            ],
+            "created": 1785547270,
+            "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 40,
+              "prompt_tokens": 392,
+              "total_tokens": 432,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-rSkzvs3yB1DVgwY23b3Uj23RLFNAqKHQ",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 392,
+              "prompt_ms": 1616.486,
+              "prompt_per_token_ms": 4.123688775510204,
+              "prompt_per_second": 242.50132695241408,
+              "predicted_n": 40,
+              "predicted_ms": 1385.354,
+              "predicted_per_token_ms": 34.63385,
+              "predicted_per_second": 28.87348648793016
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-compile-failure-read",
+          "split": "test",
+          "family": "continue",
+          "passed": false,
+          "reason": "工具调用前后含额外文本",
+          "wall_ms": 3266.1292999982834,
+          "target": "<tool_call>\n{\"name\":\"read_file\",\"arguments\":{\"path\":\"src/pages/Home.tsx\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "编译失败，首个报错文件为 `src/pages/Home.tsx`。\n\n",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "read_file",
+                        "arguments": "{\"path\":\"frontend/src/pages/Home.tsx\"}"
+                      },
+                      "id": "GETw37oPuqhD8O0yV8x7XhRr9oEbUfuY"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785547273,
+            "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 46,
+              "prompt_tokens": 423,
+              "total_tokens": 469,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-uujL07Xfrwt9QA5KjQ1xu8gbrHhxaJfR",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 423,
+              "prompt_ms": 1652.836,
+              "prompt_per_token_ms": 3.9074137115839243,
+              "prompt_per_second": 255.92375771098884,
+              "predicted_n": 46,
+              "predicted_ms": 1580.121,
+              "predicted_per_token_ms": 34.35045652173913,
+              "predicted_per_second": 29.111694610729174
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-list-success-finish",
+          "split": "test",
+          "family": "finish",
+          "passed": true,
+          "reason": "严格JSON匹配",
+          "wall_ms": 1805.1760999951512,
+          "target": "{\"count\":3}",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"count\": 3}"
+                }
+              }
+            ],
+            "created": 1785547275,
+            "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 7,
+              "prompt_tokens": 366,
+              "total_tokens": 373,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-eWiyqZ2XFp4cfzjDMCcVFFXhKgQRVkRm",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 366,
+              "prompt_ms": 1556.886,
+              "prompt_per_token_ms": 4.253786885245901,
+              "prompt_per_second": 235.0846497431411,
+              "predicted_n": 7,
+              "predicted_ms": 213.198,
+              "predicted_per_token_ms": 30.456857142857142,
+              "predicted_per_second": 32.833328642857815
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-validation-production-activate",
+          "split": "test",
+          "family": "continue",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 2526.5263999972376,
+          "target": "<tool_call>\n{\"name\":\"activate_config\",\"arguments\":{\"environment\":\"production\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "activate_config",
+                        "arguments": "{\"environment\":\"production\"}"
+                      },
+                      "id": "tQlHbVI7sFK4BR7I7NFrNbrFTmJdBA1g"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785547278,
+            "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 27,
+              "prompt_tokens": 386,
+              "total_tokens": 413,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-31kyTfp5aQ7Yq236RhlNBvzsCbvPCqUi",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 386,
+              "prompt_ms": 1575.133,
+              "prompt_per_token_ms": 4.080655440414508,
+              "prompt_per_second": 245.05867123601627,
+              "predicted_n": 27,
+              "predicted_ms": 921.192,
+              "predicted_per_token_ms": 34.11822222222222,
+              "predicted_per_second": 29.30985071516036
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-write-log-finish",
+          "split": "test",
+          "family": "finish",
+          "passed": false,
+          "reason": "JSON与冻结目标不一致",
+          "wall_ms": 1746.4213999992353,
+          "target": "{\"result\":\"saved\"}",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"written\":true}"
+                }
+              }
+            ],
+            "created": 1785547279,
+            "model": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 6,
+              "prompt_tokens": 357,
+              "total_tokens": 363,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-s9FX0sY1Vj7O7Pq7FOnfEKChO8CDjq2o",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 357,
+              "prompt_ms": 1534.109,
+              "prompt_per_token_ms": 4.297224089635854,
+              "prompt_per_second": 232.7083668761477,
+              "predicted_n": 6,
+              "predicted_ms": 182.288,
+              "predicted_per_token_ms": 30.381333333333334,
+              "predicted_per_second": 32.914947774949525
+            }
+          },
+          "error": null
+        }
+      ]
+    },
+    {
+      "alias": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+      "load_seconds": 7.636921600002097,
+      "summary": {
+        "passed": 11,
+        "total": 20,
+        "by_split": {
+          "train": {
+            "passed": 6,
+            "total": 10
+          },
+          "validation": {
+            "passed": 3,
+            "total": 5
+          },
+          "test": {
+            "passed": 2,
+            "total": 5
+          }
+        },
+        "by_family": {
+          "finish": {
+            "passed": 5,
+            "total": 8
+          },
+          "continue": {
+            "passed": 6,
+            "total": 12
+          }
+        }
+      },
+      "rows": [
+        {
+          "id": "policy-read-success-finish",
+          "split": "train",
+          "family": "finish",
+          "passed": true,
+          "reason": "严格JSON匹配",
+          "wall_ms": 1825.05630000378,
+          "target": "{\"port\":9000}",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"port\":9000}"
+                }
+              }
+            ],
+            "created": 1785547290,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 9,
+              "prompt_tokens": 332,
+              "total_tokens": 341,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-T1wcx0WtbasfWMJvI2WdHR73grvSuWYC",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 332,
+              "prompt_ms": 1500.467,
+              "prompt_per_token_ms": 4.519478915662651,
+              "prompt_per_second": 221.26444633570748,
+              "predicted_n": 9,
+              "predicted_ms": 285.559,
+              "predicted_per_token_ms": 31.72877777777778,
+              "predicted_per_second": 31.517129559915812
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-write-success-finish",
+          "split": "train",
+          "family": "finish",
+          "passed": false,
+          "reason": "JSON与冻结目标不一致",
+          "wall_ms": 1742.007900000317,
+          "target": "{\"status\":\"done\"}",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"status\":\"success\"}"
+                }
+              }
+            ],
+            "created": 1785547292,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 6,
+              "prompt_tokens": 357,
+              "total_tokens": 363,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-gDVMLygrPjLSjWJRphFS6zxdcYhP4MPD",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 357,
+              "prompt_ms": 1525.392,
+              "prompt_per_token_ms": 4.272806722689076,
+              "prompt_per_second": 234.03820132792094,
+              "predicted_n": 6,
+              "predicted_ms": 186.368,
+              "predicted_per_token_ms": 31.061333333333334,
+              "predicted_per_second": 32.19436813186813
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-read-missing-list",
+          "split": "train",
+          "family": "continue",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 2962.5063999992562,
+          "target": "<tool_call>\n{\"name\":\"list_files\",\"arguments\":{\"path\":\"config\",\"glob\":\"*.yaml\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "list_files",
+                        "arguments": "{\"path\":\"config\",\"glob\":\"*.yaml\"}"
+                      },
+                      "id": "PqOFvhfNC11FyqVgjL88hguMdgmSnxBq"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785547295,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 38,
+              "prompt_tokens": 404,
+              "total_tokens": 442,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-vFHSzdKsj5CDsCg1g6u33uRb8vvhXohA",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 404,
+              "prompt_ms": 1627.353,
+              "prompt_per_token_ms": 4.028101485148515,
+              "prompt_per_second": 248.25591005762115,
+              "predicted_n": 38,
+              "predicted_ms": 1308.25,
+              "predicted_per_token_ms": 34.42763157894737,
+              "predicted_per_second": 29.046436078731126
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-test-failure-read",
+          "split": "train",
+          "family": "continue",
+          "passed": false,
+          "reason": "工具参数与冻结目标不一致",
+          "wall_ms": 2671.152799994161,
+          "target": "<tool_call>\n{\"name\":\"read_file\",\"arguments\":{\"path\":\"tests/test_auth.py\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "read_file",
+                        "arguments": "{\"path\":\"backend/tests/test_auth.py\"}"
+                      },
+                      "id": "SXtwJAFClu89cHzLJaw7c2KvuSOOjkft"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785547298,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 29,
+              "prompt_tokens": 419,
+              "total_tokens": 448,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-6qL5yZMAUvFiGQe6suYmiKV1bzRVg9dD",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 419,
+              "prompt_ms": 1657.217,
+              "prompt_per_token_ms": 3.9551718377088307,
+              "prompt_per_second": 252.83351546598905,
+              "predicted_n": 29,
+              "predicted_ms": 985.528,
+              "predicted_per_token_ms": 33.983724137931034,
+              "predicted_per_second": 29.425850914433685
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-validate-activate",
+          "split": "train",
+          "family": "continue",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 2567.591799997899,
+          "target": "<tool_call>\n{\"name\":\"activate_config\",\"arguments\":{\"environment\":\"staging\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "activate_config",
+                        "arguments": "{\"environment\":\"staging\"}"
+                      },
+                      "id": "WcG9mbqL35lNtj6pGmDZvaTFBHBByJ2r"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785547300,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 28,
+              "prompt_tokens": 386,
+              "total_tokens": 414,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-Qw8VYiT3Gc5ApkCsN1GBQI4MVRrp3PSP",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 386,
+              "prompt_ms": 1583.344,
+              "prompt_per_token_ms": 4.101927461139897,
+              "prompt_per_second": 243.7878313240837,
+              "predicted_n": 28,
+              "predicted_ms": 953.648,
+              "predicted_per_token_ms": 34.05885714285714,
+              "predicted_per_second": 29.36093820780833
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-activate-health",
+          "split": "train",
+          "family": "continue",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 2523.8822999963304,
+          "target": "<tool_call>\n{\"name\":\"health_check\",\"arguments\":{\"service\":\"api\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "health_check",
+                        "arguments": "{\"service\":\"api\"}"
+                      },
+                      "id": "dKhzkdyEe8wkDM62KAGA8NG5uDdsgm4U"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785547303,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 27,
+              "prompt_tokens": 390,
+              "total_tokens": 417,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-o91h3T97mrLsKYDOP3wjZ1RgfvswGK7U",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 390,
+              "prompt_ms": 1581.599,
+              "prompt_per_token_ms": 4.055382051282051,
+              "prompt_per_second": 246.58589187271872,
+              "predicted_n": 27,
+              "predicted_ms": 914.705,
+              "predicted_per_token_ms": 33.87796296296296,
+              "predicted_per_second": 29.517713361138288
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-missing-env-ask",
+          "split": "train",
+          "family": "continue",
+          "passed": false,
+          "reason": "结束原因不是tool_calls: stop",
+          "wall_ms": 3214.6173000001,
+          "target": "<tool_call>\n{\"name\":\"ask_user_question\",\"arguments\":{\"question\":\"部署到哪个环境？\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "发布请求已读取，版本为 `2.0.0`。\n\n当前请求中缺少目标环境信息。请问您希望发布到哪个环境？（例如：开发环境、测试环境、生产环境）"
+                }
+              }
+            ],
+            "created": 1785547306,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 45,
+              "prompt_tokens": 393,
+              "total_tokens": 438,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-R4OdtnaS2QnVvg8fAHn8fdEZpXLJ8bYE",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 393,
+              "prompt_ms": 1630.417,
+              "prompt_per_token_ms": 4.148643765903308,
+              "prompt_per_second": 241.04262897160663,
+              "predicted_n": 45,
+              "predicted_ms": 1549.193,
+              "predicted_per_token_ms": 34.42651111111111,
+              "predicted_per_second": 29.04738144311264
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-search-empty-finish",
+          "split": "train",
+          "family": "finish",
+          "passed": true,
+          "reason": "严格JSON匹配",
+          "wall_ms": 1719.6571999957087,
+          "target": "{\"count\":0}",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"count\":0}"
+                }
+              }
+            ],
+            "created": 1785547308,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 6,
+              "prompt_tokens": 351,
+              "total_tokens": 357,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-rli8fjvwhSZ83I5feFFsqGV7M20nkJJS",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 351,
+              "prompt_ms": 1510.153,
+              "prompt_per_token_ms": 4.3024301994302,
+              "prompt_per_second": 232.42678059772751,
+              "predicted_n": 6,
+              "predicted_ms": 180.218,
+              "predicted_per_token_ms": 30.03633333333333,
+              "predicted_per_second": 33.29301179682385
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-health-success-finish",
+          "split": "train",
+          "family": "finish",
+          "passed": true,
+          "reason": "严格JSON匹配",
+          "wall_ms": 1803.7504999956582,
+          "target": "{\"status\":\"deployed\"}",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"status\":\"deployed\"}"
+                }
+              }
+            ],
+            "created": 1785547310,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 7,
+              "prompt_tokens": 332,
+              "total_tokens": 339,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-L5JnWLWkjA5oKRDis5H1BA8cwW331gmX",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 332,
+              "prompt_ms": 1488.906,
+              "prompt_per_token_ms": 4.484656626506024,
+              "prompt_per_second": 222.9825119920264,
+              "predicted_n": 7,
+              "predicted_ms": 286.24,
+              "predicted_per_token_ms": 40.89142857142857,
+              "predicted_per_second": 24.45500279485746
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-command-error-read",
+          "split": "train",
+          "family": "continue",
+          "passed": false,
+          "reason": "工具参数与冻结目标不一致",
+          "wall_ms": 2647.295499999018,
+          "target": "<tool_call>\n{\"name\":\"read_file\",\"arguments\":{\"path\":\"src/lib.rs\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "read_file",
+                        "arguments": "{\"path\":\"app/src/lib.rs\"}"
+                      },
+                      "id": "vsR4UZ2iAJro6fzb2cEdY1lgnEZXYLVx"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785547312,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 28,
+              "prompt_tokens": 423,
+              "total_tokens": 451,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-yHTcaEjfoj6MTW1AUR9h505GZWjhcTZb",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 423,
+              "prompt_ms": 1669.807,
+              "prompt_per_token_ms": 3.947534278959811,
+              "prompt_per_second": 253.3226893886539,
+              "predicted_n": 28,
+              "predicted_ms": 950.808,
+              "predicted_per_token_ms": 33.95742857142857,
+              "predicted_per_second": 29.448637369479435
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-config-missing-list",
+          "split": "validation",
+          "family": "continue",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 3018.5120000023744,
+          "target": "<tool_call>\n{\"name\":\"list_files\",\"arguments\":{\"path\":\"conf\",\"glob\":\"*.toml\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "list_files",
+                        "arguments": "{\"path\":\"conf\",\"glob\":\"*.toml\"}"
+                      },
+                      "id": "EQCjODXBbXmXpi6FzzEaQO0gIWhtzs6f"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785547315,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 39,
+              "prompt_tokens": 409,
+              "total_tokens": 448,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-jgE1Mt0HQlVKTCZlQxCoHv1Li8EaC8hs",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 409,
+              "prompt_ms": 1640.533,
+              "prompt_per_token_ms": 4.011083129584351,
+              "prompt_per_second": 249.30921840645695,
+              "predicted_n": 39,
+              "predicted_ms": 1346.366,
+              "predicted_per_token_ms": 34.52220512820513,
+              "predicted_per_second": 28.966863393757716
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-missing-region-ask",
+          "split": "validation",
+          "family": "continue",
+          "passed": false,
+          "reason": "结束原因不是tool_calls: stop",
+          "wall_ms": 2953.6656999989646,
+          "target": "<tool_call>\n{\"name\":\"ask_user_question\",\"arguments\":{\"question\":\"部署到哪个区域？\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "读取到的上线单内容如下：\n\n```json\n{\"service\":\"web\"}\n```\n\n该上线单中缺少“区域”信息。请问该服务部署在哪个区域？"
+                }
+              }
+            ],
+            "created": 1785547318,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 38,
+              "prompt_tokens": 390,
+              "total_tokens": 428,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-LKbUCPDVgMQ5W6HMwWiFqnjQB4WMl1uu",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 390,
+              "prompt_ms": 1624.807,
+              "prompt_per_token_ms": 4.166171794871795,
+              "prompt_per_second": 240.028508001258,
+              "predicted_n": 38,
+              "predicted_ms": 1299.417,
+              "predicted_per_token_ms": 34.195184210526314,
+              "predicted_per_second": 29.243883987973067
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-save-success-finish",
+          "split": "validation",
+          "family": "finish",
+          "passed": false,
+          "reason": "JSON与冻结目标不一致",
+          "wall_ms": 1729.2699000026914,
+          "target": "{\"status\":\"complete\"}",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"status\":\"success\"}"
+                }
+              }
+            ],
+            "created": 1785547320,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 6,
+              "prompt_tokens": 357,
+              "total_tokens": 363,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-WR4P8j4dfFWoYzBVBGVuVjuK4mFnLHsA",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 357,
+              "prompt_ms": 1516.926,
+              "prompt_per_token_ms": 4.24909243697479,
+              "prompt_per_second": 235.34437408284916,
+              "predicted_n": 6,
+              "predicted_ms": 179.77,
+              "predicted_per_token_ms": 29.96166666666667,
+              "predicted_per_second": 33.37598041942482
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-activation-worker-health",
+          "split": "validation",
+          "family": "continue",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 2527.0095000014408,
+          "target": "<tool_call>\n{\"name\":\"health_check\",\"arguments\":{\"service\":\"worker\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "health_check",
+                        "arguments": "{\"service\":\"worker\"}"
+                      },
+                      "id": "o3AZKtjbbrILqzPYn4vzTpy6Xc74GYgW"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785547323,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 27,
+              "prompt_tokens": 386,
+              "total_tokens": 413,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-3sL9i2hLF5NGu0RDzcFOpbU6cKefs8lZ",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 386,
+              "prompt_ms": 1581.799,
+              "prompt_per_token_ms": 4.097924870466321,
+              "prompt_per_second": 244.02594767097463,
+              "predicted_n": 27,
+              "predicted_ms": 920.339,
+              "predicted_per_token_ms": 34.086629629629634,
+              "predicted_per_second": 29.337016034309094
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-read-version-finish",
+          "split": "validation",
+          "family": "finish",
+          "passed": true,
+          "reason": "严格JSON匹配",
+          "wall_ms": 1930.7428000029176,
+          "target": "{\"version\":\"4.1.0\"}",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"version\":\"4.1.0\"}"
+                }
+              }
+            ],
+            "created": 1785547324,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 10,
+              "prompt_tokens": 333,
+              "total_tokens": 343,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-No6bQWkTEx7VhRjLfP0UIXXbhN7VjJYn",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 333,
+              "prompt_ms": 1523.422,
+              "prompt_per_token_ms": 4.5748408408408405,
+              "prompt_per_second": 218.58683936558614,
+              "predicted_n": 10,
+              "predicted_ms": 377.663,
+              "predicted_per_token_ms": 37.7663,
+              "predicted_per_second": 26.478633067046545
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-missing-secret-ask",
+          "split": "test",
+          "family": "continue",
+          "passed": false,
+          "reason": "结束原因不是tool_calls: stop",
+          "wall_ms": 2876.007600003504,
+          "target": "<tool_call>\n{\"name\":\"ask_user_question\",\"arguments\":{\"question\":\"使用哪个密钥？\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "任务配置文件已读取，内容为 `{\"image\":\"worker:v3\"}`。\n\n当前配置中缺少密钥名称（secret name）。请问您希望使用哪个密钥名称？"
+                }
+              }
+            ],
+            "created": 1785547327,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 36,
+              "prompt_tokens": 392,
+              "total_tokens": 428,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-3lHnxTiseNFKWAEyjY9nYu7e6hyVSo7K",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 392,
+              "prompt_ms": 1613.769,
+              "prompt_per_token_ms": 4.116757653061224,
+              "prompt_per_second": 242.9096109790187,
+              "predicted_n": 36,
+              "predicted_ms": 1232.508,
+              "predicted_per_token_ms": 34.236333333333334,
+              "predicted_per_second": 29.2087353591214
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-compile-failure-read",
+          "split": "test",
+          "family": "continue",
+          "passed": false,
+          "reason": "工具参数与冻结目标不一致",
+          "wall_ms": 2719.3355999988853,
+          "target": "<tool_call>\n{\"name\":\"read_file\",\"arguments\":{\"path\":\"src/pages/Home.tsx\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "read_file",
+                        "arguments": "{\"path\":\"frontend/src/pages/Home.tsx\"}"
+                      },
+                      "id": "mgfdVosn96J19HYVnQPCtmgCGl50gznp"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785547330,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 30,
+              "prompt_tokens": 423,
+              "total_tokens": 453,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-GFghja8T5fiBZNwg38FMQkpOMDMzwJt3",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 423,
+              "prompt_ms": 1661.809,
+              "prompt_per_token_ms": 3.9286264775413713,
+              "prompt_per_second": 254.5418877861415,
+              "predicted_n": 30,
+              "predicted_ms": 1028.509,
+              "predicted_per_token_ms": 34.283633333333334,
+              "predicted_per_second": 29.16843702874744
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-list-success-finish",
+          "split": "test",
+          "family": "finish",
+          "passed": true,
+          "reason": "严格JSON匹配",
+          "wall_ms": 1815.8470999987912,
+          "target": "{\"count\":3}",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"count\": 3}"
+                }
+              }
+            ],
+            "created": 1785547332,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 7,
+              "prompt_tokens": 366,
+              "total_tokens": 373,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-vL92gPfL2bMauVR5Ugf2VTBmGUjt4IVA",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 366,
+              "prompt_ms": 1573.717,
+              "prompt_per_token_ms": 4.299773224043716,
+              "prompt_per_second": 232.57040497116063,
+              "predicted_n": 7,
+              "predicted_ms": 213.43,
+              "predicted_per_token_ms": 30.490000000000002,
+              "predicted_per_second": 32.79763857002296
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-validation-production-activate",
+          "split": "test",
+          "family": "continue",
+          "passed": true,
+          "reason": "严格工具调用匹配",
+          "wall_ms": 2536.821099994995,
+          "target": "<tool_call>\n{\"name\":\"activate_config\",\"arguments\":{\"environment\":\"production\"}}\n</tool_call>",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "",
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "activate_config",
+                        "arguments": "{\"environment\":\"production\"}"
+                      },
+                      "id": "twbZHZCKBnonYXFQ2qTbhlWCnstcvL7X"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1785547334,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 27,
+              "prompt_tokens": 386,
+              "total_tokens": 413,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-BmzGNwYqxupLEMO3jxrFI5xQATOGZf6z",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 386,
+              "prompt_ms": 1591.618,
+              "prompt_per_token_ms": 4.123362694300518,
+              "prompt_per_second": 242.52050429185897,
+              "predicted_n": 27,
+              "predicted_ms": 914.914,
+              "predicted_per_token_ms": 33.885703703703705,
+              "predicted_per_second": 29.51097043000763
+            }
+          },
+          "error": null
+        },
+        {
+          "id": "policy-write-log-finish",
+          "split": "test",
+          "family": "finish",
+          "passed": false,
+          "reason": "JSON与冻结目标不一致",
+          "wall_ms": 1742.3744999978226,
+          "target": "{\"result\":\"saved\"}",
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"written\":true}"
+                }
+              }
+            ],
+            "created": 1785547336,
+            "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+            "system_fingerprint": "b1-b46812d",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 6,
+              "prompt_tokens": 357,
+              "total_tokens": 363,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              }
+            },
+            "id": "chatcmpl-bbxfeak0P5jAZlSS0SBdruJbgFuviHFs",
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 357,
+              "prompt_ms": 1532.526,
+              "prompt_per_token_ms": 4.292789915966387,
+              "prompt_per_second": 232.94873953198834,
+              "predicted_n": 6,
+              "predicted_ms": 178.266,
+              "predicted_per_token_ms": 29.711,
+              "predicted_per_second": 33.65756790414325
+            }
+          },
+          "error": null
+        }
+      ]
+    }
+  ],
+  "comparison": {
+    "wins": [
+      "policy-read-success-finish",
+      "policy-read-missing-list",
+      "policy-config-missing-list",
+      "policy-read-version-finish"
+    ],
+    "regressions": [],
+    "score_delta": 4,
+    "advances": true
+  }
+}

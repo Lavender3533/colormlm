@@ -1,0 +1,72 @@
+{
+  "format": "colorlm-neural-output-bus-capture-v1",
+  "encoding": "UTF-8",
+  "container": "NumPy NPZ without pickle",
+  "purpose": "一次采集 base/donor logits 与 donor terminal hidden，随后离线回放 alpha、校准门和验证多 donor",
+  "arrays": {
+    "base_logits": {
+      "dtype": "float16 or float32",
+      "shape": ["N", "V_base"],
+      "tap": "base final LM head output, before any donor contribution"
+    },
+    "labels": {
+      "dtype": "int64",
+      "shape": ["N"],
+      "rule": "teacher target in base vocabulary; evaluation only"
+    },
+    "task_ids": {
+      "dtype": "fixed-width Unicode",
+      "shape": ["N"],
+      "rule": "split/report only; forbidden as gate input"
+    },
+    "sample_ids": {
+      "dtype": "fixed-width Unicode",
+      "shape": ["N"],
+      "optional": true
+    },
+    "sequence_ids": {
+      "dtype": "int64",
+      "shape": ["N"],
+      "optional": true,
+      "purpose": "DSpark/speculative block replay"
+    },
+    "token_indices": {
+      "dtype": "int64",
+      "shape": ["N"],
+      "optional": true,
+      "purpose": "preserve within-sequence order"
+    },
+    "donor_i_logits": {
+      "dtype": "float16 or float32",
+      "shape": ["N", "M_i"],
+      "tap": "donor output norm/head logits for exactly mapped donor rows, before centering or alpha"
+    },
+    "donor_i_base_ids": {
+      "dtype": "int64",
+      "shape": ["M_i"],
+      "rule": "unique exact-token-byte map into base vocabulary"
+    },
+    "donor_i_hidden": {
+      "dtype": "float16 or float32",
+      "shape": ["N", "D_i"],
+      "tap": "donor terminal hidden before donor output norm"
+    }
+  },
+  "manifest_required": [
+    "capture format/version",
+    "base and every donor model SHA-256",
+    "token-map SHA-256",
+    "teacher/sample-set SHA-256",
+    "tensor tap names and pre/post norm status",
+    "dtype, shape, endianness",
+    "runtime commit/build identity",
+    "deterministic request parameters"
+  ],
+  "invariants": [
+    "all rows describe the same teacher-forced prefix boundary across base and donors",
+    "alpha=0 offline reconstruction is exactly base_logits",
+    "target labels and task ids never enter gate features",
+    "no duplicate donor_i_base_ids",
+    "unmapped base tokens receive zero donor residual"
+  ]
+}

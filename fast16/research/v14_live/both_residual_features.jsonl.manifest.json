@@ -1,0 +1,46 @@
+{
+  "format": "colorlm-v13-counterfactual-route-shard-manifest-v1",
+  "route": "k3",
+  "route_attestation": "process-level --force-path plus expected API alias",
+  "teacher": "D:\\project\\大模型ssd化\\fast16\\research\\v13_live\\teacher_v2.jsonl",
+  "teacher_sha256": "f078f7fc6ad3f6a7331139b4d3626a1ef773cb176fdaa0a02003140ccc306382",
+  "shard": "both_residual_features.jsonl",
+  "shard_sha256": "1580c1dd1e6bc7f376eb18155792e0d10ff63e8752105fdce963ca20fa76d59d",
+  "sample_count": 72,
+  "exact_count": 72,
+  "exact_coverage": 1.0,
+  "n_probs": 1,
+  "elapsed_seconds": 118.733242,
+  "server": {
+    "endpoint": "http://127.0.0.1:8110",
+    "models": [
+      "ColorLM-v15-Residual-Calibrate"
+    ],
+    "model_path": "fast16/models/ColorLM-v6-Q3Router-Fused-A1.gguf",
+    "context": 4096
+  },
+  "expected_model": "ColorLM-v15-Residual-Calibrate",
+  "hidden": null,
+  "k3_features": {
+    "file": "both_residual_features.npz",
+    "sha256": "3d3cd3d5fffc0200801f4dffe8b5d48da81792018c25d804a017139a598e80e7",
+    "sites": [
+      28
+    ],
+    "feature_width": 6,
+    "feature_names": [
+      "hidden_rms",
+      "native_rms",
+      "k3_delta_rms",
+      "hidden_delta_cos",
+      "native_delta_cos",
+      "energy_gate"
+    ],
+    "byte_start_offset": 208,
+    "byte_end_offset": 236944,
+    "records_before_start": 2,
+    "records_appended": 72,
+    "prefix_sha256_at_start": "c9dddc0455a48563405bf519c42a032221860defe16b2956a928fa5777658b45",
+    "alignment": "strict-appended-byte-range-v1"
+  }
+}

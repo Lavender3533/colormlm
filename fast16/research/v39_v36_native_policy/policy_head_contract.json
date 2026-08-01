@@ -1,0 +1,52 @@
+{
+  "format": "colorlm-v39-v36-native-sequence-policy-contract-v1",
+  "date": "2026-08-01",
+  "base_model": "fast16/models/ColorLM-v36-Qwen36-Global-Shared-Backbone.gguf",
+  "base_model_bytes": 13613857952,
+  "source_tasks": "fast16/research/v29_sequence_policy_head/policy_tasks_v1.jsonl",
+  "source_tasks_sha256": "e3bcee8a77ac696ad16661b4b492168ddd381bc75706f4601f3f2cd43c06625c",
+  "source_teacher": "fast16/research/v29_sequence_policy_head/policy-teacher.jsonl",
+  "source_teacher_sha256": "82757d28663f0d1ce7d892a59573f443606217306e20c48b08a73a19d2a0c563",
+  "fit_implementation": "fast16/research/v29_sequence_policy_head/fit_sequence_policy.py",
+  "fit_implementation_sha256": "c56a2d48c4a2a1b173bf641a3aaa7d757c7948518bd4f3df5cc8c72714a95724",
+  "scope": {
+    "mode": "explicit_tools_only",
+    "no_tools_behavior": "physical_bypass",
+    "host_text_routing": false,
+    "maximum_target_tokens_per_task": 12
+  },
+  "candidate_rows": {
+    "source_split": "train",
+    "minimum_distinct_train_tasks": 2,
+    "selection_uses_validation_or_test": false,
+    "minimum_candidate_tokens": 4
+  },
+  "target": {
+    "margin_over_native_top1": 0.5,
+    "maximum_positive_correction": 8.0,
+    "minimum_runtime_correction": -2.0,
+    "maximum_runtime_correction": 8.0
+  },
+  "fit": {
+    "family": "centered multi-output dual ridge",
+    "hidden_normalization": "per-sample-l2",
+    "ridge_lambda": 0.1,
+    "fit_split": "train",
+    "parameter_scan_allowed": false
+  },
+  "pass_gate": {
+    "validation_mean_target_nll_delta_max": -0.01,
+    "test_mean_target_nll_delta_max": -0.01,
+    "validation_selected_token_win_rate_min": 0.6,
+    "test_selected_token_win_rate_min": 0.6,
+    "maximum_heldout_task_mean_nll_regression": 0.03
+  },
+  "runtime_gate": {
+    "frozen_tool_tasks": 20,
+    "minimum_score": 11,
+    "maximum_regressions_vs_v38": 0,
+    "no_tools_exact_bypass": true,
+    "maximum_speed_regression": 0.05
+  },
+  "failure_action": "stop v39 native sequence policy head; keep v38 and do not scan fitted hyperparameters against holdout labels"
+}

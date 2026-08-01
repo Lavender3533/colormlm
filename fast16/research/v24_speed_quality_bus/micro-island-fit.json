@@ -1,0 +1,134 @@
+{
+  "format": "colorlm-v25-micro-island-fit-v1",
+  "dump": "D:\\project\\大模型ssd化\\fast16\\research\\v24_speed_quality_bus\\teacher-island-20260801.bin",
+  "pair_records": 128,
+  "train_records": 102,
+  "eval_records": 26,
+  "train_tokens": 288,
+  "eval_tokens": 26,
+  "input_width": 2048,
+  "target_width": 2048,
+  "ranks": {
+    "32": {
+      "rank": 32,
+      "weights_bytes_f16": 262144,
+      "input_projection_shape": [
+        32,
+        2048
+      ],
+      "output_projection_shape": [
+        32,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.5702390670776367,
+      "zero_baseline": {
+        "rmse": 1.625731110572815,
+        "reference_rms": 1.625731110572815,
+        "relative_rmse": 1.0,
+        "cosine_mean": 0.0,
+        "cosine_median": 0.0,
+        "cosine_positive_fraction": 0.0
+      },
+      "micro_island": {
+        "rmse": 1.597385287284851,
+        "reference_rms": 1.625731110572815,
+        "relative_rmse": 0.9825642704963684,
+        "cosine_mean": 0.23152607679367065,
+        "cosine_median": 0.2291627824306488,
+        "cosine_positive_fraction": 0.9615384615384616
+      },
+      "artifact": "D:\\project\\大模型ssd化\\fast16\\research\\v24_speed_quality_bus\\micro-island-artifacts\\micro_island_r32.npz"
+    },
+    "64": {
+      "rank": 64,
+      "weights_bytes_f16": 524288,
+      "input_projection_shape": [
+        64,
+        2048
+      ],
+      "output_projection_shape": [
+        64,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.7321959733963013,
+      "zero_baseline": {
+        "rmse": 1.625731110572815,
+        "reference_rms": 1.625731110572815,
+        "relative_rmse": 1.0,
+        "cosine_mean": 0.0,
+        "cosine_median": 0.0,
+        "cosine_positive_fraction": 0.0
+      },
+      "micro_island": {
+        "rmse": 1.6236848831176758,
+        "reference_rms": 1.625731110572815,
+        "relative_rmse": 0.9987413287162781,
+        "cosine_mean": 0.21514980494976044,
+        "cosine_median": 0.23628398776054382,
+        "cosine_positive_fraction": 0.9230769230769231
+      },
+      "artifact": "D:\\project\\大模型ssd化\\fast16\\research\\v24_speed_quality_bus\\micro-island-artifacts\\micro_island_r64.npz"
+    },
+    "128": {
+      "rank": 128,
+      "weights_bytes_f16": 1048576,
+      "input_projection_shape": [
+        128,
+        2048
+      ],
+      "output_projection_shape": [
+        128,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.888959527015686,
+      "zero_baseline": {
+        "rmse": 1.625731110572815,
+        "reference_rms": 1.625731110572815,
+        "relative_rmse": 1.0,
+        "cosine_mean": 0.0,
+        "cosine_median": 0.0,
+        "cosine_positive_fraction": 0.0
+      },
+      "micro_island": {
+        "rmse": 1.6623024940490723,
+        "reference_rms": 1.625731110572815,
+        "relative_rmse": 1.0224953889846802,
+        "cosine_mean": 0.19472311437129974,
+        "cosine_median": 0.1810063272714615,
+        "cosine_positive_fraction": 0.9615384615384616
+      },
+      "artifact": "D:\\project\\大模型ssd化\\fast16\\research\\v24_speed_quality_bus\\micro-island-artifacts\\micro_island_r128.npz"
+    },
+    "256": {
+      "rank": 256,
+      "weights_bytes_f16": 2097152,
+      "input_projection_shape": [
+        256,
+        2048
+      ],
+      "output_projection_shape": [
+        256,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.9942647814750671,
+      "zero_baseline": {
+        "rmse": 1.625731110572815,
+        "reference_rms": 1.625731110572815,
+        "relative_rmse": 1.0,
+        "cosine_mean": 0.0,
+        "cosine_median": 0.0,
+        "cosine_positive_fraction": 0.0
+      },
+      "micro_island": {
+        "rmse": 1.8650435209274292,
+        "reference_rms": 1.625731110572815,
+        "relative_rmse": 1.147202968597412,
+        "cosine_mean": 0.11700064688920975,
+        "cosine_median": 0.100182443857193,
+        "cosine_positive_fraction": 0.8076923076923077
+      },
+      "artifact": "D:\\project\\大模型ssd化\\fast16\\research\\v24_speed_quality_bus\\micro-island-artifacts\\micro_island_r256.npz"
+    }
+  },
+  "decision_rule": "candidate must beat zero baseline on held-out cosine and relative RMSE before runtime integration"
+}

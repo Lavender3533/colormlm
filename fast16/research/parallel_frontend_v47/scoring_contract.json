@@ -1,0 +1,65 @@
+{
+  "schema_version": "parallel-frontend-contract-v1",
+  "scorer_version": "parallel-frontend-static-v1.0.0",
+  "encoding": {
+    "required": "UTF-8",
+    "bom_allowed": false,
+    "invalid_utf8_final_score": 0
+  },
+  "scope": {
+    "artifact": "单个自包含或可引用外部资源的 HTML 文件",
+    "execution": "纯静态；不执行 JavaScript、不联网、不栅格化",
+    "determinism": "同一字节序列和评分器版本必须得到相同结果"
+  },
+  "dimensions": {
+    "structure": {
+      "max": 18,
+      "signals": ["HTML5 doctype", "唯一 html/head/body", "title 与 UTF-8 charset", "唯一 h1", "语义地标", "id 唯一", "标签闭合"]
+    },
+    "responsive": {
+      "max": 16,
+      "signals": ["移动 viewport", "媒体查询与多断点", "流式单位/函数", "Grid/Flex/wrap", "响应式媒体", "无明显横向溢出"]
+    },
+    "interaction": {
+      "max": 16,
+      "signals": ["有意义的原生控件", "事件接线", "hover/focus/active 等状态", "150–300ms 过渡", "无空链接/惰性按钮", "表单提交路径"]
+    },
+    "visual_complexity": {
+      "max": 20,
+      "signals": ["CSS 深度", "多层内容编排", "布局/渐变/阴影/动画等技法", "颜色与字体系统", "视觉资产", "排版系统"]
+    },
+    "dependency_safety": {
+      "max": 10,
+      "signals": ["外部依赖数量", "主动脚本/样式", "HTTPS", "显式版本", "依赖主机数量"]
+    },
+    "accessibility": {
+      "max": 20,
+      "signals": ["文档语言", "图片替代文本", "表单标签", "控件可访问名称", "标题顺序", "语义地标", "可见焦点", "减少运动", "跳过导航", "语义点击目标"]
+    }
+  },
+  "template_penalty": {
+    "max": 20,
+    "applied_after_gross_score": true,
+    "signals": {
+      "exact_three_card_signature": 6,
+      "low_composition": 3,
+      "no_distinct_visual_asset": 3,
+      "generic_landing_copy": 2,
+      "shallow_style_system": 3,
+      "three_cards_without_behavior": 3
+    }
+  },
+  "formula": "final_score = clamp(sum(dimension_scores) - template_penalty, 0, 100)",
+  "tiers": {
+    "advanced": "final_score >= 75 且 template_penalty <= 4",
+    "competent": "final_score >= 55 且 template_penalty <= 10",
+    "template_or_incomplete": "其他"
+  },
+  "hard_limits": [
+    "静态信号不能证明浏览器中真实可用或视觉无回归",
+    "没有计算 CSS 级联后的颜色对比度",
+    "没有模拟 375/768/1024/1440 像素视口",
+    "复杂度不是审美质量，必须与模板惩罚和人工盲评共同解释",
+    "分数只适合冻结版本间的同契约比较，不可映射为 DesignBench、FronTalk 或 ArtifactsBench 官方分数"
+  ]
+}

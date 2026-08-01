@@ -1,0 +1,26 @@
+{
+  "schema_version": "capability-manifest-v1",
+  "frozen_date": "2026-07-31",
+  "encoding": "UTF-8 without BOM",
+  "dimensions": [
+    "reasoning",
+    "knowledge",
+    "long_context",
+    "coding",
+    "tools",
+    "planning",
+    "computer_use",
+    "communication"
+  ],
+  "counts": {
+    "dev": {"per_dimension": 3, "total": 24},
+    "task_holdout": {"per_dimension": 2, "total": 16},
+    "final_holdout": {"per_dimension": 1, "total": 8},
+    "all": {"per_dimension": 6, "total": 48}
+  },
+  "files": {
+    "data/dev.jsonl": "802abf76ce13d4da86cf75bf0aed7b8efd180a3bade1c648f9a9b3cb6d48e9ac",
+    "data/task_holdout.jsonl": "35d6c9ab4a6f7883866519fdca5575ac6277b235f53c1e88298bab6420bcb948",
+    "data/final_holdout.jsonl": "437fed800dc0bf0c6ed1b59938d81294a62af5b0bed7431055427399ae465d14"
+  }
+}

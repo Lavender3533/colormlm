@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://colorlm.local/schemas/design-ir-sequence-record-v1.json",
+  "title": "terminal hidden 到完整 Design IR 序列岛记录",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "task_id", "group_id", "template_cluster_id", "split", "capability", "target_mode", "prompt_utf8", "copy_slots", "target_text", "target_utf8_bytes", "target_token_ids", "capture", "prefix_sha256"],
+  "properties": {
+    "schema_version": {"const": "design-ir-sequence-record-v1"},
+    "task_id": {"type": "string", "minLength": 1},
+    "group_id": {"type": "string", "minLength": 1},
+    "template_cluster_id": {"type": "string", "minLength": 1},
+    "split": {"enum": ["train", "validation", "blind"]},
+    "capability": {"const": "frontend-design-ir"},
+    "target_mode": {"const": "complete-design-genome"},
+    "prompt_utf8": {"type": "string", "minLength": 1},
+    "copy_slots": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "start_utf8", "end_utf8", "text"],
+        "properties": {
+          "id": {"type": "integer", "minimum": 0, "maximum": 63},
+          "kind": {"enum": ["title", "lede", "label", "value"]},
+          "start_utf8": {"type": "integer", "minimum": 0},
+          "end_utf8": {"type": "integer", "minimum": 1},
+          "text": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "target_text": {"type": "string", "minLength": 1},
+    "target_utf8_bytes": {"type": "integer", "minimum": 150, "maximum": 1200},
+    "target_token_ids": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 0}},
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "layer", "hidden_dtype", "hidden_shape", "hidden_file", "hidden_sha256", "request_sha256"],
+      "properties": {
+        "model": {"type": "string", "minLength": 1},
+        "layer": {"type": "string", "minLength": 1},
+        "hidden_dtype": {"enum": ["float16", "float32"]},
+        "hidden_shape": {"type": "array", "prefixItems": [{"const": 2048}], "items": false},
+        "hidden_file": {"type": "string", "minLength": 1},
+        "hidden_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "request_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "prefix_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

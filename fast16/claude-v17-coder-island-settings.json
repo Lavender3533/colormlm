@@ -1,0 +1,15 @@
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:8105",
+    "ANTHROPIC_API_KEY": "sk-ant-local-v17-coder-island",
+    "ANTHROPIC_AUTH_TOKEN": "",
+    "ANTHROPIC_MODEL": "ColorLM-v17-Coder-Neural-Island",
+    "ANTHROPIC_SMALL_FAST_MODEL": "ColorLM-v17-Coder-Neural-Island",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "ColorLM-v17-Coder-Neural-Island",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "ColorLM-v17-Coder-Neural-Island",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "ColorLM-v17-Coder-Neural-Island",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "DISABLE_TELEMETRY": "1",
+    "DISABLE_ERROR_REPORTING": "1"
+  }
+}

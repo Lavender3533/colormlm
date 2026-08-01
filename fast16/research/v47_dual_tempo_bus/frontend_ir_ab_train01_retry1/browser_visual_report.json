@@ -1,0 +1,46 @@
+{
+  "format": "colorlm-v47-frontend-browser-check-v1",
+  "status": "single_train_task_development_hybrid",
+  "url": "http://127.0.0.1:8151/candidate.html",
+  "desktop": {
+    "viewport": {"width": 1440, "height": 900},
+    "rendered": true,
+    "visual_summary": "深色边缘节点运维台；筛选栏、密集数据表、状态徽标和右侧详情抽屉层级清楚，不是Hero加三卡片。",
+    "status_filter": {
+      "selected": "warning",
+      "visible_rows": 10,
+      "all_visible_rows_warning": true,
+      "live_announcement": "已显示 10 个节点"
+    },
+    "detail_drawer": {
+      "opened": true,
+      "title": "节点详情",
+      "body_scroll_locked": true
+    },
+    "alert_modal": {
+      "opened": true,
+      "node_id": "node-0001",
+      "cancelled": true
+    }
+  },
+  "mobile": {
+    "requested_viewport": {"width": 375, "height": 812},
+    "document_viewport_width": 360,
+    "body_scroll_width": 360,
+    "horizontal_overflow": false,
+    "desktop_table_display": "none",
+    "card_list_display": "flex",
+    "card_count": 50,
+    "visual_findings": [
+      "功能性响应式切换成立",
+      "部分卡片文本在窄屏换行拥挤，视觉精修仍不足",
+      "状态徽标与详情按钮可见，但信息密度偏高"
+    ]
+  },
+  "console_errors_or_warnings": [],
+  "decision": {
+    "functional_browser_check_passed": true,
+    "visual_polish_complete": false,
+    "general_frontend_claim_allowed": false
+  }
+}

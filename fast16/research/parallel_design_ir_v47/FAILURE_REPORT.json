@@ -1,0 +1,12 @@
+{
+  "schema_version": "parallel-design-genome-failure-report-v1",
+  "status": "no_observed_static_failures",
+  "scope": "仅 8 条 train 的 schema、编译、静态门与合成恢复测试；未读取或运行 validation/blind。",
+  "failures": [],
+  "unproven": [
+    "静态检查不证明浏览器交互、焦点陷阱、视觉审美或 WCAG 对比度真实通过。",
+    "8 条教师 Genome 不证明 terminal-hidden Genome Head 可泛化。",
+    "copy slots 当前由教师标注；自动候选抽取与未见专有名词复制尚未证明。",
+    "llama.cpp 兼容 schema 只通过本地 converter；真实 v38 已知更可靠路径是有界 GBNF，最终目标是并行分类头。"
+  ]
+}

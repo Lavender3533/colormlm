@@ -1,0 +1,84 @@
+{
+  "format": "colorlm-v19.1-evaluation-contract-v1",
+  "date": "2026-07-31",
+  "purpose": "验证 v19 双输出头信号是否跨独立任务泛化，避免把连续开头 token 或单题 NLL 偶然改善误判为整体变聪明",
+  "candidate_point": {
+    "alpha": 0.03,
+    "status": "fixed_evaluation_point",
+    "not": "final_frozen_parameter",
+    "rule": "本轮保持不变以避免评估期间继续调参；是否保留必须由任务级、关键 token 和实际生成共同决定"
+  },
+  "controlled_variables": [
+    "teacher set",
+    "chat template",
+    "context size",
+    "runtime parameters",
+    "model binary except the output-head branch",
+    "neural island runtime-v3 and alpha",
+    "seed and exact pre-sampling logprob method"
+  ],
+  "stages": [
+    {
+      "id": "smoke60",
+      "description": "10 个独立任务，每题连续前 6 个 token，共 60 个精确 NLL 样本",
+      "interpretation": "仅为链路与初步泛化冒烟测试，可能主要覆盖代码或 JSON 开头，不代表关键能力决策"
+    },
+    {
+      "id": "task_level",
+      "description": "按 10 个任务分别统计均值、胜负、最差回归，并分 Python、Java、Rust、TypeScript 和五种工具任务检查",
+      "required_statistics": [
+        "per-task mean delta",
+        "task wins/losses/equal",
+        "worst task regression",
+        "code/tool group mean and median delta",
+        "leave-one-task-out mean delta"
+      ]
+    },
+    {
+      "id": "decision_tokens",
+      "description": "补充人工审计的关键决策 token",
+      "coding_categories": [
+        "operator",
+        "boundary condition",
+        "return value",
+        "critical API"
+      ],
+      "tool_categories": [
+        "tool name",
+        "argument name",
+        "argument value",
+        "termination marker"
+      ],
+      "selection_rule": "每个 token 必须记录完整前缀、token ID、可读文本、类别和选择理由；不得根据候选结果反向挑选"
+    },
+    {
+      "id": "generation",
+      "description": "在 NLL 门通过后进行实际生成 A/B",
+      "rule": "v19 输出不能继续与 v17 完全相同；差异必须可由单元测试、工具协议或人工固定规则判定为净改善，而非单纯不同"
+    }
+  ],
+  "promotion_gate": {
+    "required": [
+      "多数独立任务改善",
+      "没有单类任务明显崩坏",
+      "所有 leave-one-task-out 子集的总体方向仍为正",
+      "关键决策 token 组通过",
+      "实际生成相对 v17 产生可验证净改善",
+      "alpha=0 物理旁路继续严格成立"
+    ],
+    "only_after_pass": [
+      "confidence gating",
+      "probability calibration",
+      "output-head cost reduction"
+    ]
+  },
+  "expansion_order": [
+    "reasoning",
+    "knowledge",
+    "long context",
+    "planning",
+    "computer use",
+    "natural communication"
+  ],
+  "second_donor_rule": "只有多维度出现可重复提升后才讨论第二 donor；每个 donor 必须先独立通过其目标维度门"
+}

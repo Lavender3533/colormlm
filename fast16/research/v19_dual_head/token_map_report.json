@@ -1,0 +1,3641 @@
+{
+  "format": "colorlm-donor-token-map-v1",
+  "method": "exact-tokenizer.ggml.tokens-raw-bytes",
+  "base": {
+    "path": "D:\\project\\大模型ssd化\\fast16\\models\\ColorLM-v6-Q3Router-Fused-A1.gguf",
+    "bytes": 13731822496,
+    "vocab_size": 248320,
+    "eos_token_id": 248046,
+    "padding_token_id": 248055,
+    "duplicate_token_byte_groups": 0
+  },
+  "donor": {
+    "path": "D:\\project\\大模型ssd化\\fast16\\models\\donor\\qwen3-coder-next-iq3s\\Qwen3-Coder-Next-UD-IQ3_S.gguf",
+    "bytes": 29690687488,
+    "vocab_size": 151936,
+    "eos_token_id": 151645,
+    "padding_token_id": 151654,
+    "duplicate_token_byte_groups": 0,
+    "output_norm": {
+      "name": "output_norm.weight",
+      "shape": [
+        2048
+      ],
+      "dtype": "0",
+      "bytes": 8192,
+      "data_offset": 261241856,
+      "sha256": "0de3e7fda28f600b1161a1e286fd9fdaca514b0e0455827bb72b3f081943adbd"
+    },
+    "output": {
+      "name": "output.weight",
+      "shape": [
+        2048,
+        151936
+      ],
+      "dtype": "14",
+      "bytes": 255252480,
+      "data_offset": 5989376,
+      "sha256": "85e74917e40e36033c9abd27c1b877588576ec916cd039d6dddc81bba70c2340"
+    },
+    "token_embedding": {
+      "name": "token_embd.weight",
+      "shape": [
+        2048,
+        151936
+      ],
+      "dtype": "14",
+      "bytes": 255252480,
+      "data_offset": 261250048,
+      "sha256": "ad805a7e2bc05df90ce07d71807ee1ad60e20a5b9ef95bfc07e27c7000b8f18f"
+    },
+    "output_tied_to_embedding": false
+  },
+  "mapping": {
+    "file": "donor_to_base.i32",
+    "dtype": "I32_LE",
+    "length": 151936,
+    "bytes": 607744,
+    "sha256": "3a54dfdbfbc5e04280cafe5b4164d4b7ac944aac1aaefcd50b7d4c0cf8be3020",
+    "mapped": 131612,
+    "unmapped": 20324,
+    "donor_coverage": 0.866233150800337,
+    "unique_base_ids_covered": 131612,
+    "base_vocab_coverage": 0.5300096649484536,
+    "ambiguous_base_token_matches": [],
+    "runtime_target_collisions": []
+  },
+  "token_type_counts": {
+    "base": {
+      "1": 248044,
+      "3": 27,
+      "4": 6,
+      "5": 243
+    },
+    "donor": {
+      "1": 151643,
+      "3": 20,
+      "4": 6,
+      "5": 267
+    }
+  },
+  "control_tokens": [
+    {
+      "donor_id": 151643,
+      "base_id": 248044,
+      "mapped": true,
+      "token": "<|endoftext|>",
+      "token_sha256": "3d0c1cf596181258a003e9f95c836c765d44353532e67c70d7dff48b05f64840",
+      "donor_token_type": 3,
+      "base_token_type": 3,
+      "metadata_sources": [
+        "config.bos_token_id",
+        "gguf.token_type.3",
+        "tokenizer.json.added_token",
+        "tokenizer.json.special"
+      ]
+    },
+    {
+      "donor_id": 151644,
+      "base_id": 248045,
+      "mapped": true,
+      "token": "<|im_start|>",
+      "token_sha256": "17a9ea43212df48ca4fca436c080e1e35cded043b9197b44a4bd53fbb04f3193",
+      "donor_token_type": 3,
+      "base_token_type": 3,
+      "metadata_sources": [
+        "gguf.token_type.3",
+        "tokenizer.json.added_token",
+        "tokenizer.json.special"
+      ]
+    },
+    {
+      "donor_id": 151645,
+      "base_id": 248046,
+      "mapped": true,
+      "token": "<|im_end|>",
+      "token_sha256": "d6b60b51acc9448b15da9cb03f644d0ec8c410e37735817f39e15764aa75a37f",
+      "donor_token_type": 3,
+      "base_token_type": 3,
+      "metadata_sources": [
+        "config.eos_token_id",
+        "gguf.token_type.3",
+        "tokenizer.json.added_token",
+        "tokenizer.json.special"
+      ]
+    },
+    {
+      "donor_id": 151646,
+      "base_id": 248047,
+      "mapped": true,
+      "token": "<|object_ref_start|>",
+      "token_sha256": "b6ed1799341ebb18756c19ed4e5db6fab407f2909afd652c80affc9c370de7e6",
+      "donor_token_type": 3,
+      "base_token_type": 3,
+      "metadata_sources": [
+        "gguf.token_type.3",
+        "tokenizer.json.added_token",
+        "tokenizer.json.special"
+      ]
+    },
+    {
+      "donor_id": 151647,
+      "base_id": 248048,
+      "mapped": true,
+      "token": "<|object_ref_end|>",
+      "token_sha256": "bb9acb19849fecd4e39ac4bf0a4024fe9df7980192a84d63bd60ba0c3970e2a7",
+      "donor_token_type": 3,
+      "base_token_type": 3,
+      "metadata_sources": [
+        "gguf.token_type.3",
+        "tokenizer.json.added_token",
+        "tokenizer.json.special"
+      ]
+    },
+    {
+      "donor_id": 151648,
+      "base_id": 248049,
+      "mapped": true,
+      "token": "<|box_start|>",
+      "token_sha256": "208e87e4593c1a0e4401ef20058031332dc22036925a51dbf9c833d925d92f41",
+      "donor_token_type": 3,
+      "base_token_type": 3,
+      "metadata_sources": [
+        "gguf.token_type.3",
+        "tokenizer.json.added_token",
+        "tokenizer.json.special"
+      ]
+    },
+    {
+      "donor_id": 151649,
+      "base_id": 248050,
+      "mapped": true,
+      "token": "<|box_end|>",
+      "token_sha256": "66452a4eb6a856ff3fe4f63f997314d934e1fb163e24a6f9e2439f1f69938a11",
+      "donor_token_type": 3,
+      "base_token_type": 3,
+      "metadata_sources": [
+        "gguf.token_type.3",
+        "tokenizer.json.added_token",
+        "tokenizer.json.special"
+      ]
+    },
+    {
+      "donor_id": 151650,
+      "base_id": 248051,
+      "mapped": true,
+      "token": "<|quad_start|>",
+      "token_sha256": "9c29cd622a12355430f8c16f8d5c428057070d5d67c4308dc8705310eac87a71",
+      "donor_token_type": 3,
+      "base_token_type": 3,
+      "metadata_sources": [
+        "gguf.token_type.3",
+        "tokenizer.json.added_token",
+        "tokenizer.json.special"
+      ]
+    },
+    {
+      "donor_id": 151651,
+      "base_id": 248052,
+      "mapped": true,
+      "token": "<|quad_end|>",
+      "token_sha256": "81675f2cfdea17c50c6fff275a255a5c3434ab0defa8b1fa981a99a5f515978b",
+      "donor_token_type": 3,
+      "base_token_type": 3,
+      "metadata_sources": [
+        "gguf.token_type.3",
+        "tokenizer.json.added_token",
+        "tokenizer.json.special"
+      ]
+    },
+    {
+      "donor_id": 151652,
+      "base_id": 248053,
+      "mapped": true,
+      "token": "<|vision_start|>",
+      "token_sha256": "1f91564b7c1bb7794308e6f2af07408cd0c1729a94e61bb3086a5772d8b25b9f",
+      "donor_token_type": 3,
+      "base_token_type": 3,
+      "metadata_sources": [
+        "gguf.token_type.3",
+        "tokenizer.json.added_token",
+        "tokenizer.json.special"
+      ]
+    },
+    {
+      "donor_id": 151653,
+      "base_id": 248054,
+      "mapped": true,
+      "token": "<|vision_end|>",
+      "token_sha256": "15f5ef43e593f6127fddfd2274b85d386c80df9548f66442777531ffea6ad38d",
+      "donor_token_type": 3,
+      "base_token_type": 3,
+      "metadata_sources": [
+        "gguf.token_type.3",
+        "tokenizer.json.added_token",
+        "tokenizer.json.special"
+      ]
+    },
+    {
+      "donor_id": 151654,
+      "base_id": 248055,
+      "mapped": true,
+      "token": "<|vision_pad|>",
+      "token_sha256": "b531e7689d471ac5f611f59fa09e46d52584b015862a35cd89c530b7869aa160",
+      "donor_token_type": 3,
+      "base_token_type": 3,
+      "metadata_sources": [
+        "gguf.token_type.3",
+        "tokenizer.json.added_token",
+        "tokenizer.json.special"
+      ]
+    },
+    {
+      "donor_id": 151655,
+      "base_id": 248056,
+      "mapped": true,
+      "token": "<|image_pad|>",
+      "token_sha256": "97182f2440da57ea2acb677cdf5f553a0cb4b93b1091ec83197c15de4db0d52a",
+      "donor_token_type": 3,
+      "base_token_type": 3,
+      "metadata_sources": [
+        "gguf.token_type.3",
+        "tokenizer.json.added_token",
+        "tokenizer.json.special"
+      ]
+    },
+    {
+      "donor_id": 151656,
+      "base_id": 248057,
+      "mapped": true,
+      "token": "<|video_pad|>",
+      "token_sha256": "080babe82187c4c93f550f53dffca78eb550d3375f88c3bbce75818e13fe260a",
+      "donor_token_type": 3,
+      "base_token_type": 3,
+      "metadata_sources": [
+        "gguf.token_type.3",
+        "tokenizer.json.added_token",
+        "tokenizer.json.special"
+      ]
+    },
+    {
+      "donor_id": 151657,
+      "base_id": 248058,
+      "mapped": true,
+      "token": "<tool_call>",
+      "token_sha256": "928019ac18a3df80697920340e804983be6e80fc2c5d511547638ee0b4ba0638",
+      "donor_token_type": 4,
+      "base_token_type": 4,
+      "metadata_sources": [
+        "gguf.token_type.4",
+        "tokenizer.json.added_token"
+      ]
+    },
+    {
+      "donor_id": 151658,
+      "base_id": 248059,
+      "mapped": true,
+      "token": "</tool_call>",
+      "token_sha256": "838ef647e688f2ebf7b584f5f94714df7ccf4bfc19c643752c0c1e922e1724ec",
+      "donor_token_type": 4,
+      "base_token_type": 4,
+      "metadata_sources": [
+        "gguf.token_type.4",
+        "tokenizer.json.added_token"
+      ]
+    },
+    {
+      "donor_id": 151659,
+      "base_id": 248060,
+      "mapped": true,
+      "token": "<|fim_prefix|>",
+      "token_sha256": "8c00540d5fc243426fd2577bf91c4129fedba827ffbd022e32193837c85aa999",
+      "donor_token_type": 3,
+      "base_token_type": 3,
+      "metadata_sources": [
+        "gguf.token_type.3",
+        "tokenizer.json.added_token"
+      ]
+    },
+    {
+      "donor_id": 151660,
+      "base_id": 248061,
+      "mapped": true,
+      "token": "<|fim_middle|>",
+      "token_sha256": "4c9c94a3deed5b314039b02010b5f74c8ce8138f992334e7ec7955e5e5369a98",
+      "donor_token_type": 3,
+      "base_token_type": 3,
+      "metadata_sources": [
+        "gguf.token_type.3",
+        "tokenizer.json.added_token"
+      ]
+    },
+    {
+      "donor_id": 151661,
+      "base_id": 248062,
+      "mapped": true,
+      "token": "<|fim_suffix|>",
+      "token_sha256": "ef6818354522c4c572bd82e83fc1152058178bd35a84a51427dbf6442a31b406",
+      "donor_token_type": 3,
+      "base_token_type": 3,
+      "metadata_sources": [
+        "gguf.token_type.3",
+        "tokenizer.json.added_token"
+      ]
+    },
+    {
+      "donor_id": 151662,
+      "base_id": 248063,
+      "mapped": true,
+      "token": "<|fim_pad|>",
+      "token_sha256": "0e357dbd694cf1786b010b1e4f5dc3dc7a0b0ba2e12e43df1be2858701834694",
+      "donor_token_type": 3,
+      "base_token_type": 3,
+      "metadata_sources": [
+        "gguf.token_type.3",
+        "tokenizer.json.added_token"
+      ]
+    },
+    {
+      "donor_id": 151663,
+      "base_id": 248064,
+      "mapped": true,
+      "token": "<|repo_name|>",
+      "token_sha256": "1ce8621bbc11133faf58e067eae218439426dbae8eb883b281fb7380d5f5b81b",
+      "donor_token_type": 3,
+      "base_token_type": 3,
+      "metadata_sources": [
+        "gguf.token_type.3",
+        "tokenizer.json.added_token"
+      ]
+    },
+    {
+      "donor_id": 151664,
+      "base_id": 248065,
+      "mapped": true,
+      "token": "<|file_sep|>",
+      "token_sha256": "063267bb253549b63de507da6e500dbe60915a6eb69fd00fc398861ef6ba8b7a",
+      "donor_token_type": 3,
+      "base_token_type": 3,
+      "metadata_sources": [
+        "gguf.token_type.3",
+        "tokenizer.json.added_token"
+      ]
+    },
+    {
+      "donor_id": 151665,
+      "base_id": 248066,
+      "mapped": true,
+      "token": "<tool_response>",
+      "token_sha256": "50fae25d8a2b066a130f0ae256f3d92383f459c5ea2fbef3bca64eeeb763bbdd",
+      "donor_token_type": 4,
+      "base_token_type": 4,
+      "metadata_sources": [
+        "gguf.token_type.4",
+        "tokenizer.json.added_token"
+      ]
+    },
+    {
+      "donor_id": 151666,
+      "base_id": 248067,
+      "mapped": true,
+      "token": "</tool_response>",
+      "token_sha256": "97410b1bc1867b41dbbac1f1371fa47421f80e0404bf0184acf9e306d311f5b2",
+      "donor_token_type": 4,
+      "base_token_type": 4,
+      "metadata_sources": [
+        "gguf.token_type.4",
+        "tokenizer.json.added_token"
+      ]
+    },
+    {
+      "donor_id": 151667,
+      "base_id": 248068,
+      "mapped": true,
+      "token": "<think>",
+      "token_sha256": "7d329bb7d9d43bf17bcafd4cb8203e1b94423923e87980bd1d2d9fc525d50b99",
+      "donor_token_type": 4,
+      "base_token_type": 4,
+      "metadata_sources": [
+        "gguf.token_type.4",
+        "tokenizer.json.added_token"
+      ]
+    },
+    {
+      "donor_id": 151668,
+      "base_id": 248069,
+      "mapped": true,
+      "token": "</think>",
+      "token_sha256": "475ad64997bc531fda042238dad1fce2ee04a94130baa9977f0f6ff93bcf9f00",
+      "donor_token_type": 4,
+      "base_token_type": 4,
+      "metadata_sources": [
+        "gguf.token_type.4",
+        "tokenizer.json.added_token"
+      ]
+    },
+    {
+      "donor_id": 151669,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151669]",
+      "token_sha256": "2eee451e575a83e7f5e16b97489c842ea41bb94dbe907bec2ebc3c20b475b131",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151670,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151670]",
+      "token_sha256": "b57e4455a8e6bb054cec28b66ef8d06f41d5e4757cc567fd7840f36da900b4ad",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151671,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151671]",
+      "token_sha256": "bb173e60a6b2b6558c8bf282454a2eb665003697cff4d84195510a4bb254cf97",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151672,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151672]",
+      "token_sha256": "8b06988ce40ef496ba157d0127fc784a4732d8aeae781bf2aace306a950bca89",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151673,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151673]",
+      "token_sha256": "7e3cfada90e5e6333d2f9fdb8e5399ac7840cac394418b8e6e22d7f2554fc25b",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151674,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151674]",
+      "token_sha256": "0a738c4cf04cb67d86da5b72aed8dbca86ad2d6d4e39547f13e40742898fec32",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151675,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151675]",
+      "token_sha256": "5ee81d1a0cc28e6ca0b94eeffc27f35da0afbda2ec8825b3112f8b4724c5c028",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151676,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151676]",
+      "token_sha256": "d93857b4425fa5c8116194241dfaae967428cb836608d87dae8e9e77660b2dbb",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151677,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151677]",
+      "token_sha256": "f0d9c620a4a45fbda126ab58d9c5fbce47ae01fff9e3221f3b837382dd6d4700",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151678,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151678]",
+      "token_sha256": "de90096cdcb1ac892190efcca3c24b5bb39d1a3f8a8bee443b3753669ab918e9",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151679,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151679]",
+      "token_sha256": "e038669b7436db1f8ff356df2c33ae989f0b2e0acf0574cfb3824385447a1f70",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151680,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151680]",
+      "token_sha256": "b9a21c5ec33db55e18b14addde991bfc10cf6420c9e012702d44d4fb984271d5",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151681,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151681]",
+      "token_sha256": "e7835273ef51923861f865363815a01218b5be0ee215372f955c115fb9e10378",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151682,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151682]",
+      "token_sha256": "8cbc8f3757219d794b4fcd8c2ddf51cb489e07b458d08f7f9072490da8868ebe",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151683,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151683]",
+      "token_sha256": "1616a07d67528c0323942c67850b3bee8269958cae19692696d3f4433de31f15",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151684,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151684]",
+      "token_sha256": "824d28dd0f1b83a82e09bf063d785192df94ad5d33e59499a346f9433ef2acc3",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151685,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151685]",
+      "token_sha256": "e25d39f6aa00ad7caf61b83d328a953b69a960de7f1e70f103546b31d90fa0e3",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151686,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151686]",
+      "token_sha256": "4450af75f4be40b6e85d44a65cf1e1bcd3ef3bf0059523f7b3644d3ba1e5e0cc",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151687,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151687]",
+      "token_sha256": "7509f6c4ea1962fddbd7b4f345b49dc5a333a52032d84aa5d6ec5dd61a49ad31",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151688,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151688]",
+      "token_sha256": "357b9f898aff5733656e978dce4a5ad8dcc8f3b06c7a816439e66d1a3b4534c4",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151689,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151689]",
+      "token_sha256": "a377e2dcaf0f5aa51fdd2ea4b27436d48a93064283f75623742dfd9aa408c988",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151690,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151690]",
+      "token_sha256": "f48f3f196aacc65aaa2529d69b37c256d560892a21b8f61198c098435f6c7725",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151691,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151691]",
+      "token_sha256": "de16b1af792ed03c062691f21bc8997a3ccbfbd9906ce3611dbeee3798c1df97",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151692,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151692]",
+      "token_sha256": "ce7809776833259d7a76eedd8e3b30a390efe523311523fd702717508e285214",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151693,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151693]",
+      "token_sha256": "9caab52922eb355862edc20b4754e38ec73af9137a8f1ebed8e16f3783a8da7c",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151694,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151694]",
+      "token_sha256": "10929277ab09e703e979a513727da63bb662c10750babb7a225b083bea2bfaaa",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151695,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151695]",
+      "token_sha256": "c0b2f706d7a8ec5ceeae0d2ac069323f31c746ce27f5062f14f1e4abbf220f84",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151696,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151696]",
+      "token_sha256": "078f29bb5118fbf99a1e8f68c81739e8f56df68b57420c901f56e8d95de74970",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151697,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151697]",
+      "token_sha256": "a3f23ccc41d4b83bfe8f03759514e544d42d72ada5873cff270863ff9fabb683",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151698,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151698]",
+      "token_sha256": "e74c9df2e916b9ebb834f0c525997f376d4f073010bbc994e9e6e74b1a9a8a16",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151699,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151699]",
+      "token_sha256": "c46df849c286b8d104281c2812abc5ae2c83d69247f2abcce2bf9f74c24266d3",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151700,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151700]",
+      "token_sha256": "b56cf180e38daf0a83f981e51f30410abaa36421fb925702a0d14fe9ada4d74f",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151701,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151701]",
+      "token_sha256": "63794afc7bb08e466cc9ae800c301faef3475ab008c82f602dad672daa7574fa",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151702,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151702]",
+      "token_sha256": "0eb80c5c414c1f678b5845273fa9f6475c0cdaba6bd566eaeb95aca78e9ae4d0",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151703,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151703]",
+      "token_sha256": "f16d6eaf5830dad6fd40bc98f494ba776ac49ca012ccb76f5a6a3e31d319376c",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151704,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151704]",
+      "token_sha256": "1d8063418df494edfe7b1840aebd9dd6f02f4233501260e8b8b4021a02ae26e8",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151705,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151705]",
+      "token_sha256": "bfb8096be45ee4f38b312901039cc317247e89c1e0200a73038555bc425318ba",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151706,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151706]",
+      "token_sha256": "f0e449f0930b963779a3495a79d98984e5eb52b5c1a88d13045de2080206b84d",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151707,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151707]",
+      "token_sha256": "a6a9a1ce976e333fe2816be4267dd5dfb4fed49f8f186ef6ddea00df346c2901",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151708,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151708]",
+      "token_sha256": "21a035c0ca47f99894eab7dbe50486adc21329d4acf8784183d28d51529d64dd",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151709,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151709]",
+      "token_sha256": "0fb439c1a4b8a6b3cd413b3a46de3775bec2b60c640d6d60ba756f4412734775",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151710,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151710]",
+      "token_sha256": "4f85675e212f2a6add6e158bcb6e621848bb1b6ce1183afa5885dff7418cf4e4",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151711,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151711]",
+      "token_sha256": "c05d89f2b772f980e9f5dd0c3861c27becc6a05a0c90a1de4738870581d7bc00",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151712,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151712]",
+      "token_sha256": "c99d7da24a73ece5af0fbf4403977d5c753ed2cfb37421ef1efe64cc6ea90d41",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151713,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151713]",
+      "token_sha256": "075a163867da7b3297576eb2c33947c390c24a7721b023623d2b55dbdc32912b",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151714,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151714]",
+      "token_sha256": "909bfff9fe7c1d7b4868920fd9409021f0a3f3c6c232d920200f3f8756ae00c7",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151715,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151715]",
+      "token_sha256": "90d964032c88d00b45298f5e56ea64317f4279466d27c65342c1319247798ddf",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151716,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151716]",
+      "token_sha256": "fbcaa66fcf763c133301dee5210cec33edc52528e054d76f5a948109111f1a86",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151717,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151717]",
+      "token_sha256": "33fa5bb71ce0242c2321acead61db4bad64a88ce0713e022e5944a9715b8f770",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151718,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151718]",
+      "token_sha256": "12603d26556cd2dbb55b294ca63c4e66332faa7c1e41f125d01dcd77ba798193",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151719,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151719]",
+      "token_sha256": "5749e21141216c187483da004fa4fcf1a8dace15393dda5cae253d48b3494a1d",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151720,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151720]",
+      "token_sha256": "e7dcd757385cc392caa89866f0e930da4eeee6210ebd3449dfc838954e8b9509",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151721,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151721]",
+      "token_sha256": "e56ee9a61a71d772c41a18b962e9354984d18fde54863ed07a40cf4a0eab16a1",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151722,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151722]",
+      "token_sha256": "05ffa662b1fe3485e87322be12729ec21d7fde34a735faca21a2289a7690b558",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151723,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151723]",
+      "token_sha256": "51acb01386946e4d3894480dfb18021be3a5f3b4cae0766ab4a8b67677170d7f",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151724,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151724]",
+      "token_sha256": "c2543047def9ca3d52722ca4c9657ffa27747e6da7c22ad49ac5d27bd2f1d2a5",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151725,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151725]",
+      "token_sha256": "b91cf17d3f3079c231b04aecc40429e101f99dcbde223b5a67209241a238f285",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151726,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151726]",
+      "token_sha256": "5b906871445b9554d07844fd2cc7ac0c865dbcd8cf3f88d589f4a02e4443a07e",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151727,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151727]",
+      "token_sha256": "b5ff87272d1b6e1b08a4d299d6e2edc336f8a0120e0c838018ff020408ab17cd",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151728,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151728]",
+      "token_sha256": "62491e4c2f3b49f40606e4bc6f9c6805ce6428ded5cac27a62c93f8980ac3c28",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151729,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151729]",
+      "token_sha256": "2baf45799da8713c43ade3db3276e5e9babea38376da56e74c9aeb80b797f82c",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151730,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151730]",
+      "token_sha256": "e2e0298911c77cf3a0e9a8c90d294a61c1a7e47699ff5b5e19893a516a782ee1",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151731,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151731]",
+      "token_sha256": "c43096ae5dc4abd8cfabf0ebf9ceadd0e997f5491347fa3398bd76de9ce0a719",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151732,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151732]",
+      "token_sha256": "d362d68921bc431bb0102725d43735b4e43de82b827e283c49c06560b8af1ea8",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151733,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151733]",
+      "token_sha256": "6d955550e37c15fc9393b2ac17daf49b14769cb75bdf9345e8090ace14778110",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151734,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151734]",
+      "token_sha256": "ff1190e9618d5fa849921a30f0edd8021415b23ca7c4920fdeaad8786ea89410",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151735,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151735]",
+      "token_sha256": "726a05cb9bb3017db4f1357a30980b23339acfbfddf4820c18306aacba7e6679",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151736,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151736]",
+      "token_sha256": "05b2da1c9af99b7a18b9bee2c177bc4df145cd3b0b9d6f4950f7df8163a9480a",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151737,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151737]",
+      "token_sha256": "73c0ead2419657bbfc0e4c71ff7d07420d2cc12a8519949052b72be2eccb1c74",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151738,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151738]",
+      "token_sha256": "fdbea1dbc461051bedf14baa08e2f7aa2f19934dc8198feab7742283ab680dea",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151739,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151739]",
+      "token_sha256": "0ad00cb9b03f3ebe39fbf0df6986509e99d865e0195df4ebf3ed3eed2cc394b2",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151740,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151740]",
+      "token_sha256": "7cb19bfd55e0979d2aedd3693a482a94c27b77f318c3000447749f6c53862663",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151741,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151741]",
+      "token_sha256": "90c66855fe5fdb1edc329807ef90a369d7a6a54fc63dbcfeca4013c9009185d1",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151742,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151742]",
+      "token_sha256": "a6be54dadd98b8950c0c1ce427252a27034849b277481c2de8756b364f89be90",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151743,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151743]",
+      "token_sha256": "d3c8bdb1dc14abb3e77c6db2a59a0b194e31b3f097c903d62c366f93e9a9ba5c",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151744,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151744]",
+      "token_sha256": "9888a74d862ddc830c336b1495248c36a478ff9c084a3332dc31f529b4cd3058",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151745,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151745]",
+      "token_sha256": "e7b7f455c754ab1858e0d58d4d0c35fa3a505cbbfe0c85c2a26f5df230803889",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151746,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151746]",
+      "token_sha256": "889c99ab97c2331699ecdade0ed67c875fc292d42b926bb38d88c176bfffa817",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151747,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151747]",
+      "token_sha256": "d6425750987a0903106e5228ea0b11cd712b7dd1bdb1fdf6b8c6835f6b2c02b2",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151748,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151748]",
+      "token_sha256": "d7387b28ca7aa4d8396e8303841dadf841feebbcaa82b27b78fb3a135175c699",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151749,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151749]",
+      "token_sha256": "aaf4dca64b88b80d4cebc7dc32dc749758a453a97f3d464fcfe1204a2e8ab8e3",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151750,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151750]",
+      "token_sha256": "18803e3273f541234be6cceafa6e6987bba8e961e5a53d05ad495e1a76611c95",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151751,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151751]",
+      "token_sha256": "6d274fdc74bb3235fa9900b45c0fe714b362a4186fed7ba0c9104fe4c0a679a6",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151752,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151752]",
+      "token_sha256": "4453617c6fe05cf772677631da702d56ac3a61c56e71875e39ab74b79f918d56",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151753,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151753]",
+      "token_sha256": "5b93c97eac9e45070852b4a820c899219461b3a43409994fb378702c05932898",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151754,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151754]",
+      "token_sha256": "1194aa00480620f3f85b8524ab3e6d0bbc3613b7105b078b7f76977b1351ecd2",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151755,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151755]",
+      "token_sha256": "7e3f39618e44837535cd239a12f6d3b4e50240809c3ad4fd4159c13fa74a755c",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151756,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151756]",
+      "token_sha256": "99512c89cecaf41ac316afb6c1e6713176c89f3f9de2449c6f5e03841d58dd16",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151757,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151757]",
+      "token_sha256": "8ee78210e59318b0ab326407d4d88c1d7a2a04eb3d6784b91d17d87f4fbf3bdb",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151758,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151758]",
+      "token_sha256": "4acaea683c75ffafa32d6b49bf3600d2ae7f1f7e72420647807563101fc50254",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151759,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151759]",
+      "token_sha256": "9c6aa1546290089760e905ec4c12feffc4e3980441c7ae769ada9a26c0439fa0",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151760,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151760]",
+      "token_sha256": "e448da0649219c898b05b29fcc024bbdff8516b3b8541f33b1a1574bde944537",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151761,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151761]",
+      "token_sha256": "e2fb004a79f2bdcf47e2d09f5b2f59439b1d06ddc482b9d6cd5a3407bcc42136",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151762,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151762]",
+      "token_sha256": "c7ac8c71354b2ee154ab341dfdb50c77a347ca5c01245c6bf2c410bb0165b401",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151763,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151763]",
+      "token_sha256": "72e2ba542c546b9d2db835fbeef5b62779b6416a5fde5343bcc86a31285a5a84",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151764,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151764]",
+      "token_sha256": "db3b7c83eadee40ce45cfb6001e294a8a6993678bda06dcb4fbfddd5110adb52",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151765,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151765]",
+      "token_sha256": "61fd0c9be4cb93570d9fd6b66ceeba1d8c9d2207e79b56422285a327658dbe94",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151766,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151766]",
+      "token_sha256": "54235e28e3f8aeeecee2c5739347a67303217ad5f43a585487a06d3139bbab89",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151767,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151767]",
+      "token_sha256": "69456b4b3b180137720115cfac2b3e6ba3a5842294b98d52b5ace4a72939d860",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151768,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151768]",
+      "token_sha256": "df2961912b3b50ffc577ebc7a35f3b5bd176da6d95a3fbfed81b2c38d3ca5f33",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151769,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151769]",
+      "token_sha256": "12d737df95c96c4c04f6033307fa6e1f894390a735d957885ebffb479da15d8f",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151770,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151770]",
+      "token_sha256": "6268ec7b1fa309473f3f4f25f42cb0cfbbd644992a6244326a6843ecc5ee7e76",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151771,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151771]",
+      "token_sha256": "8d0e97b7e101d26b889748db6335ec904383e2c092291ad98ecfed8aa822d0e8",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151772,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151772]",
+      "token_sha256": "7d903ebeb2d1dcbf4e5829096a068d1647a7633b321998e9399133816051258c",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151773,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151773]",
+      "token_sha256": "46b4e2422b937785d03a7298f0555671dcdd613fca6e8e31a9f016132991104e",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151774,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151774]",
+      "token_sha256": "14e0b71a3abf494d051d35ba6bc4494cb489970be88fc37e4fa27b3a2ee970e4",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151775,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151775]",
+      "token_sha256": "d0cbf15626ff541a641fc1c99d65f00353b039cb0e368aa181a3b36c3ac8e067",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151776,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151776]",
+      "token_sha256": "296e91aa088ad4acd65da6fd7e6765c5585c05b2af0984be3862abc4ee93d0ea",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151777,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151777]",
+      "token_sha256": "3278864684a63de48ab0d98841632263152e887825a5ab2d65e73465f90f9a66",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151778,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151778]",
+      "token_sha256": "0f0632ad255243da3f9de0fb55612741404cd875c58b4318c7ba68741e46e385",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151779,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151779]",
+      "token_sha256": "10c3e160f4e563b10e77f674847bd3c623f62f61164326ade8045b19fa6f5a5f",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151780,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151780]",
+      "token_sha256": "29a1def1f9fdc7aa2c7964f940cb19ad91d3b68c0cfc76ce7455d96af79a06ec",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151781,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151781]",
+      "token_sha256": "3978ffbf8506faf6a84def7cdc7b8d146df751b0fbaf49f3a84e6696b020a873",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151782,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151782]",
+      "token_sha256": "03709b9d4a39de3c9fecedfe19a1e933c6cdbed06ae0b54f6dd83f56ac40f01b",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151783,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151783]",
+      "token_sha256": "0d97c2d24d0f5b98157edb97da99144646e46f2861d6dc931dc484bd50fb046f",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151784,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151784]",
+      "token_sha256": "b8e6570bb341d452b141a5df8df6fdf66e4efa6543d4232a95f709b58a3a19fd",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151785,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151785]",
+      "token_sha256": "86532215ee6f4e003a212ae8a26ea1a97a16bb9cae21bbd1d687244b989f0d17",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151786,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151786]",
+      "token_sha256": "35176deaf0f29aa2e441a414b9b5d7d767bc5354131cb15fc18708d480200d24",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151787,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151787]",
+      "token_sha256": "5845922d54cbbf310d1e8f119ca4bcf324d7ef315c28c310b5069fb2f63867b9",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151788,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151788]",
+      "token_sha256": "dd304573903d342529f9da1a6356e46326bb5bae729eb76018c73d67fc84d1c2",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151789,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151789]",
+      "token_sha256": "2cc40f280f0520706cb44b2c500b4c70f365700bbeb957d7e441a198f0cfb6e0",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151790,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151790]",
+      "token_sha256": "fa6360f230b184120c470e9052f4fa6d1010fcfe4b06ecf5a55d08be68f711c4",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151791,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151791]",
+      "token_sha256": "b3577a91a4257b70feb60e15b20ad03d5685f3a68f239d58ad1d9f0ac11f91c0",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151792,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151792]",
+      "token_sha256": "96b8dad405f2adb27bfa545485171ea459f461da34848eee65f706a57fd1cc11",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151793,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151793]",
+      "token_sha256": "6cd2f98fbf4f71d0c35abc5f69055d4ddd37df52d9447ac7464e81b9f8ed1331",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151794,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151794]",
+      "token_sha256": "28f84c2c18bf24ac37c534adacde45c828e3dff139d394608c49b75ad2b4ee55",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151795,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151795]",
+      "token_sha256": "6b10f5005e3777123e3556a1ea5cdfbeb3b88a293eda6020a85b5a237f4e4a87",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151796,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151796]",
+      "token_sha256": "07eebfad822471bd88290cc419e82de48508f9dc850ec687a877937fffdf26c3",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151797,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151797]",
+      "token_sha256": "d4fa6a1a9942d524ec97778a399acce3b0c169abbe5ca5b1c3fcd4dd911601a2",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151798,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151798]",
+      "token_sha256": "ab00f39c531f3a75aef4658edc4359b6dcf2d5bcb0541caf8cb3d80c9a6da8de",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151799,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151799]",
+      "token_sha256": "3f3d9c9becf02a1bc79a8bb9e9f33cff9784552b9d1f788b032f8c77069f2264",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151800,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151800]",
+      "token_sha256": "bc7e8bcb0d53aab92d215527057cb4f5d3524fa1a3ad783891cf953e8acb8816",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151801,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151801]",
+      "token_sha256": "0594c705703a068152c6e86300d1dc10643fe30ce1fa592bdf497181f6d63b16",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151802,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151802]",
+      "token_sha256": "a4000bbf86e86c402ad48ebc38af8d840801e9c7fb63c6282d66c9145adb1579",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151803,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151803]",
+      "token_sha256": "9bcbbd94d19b3dec26c2b37d7215b4f93f10bb808afd11bf945fa16a627d070f",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151804,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151804]",
+      "token_sha256": "2792f71f1eb833d199b87f2cafd9d4932faf413dabb05b1cbb2754f8ba7eec45",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151805,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151805]",
+      "token_sha256": "4f0b6ac789e37f53155e87ec18107b6ffb7e65065d14bc26fc3e4f04c1fab437",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151806,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151806]",
+      "token_sha256": "afc3961df23bd1ea21bd239d89724977e6105e2efe33fc52a53a7053b422866c",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151807,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151807]",
+      "token_sha256": "fa892a61cd26154c52c72af94ab2687249e17935650b64d3ca215c8dadc64ed5",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151808,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151808]",
+      "token_sha256": "bc921b24a4188690073e2733ce6fa43187e235f1d65bd8e4155301b6a67faefd",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151809,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151809]",
+      "token_sha256": "9de6936c02e0dc97f5f337e879b02211b104aa6db972cb3104fd74c8c5b4e2e0",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151810,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151810]",
+      "token_sha256": "b6ef75e1b41ee41c7f3324d8d0b50133adfbd8092add69d2d81738a27b9869f0",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151811,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151811]",
+      "token_sha256": "a109ea2213ceaceefc39bdae98eedd0cc8a70d9ad6ef1e2a5e8c2d1be4e10265",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151812,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151812]",
+      "token_sha256": "a7de6af0f41ca524da206910f9e7422541cf31b7f436e52f6757210411c3f4fa",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151813,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151813]",
+      "token_sha256": "98bf28540fd3da2f7fb5850be786a9c484f6d2c9d5caccf72ea1c601de0e7358",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151814,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151814]",
+      "token_sha256": "8640b4e5530baee6eae7227651cf1f3ab3c7c59d3acf215e654b7fb1e699d1c1",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151815,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151815]",
+      "token_sha256": "0003c636883e43da5760d89654fb217f17b54d4cc391e855a9ef5b599f75a5aa",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151816,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151816]",
+      "token_sha256": "bf2e7dbbcfc0637c03be17dfdac75bf3f169da8a4756acfe9cab2804156f5d3a",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151817,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151817]",
+      "token_sha256": "699f7003946f15796349a5efef2c726e8b770f713b6af7c3b054cf2744ab6ef7",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151818,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151818]",
+      "token_sha256": "6e296b86afeb647a2fef4254067f222bc2c03b0c89eec5ad2d314e56a65074cd",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151819,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151819]",
+      "token_sha256": "6ec34d0e72818b787886f7d27125159524a058e2025c2bb37a78d80c3274bd88",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151820,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151820]",
+      "token_sha256": "ea11c7d179b9dd7d354831459178c131ea2f6c4dcaee832441b07afd583858b9",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151821,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151821]",
+      "token_sha256": "8eaf1b719f08696b19ec7f9349949b69d63d1ae3817663bdc78c883ac093f601",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151822,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151822]",
+      "token_sha256": "d6d548eefb9c2aa8856948fea9873d8dc39b8c3f654e3fed238d781648791bca",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151823,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151823]",
+      "token_sha256": "4f093620cf0ad59585c2f8d0a7b64d4a691648f9bae0267a0f51da6bc3bcd9a1",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151824,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151824]",
+      "token_sha256": "f1dabd0f106b054cb29de0b1f3ff0d4902abeedf6af66cb138e59639c2193835",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151825,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151825]",
+      "token_sha256": "27dc2872b2b626bcd9f7d189cf7750b3ba62a6bc2f86dc94ed71a1fa9bea0479",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151826,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151826]",
+      "token_sha256": "4d40cf72a7464e00fe8e6a9278d9fca1247e6b0499c81def372aa004d5dcabf4",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151827,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151827]",
+      "token_sha256": "072b3354fa30512dffe4acd6a695ecf78b750051bc92cee9149710a4b4d93064",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151828,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151828]",
+      "token_sha256": "b31991d29015ca50995d00dee2d582e02196ef5f828edd5f4d818fd754d443ac",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151829,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151829]",
+      "token_sha256": "f4aa564cddd2a8fa6e003f9d05e93d717d4c40ce3ebb7f7e4c89f8c830995f21",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151830,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151830]",
+      "token_sha256": "4c00d0738af1cb526591b7ff69e285117dfc64577b2ce6e824f85074bc8222bd",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151831,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151831]",
+      "token_sha256": "3811721d93b2ea3ddc0db2bdd195037d88f36b2aeed6323904da97769d41b229",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151832,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151832]",
+      "token_sha256": "767fdfa2ac6c4ec2dbf49422b43eeab2082cb1f693c5a7a31e213883239bd059",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151833,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151833]",
+      "token_sha256": "b4c28dee16f777bb30f6a7311034786cf646e17ce4779f8e6278d3214f198dc7",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151834,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151834]",
+      "token_sha256": "3f12edf4d87f39b4f0ffca4f01df69d7952c0e4876bd1dcdc187e342190df64f",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151835,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151835]",
+      "token_sha256": "32b32f008c5c898a5769c8631cd17976d559dcd9f9b5377f0b01a42906c8e24d",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151836,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151836]",
+      "token_sha256": "c04b936aa197d1a937c6792910783bae9d19bba1dc05db24540043f93b095c21",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151837,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151837]",
+      "token_sha256": "166a2cb6b6a34b33be0652c88358936db297ebe47ccdd931d1572a98817947c0",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151838,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151838]",
+      "token_sha256": "3bd7f93b569c623af48997ec980521b0d37a9619457c5ad8779ac744148eecc8",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151839,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151839]",
+      "token_sha256": "e29c9e306342582288d350d2e191b041f75b8a793ce3780bf70b1446ecd37b53",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151840,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151840]",
+      "token_sha256": "fea2648e20f041363b0cc659ee981d602547cfd1cd5db43d8af65670f35c99a1",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151841,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151841]",
+      "token_sha256": "b5c94a8b2e2162ff5823af04745589ba3d3733ba4b8eba31a3873e1373091398",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151842,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151842]",
+      "token_sha256": "6ecaaaffbca057c141c598abf9f528cad46895f8ae42c7d99f3e93a287a3f449",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151843,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151843]",
+      "token_sha256": "1649fd525df39f7f9cb4f9d49f45cee1d5c6b543e0ce28855b3dc8af8b76819e",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151844,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151844]",
+      "token_sha256": "cee78226b2653b6177ec9f0a70b33cfc634eb403b8f8232df4369d4d2437c39f",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151845,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151845]",
+      "token_sha256": "768defc975f3ddf961702e23f087bf1b10b445398abcab7a22ca63f877a22065",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151846,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151846]",
+      "token_sha256": "85c52e7e012ca954584ce5a02a97815017a3d140c8b93b39f38d88a6f331285b",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151847,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151847]",
+      "token_sha256": "ffab239af4a156d646a622a3d1b33f81367fe5b1ac0bca3d6d2220718705c6e0",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151848,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151848]",
+      "token_sha256": "2e17bf66a9298251dfa4b69f5f6291e992da7b8a37154ba352a32f29b8a2ed42",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151849,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151849]",
+      "token_sha256": "a64f262da6a0e151c4e315059dd1d16075f8c231a4378a02663dc3d735f41622",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151850,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151850]",
+      "token_sha256": "925fedd85883d34f1cb50153b9c5c09877e0655224bee36559c93444c54bb9c9",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151851,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151851]",
+      "token_sha256": "dadee805b3b5eda8c08ab0ee3155d3849c3c6dc874e908fa01b461fe5f43e8b6",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151852,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151852]",
+      "token_sha256": "ead6db76a402560c62ad1141c6f47f732f4fd32c2a4958d844a8f8996d859273",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151853,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151853]",
+      "token_sha256": "c7bce89b8ec05790b162f88bda9b8867664d229a015d0da9099afaec4b0becda",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151854,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151854]",
+      "token_sha256": "3313a898b8f2cbc7a763438e90faa2ca1bc811a099da1f17e9e74580ebed9aa4",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151855,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151855]",
+      "token_sha256": "12f3d5f7dacc07556614fbd430c1327801c5d849608a2274997a1db2640903a4",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151856,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151856]",
+      "token_sha256": "02bad1559e1a31fd9c2f94767e4ed64b743e74520257642f3039560b41324e31",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151857,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151857]",
+      "token_sha256": "7c663781db71642bdca3cc1a3dc5e21d358834cbb18f3c352e9abd15267efb54",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151858,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151858]",
+      "token_sha256": "4872a75ae3916d712610046b0a3db09e3b4fb723cf4c4b23a7838a9f0ec7b5d9",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151859,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151859]",
+      "token_sha256": "a7e8c8fc66defe88ba111cba6d742fa9ca9cf6fdc5410e5c12bf777f2fe3274e",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151860,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151860]",
+      "token_sha256": "3f26d2018de3f940adb2cc66c879a692bb9d8168d7f474d4f579c3aa3c387a74",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151861,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151861]",
+      "token_sha256": "14413b13d43b1c45ac1c4795c3a314c7c2ca63faeee8fe6699bc7f1e4e6568a1",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151862,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151862]",
+      "token_sha256": "ffb94661c78d1bdf85d287913a3ad9d6a3bc3ff2a26bd2d275c9efe5a904c908",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151863,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151863]",
+      "token_sha256": "5dd8f592fcb2ad625e0a6c704c8eba7e4cbf14741c6f43afbaee4c2335ee2f7e",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151864,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151864]",
+      "token_sha256": "96fde96ed9a9ffb2d6311f19dcebabdc34682da142287cbc602318102aca0e65",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151865,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151865]",
+      "token_sha256": "46d63e59a206800068b341ab1c3dc8985474669aba8d03c75f519afd402aad97",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151866,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151866]",
+      "token_sha256": "6889bbe6a1f271dfb523e8d982f04ea0349c7df00275758f9531afab043d1c95",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151867,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151867]",
+      "token_sha256": "4eb240755de5827e0de6429590c0d3addfc656c305d173988113873345d86231",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151868,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151868]",
+      "token_sha256": "96099dc519a902a7a7ae7bf4c1ba4d5ab151f213d2be0a3a7f0813fb0ec62bcc",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151869,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151869]",
+      "token_sha256": "7a5534e173e27f4a7c0f384e932cf2a3a00bb4373cbaa95b5caf0bba62ad48b9",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151870,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151870]",
+      "token_sha256": "a863e7e9d41c117b294b253f3904c374494dffcf3679f3b18a204bcd0d6a6028",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151871,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151871]",
+      "token_sha256": "7d3b6123345f71fc210374c7a6494c7e060cecebb05d025bebbcbba199fe0c52",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151872,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151872]",
+      "token_sha256": "93601d1fed261429f59ea0bd321be4c40279a5f76b503bc11898e821dbe92130",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151873,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151873]",
+      "token_sha256": "f7b6e036149709f5be2c8db8fc44f2c1b07e0c71b5d9682ca9a98368eae54842",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151874,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151874]",
+      "token_sha256": "b82ea1716a81561189df79d8eb861e1fce973e9c5128b76a8141ad038deb363b",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151875,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151875]",
+      "token_sha256": "1d366cb405f7fec18b6c0fea3fc08610ecfe2807f0ffbefcdbe3c35dcf6ee138",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151876,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151876]",
+      "token_sha256": "e019c5997d46791bc4a4179f0d7c157bf5a62df58f65c86bd8b93a1065a30143",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151877,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151877]",
+      "token_sha256": "75cf4b45d88fd2bd01cee6511a67e95ced47bfbb6f2c03643a9328f52c3f63c1",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151878,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151878]",
+      "token_sha256": "85a33f619784948065a2b561edae5f74fb3169c59b482f6088ce65c0045342c9",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151879,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151879]",
+      "token_sha256": "d675a0190e19a2fd784d6bcea612dc20f4c2e9b8aae1d90ff89e871ff8cdd818",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151880,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151880]",
+      "token_sha256": "4a9e0d00a279f2446fb2160db1d4059a008c70aa2330c62cda02e038aff510e7",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151881,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151881]",
+      "token_sha256": "dffa42547ca8f279f420ed1a418c1d0b6383c7a52b89011fa42c144b0aecca0a",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151882,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151882]",
+      "token_sha256": "d6b07835a594ca3956abef8f5cf04ce616d7a8e6abc8486656c0ae01d5bf5824",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151883,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151883]",
+      "token_sha256": "fdbf0a153bd47a4420089507c85ea1a9a8b084a074cdcefdad530c615630ac36",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151884,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151884]",
+      "token_sha256": "d16968c277f104f3a53eb2c701650c28faee6d311dad9b14ae3cc077606fae73",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151885,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151885]",
+      "token_sha256": "33347c21e94192e44a3a7f3b8b81f47ff6d825ded1df4447b9b27054dfd0dbd2",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151886,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151886]",
+      "token_sha256": "7d43fe09215789ad188560dfcd25cd116d1f324997c73712b21b5c63a663ca1c",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151887,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151887]",
+      "token_sha256": "93385a08aa01bbd2ef81a25fd3e77ee27c0ebe05c59d1e5edd06d7ce3168ef37",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151888,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151888]",
+      "token_sha256": "accec1a29aa626e0f6b60fe7b28ecdeaa4c15a5c0458b95897f622e67b587e66",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151889,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151889]",
+      "token_sha256": "135798a7cd0648d4b3e987c57b2b955878b8fa94f63d2889b59f3b755ee2bff1",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151890,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151890]",
+      "token_sha256": "4a30017faaf00ac0302aa133e1346316ca4bac74428aaf6bae54e335ec8f1a75",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151891,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151891]",
+      "token_sha256": "b4146b4a00bf6bb775bc5d0129f60ff4413ac0690e4aa916b9650b515e135b68",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151892,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151892]",
+      "token_sha256": "9d7df9fd748fe831087d1baa65c081d69d349464705d0ea265375e19ed790a20",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151893,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151893]",
+      "token_sha256": "079de16a2132f23307e7d876c3bec29cbd371e22a404d12860f4a326b9a2a807",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151894,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151894]",
+      "token_sha256": "ede6fbd56f597e4f0305fb8644a94fb3de9ccd7b2d0c0ff1336f08f2fcd25a72",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151895,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151895]",
+      "token_sha256": "287f5a585348d568589c553531fa1928995cf9f3d82caa3107eb158b5aa6f509",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151896,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151896]",
+      "token_sha256": "f9d0fd23b6d1e126b33d85b470c8286d531ee20fe14d06fe10cf96246f60b54a",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151897,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151897]",
+      "token_sha256": "1b7f3503d62fa7136e85a07e1b5423638b908f7181337b23ea7e30bba7105e03",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151898,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151898]",
+      "token_sha256": "6d4e03477d512937f07a1f6098d5b277fa3ee2d7d7cb05ce22beac7f828c9d3b",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151899,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151899]",
+      "token_sha256": "2240ee3d8e7859d03078ac667fde4c09162b02be5800f6c00ff17117255091ac",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151900,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151900]",
+      "token_sha256": "fd71255b883a78b1cf275a7663d6b2e0aa4cb6b8455f65173aa054f6ced1c24f",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151901,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151901]",
+      "token_sha256": "38523fe4802d8ccc7b81ba65de5668befd37456d1779ddd3cc40bdc6bb742e42",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151902,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151902]",
+      "token_sha256": "7e013d7dc5405e185d712ca24d313421ba4c86c0b06747185c63c9308e419965",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151903,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151903]",
+      "token_sha256": "32de39caea84768052251c999b701188b193cc443bb177dbb00bf9742ba1495a",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151904,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151904]",
+      "token_sha256": "6b872a0a576b7c84b6e1c20edee6ab2d09215ec6cc325bfcd0da84ada71a4692",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151905,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151905]",
+      "token_sha256": "8853da857264ad6a238b40d85c23b9f28cf07305c326782b63ed1ea97444a97a",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151906,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151906]",
+      "token_sha256": "75cf09cd4eee5bb756bd9b60453405eecf1f2630785217ffaf911d41de55b629",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151907,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151907]",
+      "token_sha256": "61715979d8fe999a4a04ade9b55cd18139ac4e4851ce281fc2fd0e3b812246df",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151908,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151908]",
+      "token_sha256": "5d2d22f6a20c55843f3fd04f7869297b3798b480dee72d69be6822f1fbe1b835",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151909,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151909]",
+      "token_sha256": "f740cf3c881fd1968c271525e165b7532695543cd6a0b8905d5aa07bb8639cef",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151910,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151910]",
+      "token_sha256": "e3544bcdad3705f06c254fb2a35accf71d1d2dd988f0abcfcac0388a26496484",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151911,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151911]",
+      "token_sha256": "8d704452a6d2c610d0c4f125dcf574e0c8195ec520ad1be07bbbe0224856e560",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151912,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151912]",
+      "token_sha256": "feedf3601c5e2c53b968bde925ea3c740fea8da9277867d9f5b893d5f4695dc0",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151913,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151913]",
+      "token_sha256": "08d5070ce7dd74c0ca8bbf404c7a739a5970dd9ff5f708af14fa6e6d7432a961",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151914,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151914]",
+      "token_sha256": "7985ec43cbc06721a0c2ede4d968845470f5c8f0b0e98009ba294d54ba912df3",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151915,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151915]",
+      "token_sha256": "b6445f291950606bb10e58db765af8eec5e4055a123647ae36463e2a5ee8a588",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151916,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151916]",
+      "token_sha256": "6666774ba0bd1486ce59c4e67fdebc9f2bf98eeb053d7fc12a04019432f573d5",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151917,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151917]",
+      "token_sha256": "509ccbf4a817447882cffab512bebb8449e48a2f873b3380a8f4c4e8fa9e2a31",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151918,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151918]",
+      "token_sha256": "5c412ced11779c7f1f7cb2ec03f562f148512c81800ca9516d8b1891b79315c5",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151919,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151919]",
+      "token_sha256": "b2fb813b0696b997236bcf3a30f7947dc4ff179f32d84d32cb2ed650a5a75409",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151920,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151920]",
+      "token_sha256": "531d466c7513eb7a7aea3cb4c0f0299d84f88d4297c80bf64d76a3363703cb14",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151921,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151921]",
+      "token_sha256": "7804ea76de3d770a43480d53b76d2b777f553a6050a400d6a3db2880e0c53df7",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151922,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151922]",
+      "token_sha256": "dc83b6aee1d8b4ff6aadc2f32e9bf4af6f1badf72ce74ea5c49859af63c7192f",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151923,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151923]",
+      "token_sha256": "0f7171b2fc484fed32c37aa84d3cca574a64788e8ee8b655e47640a13cba33d9",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151924,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151924]",
+      "token_sha256": "c1152b3d5ad64786df4a7f1bc3e2832efa28b7f8ebaf6f97edb8fdf348cb4cf1",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151925,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151925]",
+      "token_sha256": "1b22257b7b587d392e1ffc78b298ba670bda8d0de24309efb945905ffa330c6f",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151926,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151926]",
+      "token_sha256": "bfb3fd732f5a2c8d424ab63adc512a73060fd20b988324b88c382158f89cd5d0",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151927,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151927]",
+      "token_sha256": "cab5f267c269461217a6e39a498f9d8a3d542736ec162f6df9291c571c253dd3",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151928,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151928]",
+      "token_sha256": "c25b8d734def9737a85a7fd710e735a4d0c94bf772abf71e9fb24adef5b98dfe",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151929,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151929]",
+      "token_sha256": "77e2ca19ead13f33e236a4ccb220fd0704abf1ce11e03a7fcccca7e7038d956a",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151930,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151930]",
+      "token_sha256": "b0926ea01139e514913ff91192e3232bec84d45546a6f5a110d4e09ed9fcf7e9",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151931,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151931]",
+      "token_sha256": "c30f39c41b746287b93a212762d6830bae3b714abe413593c580f36c37e77feb",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151932,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151932]",
+      "token_sha256": "2fcd23a31c59473bbe22cb29960b2b7b63b4914ade49d9810cabc2b4ff8d5a75",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151933,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151933]",
+      "token_sha256": "f0a7c1eb0741de77825db3d4636704300b6e9e4e99cd3c936676bd0a73d3930b",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151934,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151934]",
+      "token_sha256": "d9517bf61a6eb5bc85eca8dccd5efd5be8d71abedd16e7f914873a3857579d5a",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    },
+    {
+      "donor_id": 151935,
+      "base_id": null,
+      "mapped": false,
+      "token": "[PAD151935]",
+      "token_sha256": "bee0a0d37ca89b6a6642b610ce08e05c43414bebcf0fa075346d0f42bd4f3584",
+      "donor_token_type": 5,
+      "base_token_type": null,
+      "metadata_sources": [
+        "gguf.token_type.5"
+      ]
+    }
+  ]
+}

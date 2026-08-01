@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "colorlm-v47-parallel-draft-error-replay-v1",
+  "type": "object",
+  "required": [
+    "format",
+    "record",
+    "anchor_id",
+    "split",
+    "rejection_position",
+    "proposed_token_id",
+    "validator_token_id",
+    "validator_target_in_shortlist",
+    "proposal_prefix"
+  ],
+  "properties": {
+    "format": {"const": "colorlm-v47-parallel-draft-error-replay-v1"},
+    "record": {"type": "integer", "minimum": 0},
+    "anchor_id": {"type": "string", "minLength": 1},
+    "split": {"enum": ["train", "validation", "test"]},
+    "rejection_position": {"type": "integer", "minimum": 1, "maximum": 4},
+    "proposed_token_id": {"type": "integer", "minimum": 0},
+    "validator_token_id": {"type": "integer", "minimum": 0},
+    "validator_target_in_shortlist": {"type": "boolean"},
+    "proposal_prefix": {"type": "array", "items": {"type": "integer", "minimum": 0}, "maxItems": 4}
+  },
+  "$comment": "训练器只允许读取split=train的error replay。validation/test拒绝位置只能用于报告，禁止回灌。"
+}

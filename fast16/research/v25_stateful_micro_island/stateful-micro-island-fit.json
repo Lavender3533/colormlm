@@ -1,0 +1,640 @@
+{
+  "format": "colorlm-v25-stateful-micro-island-fit-v1",
+  "dump": "D:\\project\\大模型ssd化\\fast16\\research\\v25_stateful_micro_island\\teacher-stateful-20260801.bin",
+  "sequence_boundary": "每个ne1>1的prefill开始新请求；状态在请求边界清零",
+  "dropped_leading_sequence_tokens": [
+    2
+  ],
+  "architecture": "q_t=U(h_t-mean); z_t=rho*z_(t-1)+q_t; delta_hat=[q_t,z_t]V+y_mean",
+  "split": {
+    "train_sequences": 4,
+    "validation_sequences": 2,
+    "test_sequences": 2,
+    "train_tokens": 420,
+    "validation_tokens": 440,
+    "test_tokens": 174
+  },
+  "validation_candidates": [
+    {
+      "requested_rank": 32,
+      "rank": 32,
+      "rho": 0.0,
+      "ridge": 0.001,
+      "ridge_absolute": 0.345570068359375,
+      "weights_bytes_f16": 401408,
+      "input_projection_shape": [
+        32,
+        2048
+      ],
+      "output_projection_shape": [
+        64,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.5221413969993591,
+      "metrics": {
+        "rmse": 1.7211536169052124,
+        "reference_rms": 1.7720868587493896,
+        "relative_rmse": 0.9712580442428589,
+        "cosine_mean": 0.27078571915626526,
+        "cosine_median": 0.21688714623451233,
+        "cosine_positive_fraction": 0.9659090909090909
+      },
+      "per_sequence": [
+        {
+          "rmse": 1.7756177186965942,
+          "reference_rms": 1.8227989673614502,
+          "relative_rmse": 0.9741160273551941,
+          "cosine_mean": 0.2613033950328827,
+          "cosine_median": 0.19974642992019653,
+          "cosine_positive_fraction": 0.9630681818181818
+        },
+        {
+          "rmse": 1.4834342002868652,
+          "reference_rms": 1.55276358127594,
+          "relative_rmse": 0.9553509950637817,
+          "cosine_mean": 0.3087150752544403,
+          "cosine_median": 0.2846987545490265,
+          "cosine_positive_fraction": 0.9772727272727273
+        }
+      ]
+    },
+    {
+      "requested_rank": 32,
+      "rank": 32,
+      "rho": 0.5,
+      "ridge": 0.001,
+      "ridge_absolute": 0.6016258544921875,
+      "weights_bytes_f16": 401408,
+      "input_projection_shape": [
+        32,
+        2048
+      ],
+      "output_projection_shape": [
+        64,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.5221413969993591,
+      "metrics": {
+        "rmse": 1.7537622451782227,
+        "reference_rms": 1.7720868587493896,
+        "relative_rmse": 0.989659309387207,
+        "cosine_mean": 0.24531395733356476,
+        "cosine_median": 0.183685302734375,
+        "cosine_positive_fraction": 0.9363636363636364
+      },
+      "per_sequence": [
+        {
+          "rmse": 1.8101269006729126,
+          "reference_rms": 1.8227989673614502,
+          "relative_rmse": 0.9930480122566223,
+          "cosine_mean": 0.24051371216773987,
+          "cosine_median": 0.17958685755729675,
+          "cosine_positive_fraction": 0.9460227272727273
+        },
+        {
+          "rmse": 1.5073729753494263,
+          "reference_rms": 1.55276358127594,
+          "relative_rmse": 0.9707678556442261,
+          "cosine_mean": 0.26451489329338074,
+          "cosine_median": 0.23617330193519592,
+          "cosine_positive_fraction": 0.8977272727272727
+        }
+      ]
+    },
+    {
+      "requested_rank": 32,
+      "rank": 32,
+      "rho": 0.8,
+      "ridge": 0.001,
+      "ridge_absolute": 1.783770263671875,
+      "weights_bytes_f16": 401408,
+      "input_projection_shape": [
+        32,
+        2048
+      ],
+      "output_projection_shape": [
+        64,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.5221413969993591,
+      "metrics": {
+        "rmse": 1.788550853729248,
+        "reference_rms": 1.7720868587493896,
+        "relative_rmse": 1.0092906951904297,
+        "cosine_mean": 0.22299890220165253,
+        "cosine_median": 0.1712566316127777,
+        "cosine_positive_fraction": 0.9068181818181819
+      },
+      "per_sequence": [
+        {
+          "rmse": 1.846673607826233,
+          "reference_rms": 1.8227989673614502,
+          "relative_rmse": 1.0130977630615234,
+          "cosine_mean": 0.22539745271205902,
+          "cosine_median": 0.1693301498889923,
+          "cosine_positive_fraction": 0.9204545454545454
+        },
+        {
+          "rmse": 1.5341956615447998,
+          "reference_rms": 1.55276358127594,
+          "relative_rmse": 0.9880419969558716,
+          "cosine_mean": 0.21340465545654297,
+          "cosine_median": 0.18173295259475708,
+          "cosine_positive_fraction": 0.8522727272727273
+        }
+      ]
+    },
+    {
+      "requested_rank": 32,
+      "rank": 32,
+      "rho": 0.95,
+      "ridge": 0.001,
+      "ridge_absolute": 10.1795986328125,
+      "weights_bytes_f16": 401408,
+      "input_projection_shape": [
+        32,
+        2048
+      ],
+      "output_projection_shape": [
+        64,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.5221413969993591,
+      "metrics": {
+        "rmse": 2.0227560997009277,
+        "reference_rms": 1.7720868587493896,
+        "relative_rmse": 1.1414542198181152,
+        "cosine_mean": 0.1651102900505066,
+        "cosine_median": 0.12067452073097229,
+        "cosine_positive_fraction": 0.8318181818181818
+      },
+      "per_sequence": [
+        {
+          "rmse": 2.088467836380005,
+          "reference_rms": 1.8227989673614502,
+          "relative_rmse": 1.1457477807998657,
+          "cosine_mean": 0.17313867807388306,
+          "cosine_median": 0.1340847909450531,
+          "cosine_positive_fraction": 0.8693181818181818
+        },
+        {
+          "rmse": 1.7352012395858765,
+          "reference_rms": 1.55276358127594,
+          "relative_rmse": 1.1174921989440918,
+          "cosine_mean": 0.1329968124628067,
+          "cosine_median": 0.08368028700351715,
+          "cosine_positive_fraction": 0.6818181818181818
+        }
+      ]
+    },
+    {
+      "requested_rank": 64,
+      "rank": 64,
+      "rho": 0.0,
+      "ridge": 0.001,
+      "ridge_absolute": 0.2256398468017578,
+      "weights_bytes_f16": 794624,
+      "input_projection_shape": [
+        64,
+        2048
+      ],
+      "output_projection_shape": [
+        128,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.6818640232086182,
+      "metrics": {
+        "rmse": 1.730893611907959,
+        "reference_rms": 1.7720868587493896,
+        "relative_rmse": 0.976754367351532,
+        "cosine_mean": 0.26118820905685425,
+        "cosine_median": 0.21461263298988342,
+        "cosine_positive_fraction": 0.9568181818181818
+      },
+      "per_sequence": [
+        {
+          "rmse": 1.7869967222213745,
+          "reference_rms": 1.8227989673614502,
+          "relative_rmse": 0.9803586602210999,
+          "cosine_mean": 0.2520509958267212,
+          "cosine_median": 0.19701772928237915,
+          "cosine_positive_fraction": 0.9630681818181818
+        },
+        {
+          "rmse": 1.4854408502578735,
+          "reference_rms": 1.55276358127594,
+          "relative_rmse": 0.956643283367157,
+          "cosine_mean": 0.2977369427680969,
+          "cosine_median": 0.28199902176856995,
+          "cosine_positive_fraction": 0.9318181818181818
+        }
+      ]
+    },
+    {
+      "requested_rank": 64,
+      "rank": 64,
+      "rho": 0.5,
+      "ridge": 0.001,
+      "ridge_absolute": 0.37289666748046874,
+      "weights_bytes_f16": 794624,
+      "input_projection_shape": [
+        64,
+        2048
+      ],
+      "output_projection_shape": [
+        128,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.6818640232086182,
+      "metrics": {
+        "rmse": 1.812902569770813,
+        "reference_rms": 1.7720868587493896,
+        "relative_rmse": 1.023032546043396,
+        "cosine_mean": 0.20848992466926575,
+        "cosine_median": 0.17478838562965393,
+        "cosine_positive_fraction": 0.8954545454545455
+      },
+      "per_sequence": [
+        {
+          "rmse": 1.867180585861206,
+          "reference_rms": 1.8227989673614502,
+          "relative_rmse": 1.0243480205535889,
+          "cosine_mean": 0.20033174753189087,
+          "cosine_median": 0.16503500938415527,
+          "cosine_positive_fraction": 0.8948863636363636
+        },
+        {
+          "rmse": 1.5772204399108887,
+          "reference_rms": 1.55276358127594,
+          "relative_rmse": 1.015750527381897,
+          "cosine_mean": 0.2411225438117981,
+          "cosine_median": 0.212924987077713,
+          "cosine_positive_fraction": 0.8977272727272727
+        }
+      ]
+    },
+    {
+      "requested_rank": 64,
+      "rank": 64,
+      "rho": 0.8,
+      "ridge": 0.001,
+      "ridge_absolute": 1.0319732666015624,
+      "weights_bytes_f16": 794624,
+      "input_projection_shape": [
+        64,
+        2048
+      ],
+      "output_projection_shape": [
+        128,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.6818640232086182,
+      "metrics": {
+        "rmse": 1.9450844526290894,
+        "reference_rms": 1.7720868587493896,
+        "relative_rmse": 1.0976237058639526,
+        "cosine_mean": 0.18412409722805023,
+        "cosine_median": 0.1458580493927002,
+        "cosine_positive_fraction": 0.8545454545454545
+      },
+      "per_sequence": [
+        {
+          "rmse": 1.996397614479065,
+          "reference_rms": 1.8227989673614502,
+          "relative_rmse": 1.095237374305725,
+          "cosine_mean": 0.179967001080513,
+          "cosine_median": 0.13836559653282166,
+          "cosine_positive_fraction": 0.8636363636363636
+        },
+        {
+          "rmse": 1.7246311902999878,
+          "reference_rms": 1.55276358127594,
+          "relative_rmse": 1.1106849908828735,
+          "cosine_mean": 0.20075248181819916,
+          "cosine_median": 0.18106624484062195,
+          "cosine_positive_fraction": 0.8181818181818182
+        }
+      ]
+    },
+    {
+      "requested_rank": 64,
+      "rank": 64,
+      "rho": 0.95,
+      "ridge": 0.001,
+      "ridge_absolute": 5.48434326171875,
+      "weights_bytes_f16": 794624,
+      "input_projection_shape": [
+        64,
+        2048
+      ],
+      "output_projection_shape": [
+        128,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.6818640232086182,
+      "metrics": {
+        "rmse": 2.688234567642212,
+        "reference_rms": 1.7720868587493896,
+        "relative_rmse": 1.5169880390167236,
+        "cosine_mean": 0.1450035721063614,
+        "cosine_median": 0.10434927046298981,
+        "cosine_positive_fraction": 0.8045454545454546
+      },
+      "per_sequence": [
+        {
+          "rmse": 2.7507901191711426,
+          "reference_rms": 1.8227989673614502,
+          "relative_rmse": 1.5091023445129395,
+          "cosine_mean": 0.14450551569461823,
+          "cosine_median": 0.1005542054772377,
+          "cosine_positive_fraction": 0.8210227272727273
+        },
+        {
+          "rmse": 2.4219090938568115,
+          "reference_rms": 1.55276358127594,
+          "relative_rmse": 1.5597410202026367,
+          "cosine_mean": 0.14699587225914001,
+          "cosine_median": 0.12440171837806702,
+          "cosine_positive_fraction": 0.7386363636363636
+        }
+      ]
+    },
+    {
+      "requested_rank": 128,
+      "rank": 128,
+      "rho": 0.0,
+      "ridge": 0.001,
+      "ridge_absolute": 0.13974581909179687,
+      "weights_bytes_f16": 1581056,
+      "input_projection_shape": [
+        128,
+        2048
+      ],
+      "output_projection_shape": [
+        256,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.8445995450019836,
+      "metrics": {
+        "rmse": 1.7475707530975342,
+        "reference_rms": 1.7720868587493896,
+        "relative_rmse": 0.9861654043197632,
+        "cosine_mean": 0.25823649764060974,
+        "cosine_median": 0.2079715132713318,
+        "cosine_positive_fraction": 0.9409090909090909
+      },
+      "per_sequence": [
+        {
+          "rmse": 1.8054802417755127,
+          "reference_rms": 1.8227989673614502,
+          "relative_rmse": 0.9904988408088684,
+          "cosine_mean": 0.24730844795703888,
+          "cosine_median": 0.19118741154670715,
+          "cosine_positive_fraction": 0.9431818181818182
+        },
+        {
+          "rmse": 1.4936469793319702,
+          "reference_rms": 1.55276358127594,
+          "relative_rmse": 0.961928129196167,
+          "cosine_mean": 0.3019486367702484,
+          "cosine_median": 0.2501141428947449,
+          "cosine_positive_fraction": 0.9318181818181818
+        }
+      ]
+    },
+    {
+      "requested_rank": 128,
+      "rank": 128,
+      "rho": 0.5,
+      "ridge": 0.001,
+      "ridge_absolute": 0.2200512237548828,
+      "weights_bytes_f16": 1581056,
+      "input_projection_shape": [
+        128,
+        2048
+      ],
+      "output_projection_shape": [
+        256,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.8445995450019836,
+      "metrics": {
+        "rmse": 1.9549847841262817,
+        "reference_rms": 1.7720868587493896,
+        "relative_rmse": 1.10321044921875,
+        "cosine_mean": 0.1153789684176445,
+        "cosine_median": 0.09637318551540375,
+        "cosine_positive_fraction": 0.7909090909090909
+      },
+      "per_sequence": [
+        {
+          "rmse": 1.9977301359176636,
+          "reference_rms": 1.8227989673614502,
+          "relative_rmse": 1.09596848487854,
+          "cosine_mean": 0.09763560444116592,
+          "cosine_median": 0.0900021344423294,
+          "cosine_positive_fraction": 0.7869318181818182
+        },
+        {
+          "rmse": 1.7737319469451904,
+          "reference_rms": 1.55276358127594,
+          "relative_rmse": 1.1423065662384033,
+          "cosine_mean": 0.18635247647762299,
+          "cosine_median": 0.1193457618355751,
+          "cosine_positive_fraction": 0.8068181818181818
+        }
+      ]
+    },
+    {
+      "requested_rank": 128,
+      "rank": 128,
+      "rho": 0.8,
+      "ridge": 0.001,
+      "ridge_absolute": 0.5722631835937501,
+      "weights_bytes_f16": 1581056,
+      "input_projection_shape": [
+        128,
+        2048
+      ],
+      "output_projection_shape": [
+        256,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.8445995450019836,
+      "metrics": {
+        "rmse": 2.4250781536102295,
+        "reference_rms": 1.7720868587493896,
+        "relative_rmse": 1.3684872388839722,
+        "cosine_mean": 0.03901003673672676,
+        "cosine_median": 0.0335356742143631,
+        "cosine_positive_fraction": 0.6022727272727273
+      },
+      "per_sequence": [
+        {
+          "rmse": 2.496089458465576,
+          "reference_rms": 1.8227989673614502,
+          "relative_rmse": 1.369371771812439,
+          "cosine_mean": 0.009750079363584518,
+          "cosine_median": 0.021042808890342712,
+          "cosine_positive_fraction": 0.5653409090909091
+        },
+        {
+          "rmse": 2.1173484325408936,
+          "reference_rms": 1.55276358127594,
+          "relative_rmse": 1.3636000156402588,
+          "cosine_mean": 0.15604986250400543,
+          "cosine_median": 0.10373691469430923,
+          "cosine_positive_fraction": 0.75
+        }
+      ]
+    },
+    {
+      "requested_rank": 128,
+      "rank": 128,
+      "rho": 0.95,
+      "ridge": 0.001,
+      "ridge_absolute": 2.8739636230468752,
+      "weights_bytes_f16": 1581056,
+      "input_projection_shape": [
+        128,
+        2048
+      ],
+      "output_projection_shape": [
+        256,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.8445995450019836,
+      "metrics": {
+        "rmse": 3.9019088745117188,
+        "reference_rms": 1.7720868587493896,
+        "relative_rmse": 2.2018723487854004,
+        "cosine_mean": 0.01095208153128624,
+        "cosine_median": -0.002394004724919796,
+        "cosine_positive_fraction": 0.48409090909090907
+      },
+      "per_sequence": [
+        {
+          "rmse": 4.117819309234619,
+          "reference_rms": 1.8227989673614502,
+          "relative_rmse": 2.259063959121704,
+          "cosine_mean": -0.021156098693609238,
+          "cosine_median": -0.010777698829770088,
+          "cosine_positive_fraction": 0.4431818181818182
+        },
+        {
+          "rmse": 2.880751848220825,
+          "reference_rms": 1.55276358127594,
+          "relative_rmse": 1.8552417755126953,
+          "cosine_mean": 0.13938480615615845,
+          "cosine_median": 0.09349466860294342,
+          "cosine_positive_fraction": 0.6477272727272727
+        }
+      ]
+    }
+  ],
+  "selected_on_validation": {
+    "requested_rank": 32,
+    "rho": 0.5
+  },
+  "test": {
+    "stateful": {
+      "requested_rank": 32,
+      "rank": 32,
+      "rho": 0.5,
+      "ridge": 0.001,
+      "ridge_absolute": 1.0301915283203125,
+      "weights_bytes_f16": 401408,
+      "input_projection_shape": [
+        32,
+        2048
+      ],
+      "output_projection_shape": [
+        64,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.46131181716918945,
+      "metrics": {
+        "rmse": 1.2516263723373413,
+        "reference_rms": 1.307085394859314,
+        "relative_rmse": 0.957570493221283,
+        "cosine_mean": 0.2954675555229187,
+        "cosine_median": 0.24819880723953247,
+        "cosine_positive_fraction": 0.9425287356321839
+      },
+      "per_sequence": [
+        {
+          "rmse": 1.1634513139724731,
+          "reference_rms": 1.221759557723999,
+          "relative_rmse": 0.9522752165794373,
+          "cosine_mean": 0.29028329253196716,
+          "cosine_median": 0.24873603880405426,
+          "cosine_positive_fraction": 0.9278350515463918
+        },
+        {
+          "rmse": 1.354559063911438,
+          "reference_rms": 1.4072293043136597,
+          "relative_rmse": 0.9625716805458069,
+          "cosine_mean": 0.3019983470439911,
+          "cosine_median": 0.24284501373767853,
+          "cosine_positive_fraction": 0.961038961038961
+        }
+      ]
+    },
+    "matched_stateless": {
+      "requested_rank": 32,
+      "rank": 32,
+      "rho": 0.0,
+      "ridge": 0.001,
+      "ridge_absolute": 0.5644129028320313,
+      "weights_bytes_f16": 401408,
+      "input_projection_shape": [
+        32,
+        2048
+      ],
+      "output_projection_shape": [
+        64,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.46131181716918945,
+      "metrics": {
+        "rmse": 1.2320096492767334,
+        "reference_rms": 1.307085394859314,
+        "relative_rmse": 0.942562460899353,
+        "cosine_mean": 0.3119112551212311,
+        "cosine_median": 0.26656341552734375,
+        "cosine_positive_fraction": 0.9425287356321839
+      },
+      "per_sequence": [
+        {
+          "rmse": 1.1443263292312622,
+          "reference_rms": 1.221759557723999,
+          "relative_rmse": 0.9366215467453003,
+          "cosine_mean": 0.3029821217060089,
+          "cosine_median": 0.25001171231269836,
+          "cosine_positive_fraction": 0.9381443298969072
+        },
+        {
+          "rmse": 1.3342914581298828,
+          "reference_rms": 1.4072293043136597,
+          "relative_rmse": 0.9481691718101501,
+          "cosine_mean": 0.3231595456600189,
+          "cosine_median": 0.29280850291252136,
+          "cosine_positive_fraction": 0.948051948051948
+        }
+      ]
+    },
+    "stateful_relative_rmse_gain": -0.015008032321929932,
+    "per_sequence_passes": 2
+  },
+  "runtime_integration_gate": {
+    "passed": false,
+    "requirements": {
+      "test_relative_rmse_max": 0.9,
+      "test_cosine_median_min": 0.4,
+      "relative_rmse_gain_over_matched_stateless_min": 0.02,
+      "all_test_sequences_beat_zero": true
+    },
+    "next_action": "停止运行图接入；扩大独立教师轨迹或改变状态结构"
+  },
+  "artifact": "D:\\project\\大模型ssd化\\fast16\\research\\v25_stateful_micro_island\\stateful-micro-island-selected.npz"
+}

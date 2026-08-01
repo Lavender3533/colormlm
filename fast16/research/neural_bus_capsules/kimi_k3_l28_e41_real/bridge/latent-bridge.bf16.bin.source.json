@@ -1,0 +1,54 @@
+{
+  "format": "colorlm-kimi-k3-local-biopsy-bridge-source-v1",
+  "plan_identity": {
+    "repo": "moonshotai/Kimi-K3",
+    "revision": "master",
+    "layer": 28,
+    "expert": null,
+    "source_shard": "model-00029-of-000096.safetensors",
+    "http_range": {
+      "start": 14312752,
+      "end_inclusive": 117080367,
+      "bytes": 102767616
+    }
+  },
+  "header_tensors_sha256": "26946ae36b3c65c0234b08937937fa99dc78149fde3ccb26386a2474a85d7874",
+  "raw_sha256": "32326ce6377b59ca82d4bc4bea56bfeabcfa6c24cc02ba94a4e8a1021853f629",
+  "raw_bytes": 102767616,
+  "components": [
+    {
+      "role": "latent_down",
+      "tensor": "language_model.model.layers.28.block_sparse_moe.routed_expert_down_proj.weight",
+      "source": "fast16\\research\\biopsy_cache\\moonshotai_Kimi-K3\\master\\extracted\\language_model.model.layers.28.block_sparse_moe.routed_expert_down_proj.weight.bin",
+      "source_manifest": "fast16\\research\\biopsy_cache\\moonshotai_Kimi-K3\\master\\extracted\\language_model.model.layers.28.block_sparse_moe.routed_expert_down_proj.weight.bin.json",
+      "bytes": 51380224,
+      "sha256": "9e1834da5dd0216623db4c2c200c17ec5fab91df29b8ed78a18108e6e652c079",
+      "capsule_offset_start": 0,
+      "capsule_offset_end": 51380224
+    },
+    {
+      "role": "latent_norm",
+      "tensor": "language_model.model.layers.28.block_sparse_moe.routed_expert_norm.weight",
+      "source": "fast16\\research\\biopsy_cache\\moonshotai_Kimi-K3\\master\\extracted\\language_model.model.layers.28.block_sparse_moe.routed_expert_norm.weight.bin",
+      "source_manifest": "fast16\\research\\biopsy_cache\\moonshotai_Kimi-K3\\master\\extracted\\language_model.model.layers.28.block_sparse_moe.routed_expert_norm.weight.bin.json",
+      "bytes": 7168,
+      "sha256": "ec99aedeb2e84072b7eeda5ebdf6edde46b3da274bea56cb409375d16f9b9fba",
+      "capsule_offset_start": 51380224,
+      "capsule_offset_end": 51387392
+    },
+    {
+      "role": "latent_up",
+      "tensor": "language_model.model.layers.28.block_sparse_moe.routed_expert_up_proj.weight",
+      "source": "fast16\\research\\biopsy_cache\\moonshotai_Kimi-K3\\master\\extracted\\language_model.model.layers.28.block_sparse_moe.routed_expert_up_proj.weight.bin",
+      "source_manifest": "fast16\\research\\biopsy_cache\\moonshotai_Kimi-K3\\master\\extracted\\language_model.model.layers.28.block_sparse_moe.routed_expert_up_proj.weight.bin.json",
+      "bytes": 51380224,
+      "sha256": "b9d33696a308f8698b445fa2eb8318ed76d9d2bb243b6942fbd0497b9fde1f75",
+      "capsule_offset_start": 51387392,
+      "capsule_offset_end": 102767616
+    }
+  ],
+  "validator": {
+    "kind": "local-biopsy-component-sha256",
+    "component_count": 3
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "colorlm-v47-parallel-draft-row-v1",
+  "type": "object",
+  "required": [
+    "record",
+    "anchor_id",
+    "trajectory_id",
+    "group_id",
+    "template_cluster_id",
+    "split",
+    "context_bucket",
+    "recent_token_ids",
+    "validator_token_ids",
+    "validator_terminated",
+    "validator_source",
+    "oracle_token_ids",
+    "oracle_terminated"
+  ],
+  "properties": {
+    "record": {"type": "integer", "minimum": 0},
+    "anchor_id": {"type": "string", "minLength": 1},
+    "trajectory_id": {"type": "string", "minLength": 1},
+    "group_id": {"type": "string", "minLength": 1},
+    "template_cluster_id": {"type": "string", "minLength": 1},
+    "split": {"enum": ["train", "validation", "test"]},
+    "context_bucket": {"enum": ["lt_2k", "2k_8k", "gt_8k"]},
+    "recent_token_ids": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 0, "maximum": 248319},
+      "maxItems": 96
+    },
+    "validator_token_ids": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 0, "maximum": 248319},
+      "minItems": 1,
+      "maxItems": 4
+    },
+    "validator_terminated": {"type": "boolean"},
+    "validator_source": {"const": "v38-free-greedy-from-anchor"},
+    "oracle_token_ids": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 0, "maximum": 248319},
+      "minItems": 1,
+      "maxItems": 4
+    },
+    "oracle_terminated": {"type": "boolean"}
+  },
+  "additionalProperties": true
+}

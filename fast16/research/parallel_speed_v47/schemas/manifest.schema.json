@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "colorlm-parallel-speed-v47-manifest-v1",
+  "type": "object",
+  "required": ["format", "scope", "base", "evidence", "draft_head", "latent_recursion", "paging", "claim_limits"],
+  "properties": {
+    "format": {"const": "colorlm-parallel-speed-v47-manifest-v1"},
+    "scope": {"const": "offline-only"},
+    "base": {
+      "type": "object",
+      "required": ["hidden_size", "vocab_size", "layers", "active_parameters_per_token"],
+      "properties": {
+        "hidden_size": {"type": "integer", "minimum": 1},
+        "vocab_size": {"type": "integer", "minimum": 1},
+        "layers": {"type": "integer", "minimum": 1},
+        "active_parameters_per_token": {"type": "integer", "minimum": 1}
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "path", "sha256"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "draft_head": {
+      "type": "object",
+      "required": ["tap_layers", "fusion_rank", "position_rank", "draft_tokens", "reuse_frozen_embedding_and_lm_head"],
+      "properties": {
+        "tap_layers": {"type": "array", "minItems": 2, "items": {"type": "integer", "minimum": 0}},
+        "fusion_rank": {"type": "integer", "minimum": 1},
+        "position_rank": {"type": "integer", "minimum": 1},
+        "draft_tokens": {"type": "integer", "minimum": 1, "maximum": 4},
+        "reuse_frozen_embedding_and_lm_head": {"const": true}
+      }
+    },
+    "latent_recursion": {
+      "type": "object",
+      "required": ["bottleneck_rank", "max_loops", "k_values", "k_distribution_assumption", "hard_bypass_k0"],
+      "properties": {
+        "max_loops": {"const": 4},
+        "k_values": {"const": [0, 1, 2, 3, 4]},
+        "k_distribution_assumption": {"type": "array", "minItems": 5, "maxItems": 5, "items": {"type": "number", "minimum": 0, "maximum": 1}},
+        "hard_bypass_k0": {"const": true}
+      }
+    },
+    "paging": {
+      "type": "object",
+      "required": ["layers", "experts_per_layer", "expert_page_bytes", "gpu_slots_per_layer", "cpu_warm_slots_per_layer", "exact_miss_path"],
+      "properties": {
+        "expert_page_bytes": {"type": "integer", "minimum": 1},
+        "gpu_slots_per_layer": {"type": "integer", "minimum": 10},
+        "cpu_warm_slots_per_layer": {"type": "integer", "minimum": 10},
+        "exact_miss_path": {"const": true}
+      }
+    },
+    "claim_limits": {"type": "array", "minItems": 3, "items": {"type": "string"}}
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "format": "colorlm-v47-dual-tempo-contract-v1",
+  "status": "research_only",
+  "authoritative_base": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+  "lanes": {
+    "fast": {
+      "mechanism": "multi_layer_multi_token_draft_with_v38_verification",
+      "maximum_draft_tokens": 4,
+      "first_token_source": "native_v38_logits",
+      "future_token_projection": {
+        "rank": 64,
+        "native_top_k": 32,
+        "recent_context_tokens": 96,
+        "train_frequent_tokens": 64,
+        "candidate_limit": 192,
+        "evidence": "v44 critical-token development replay 408/408 coverage; must be rechecked on independent full trajectories"
+      },
+      "quality_invariant": "accepted_tokens_must_equal_v38_verifier",
+      "training_distribution": "on_policy_draft_rollout_with_rejected_position_replay",
+      "teacher_forced_coverage_is_sufficient": false,
+      "minimum_adjacent_speedup_percent": 8.0,
+      "maximum_frozen_gate_regressions": 0
+    },
+    "slow": {
+      "mechanism": "local_latent_recursion_then_sequence_capability_island",
+      "allowed_k": [0, 1, 2, 3, 4],
+      "default_k": 0,
+      "no_op_invariant": "k_zero_and_island_disabled_build_no_extra_runtime_nodes",
+      "routing_supervision": "counterfactual_whole_trajectory_success"
+    }
+  },
+  "semantic_compression": {
+    "mechanism": "grammar_constrained_design_genome_to_deterministic_compiler",
+    "model_output": "closed_vocabulary_ir_with_copy_slots",
+    "target_utf8_bytes": {"preferred_min": 150, "preferred_max": 600, "hard_max": 1200},
+    "compiler_output": "final_html_css_js_without_additional_model_tokens",
+    "cold_start_teacher": "v38_bounded_single_line_grammar",
+    "first_runtime": "parallel_terminal_hidden_to_genome_fields",
+    "autoregressive_ir_decoder_forbidden": true,
+    "parallel_field_ontology": "genome_head_ontology.json",
+    "distillation_minimum_train_only_trajectories": 128,
+    "quality_dimensions": [
+      "task_contract", "structure", "responsive", "interaction", "visual_render",
+      "dependency_safety", "accessibility", "template_penalty"
+    ]
+  },
+  "capability_islands": [
+    "tool_sequence",
+    "frontend_design_ir",
+    "planning_action_graph",
+    "debug_patch_plan"
+  ],
+  "local_budget": {
+    "target_hardware": "RX 5700 XT 8GB VRAM and 32GB RAM",
+    "hot_auxiliary_mebibytes_max": 256,
+    "cold_islands": "host_ram_or_ssd",
+    "resident_full_donor_forbidden": true
+  },
+  "dataset": {
+    "one_initial_terminal_hidden_per_task": true,
+    "full_target_sequence_required": true,
+    "frontend_base_train_tasks_are_compiler_evidence_only": 8,
+    "frontend_pointer_copy_required": true,
+    "split_isolation_keys": ["group_id", "template_cluster_id"],
+    "fit_split": "train",
+    "structure_selection_split": "validation",
+    "blind_runs_max": 1
+  },
+  "stop_conditions": [
+    "single_token_nll_improves_without_whole_sequence_gain",
+    "hard_top1_router_without_counterfactual_labels",
+    "fixed_alpha_scan_on_consumed_validation",
+    "blind_split_used_for_vocabulary_or_structure_selection",
+    "draft_state_rollback_is_not_byte_equivalent",
+    "teacher_forced_draft_coverage_used_as_speed_claim",
+    "frontend_decoder_trained_on_only_eight_free_text_sequences",
+    "unbounded_gbnf_list_or_pretty_printed_json_used_as_fast_path",
+    "frontend_compiler_calls_the_model_again_for_long_html",
+    "frontend_claim_based_only_on_output_changed_or_static_nll"
+  ]
+}

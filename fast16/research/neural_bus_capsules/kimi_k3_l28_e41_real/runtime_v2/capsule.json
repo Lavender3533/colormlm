@@ -1,0 +1,311 @@
+{
+  "format": "colorlm-kimi-k3-latent-macro-capsule-v2",
+  "repo": "moonshotai/Kimi-K3",
+  "revision": "master",
+  "layer": 28,
+  "expert": 41,
+  "dimensions": {
+    "colorlm": 2048,
+    "latent": 3584,
+    "intermediate": 3072
+  },
+  "activation": {
+    "name": "situ",
+    "beta": 4.0,
+    "linear_beta": 25.0
+  },
+  "rms_norm_eps": 1e-05,
+  "execution": "z=colorlm_to_latent@h; e=down@situ(gate@z,up@z); delta=latent_to_colorlm@rms_norm(e,latent_norm)",
+  "runtime_layout": "six-headerless-f16-le-row-major-v1",
+  "runtime_total_bytes": 95427584,
+  "runtime_files": {
+    "b_in": {
+      "file": "b_in.f16",
+      "shape": [
+        3584,
+        2048
+      ],
+      "dtype": "float16-le",
+      "layout": "raw-row-major-pytorch-out-in",
+      "bytes": 14680064,
+      "sha256": "a1368d9b5683a7ec29331e30342a9a2659ae1a8ed7223baaec08b1fc2f0a4d33",
+      "source_npy": "fast16\\research\\neural_bus_capsules\\kimi_k3_l28_e41_real\\bridge\\colorlm_to_latent.float16.npy"
+    },
+    "gate": {
+      "file": "gate.f16",
+      "shape": [
+        3072,
+        3584
+      ],
+      "dtype": "float16-le",
+      "layout": "raw-row-major-pytorch-out-in",
+      "bytes": 22020096,
+      "sha256": "87e888216ad22c25225e6c0691416bfa1cb0ae629aa9d2a0d1a40db540170889",
+      "source_npy": "fast16\\research\\neural_bus_capsules\\kimi_k3_l28_e41_real\\expert\\gate.f16.npy"
+    },
+    "up": {
+      "file": "up.f16",
+      "shape": [
+        3072,
+        3584
+      ],
+      "dtype": "float16-le",
+      "layout": "raw-row-major-pytorch-out-in",
+      "bytes": 22020096,
+      "sha256": "728e9f5cf60f4f468f7c3749a802d7b8a7fe17f7b630825338f38659f9fc0ad0",
+      "source_npy": "fast16\\research\\neural_bus_capsules\\kimi_k3_l28_e41_real\\expert\\up.f16.npy"
+    },
+    "down": {
+      "file": "down.f16",
+      "shape": [
+        3584,
+        3072
+      ],
+      "dtype": "float16-le",
+      "layout": "raw-row-major-pytorch-out-in",
+      "bytes": 22020096,
+      "sha256": "680ce79e8e907dfbc26cea6cd085a57ed9d8b9f7a36b17c6dc697c08abe55894",
+      "source_npy": "fast16\\research\\neural_bus_capsules\\kimi_k3_l28_e41_real\\expert\\down.f16.npy"
+    },
+    "norm": {
+      "file": "norm.f16",
+      "shape": [
+        3584
+      ],
+      "dtype": "float16-le",
+      "layout": "raw-vector",
+      "bytes": 7168,
+      "sha256": "9a1e2ddf3692d9648cdce889e8085b2352173449e0cb42f03f893600fbc7b310",
+      "source_npy": "fast16\\research\\neural_bus_capsules\\kimi_k3_l28_e41_real\\bridge\\latent_norm.float16.npy"
+    },
+    "b_out": {
+      "file": "b_out.f16",
+      "shape": [
+        2048,
+        3584
+      ],
+      "dtype": "float16-le",
+      "layout": "raw-row-major-pytorch-out-in",
+      "bytes": 14680064,
+      "sha256": "ea256a8f562f0338e2fb1ccc696ac4c24fc879b7291b8272cf61c7e6a69c6f5b",
+      "source_npy": "fast16\\research\\neural_bus_capsules\\kimi_k3_l28_e41_real\\bridge\\latent_to_colorlm.float16.npy"
+    }
+  },
+  "expert_capsule": {
+    "path": "fast16\\research\\neural_bus_capsules\\kimi_k3_l28_e41_real\\expert",
+    "manifest": {
+      "format": "colorlm-kimi-k3-expert-capsule-v1",
+      "repo": "moonshotai/Kimi-K3",
+      "revision": "master",
+      "layer": 28,
+      "expert": 41,
+      "source_shard": "model-00029-of-000096.safetensors",
+      "source_http_range": {
+        "start": 7339921712,
+        "end_inclusive": 7357468975,
+        "bytes": 17547264
+      },
+      "source_quantization": "MXFP4 E2M1 + E8M0 scale",
+      "group_size": 32,
+      "nibble_order": "low_then_high_interleaved",
+      "scale_equation": "value * 2**(scale_u8 - 127)",
+      "raw_capsule": {
+        "path": "expert.mxfp4.bin",
+        "bytes": 17547264,
+        "sha256": "ac927716d14a54f9b3294eb07d3720727a6ad9e03ef9a4c7ddf10bc21e87a4af",
+        "downloaded": true,
+        "source_validator": {
+          "header": "ETag",
+          "value": "\"71ACF9CD66A92653712A34E643524328-400\""
+        },
+        "source_shard_bytes": 16990916912
+      },
+      "matrix_mapping": {
+        "w1": "gate",
+        "w3": "up",
+        "w2": "down"
+      },
+      "matrix_orientation": "pytorch-linear-out-in",
+      "latent_input_width": 3584,
+      "intermediate_width": 3072,
+      "activation": {
+        "name": "situ",
+        "beta": 4.0,
+        "linear_beta": 25.0,
+        "equation": "beta*tanh(gate/beta)*sigmoid(gate) * linear_beta*tanh(up/linear_beta)"
+      },
+      "computation_contract": "down @ ((beta*tanh((gate@x)/beta)*sigmoid(gate@x)) * (linear_beta*tanh((up@x)/linear_beta)))",
+      "requires_outer_latent_bridge": true,
+      "matrices": {
+        "gate": {
+          "source_weight": "w1",
+          "file": "gate.f16.npy",
+          "dtype": "float16",
+          "shape": [
+            3072,
+            3584
+          ],
+          "orientation": "pytorch-linear-out-in",
+          "bytes": 22020224,
+          "sha256": "b8bbfd78400640907c6564dc98fe9edbbd056243a35d77bb7446bbbaa2849d41",
+          "raw_sha256": "ac927716d14a54f9b3294eb07d3720727a6ad9e03ef9a4c7ddf10bc21e87a4af",
+          "decoder_contract": "colorlm-kimi-k3-mxfp4-decoder-v1",
+          "decode_stats": {
+            "min": -0.125,
+            "max": 0.125,
+            "rms": 0.024718513490758515,
+            "nonzero": 9738352
+          }
+        },
+        "up": {
+          "source_weight": "w3",
+          "file": "up.f16.npy",
+          "dtype": "float16",
+          "shape": [
+            3072,
+            3584
+          ],
+          "orientation": "pytorch-linear-out-in",
+          "bytes": 22020224,
+          "sha256": "743a171eb538ea1eeeb676ad5d19c3c39a98f0e70a67b119e1686f4d9163b3d3",
+          "raw_sha256": "ac927716d14a54f9b3294eb07d3720727a6ad9e03ef9a4c7ddf10bc21e87a4af",
+          "decoder_contract": "colorlm-kimi-k3-mxfp4-decoder-v1",
+          "decode_stats": {
+            "min": -0.125,
+            "max": 0.125,
+            "rms": 0.02469063785704827,
+            "nonzero": 9735907
+          }
+        },
+        "down": {
+          "source_weight": "w2",
+          "file": "down.f16.npy",
+          "dtype": "float16",
+          "shape": [
+            3584,
+            3072
+          ],
+          "orientation": "pytorch-linear-out-in",
+          "bytes": 22020224,
+          "sha256": "6c524d34efde54af27082956025acbc0a655f0d946b4c4474640d9855f0ec0f2",
+          "raw_sha256": "ac927716d14a54f9b3294eb07d3720727a6ad9e03ef9a4c7ddf10bc21e87a4af",
+          "decoder_contract": "colorlm-kimi-k3-mxfp4-decoder-v1",
+          "decode_stats": {
+            "min": -0.125,
+            "max": 0.125,
+            "rms": 0.023973776452821102,
+            "nonzero": 9720744
+          }
+        }
+      }
+    }
+  },
+  "latent_bridge": {
+    "path": "fast16\\research\\neural_bus_capsules\\kimi_k3_l28_e41_real\\bridge",
+    "manifest": {
+      "format": "colorlm-kimi-k3-folded-latent-bridge-v1",
+      "repo": "moonshotai/Kimi-K3",
+      "revision": "master",
+      "layer": 28,
+      "raw_sha256": "32326ce6377b59ca82d4bc4bea56bfeabcfa6c24cc02ba94a4e8a1021853f629",
+      "transport": {
+        "file": "D:\\project\\大模型ssd化\\fast16\\research\\kimi_k3_to_colorlm_semiorthogonal_f32.npy",
+        "shape": [
+          7168,
+          2048
+        ],
+        "sha256": "8ff9eb4760979135b05e31675b229128f275a951f3101fba98bbb63b41303c3b",
+        "direction": "kimi_row @ transport = colorlm_row"
+      },
+      "equations": {
+        "colorlm_to_latent": "routed_expert_down_proj @ transport",
+        "latent_to_colorlm": "transport.T @ routed_expert_up_proj"
+      },
+      "rms_norm_eps": 1e-05,
+      "matrices": {
+        "colorlm_to_latent": {
+          "file": "colorlm_to_latent.float16.npy",
+          "shape": [
+            3584,
+            2048
+          ],
+          "dtype": "float16",
+          "bytes": 14680192,
+          "sha256": "c078c831e2027d8b934734e7067e61d47dfcd26be1b9fa9d2b81a86392e106e5",
+          "orientation": "pytorch-linear-out-in"
+        },
+        "latent_to_colorlm": {
+          "file": "latent_to_colorlm.float16.npy",
+          "shape": [
+            2048,
+            3584
+          ],
+          "dtype": "float16",
+          "bytes": 14680192,
+          "sha256": "9d574f3d8f9cd8f57e4851ed0baeae98ab71dc1629afa2136579ffde21e636fb",
+          "orientation": "pytorch-linear-out-in"
+        },
+        "latent_norm": {
+          "file": "latent_norm.float16.npy",
+          "shape": [
+            3584
+          ],
+          "dtype": "float16",
+          "bytes": 7296,
+          "sha256": "40b940dec2ea3dd628fac2f75567b2a8da529951f8da14534ef36f796afa55ed",
+          "orientation": "vector"
+        }
+      }
+    }
+  },
+  "router_prior": {
+    "path": "fast16\\research\\neural_bus_capsules\\kimi_k3_l28_e41_real\\router",
+    "manifest": {
+      "format": "colorlm-kimi-k3-router-prior-v1",
+      "layer": 28,
+      "expert": 41,
+      "source_router": {
+        "file": "fast16\\research\\biopsy_cache\\moonshotai_Kimi-K3\\master\\extracted\\language_model.model.layers.28.block_sparse_moe.gate.weight.bin",
+        "sha256": "d0e051d8bb5eec9cd4c1bae9aaf3d60dcb3aac1c694aa9f85307656c1ee11c2b",
+        "row": {
+          "file": "router_kimi_f32.npy",
+          "shape": [
+            7168
+          ],
+          "dtype": "float32",
+          "bytes": 28800,
+          "sha256": "df4ddfb752a2ac627672f90c5e92c5e06bf7ebda56641c18166f5fc5bc3f4509",
+          "orientation": "vector"
+        }
+      },
+      "transport_sha256": "8ff9eb4760979135b05e31675b229128f275a951f3101fba98bbb63b41303c3b",
+      "mapped_row": {
+        "file": "router_colorlm_f32.npy",
+        "shape": [
+          2048
+        ],
+        "dtype": "float32",
+        "bytes": 8320,
+        "sha256": "992926a9b944faf477c4a76f193d0bdb96540e25316f99639ab9e75505e3bb75",
+        "orientation": "vector"
+      },
+      "mapped_l2_norm": 2.46850323677063,
+      "contract": "score = router_colorlm_f32 @ hidden_state",
+      "warning": "router prior is not a capability label; calibrate against forced-route NLL"
+    }
+  },
+  "scope": "forced single routed expert; shared experts are intentionally excluded",
+  "runtime_router": {
+    "file": "router.f32",
+    "shape": [
+      2048
+    ],
+    "dtype": "float32-le",
+    "layout": "raw-vector",
+    "bytes": 8192,
+    "sha256": "d14f218b26c1439eb0d22e6d12e3d05c114e8d36349429b23b42ebfaa46a862e",
+    "source_npy": "fast16\\research\\neural_bus_capsules\\kimi_k3_l28_e41_real\\router\\router_colorlm_f32.npy",
+    "l2_norm": 2.468503189616052
+  },
+  "routing_contract": "cosine(router, hidden_state); combine candidates with temperature-scaled softmax"
+}

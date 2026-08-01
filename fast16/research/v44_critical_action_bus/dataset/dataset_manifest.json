@@ -1,0 +1,41 @@
+{
+  "format": "colorlm-v44-critical-action-dataset-manifest-v1",
+  "dataset_version": "v44.0",
+  "generator": "generate_v44_dataset.py",
+  "generator_sha256": "e152cfcb9c661dc20887efc552a16be0b8d842252198f3ff488e3f9781c13f82",
+  "tasks": "trajectory_tasks_v1.jsonl",
+  "tasks_sha256": "7527c3473f5ee613f7c1611d4e5171bf78a0bd56844f04b68cc3001f1bee0477",
+  "oracle": "trajectory_oracle_v1.jsonl",
+  "oracle_sha256": "232f1ea79c7aa24fd25f792efd1e9153da0620e0575bd58ead3124b54a64ef3f",
+  "contract": "dataset_contract.json",
+  "contract_sha256": "9c1263bff8d0cb4b946591f67c55ac4157bfd6a1d000b7831c05a943d9228d13",
+  "task_count": 240,
+  "group_count": 120,
+  "template_cluster_count": 24,
+  "split_counts": {
+    "blind": 60,
+    "train": 120,
+    "validation": 60
+  },
+  "capability_counts": {
+    "code_debugging": 40,
+    "computer_operation": 40,
+    "continue_or_finish": 40,
+    "missing_parameter_clarification": 40,
+    "multi_step_planning": 40,
+    "tool_argument_repair": 40
+  },
+  "template_clusters_per_capability": {
+    "code_debugging": 4,
+    "computer_operation": 4,
+    "continue_or_finish": 4,
+    "missing_parameter_clarification": 4,
+    "multi_step_planning": 4,
+    "tool_argument_repair": 4
+  },
+  "label_counts": {
+    "ask_user": 40,
+    "continue_tool": 160,
+    "finish": 40
+  }
+}

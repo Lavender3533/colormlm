@@ -1,0 +1,1 @@
+{"schema_version":"design-copy-slots-v1","task_id":"pf47-train-04","prompt_sha256":"c64a6625e1619d8bc64c412589e0dfc216e67aab398bcfccff1573815f095f69","slots":[{"id":0,"kind":"title","text":"社区工坊预约页"},{"id":1,"kind":"lede","text":"日期选择、可用时段、参与人数、费用摘要、验证错误和成功反馈"}]}

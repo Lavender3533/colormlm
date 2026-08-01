@@ -1,0 +1,91 @@
+{
+  "format": "colorlm-v28-decision-capture-index-v1",
+  "contract": "fast16/research/v28_executive_state_head/agent_state_gate_v1.json",
+  "contract_sha256": "17e62d828a110a24c1dd6c1fb38b88e7e013fe21b50e57082268f9dce041a35a",
+  "capture": "fast16/research/v28_executive_state_head/decision-states.cnob",
+  "capture_sha256": "8a9ac1ab21dbe6e4222a2f6bb811f423b7e766de61590214f45a6ab3a26de5bd",
+  "model": "ColorLM-v28-Decision-Capture",
+  "seed": 3407,
+  "records": [
+    {
+      "record": 0,
+      "id": "state-read-success-finish",
+      "split": "train",
+      "label": "finish",
+      "first_output": "```",
+      "finish_reason": "length",
+      "completion_tokens": 1,
+      "wall_ms": 1960.36
+    },
+    {
+      "record": 1,
+      "id": "state-read-missing-recover",
+      "split": "train",
+      "label": "continue_tool",
+      "first_output": "文件",
+      "finish_reason": "length",
+      "completion_tokens": 1,
+      "wall_ms": 2008.891
+    },
+    {
+      "record": 2,
+      "id": "state-test-failure-inspect",
+      "split": "train",
+      "label": "continue_tool",
+      "first_output": "测试",
+      "finish_reason": "length",
+      "completion_tokens": 1,
+      "wall_ms": 2061.742
+    },
+    {
+      "record": 3,
+      "id": "state-validation-activate",
+      "split": "train",
+      "label": "continue_tool",
+      "first_output": "<tool_call>",
+      "finish_reason": "length",
+      "completion_tokens": 1,
+      "wall_ms": 2074.145
+    },
+    {
+      "record": 4,
+      "id": "state-activation-health",
+      "split": "validation",
+      "label": "continue_tool",
+      "first_output": "<tool_call>",
+      "finish_reason": "length",
+      "completion_tokens": 1,
+      "wall_ms": 1969.851
+    },
+    {
+      "record": 5,
+      "id": "state-health-finish",
+      "split": "validation",
+      "label": "finish",
+      "first_output": "{\"",
+      "finish_reason": "length",
+      "completion_tokens": 1,
+      "wall_ms": 1875.912
+    },
+    {
+      "record": 6,
+      "id": "state-missing-target-ask",
+      "split": "test",
+      "label": "continue_tool",
+      "first_output": "部署",
+      "finish_reason": "length",
+      "completion_tokens": 1,
+      "wall_ms": 1991.287
+    },
+    {
+      "record": 7,
+      "id": "state-write-success-finish",
+      "split": "test",
+      "label": "finish",
+      "first_output": "{\"",
+      "finish_reason": "length",
+      "completion_tokens": 1,
+      "wall_ms": 1961.575
+    }
+  ]
+}

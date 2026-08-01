@@ -1,0 +1,1 @@
+{"schema_version":"design-copy-slots-v1","task_id":"pf47-train-07","prompt_sha256":"bb45cb2945ace87d7c36fe893de2ab1dd78ce4c920024447b2d32e4387aff13a","slots":[{"id":0,"kind":"title","text":"多舞台音乐节日程"},{"id":1,"kind":"lede","text":"日期/舞台筛选、时间冲突提示、收藏切换和当前时段标记"}]}

@@ -1,0 +1,51 @@
+{
+  "format": "colorlm-neural-micro-stage-runtime-v1",
+  "candidate": true,
+  "runtime_layout": "single-aligned-tensor-blob-v1",
+  "alignment": 64,
+  "source_layer": 47,
+  "hidden_size": 2048,
+  "rank": 32,
+  "equation": "delta=output.weight*(input.weight*h)+output.bias",
+  "tensor_count": 3,
+  "tensors": [
+    {
+      "name": "input.weight",
+      "dtype": "F16",
+      "ggml_shape": [
+        2048,
+        32
+      ],
+      "offset": 0,
+      "bytes": 131072,
+      "sha256": "a5492e328ebbaf1483112c99d3796da88e704042f103c17c66bb4b13b7ff9c97"
+    },
+    {
+      "name": "output.weight",
+      "dtype": "F16",
+      "ggml_shape": [
+        32,
+        2048
+      ],
+      "offset": 131072,
+      "bytes": 131072,
+      "sha256": "010dc0f0a3dc164601eef2f0b4776b33002a182aef4a0f16d81372e39fc56680"
+    },
+    {
+      "name": "output.bias",
+      "dtype": "F32",
+      "ggml_shape": [
+        2048
+      ],
+      "offset": 262144,
+      "bytes": 8192,
+      "sha256": "8cb104a81f1fc0be79fcc71b4c0337a87528f6d1af6a1d7c77348e3f95d7294f"
+    }
+  ],
+  "weights": {
+    "file": "weights.bin",
+    "bytes": 270336,
+    "sha256": "ce25563ede1e5d089e6ce4678f57483cbf5edaec1326fa03279b838c96974dd9"
+  },
+  "source_artifact": "fast16/research/v25_stateful_micro_island/stage-artifacts/stage_l47.npz"
+}

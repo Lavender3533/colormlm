@@ -1,0 +1,379 @@
+{
+  "format": "colormlm-qwen36-layer-hidden-attribution-v1",
+  "control": "fast16/research/v31_qwen36_expert_pair/v36_long_hidden_user.bin",
+  "candidate": "fast16/research/v31_qwen36_expert_pair/v33_long_hidden_user.bin",
+  "layers": [
+    {
+      "layer": 0,
+      "tokens": 2,
+      "hidden_rms": 0.5432419553008516,
+      "delta_rms": 0.0,
+      "relative_delta_rms": 0.0,
+      "cosine_mean": 1.0000000000000002,
+      "cosine_min": 1.0000000000000002
+    },
+    {
+      "layer": 1,
+      "tokens": 2,
+      "hidden_rms": 0.7676424304766897,
+      "delta_rms": 0.24145232543338085,
+      "relative_delta_rms": 0.31453749277960585,
+      "cosine_mean": 0.9557183833328085,
+      "cosine_min": 0.9304695950578128
+    },
+    {
+      "layer": 2,
+      "tokens": 2,
+      "hidden_rms": 0.8708503082429011,
+      "delta_rms": 0.39719458590726187,
+      "relative_delta_rms": 0.4560997247720727,
+      "cosine_mean": 0.9052584867077691,
+      "cosine_min": 0.8796365755608662
+    },
+    {
+      "layer": 3,
+      "tokens": 2,
+      "hidden_rms": 0.9927620950151697,
+      "delta_rms": 0.5110385304497383,
+      "relative_delta_rms": 0.5147643458747582,
+      "cosine_mean": 0.8751128374785415,
+      "cosine_min": 0.832045610820567
+    },
+    {
+      "layer": 4,
+      "tokens": 2,
+      "hidden_rms": 1.043065231070029,
+      "delta_rms": 0.549873969787807,
+      "relative_delta_rms": 0.527171219410428,
+      "cosine_mean": 0.8658478833282438,
+      "cosine_min": 0.8264665734717435
+    },
+    {
+      "layer": 5,
+      "tokens": 2,
+      "hidden_rms": 1.0530259367245742,
+      "delta_rms": 0.5902887762887752,
+      "relative_delta_rms": 0.56056432771719,
+      "cosine_mean": 0.846127635641281,
+      "cosine_min": 0.7981237589726794
+    },
+    {
+      "layer": 6,
+      "tokens": 2,
+      "hidden_rms": 1.022939046722664,
+      "delta_rms": 0.5028015486923308,
+      "relative_delta_rms": 0.49152640160059197,
+      "cosine_mean": 0.8956714245433529,
+      "cosine_min": 0.7975881519342717
+    },
+    {
+      "layer": 7,
+      "tokens": 2,
+      "hidden_rms": 1.0858482063181152,
+      "delta_rms": 0.5338431810208278,
+      "relative_delta_rms": 0.491637024323113,
+      "cosine_mean": 0.889498422587818,
+      "cosine_min": 0.7870849386882495
+    },
+    {
+      "layer": 8,
+      "tokens": 2,
+      "hidden_rms": 1.1017292048723348,
+      "delta_rms": 0.6229520780020511,
+      "relative_delta_rms": 0.5654312105434629,
+      "cosine_mean": 0.8550357566511654,
+      "cosine_min": 0.7242069819539522
+    },
+    {
+      "layer": 9,
+      "tokens": 2,
+      "hidden_rms": 1.0992329141007715,
+      "delta_rms": 0.6222028890631053,
+      "relative_delta_rms": 0.566033714130639,
+      "cosine_mean": 0.8501460880754751,
+      "cosine_min": 0.7142205489741531
+    },
+    {
+      "layer": 10,
+      "tokens": 2,
+      "hidden_rms": 1.1764415175946918,
+      "delta_rms": 0.6108762758284841,
+      "relative_delta_rms": 0.5192576653342351,
+      "cosine_mean": 0.8550912535621815,
+      "cosine_min": 0.7104463175957232
+    },
+    {
+      "layer": 11,
+      "tokens": 2,
+      "hidden_rms": 1.2038088127527353,
+      "delta_rms": 0.6051789743877635,
+      "relative_delta_rms": 0.5027201728187285,
+      "cosine_mean": 0.860135979138061,
+      "cosine_min": 0.7205230147416434
+    },
+    {
+      "layer": 12,
+      "tokens": 2,
+      "hidden_rms": 1.213326832018855,
+      "delta_rms": 0.5393948921162937,
+      "relative_delta_rms": 0.4445586118117855,
+      "cosine_mean": 0.9024783164102825,
+      "cosine_min": 0.8052320194505241
+    },
+    {
+      "layer": 13,
+      "tokens": 2,
+      "hidden_rms": 1.2378684242376459,
+      "delta_rms": 0.5263846917611571,
+      "relative_delta_rms": 0.42523476764934576,
+      "cosine_mean": 0.9054196447836242,
+      "cosine_min": 0.8110916582720216
+    },
+    {
+      "layer": 14,
+      "tokens": 2,
+      "hidden_rms": 1.2133302791174974,
+      "delta_rms": 0.5260835001655726,
+      "relative_delta_rms": 0.4335863937626396,
+      "cosine_mean": 0.9019408532937139,
+      "cosine_min": 0.8041403788410875
+    },
+    {
+      "layer": 15,
+      "tokens": 2,
+      "hidden_rms": 1.2167542532957045,
+      "delta_rms": 0.522056678521296,
+      "relative_delta_rms": 0.42905679360253035,
+      "cosine_mean": 0.9035343728655307,
+      "cosine_min": 0.8073161304765909
+    },
+    {
+      "layer": 16,
+      "tokens": 2,
+      "hidden_rms": 1.225698761905564,
+      "delta_rms": 0.5123819000368545,
+      "relative_delta_rms": 0.41803248560051315,
+      "cosine_mean": 0.9024900989259479,
+      "cosine_min": 0.8052232592396208
+    },
+    {
+      "layer": 17,
+      "tokens": 2,
+      "hidden_rms": 1.2213410840946466,
+      "delta_rms": 0.5231277742840497,
+      "relative_delta_rms": 0.42832242450259733,
+      "cosine_mean": 0.9003386960655868,
+      "cosine_min": 0.8009332063618827
+    },
+    {
+      "layer": 18,
+      "tokens": 2,
+      "hidden_rms": 1.2353153331649527,
+      "delta_rms": 0.5579135813317886,
+      "relative_delta_rms": 0.45163657112745476,
+      "cosine_mean": 0.8904759457534884,
+      "cosine_min": 0.7812118548422607
+    },
+    {
+      "layer": 19,
+      "tokens": 2,
+      "hidden_rms": 1.2681647513238854,
+      "delta_rms": 0.5699238886637923,
+      "relative_delta_rms": 0.44940839750420997,
+      "cosine_mean": 0.8890218932633112,
+      "cosine_min": 0.7782847104443391
+    },
+    {
+      "layer": 20,
+      "tokens": 2,
+      "hidden_rms": 1.2963269527538046,
+      "delta_rms": 0.6090637377180065,
+      "relative_delta_rms": 0.46983805777096915,
+      "cosine_mean": 0.8815676444398352,
+      "cosine_min": 0.7633900493366691
+    },
+    {
+      "layer": 21,
+      "tokens": 2,
+      "hidden_rms": 1.2787188226926731,
+      "delta_rms": 0.5943056362463596,
+      "relative_delta_rms": 0.4647664722686223,
+      "cosine_mean": 0.8824525482730481,
+      "cosine_min": 0.7651545886808514
+    },
+    {
+      "layer": 22,
+      "tokens": 2,
+      "hidden_rms": 1.2968512099933147,
+      "delta_rms": 0.5904446051744614,
+      "relative_delta_rms": 0.4552909390256922,
+      "cosine_mean": 0.8879047203599537,
+      "cosine_min": 0.7760576983334929
+    },
+    {
+      "layer": 23,
+      "tokens": 2,
+      "hidden_rms": 1.3370351420166535,
+      "delta_rms": 0.5861947537897596,
+      "relative_delta_rms": 0.43842883060321103,
+      "cosine_mean": 0.8898780014545984,
+      "cosine_min": 0.7800386241244569
+    },
+    {
+      "layer": 24,
+      "tokens": 2,
+      "hidden_rms": 1.363876489938766,
+      "delta_rms": 0.621198970546803,
+      "relative_delta_rms": 0.45546570758375116,
+      "cosine_mean": 0.8870106221604375,
+      "cosine_min": 0.7743195914242562
+    },
+    {
+      "layer": 25,
+      "tokens": 2,
+      "hidden_rms": 1.378412870328431,
+      "delta_rms": 0.6261783623848104,
+      "relative_delta_rms": 0.45427489532625476,
+      "cosine_mean": 0.8870718907607091,
+      "cosine_min": 0.7744337891856725
+    },
+    {
+      "layer": 26,
+      "tokens": 2,
+      "hidden_rms": 1.3300432470371835,
+      "delta_rms": 0.6343919713012319,
+      "relative_delta_rms": 0.476970935128921,
+      "cosine_mean": 0.8818529780439305,
+      "cosine_min": 0.7640319749921118
+    },
+    {
+      "layer": 27,
+      "tokens": 2,
+      "hidden_rms": 1.370024018275207,
+      "delta_rms": 0.6461273365996166,
+      "relative_delta_rms": 0.4716175249343871,
+      "cosine_mean": 0.8803180739639346,
+      "cosine_min": 0.7609419555415553
+    },
+    {
+      "layer": 28,
+      "tokens": 2,
+      "hidden_rms": 1.3997900300616868,
+      "delta_rms": 0.6642987402699526,
+      "relative_delta_rms": 0.4745702755438813,
+      "cosine_mean": 0.8729516939537916,
+      "cosine_min": 0.7461867888740469
+    },
+    {
+      "layer": 29,
+      "tokens": 2,
+      "hidden_rms": 1.4142500016187842,
+      "delta_rms": 0.6921130657857519,
+      "relative_delta_rms": 0.48938523245079923,
+      "cosine_mean": 0.867499254218316,
+      "cosine_min": 0.7352911517436901
+    },
+    {
+      "layer": 30,
+      "tokens": 2,
+      "hidden_rms": 1.4389341646985636,
+      "delta_rms": 0.770445887229727,
+      "relative_delta_rms": 0.5354281704688862,
+      "cosine_mean": 0.8488054426265612,
+      "cosine_min": 0.6979141891715378
+    },
+    {
+      "layer": 31,
+      "tokens": 2,
+      "hidden_rms": 1.321896029071835,
+      "delta_rms": 0.8494509791702278,
+      "relative_delta_rms": 0.6426004470008637,
+      "cosine_mean": 0.8131040439242033,
+      "cosine_min": 0.6900881738750809
+    },
+    {
+      "layer": 32,
+      "tokens": 2,
+      "hidden_rms": 1.3554478024861385,
+      "delta_rms": 0.8674294608320089,
+      "relative_delta_rms": 0.6399578495320771,
+      "cosine_mean": 0.8097727733997917,
+      "cosine_min": 0.6841501628913833
+    },
+    {
+      "layer": 33,
+      "tokens": 2,
+      "hidden_rms": 1.403123999613323,
+      "delta_rms": 0.939449721213844,
+      "relative_delta_rms": 0.6695414813464386,
+      "cosine_mean": 0.7911469908333624,
+      "cosine_min": 0.652053794173553
+    },
+    {
+      "layer": 34,
+      "tokens": 2,
+      "hidden_rms": 1.4203071986812177,
+      "delta_rms": 1.0049707675579338,
+      "relative_delta_rms": 0.7075728183952517,
+      "cosine_mean": 0.7655035977981156,
+      "cosine_min": 0.6179450621120227
+    },
+    {
+      "layer": 35,
+      "tokens": 2,
+      "hidden_rms": 1.492290028553616,
+      "delta_rms": 1.1142481904347288,
+      "relative_delta_rms": 0.7466699965252065,
+      "cosine_mean": 0.7406330736930817,
+      "cosine_min": 0.591733148462475
+    },
+    {
+      "layer": 36,
+      "tokens": 2,
+      "hidden_rms": 1.5597752638683948,
+      "delta_rms": 1.1483099770870393,
+      "relative_delta_rms": 0.7362021976416773,
+      "cosine_mean": 0.7453255599768519,
+      "cosine_min": 0.5735795379460944
+    },
+    {
+      "layer": 37,
+      "tokens": 2,
+      "hidden_rms": 1.5824051906386614,
+      "delta_rms": 1.2402360728250859,
+      "relative_delta_rms": 0.7837664336303931,
+      "cosine_mean": 0.7088569860819793,
+      "cosine_min": 0.5304457593877596
+    },
+    {
+      "layer": 38,
+      "tokens": 2,
+      "hidden_rms": 1.548684541763274,
+      "delta_rms": 1.2180370113763257,
+      "relative_delta_rms": 0.7864978170373642,
+      "cosine_mean": 0.6991812474238313,
+      "cosine_min": 0.55838287926843
+    },
+    {
+      "layer": 39,
+      "tokens": 1,
+      "hidden_rms": 1.3822953163784475,
+      "delta_rms": 1.2050858133736204,
+      "relative_delta_rms": 0.8718005473178423,
+      "cosine_mean": 0.6189054534244498,
+      "cosine_min": 0.6189054534244498
+    }
+  ],
+  "largest_relative_delta_layers": [
+    39,
+    38,
+    37,
+    35,
+    36,
+    34,
+    33,
+    31,
+    32,
+    9
+  ]
+}

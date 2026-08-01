@@ -1,0 +1,230 @@
+{
+  "format": "colorlm-multicap-short-gate-comparison-v1",
+  "baseline": {
+    "format": "colorlm-multicap-short-gate-score-v1",
+    "selection": "full",
+    "tasks": "D:\\project\\大模型ssd化\\fast16\\research\\v27_tool_protocol_bus\\tool_protocol_gate_v1.json",
+    "responses": "D:\\project\\大模型ssd化\\fast16\\research\\v27_tool_protocol_bus\\v17.baseline.responses.jsonl",
+    "complete": true,
+    "summary": {
+      "passed": 11,
+      "total": 12,
+      "per_dimension": {
+        "tools": {
+          "passed": 11,
+          "total": 12
+        }
+      }
+    },
+    "input_errors": {
+      "duplicates": [],
+      "unknown": []
+    },
+    "results": [
+      {
+        "id": "tool-read-range",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "tool-search-symbol",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "tool-write-note",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "tool-list-source",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "tool-run-check",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "tool-fetch-json",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "tool-move-artifact",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "tool-create-cache",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "tool-file-metadata",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "tool-replace-version",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "tool-git-diff",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "tool-ask-clarification",
+        "dimension": "tools",
+        "passed": false,
+        "detail": "tool_calls[0].function.arguments 不是合法 JSON"
+      }
+    ]
+  },
+  "candidate": {
+    "format": "colorlm-multicap-short-gate-score-v1",
+    "selection": "full",
+    "tasks": "D:\\project\\大模型ssd化\\fast16\\research\\v27_tool_protocol_bus\\tool_protocol_gate_v1.json",
+    "responses": "D:\\project\\大模型ssd化\\fast16\\research\\v27_tool_protocol_bus\\glm47.teacher.responses.jsonl",
+    "complete": true,
+    "summary": {
+      "passed": 12,
+      "total": 12,
+      "per_dimension": {
+        "tools": {
+          "passed": 12,
+          "total": 12
+        }
+      }
+    },
+    "input_errors": {
+      "duplicates": [],
+      "unknown": []
+    },
+    "results": [
+      {
+        "id": "tool-read-range",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "tool-search-symbol",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "tool-write-note",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "tool-list-source",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "tool-run-check",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "tool-fetch-json",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "tool-move-artifact",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "tool-create-cache",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "tool-file-metadata",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "tool-replace-version",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "tool-git-diff",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "tool-ask-clarification",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      }
+    ]
+  },
+  "paired": {
+    "wins": [
+      "tool-ask-clarification"
+    ],
+    "regressions": [],
+    "unchanged_pass": [
+      "tool-read-range",
+      "tool-search-symbol",
+      "tool-write-note",
+      "tool-list-source",
+      "tool-run-check",
+      "tool-fetch-json",
+      "tool-move-artifact",
+      "tool-create-cache",
+      "tool-file-metadata",
+      "tool-replace-version",
+      "tool-git-diff"
+    ],
+    "unchanged_fail": [],
+    "dimension_delta": {
+      "tools": 1
+    }
+  },
+  "target_dimensions": [
+    "tools"
+  ],
+  "missing_target_dimensions": [],
+  "decision": {
+    "generation_gate_pass": true,
+    "multidimensional_claim": false,
+    "external_requirements_still_needed": [
+      "关键 token 反事实 NLL 门",
+      "leave-one-task-out 方向门",
+      "alpha=0 物理旁路逐 token 等价",
+      "能力通过后的相邻资源和速度检查"
+    ]
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "format": "colorlm-sequence-policy-runtime-v2",
+  "formal": true,
+  "architecture": "ColorLMV4",
+  "mode": "dynamic-low-rank-bilinear",
+  "hidden_size": 2048,
+  "embedding_size": 2048,
+  "base_vocab_size": 248320,
+  "rank": 32,
+  "candidate_capacity": 256,
+  "static_token_count": 16,
+  "hidden_normalization": "per-sample-l2",
+  "embedding_normalization": "per-token-l2",
+  "correction_min": -2.0,
+  "correction_max": 8.0,
+  "source_contract_sha256": "e32ff03efe1b4d491dcb717e469efb5fcf24b24cd3b9f22b0d6cfea78673390b",
+  "source_gate_report_sha256": "3a1bb8acc39421a00ca8c02b2efa0725c0763148e13a7e19861052d37dad1908",
+  "runtime_layout": "single-aligned-tensor-blob-v1",
+  "alignment": 64,
+  "tensor_count": 3,
+  "tensors": [
+    {
+      "name": "policy.left",
+      "dtype": "F32",
+      "ggml_shape": [
+        2048,
+        32
+      ],
+      "offset": 0,
+      "bytes": 262144,
+      "sha256": "3e6eda8372b3cacc9dab21488c3637bd9c0b381c2e96ef1e609a16d991f21135"
+    },
+    {
+      "name": "policy.right",
+      "dtype": "F32",
+      "ggml_shape": [
+        2048,
+        32
+      ],
+      "offset": 262144,
+      "bytes": 262144,
+      "sha256": "b81ae6e0bdb6f17be414b06c9a7033c8c67333e46687ba6ced6c2f28dce927b0"
+    },
+    {
+      "name": "policy.static_ids",
+      "dtype": "I64",
+      "ggml_shape": [
+        16
+      ],
+      "offset": 524288,
+      "bytes": 128,
+      "sha256": "253f65518e496fbabe44e8e36717fcf89aea70368775bc942f9042a9dc419a58"
+    }
+  ],
+  "weights": {
+    "file": "weights.bin",
+    "bytes": 524416,
+    "sha256": "a92b815640ce56bfd70bca1067df95b06762cf17ed0e82a46d031435c0792ec8"
+  }
+}

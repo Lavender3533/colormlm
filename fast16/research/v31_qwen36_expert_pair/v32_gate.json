@@ -1,0 +1,70 @@
+{
+  "format": "colormlm-v32-independent-short-gate-v1",
+  "date": "2026-08-01",
+  "frozen_before_generation": true,
+  "purpose": "独立检查Qwen3.6终端连续段是否产生跨能力净改善。",
+  "dimensions": ["reasoning", "knowledge", "long_context", "coding", "tools", "planning", "computer_use", "communication"],
+  "items": [
+    {
+      "id": "reasoning-two-branch-v32",
+      "dimension": "reasoning",
+      "max_output_tokens": 24,
+      "prompt": "令x=11。先减3；若结果能被4整除则乘2，否则加5；最后减1。只输出{\"answer\":整数,\"branch\":字符串}，branch只能是multiply或add。",
+      "validator": {"type": "exact_json", "expected": {"answer": 15, "branch": "multiply"}}
+    },
+    {
+      "id": "knowledge-conflict-abstain-v32",
+      "dimension": "knowledge",
+      "max_output_tokens": 36,
+      "prompt": "冻结记录：S1称Quartz端口是7401；S2称Quartz端口是7409；两条记录同级且没有时间信息。只输出{\"port\":null,\"status\":\"conflict\",\"sources\":[\"S1\",\"S2\"]}。",
+      "validator": {"type": "exact_json", "expected": {"port": null, "status": "conflict", "sources": ["S1", "S2"]}}
+    },
+    {
+      "id": "long-context-revision-and-state-v32",
+      "dimension": "long_context",
+      "max_output_tokens": 32,
+      "prompt": "条目A mode=safe rev2。条目B owner=Lin rev9。条目C mode=fast rev5但state=withdrawn。条目D timeout=30 rev4。条目E mode=balanced rev6且state=active。条目F timeout=20 rev8。规则：忽略withdrawn；每字段取rev最大。只输出{\"mode\":字符串,\"timeout\":整数}。",
+      "validator": {"type": "exact_json", "expected": {"mode": "balanced", "timeout": 20}}
+    },
+    {
+      "id": "coding-python-boundary-v32",
+      "dimension": "coding",
+      "max_output_tokens": 32,
+      "prompt": "Python代码for i in range(len(items)+1):会在最后一次访问items[i]时越界。只输出合法JSON：{\"replacement\":字符串,\"property\":字符串}；replacement写完整修复循环头，property写upper_exclusive。",
+      "validator": {"type": "exact_json", "expected": {"replacement": "for i in range(len(items)):", "property": "upper_exclusive"}}
+    },
+    {
+      "id": "tools-replace-text-v32",
+      "dimension": "tools",
+      "max_output_tokens": 64,
+      "prompt": "可用工具只有replace_text(path:string,old:string,new:string)。把config/app.toml中的port = 7000替换为port = 7100。不要输出文本，只发起一次工具调用。",
+      "validator": {
+        "type": "tool_call",
+        "expected_name": "replace_text",
+        "expected_arguments": {"path": "config/app.toml", "old": "port = 7000", "new": "port = 7100"},
+        "expected_finish_reason": "tool_calls"
+      }
+    },
+    {
+      "id": "planning-budget-dependency-v32",
+      "dimension": "planning",
+      "max_output_tokens": 40,
+      "prompt": "预算6。A成本2价值3；B成本3价值5但依赖A；C成本4价值5；D成本1价值1。选择项目使价值最大，选择B时必须同时选择A。价值相同取成本更低。只输出{\"choose\":[按字母排序],\"cost\":整数,\"value\":整数}。",
+      "validator": {"type": "exact_json", "expected": {"choose": ["A", "B", "D"], "cost": 6, "value": 9}}
+    },
+    {
+      "id": "computer-use-unsaved-close-v32",
+      "dimension": "computer_use",
+      "max_output_tokens": 72,
+      "prompt": "离线界面：编辑器有未保存修改；目标是保存并关闭；Save按钮可用，Close按钮可用；点击Close前必须先保存。只输出{\"actions\":[动作]}，每个动作格式{\"action\":\"click\",\"target\":标签}，不要解释。",
+      "validator": {"type": "exact_json", "expected": {"actions": [{"action": "click", "target": "Save"}, {"action": "click", "target": "Close"}]}}
+    },
+    {
+      "id": "communication-two-facts-v32",
+      "dimension": "communication",
+      "max_output_tokens": 32,
+      "prompt": "当前事实：构建完成；验证未通过。只输出合法JSON，字段必须且只能是build和validation，对应字符串done和failed。",
+      "validator": {"type": "exact_json", "expected": {"build": "done", "validation": "failed"}}
+    }
+  ]
+}

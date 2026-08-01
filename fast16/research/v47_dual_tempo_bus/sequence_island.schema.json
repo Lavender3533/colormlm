@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "colorlm-v47-sequence-island-record-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format", "task_id", "group_id", "template_cluster_id", "split",
+    "capability", "target_mode", "target_text", "target_token_ids",
+    "capture_record", "prefix_sha256"
+  ],
+  "properties": {
+    "format": {"const": "colorlm-v47-sequence-record-v1"},
+    "task_id": {"type": "string", "minLength": 1},
+    "group_id": {"type": "string", "minLength": 1},
+    "template_cluster_id": {"type": "string", "minLength": 1},
+    "split": {"enum": ["train", "validation", "blind"]},
+    "capability": {"type": "string", "minLength": 1},
+    "target_mode": {"enum": ["exact_token_sequence", "frontend_design_ir", "action_graph"]},
+    "target_text": {"type": "string", "minLength": 1},
+    "target_token_ids": {
+      "type": "array", "minItems": 1, "maxItems": 512,
+      "items": {"type": "integer", "minimum": 0}
+    },
+    "capture_record": {"type": "integer", "minimum": 0},
+    "prefix_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "source_task_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "metadata": {"type": "object"}
+  }
+}
+

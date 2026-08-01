@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Design Genome v1（llama.cpp grammar 兼容）",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "q", "y", "l", "c", "x", "r", "a", "z"],
+  "properties": {
+    "v": {"type": "string", "enum": ["dg1"]},
+    "q": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": [
+        {"type": "integer", "minimum": 0, "maximum": 63},
+        {"type": "integer", "minimum": 0, "maximum": 63}
+      ]
+    },
+    "y": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": [
+        {"type": "string", "enum": ["light", "dark", "paper"]},
+        {"type": "string", "enum": ["cyan", "indigo", "coral", "green", "amber", "violet", "blue"]},
+        {"type": "string", "enum": ["compact", "normal", "airy"]},
+        {"type": "string", "enum": ["square", "soft", "round"]}
+      ]
+    },
+    "l": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": [
+        {"type": "string", "enum": ["dashboard", "editorial", "timeline", "split", "docs", "settings", "schedule", "story"]},
+        {"type": "string", "enum": ["stack", "cards", "drawer", "accordion"]},
+        {"type": "integer", "minimum": 0, "maximum": 2}
+      ]
+    },
+    "c": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": [
+        {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"type": "string", "enum": ["hero", "sidebar", "metrics"]}, {"type": "string", "enum": ["plain", "editorial", "story", "docs", "settings", "ops", "generic"]}]},
+        {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"type": "string", "enum": ["filters", "toggles", "tabs", "form"]}, {"type": "string", "enum": ["status", "catalog", "project", "date-stage", "year", "generic", "privacy", "language", "search"]}]},
+        {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"type": "string", "enum": ["table", "products", "timeline", "form", "code", "schedule", "chart"]}, {"type": "string", "enum": ["ops", "devices", "data", "generic", "magazine", "catalog", "case-study", "process", "booking", "request", "response", "stages", "year-series", "spark"]}]},
+        {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"type": "string", "enum": ["drawer", "dialog", "compare", "tabs", "table"]}, {"type": "string", "enum": ["detail", "navigation", "confirm", "preview", "danger", "success", "before-after", "range", "response", "generic", "data"]}]},
+        {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"type": "string", "enum": ["metrics", "note", "bag", "dialog", "drawer", "code"]}, {"type": "string", "enum": ["ops", "story", "generic", "source", "method", "counter", "confirm", "success", "danger", "navigation", "detail", "response"]}]}
+      ]
+    },
+    "x": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": [
+        {"type": "string", "enum": ["filter", "sort", "year", "navigate", "none"]},
+        {"type": "string", "enum": ["open", "compare", "tab", "accordion", "inspect", "none"]},
+        {"type": "string", "enum": ["confirm", "count", "validate", "copy", "favorite", "none"]},
+        {"type": "string", "enum": ["reset", "toggle", "sort", "announce", "save", "none"]}
+      ]
+    },
+    "r": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": [
+        {"type": "string", "enum": ["table>cards", "grid>stack", "schedule>accordion", "chart>scroll", "code>scroll"]},
+        {"type": "string", "enum": ["drawer>full", "aside>drawer", "none"]}
+      ]
+    },
+    "a": {"type": "integer", "minimum": 15, "maximum": 255},
+    "z": {"type": "string", "enum": ["inline", "none"]}
+  }
+}

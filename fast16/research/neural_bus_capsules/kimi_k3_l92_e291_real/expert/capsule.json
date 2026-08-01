@@ -1,0 +1,106 @@
+{
+  "format": "colorlm-kimi-k3-expert-capsule-v1",
+  "repo": "moonshotai/Kimi-K3",
+  "revision": "master",
+  "layer": 92,
+  "expert": 291,
+  "source_shard": "model-00093-of-000096.safetensors",
+  "source_http_range": {
+    "start": 4600273128,
+    "end_inclusive": 4617820391,
+    "bytes": 17547264
+  },
+  "source_quantization": "MXFP4 E2M1 + E8M0 scale",
+  "group_size": 32,
+  "nibble_order": "low_then_high_interleaved",
+  "scale_equation": "value * 2**(scale_u8 - 127)",
+  "raw_capsule": {
+    "path": "expert.mxfp4.bin",
+    "bytes": 17547264,
+    "sha256": "07d5aab872d00b75ec595800b5f074847b3b01a00a96d229a01d8b9a49462eea",
+    "downloaded": true,
+    "source_validator": {
+      "header": "ETag",
+      "value": "\"DA15EF95A922CBBF3305A6A8D013678E-400\""
+    },
+    "source_shard_bytes": 16567507176
+  },
+  "matrix_mapping": {
+    "w1": "gate",
+    "w3": "up",
+    "w2": "down"
+  },
+  "matrix_orientation": "pytorch-linear-out-in",
+  "latent_input_width": 3584,
+  "intermediate_width": 3072,
+  "activation": {
+    "name": "situ",
+    "beta": 4.0,
+    "linear_beta": 25.0,
+    "equation": "beta*tanh(gate/beta)*sigmoid(gate) * linear_beta*tanh(up/linear_beta)"
+  },
+  "computation_contract": "down @ ((beta*tanh((gate@x)/beta)*sigmoid(gate@x)) * (linear_beta*tanh((up@x)/linear_beta)))",
+  "requires_outer_latent_bridge": true,
+  "matrices": {
+    "gate": {
+      "source_weight": "w1",
+      "file": "gate.f16.npy",
+      "dtype": "float16",
+      "shape": [
+        3072,
+        3584
+      ],
+      "orientation": "pytorch-linear-out-in",
+      "bytes": 22020224,
+      "sha256": "4cc477c194b6c9ded67735d48dcaf484f21a05d55ac1528b52dfa127aef744c8",
+      "raw_sha256": "07d5aab872d00b75ec595800b5f074847b3b01a00a96d229a01d8b9a49462eea",
+      "decoder_contract": "colorlm-kimi-k3-mxfp4-decoder-v1",
+      "decode_stats": {
+        "min": -0.1875,
+        "max": 0.1875,
+        "rms": 0.02377309753412181,
+        "nonzero": 9732522
+      }
+    },
+    "up": {
+      "source_weight": "w3",
+      "file": "up.f16.npy",
+      "dtype": "float16",
+      "shape": [
+        3072,
+        3584
+      ],
+      "orientation": "pytorch-linear-out-in",
+      "bytes": 22020224,
+      "sha256": "32b4e04bc7dbe00b9d2a0f7fc3e157bcc12aac8f94d01f97b354aac83ec9e9bc",
+      "raw_sha256": "07d5aab872d00b75ec595800b5f074847b3b01a00a96d229a01d8b9a49462eea",
+      "decoder_contract": "colorlm-kimi-k3-mxfp4-decoder-v1",
+      "decode_stats": {
+        "min": -0.1875,
+        "max": 0.125,
+        "rms": 0.024496988302024385,
+        "nonzero": 9736387
+      }
+    },
+    "down": {
+      "source_weight": "w2",
+      "file": "down.f16.npy",
+      "dtype": "float16",
+      "shape": [
+        3584,
+        3072
+      ],
+      "orientation": "pytorch-linear-out-in",
+      "bytes": 22020224,
+      "sha256": "2ecfeb42de3547bdd9cef526f30e0032dc1da12874deabe18502a9ae60f596ae",
+      "raw_sha256": "07d5aab872d00b75ec595800b5f074847b3b01a00a96d229a01d8b9a49462eea",
+      "decoder_contract": "colorlm-kimi-k3-mxfp4-decoder-v1",
+      "decode_stats": {
+        "min": -0.125,
+        "max": 0.125,
+        "rms": 0.025207945927987835,
+        "nonzero": 9735720
+      }
+    }
+  }
+}

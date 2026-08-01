@@ -1,0 +1,22 @@
+{
+  "format": "colorlm-v18-single-model-capture-run-v1",
+  "result": "ok",
+  "error": null,
+  "model": "D:\\project\\大模型ssd化\\fast16\\models\\GLM-4.7-Flash-Q5_K_M.gguf",
+  "model_bytes": 21408850272,
+  "alias": "GLM-4.7-v22-Agent-Capture",
+  "server": "D:\\project\\大模型ssd化\\llama.cpp\\build-v17-perf\\bin\\Release\\llama-server.exe",
+  "port": 8124,
+  "gpu_layers": 99,
+  "cpu_moe_layers": 38,
+  "pid": 25312,
+  "tensor": "^l_out-42$",
+  "layer": 42,
+  "stage": "l_out",
+  "dump": "D:\\project\\大模型ssd化\\fast16\\research\\v22_glm_agent_bridge\\captures\\glm_l42.bin",
+  "receipt": "D:\\project\\大模型ssd化\\fast16\\research\\v22_glm_agent_bridge\\captures\\glm_l42.receipt.json",
+  "collect_return_code": 0,
+  "elapsed_seconds": 59.328,
+  "stdout_log": "D:\\project\\大模型ssd化\\fast16\\research\\v22_glm_agent_bridge\\captures\\glm_l42.receipt.server.stdout.log",
+  "stderr_log": "D:\\project\\大模型ssd化\\fast16\\research\\v22_glm_agent_bridge\\captures\\glm_l42.receipt.server.stderr.log"
+}

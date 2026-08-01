@@ -1,0 +1,152 @@
+{
+  "format": "colorlm-v13-intelligence-router-v1",
+  "status": "rejected_control",
+  "classes": [
+    "no_op",
+    "coder",
+    "k3"
+  ],
+  "input": {
+    "tensor": "attn_post_norm",
+    "transform": "per-token-l2-unit",
+    "n_embd": 2048,
+    "sites": [
+      28
+    ],
+    "hidden_sidecar_sites": [
+      12,
+      28
+    ]
+  },
+  "supervision": {
+    "applies_to_sites": [
+      28
+    ],
+    "scope": "single_site",
+    "routes": [
+      "no_op",
+      "coder",
+      "k3"
+    ]
+  },
+  "label": "argmin exact counterfactual next-token NLL",
+  "margin": 0.0001,
+  "sample_accounting": {
+    "teacher_total": 72,
+    "selected": 55,
+    "censored": 0,
+    "low_margin": 17,
+    "class_counts": {
+      "no_op": 17,
+      "coder": 16,
+      "k3": 22
+    },
+    "mean_margin": 0.0800849546842404
+  },
+  "split": {
+    "kind": "task_group",
+    "train": 40,
+    "heldout": 15,
+    "seed": 10
+  },
+  "optimizer": {
+    "name": "full-batch Adam softmax regression",
+    "epochs": 200,
+    "learning_rate": 0.03,
+    "l2": 0.001
+  },
+  "artifact_fit_scope": "train_tasks_only",
+  "heldout_used_in_fit": false,
+  "independent_final_test_required_before_full_data_refit": true,
+  "sites": [
+    {
+      "site": 28,
+      "train_accuracy": 1.0,
+      "heldout_accuracy": 0.26666666666666666,
+      "majority_route": "k3",
+      "majority_heldout_accuracy": 0.4666666666666667,
+      "always_no_op_heldout_accuracy": 0.26666666666666666,
+      "required_lift": 0.1,
+      "promotable": false,
+      "train_loss": 0.3131815195083618,
+      "artifact_fit_scope": "train_tasks_only",
+      "heldout_used_in_fit": false,
+      "independent_final_test_required_before_full_data_refit": true
+    }
+  ],
+  "artifacts": [
+    {
+      "site": 28,
+      "directory": "layer_28",
+      "manifest": "router.json",
+      "manifest_sha256": "a730ac7028ad98eec0f4f9f9b71ed6395d2c75c37c45dc83197a4236483733c9",
+      "weight": {
+        "file": "weight.f32",
+        "dtype": "float32-le",
+        "ggml_shape": [
+          2048,
+          3
+        ],
+        "bytes": 24576,
+        "sha256": "e5334c252e5f2316047da7c1c408923757ede52a7756eebd61ec1b8890dead14"
+      },
+      "bias": {
+        "file": "bias.f32",
+        "dtype": "float32-le",
+        "ggml_shape": [
+          3
+        ],
+        "bytes": 12,
+        "sha256": "5a1807b83d92fe887055a9574d2a9bc837f9942d58e976ee970e2ab7b27655a0"
+      }
+    }
+  ],
+  "source_teacher_sha256": "f078f7fc6ad3f6a7331139b4d3626a1ef773cb176fdaa0a02003140ccc306382",
+  "source_teacher_manifest": "D:\\project\\大模型ssd化\\fast16\\research\\v13_live\\teacher_v2.jsonl.manifest.json",
+  "source_teacher_manifest_sha256": "db7559827ff131836b323addcf8e123c25b9145c440894630d0b59d464052b37",
+  "source_shards": [
+    {
+      "route": "no_op",
+      "file": "D:\\project\\大模型ssd化\\fast16\\research\\v13_live\\no_op_v2.jsonl",
+      "sha256": "ca1f5d1e2922e8fb5b5c951e152d9b5db8420acf01f9d441e09e379e5279f83f",
+      "manifest": "D:\\project\\大模型ssd化\\fast16\\research\\v13_live\\no_op_v2.jsonl.manifest.json",
+      "manifest_sha256": "1dde241b59fb51a21770890c93a267e8ba7f4f06a1c92c27b7f16647eff0440a",
+      "expected_model": "ColorLM-v13-Calibrate-no_op"
+    },
+    {
+      "route": "coder",
+      "file": "D:\\project\\大模型ssd化\\fast16\\research\\v13_live\\l28_coder.jsonl",
+      "sha256": "e8b0c45e85906b969da0e150537810d4565c7b82ba364cdaa200d08249b28afe",
+      "manifest": "D:\\project\\大模型ssd化\\fast16\\research\\v13_live\\l28_coder.jsonl.manifest.json",
+      "manifest_sha256": "57829c1f25931e2908ddbb62b384b9d17c50874f48958a9d1705df1ac4eb8b2a",
+      "expected_model": "ColorLM-v13-L12-no_op-L28-coder"
+    },
+    {
+      "route": "k3",
+      "file": "D:\\project\\大模型ssd化\\fast16\\research\\v13_live\\l28_k3.jsonl",
+      "sha256": "804d8dd3cbb08f846617ce464be8856ab3a7d211d6f06e90edcbf94a2aa88d83",
+      "manifest": "D:\\project\\大模型ssd化\\fast16\\research\\v13_live\\l28_k3.jsonl.manifest.json",
+      "manifest_sha256": "d29579d6db9644a452fa12dde60eec7e99ff8eae80680170f55b67cf49e45036",
+      "expected_model": "ColorLM-v13-L12-no_op-L28-k3"
+    }
+  ],
+  "integrity_verification": {
+    "status": "passed",
+    "route_shards": "format, route, filename, SHA-256, counts, exact coverage and rows",
+    "teacher": "path, manifest format, SHA-256, sample count and sample identity",
+    "server_aliases": "expected model present for every route",
+    "hidden_sidecar": "SHA-256, sites, n_embd, sample order, shapes and finite values"
+  },
+  "runtime_contract": {
+    "logits": "W @ l2_unit(attn_post_norm) + bias",
+    "probabilities": "softmax(logits)",
+    "no_op": "must create no residual nodes when selected by a future lazy executor",
+    "current_runtime_support": true,
+    "execution": "dense-residual-v1"
+  },
+  "runtime_plan": {
+    "generated": false,
+    "reason": "at least one selected site did not exceed the heldout control gate",
+    "file": null
+  }
+}

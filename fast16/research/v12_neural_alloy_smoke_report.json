@@ -1,0 +1,80 @@
+{
+  "format": "colorlm-v12-neural-alloy-smoke-report-v1",
+  "model": "ColorLM-v12-Neural-Alloy",
+  "date": "2026-07-29",
+  "gpu": "Vulkan0 / AMD Radeon RX 5700 XT",
+  "context": 32768,
+  "single_process_single_graph": true,
+  "alloy_plan_sha256": "588145eaf57de0b6a5fbae43470497816c2d97b5ef6cd30fe8f79b6cf8c7e67f",
+  "core": {
+    "file": "ColorLM-v6-Q3Router-Fused-A1.gguf",
+    "actual_sha256": "bc94febd230212cd157000777240dd2562b9a2561b5d28e861f543c2e74cb2e5",
+    "full_file_hash_verified": true,
+    "baked_donors": [
+      {
+        "donor": "GLM-4.7-Flash-Q5_K_M.gguf",
+        "mechanism": "120 materialized shared-expert tensors across 40 layers",
+        "lineage_manifest_sha256": "a90c2d8c11ab5562ab8d5e88a4d9cc16cab6e35144bee2ea79b57fc7e12c8952"
+      },
+      {
+        "donor": "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
+        "mechanism": "40 q3-g64 full-rank router deltas compiled into the core GGUF",
+        "lineage_manifest_sha256": "7cd95c91ecfeabd6e3961ca72f59bc4acd20289a2b9b37dcfb1acd8e8cd4d447"
+      }
+    ]
+  },
+  "runtime": {
+    "llama_dll_sha256": "dd5d61924b49fd62ff1fec3e98e473b1209e059cba34da9380bbcf5fbb704640",
+    "llama_server_sha256": "6a9be8372f55c635a8610c68455068db48c6d1c08367091443334cffbb312ff5",
+    "plan_driven": true,
+    "coder_q4_manifest_and_tensor_sha256": "enforced_by_cpp_loader"
+  },
+  "runtime_donors": [
+    {
+      "donor": "Qwen/Qwen3-Coder-Next L47/E471",
+      "device": "Vulkan0",
+      "prefill_residuals": [
+        {"colorlm_layer": 12, "rms": 0.00047266, "finite": true, "nonzero": true},
+        {"colorlm_layer": 28, "rms": 0.00014522, "finite": true, "nonzero": true}
+      ]
+    },
+    {
+      "donor": "moonshotai/Kimi-K3",
+      "device": "Vulkan0",
+      "candidates": ["L28/E41", "L28/E780", "L65/E539", "L65/E752"],
+      "prefill_routes": [
+        {"colorlm_layer": 12, "candidate_0": 0.364101, "candidate_1": 0.353860, "no_op": 0.282039},
+        {"colorlm_layer": 28, "candidate_0": 0.370581, "candidate_1": 0.366257, "no_op": 0.263162}
+      ],
+      "prefill_residuals": [
+        {"colorlm_layer": 12, "rms": 0.00005429, "finite": true, "nonzero": true},
+        {"colorlm_layer": 28, "rms": 0.00005618, "finite": true, "nonzero": true}
+      ]
+    }
+  ],
+  "request": {
+    "prompt": "只回复：你好",
+    "response": "你好",
+    "prompt_tokens": 16,
+    "completion_tokens": 2,
+    "prompt_tokens_per_second": 42.53,
+    "generation_tokens_per_second": 37.51,
+    "wall_seconds": 0.551
+  },
+  "gates": {
+    "alloy_plan_consumed_by_launcher": "passed",
+    "alloy_plan_static_contract": "passed",
+    "full_core_sha256_on_release_start": "passed",
+    "coder_manifest_and_tensor_sha256": "passed",
+    "cli_zero_alpha_rollback_contract": "passed_without_model_start",
+    "v12_alias": "passed",
+    "32768_context": "passed",
+    "vulkan": "passed",
+    "full_core_sha256": "passed",
+    "coder_residual_nonzero": "passed",
+    "four_k3_candidates_loaded": "passed",
+    "k3_soft_route_non_degenerate": "passed",
+    "long_benchmark": "not_run_by_design"
+  },
+  "scope": "This smoke proves the v12 multi-donor execution contract, not a broad intelligence ranking."
+}

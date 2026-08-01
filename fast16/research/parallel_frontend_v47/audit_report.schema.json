@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://colorlm.local/schemas/parallel-frontend-audit-report-v1.json",
+  "title": "ColorLM v47 前端静态审计报告",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "contract_version", "scorer_version", "source_root", "sample_count", "ranking", "items"],
+  "properties": {
+    "schema_version": {"const": "parallel-frontend-audit-report-v1"},
+    "contract_version": {"const": "parallel-frontend-contract-v1"},
+    "scorer_version": {"type": "string", "minLength": 1},
+    "source_root": {"type": ["string", "null"]},
+    "sample_count": {"type": "integer", "minimum": 1},
+    "ranking": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rank", "file", "final_score"],
+        "properties": {
+          "rank": {"type": "integer", "minimum": 1},
+          "file": {"type": "string", "minLength": 1},
+          "final_score": {"type": "number", "minimum": 0, "maximum": 100}
+        }
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["schema_version", "scorer_version", "file", "sha256", "bytes", "encoding", "summary", "dimensions", "template_penalty", "inventory", "findings", "limitations"],
+        "properties": {
+          "schema_version": {"const": "parallel-frontend-audit-item-v1"},
+          "file": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "bytes": {"type": "integer", "minimum": 0},
+          "summary": {
+            "type": "object",
+            "required": ["gross_score", "template_penalty", "final_score", "tier"],
+            "properties": {
+              "gross_score": {"type": "number", "minimum": 0, "maximum": 100},
+              "template_penalty": {"type": "number", "minimum": 0, "maximum": 20},
+              "final_score": {"type": "number", "minimum": 0, "maximum": 100},
+              "tier": {"enum": ["advanced", "competent", "template_or_incomplete"]}
+            }
+          },
+          "dimensions": {"type": "object"},
+          "template_penalty": {"type": "object"},
+          "inventory": {"type": "object"},
+          "findings": {"type": "array"},
+          "limitations": {"type": "array"}
+        }
+      }
+    }
+  }
+}

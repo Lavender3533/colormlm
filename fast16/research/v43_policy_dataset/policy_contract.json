@@ -1,0 +1,45 @@
+{
+  "format": "colorlm-v43-paired-policy-contract-v1",
+  "date": "2026-08-01",
+  "role": "preregistered-before-v43-model-capture",
+  "base_model": "fast16/models/ColorLM-v36-Qwen36-Global-Shared-Backbone.gguf",
+  "source_tasks": "fast16/research/v43_policy_dataset/trajectory_tasks_v1.jsonl",
+  "source_tasks_sha256": "a4ee853502a1326800b89d7cacd27fdf7b48266ad664d5b23cb14f8f6c2b2fcb",
+  "source_oracle": "fast16/research/v43_policy_dataset/trajectory_oracle_v1.jsonl",
+  "source_oracle_sha256": "bd1d18c03e2dd8643079b741230678aa9d2fa92271e4585b777e96054b3bbf02",
+  "source_candidate_policy": "fast16/research/v29_sequence_policy_head/runtime-v1/policy.json",
+  "source_candidate_policy_sha256": "c647b614aaf9d28e2fb451df0c3e70b79cd3ae387c9407316307f9f88bbc914f",
+  "source_candidate_weights_sha256": "5e649b4fbbaed446906f790c2074a9cedb953f72e6cb739b78a26806521654cc",
+  "teacher": {
+    "maximum_target_tokens_per_task": 6,
+    "maximum_prefix_tokens": 4096
+  },
+  "fit": {
+    "family": "train-only-pca-multiclass-ridge-with-explicit-no-op",
+    "hidden_normalization": "per-sample-l2",
+    "candidate_source": "fixed-v29-allowlist-intersect-train-tokens",
+    "minimum_distinct_train_groups_per_candidate": 3,
+    "pca_rank": 8,
+    "ridge_lambda": 0.1,
+    "correction_strength": 12.0,
+    "no_op_rule": "exact-no-op-iff-class-0-is-argmax",
+    "parameter_scan_allowed_after_capture": false,
+    "development_source": "consumed-v39-20-task-capture-only"
+  },
+  "offline_gate": {
+    "validation_mean_target_nll_delta_max": -0.01,
+    "test_mean_target_nll_delta_max": -0.01,
+    "minimum_task_wins_minus_losses": 2,
+    "maximum_task_mean_nll_regression": 0.03,
+    "minimum_exact_no_op_rate": 0.1,
+    "maximum_exact_no_op_rate": 0.9
+  },
+  "runtime_gate": {
+    "test_tasks": 24,
+    "minimum_net_fixes": 3,
+    "maximum_regressions": 1,
+    "no_tools_physical_bypass": true,
+    "maximum_speed_regression": 0.05
+  },
+  "failure_action": "stop v43 policy candidate; retain frozen dataset and do not scan against validation/test"
+}

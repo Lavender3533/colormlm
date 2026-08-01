@@ -1,0 +1,17 @@
+{
+  "format": "colorlm-v47-frontend-deterministic-tail-compile-v1",
+  "status": "development_hybrid_not_pure_model_output",
+  "source": "D:\\project\\大模型ssd化\\fast16\\research\\v47_dual_tempo_bus\\frontend_ir_ab_train01_retry1\\candidate.html.failed.txt",
+  "source_bytes": 15068,
+  "output_bytes": 16470,
+  "truncated_duplicate_function_removed": true,
+  "deterministic_repairs": [
+    "drawer_and_modal_class_state",
+    "mobile_card_class",
+    "status_and_region_filters",
+    "keyboard_sort_and_escape",
+    "focus_visible_and_live_status",
+    "document_closure"
+  ],
+  "pure_model_claim_allowed": false
+}

@@ -1,0 +1,70 @@
+{
+  "format": "colormlm-v33-independent-short-gate-v1",
+  "date": "2026-08-01",
+  "frozen_before_generation": true,
+  "purpose": "独立检查40层Qwen3.6 MoE核心与ColorLM状态主干混合后的净能力。",
+  "dimensions": ["reasoning", "knowledge", "long_context", "coding", "tools", "planning", "computer_use", "communication"],
+  "items": [
+    {
+      "id": "reasoning-boolean-chain-v33",
+      "dimension": "reasoning",
+      "max_output_tokens": 32,
+      "prompt": "条件：P与Q恰有一个为真；Q与R真假相同；R为假。只输出{\"P\":布尔值,\"Q\":布尔值,\"R\":布尔值}。",
+      "validator": {"type": "exact_json", "expected": {"P": true, "Q": false, "R": false}}
+    },
+    {
+      "id": "knowledge-precedence-v33",
+      "dimension": "knowledge",
+      "max_output_tokens": 32,
+      "prompt": "只依据记录：F1未签名草稿称代号为M4；F2已签名正式记录称代号为N7；F3旧正式记录称代号为K2。规则：已签名优先于草稿；同级取明确标记为当前的F2。只输出{\"code\":字符串,\"source\":字符串}。",
+      "validator": {"type": "exact_json", "expected": {"code": "N7", "source": "F2"}}
+    },
+    {
+      "id": "long-context-multi-field-v33",
+      "dimension": "long_context",
+      "max_output_tokens": 36,
+      "prompt": "日志1 region=west rev2。日志2 quota=80 rev3。日志3 owner=Mei rev9。日志4 quota=120 rev8 state=cancelled。日志5 region=east rev6 state=active。日志6 quota=96 rev7 state=active。日志7 region=north rev5。规则：忽略cancelled；每字段取rev最大。只输出{\"region\":字符串,\"quota\":整数}。",
+      "validator": {"type": "exact_json", "expected": {"region": "east", "quota": 96}}
+    },
+    {
+      "id": "coding-async-order-v33",
+      "dimension": "coding",
+      "max_output_tokens": 36,
+      "prompt": "Python异步函数中，results.append(fetch(url))错误地保存了协程对象而不是结果。只输出合法JSON：{\"replacement\":字符串,\"keyword\":字符串}；replacement是修复后的完整语句，keyword为await。",
+      "validator": {"type": "exact_json", "expected": {"replacement": "results.append(await fetch(url))", "keyword": "await"}}
+    },
+    {
+      "id": "tools-write-json-v33",
+      "dimension": "tools",
+      "max_output_tokens": 72,
+      "prompt": "可用工具只有write_json(path:string,content:string)。把精确内容{\"ok\":true}写到out/status.json。不要输出文本，只发起一次工具调用。",
+      "validator": {
+        "type": "tool_call",
+        "expected_name": "write_json",
+        "expected_arguments": {"path": "out/status.json", "content": "{\"ok\":true}"},
+        "expected_finish_reason": "tool_calls"
+      }
+    },
+    {
+      "id": "planning-dependent-knapsack-v33",
+      "dimension": "planning",
+      "max_output_tokens": 40,
+      "prompt": "预算7。A成本2价值3；B成本4价值7且依赖A；C成本5价值8；D成本1价值2。选中B必须同时选A。最大化价值，价值相同取成本更低。只输出{\"choose\":[按字母排序],\"cost\":整数,\"value\":整数}。",
+      "validator": {"type": "exact_json", "expected": {"choose": ["A", "B", "D"], "cost": 7, "value": 12}}
+    },
+    {
+      "id": "computer-use-download-warning-v33",
+      "dimension": "computer_use",
+      "max_output_tokens": 72,
+      "prompt": "离线界面：下载列表中report.pdf显示安全警告；目标是保留该文件；该行有More actions按钮，菜单项为Keep和Delete。只输出{\"actions\":[动作]}，动作格式{\"action\":\"click\",\"target\":标签}，不要解释。",
+      "validator": {"type": "exact_json", "expected": {"actions": [{"action": "click", "target": "More actions"}, {"action": "click", "target": "Keep"}]}}
+    },
+    {
+      "id": "communication-terminology-v33",
+      "dimension": "communication",
+      "max_output_tokens": 32,
+      "prompt": "用户规定把donor称为“供体”。事实：第三个供体仍在验证。只输出合法JSON，字段只能是term和status；term为供体，status为validating。",
+      "validator": {"type": "exact_json", "expected": {"term": "供体", "status": "validating"}}
+    }
+  ]
+}

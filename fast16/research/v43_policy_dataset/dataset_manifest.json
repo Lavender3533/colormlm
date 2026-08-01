@@ -1,0 +1,28 @@
+{
+  "format": "colorlm-v43-paired-policy-dataset-manifest-v1",
+  "generator": "generate_v43_pilot.py",
+  "generator_sha256": "5328ca3b91ec3a0bce3872e4a5f300047af0d93a4d7d414ab1ff258f19603165",
+  "dataset": "trajectory_tasks_v1.jsonl",
+  "dataset_sha256": "a4ee853502a1326800b89d7cacd27fdf7b48266ad664d5b23cb14f8f6c2b2fcb",
+  "oracle": "trajectory_oracle_v1.jsonl",
+  "oracle_sha256": "bd1d18c03e2dd8643079b741230678aa9d2fa92271e4585b777e96054b3bbf02",
+  "contract": "policy_contract.json",
+  "contract_sha256": "2d372a24bbfdf35a8ebd2a8126b4e276c1b27f459c8962b06001ef3431ae05a9",
+  "task_count": 120,
+  "group_count": 60,
+  "split_counts": {
+    "train": 72,
+    "validation": 24,
+    "test": 24
+  },
+  "capability_counts": {
+    "code_debugging": 20,
+    "computer_operation": 20,
+    "continue_or_finish": 20,
+    "missing_parameter_clarification": 20,
+    "multi_step_planning": 20,
+    "tool_argument_repair": 20
+  },
+  "group_leakage": 0,
+  "template_cluster_leakage": 0
+}

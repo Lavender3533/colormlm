@@ -1,0 +1,244 @@
+{
+  "format": "colorlm-multicap-short-gate-comparison-v1",
+  "baseline": {
+    "format": "colorlm-multicap-short-gate-score-v1",
+    "selection": "first_per_dimension",
+    "tasks": "D:\\project\\大模型ssd化\\fast16\\research\\parallel_b\\multicap_short_gate_v1.json",
+    "responses": "D:\\project\\大模型ssd化\\fast16\\research\\parallel_b\\runs\\v17.smoke8.responses.jsonl",
+    "complete": true,
+    "summary": {
+      "passed": 3,
+      "total": 8,
+      "per_dimension": {
+        "coding": {
+          "passed": 0,
+          "total": 1
+        },
+        "communication": {
+          "passed": 1,
+          "total": 1
+        },
+        "computer_use": {
+          "passed": 0,
+          "total": 1
+        },
+        "knowledge": {
+          "passed": 1,
+          "total": 1
+        },
+        "long_context": {
+          "passed": 1,
+          "total": 1
+        },
+        "planning": {
+          "passed": 0,
+          "total": 1
+        },
+        "reasoning": {
+          "passed": 0,
+          "total": 1
+        },
+        "tools": {
+          "passed": 0,
+          "total": 1
+        }
+      }
+    },
+    "input_errors": {
+      "duplicates": [],
+      "unknown": []
+    },
+    "results": [
+      {
+        "id": "reasoning-state-transition",
+        "dimension": "reasoning",
+        "passed": false,
+        "detail": "JSON 不匹配: actual={'answer': 23}"
+      },
+      {
+        "id": "knowledge-frozen-fact",
+        "dimension": "knowledge",
+        "passed": true,
+        "detail": "exact_json"
+      },
+      {
+        "id": "long-context-two-markers",
+        "dimension": "long_context",
+        "passed": true,
+        "detail": "exact_json"
+      },
+      {
+        "id": "coding-python-clamp-fix",
+        "dimension": "coding",
+        "passed": false,
+        "detail": "文本不匹配: actual='    return min(hi, max(lo, x))'"
+      },
+      {
+        "id": "tools-read-file",
+        "dimension": "tools",
+        "passed": false,
+        "detail": "tool_calls[0].function.arguments 不是合法 JSON"
+      },
+      {
+        "id": "planning-deploy-sequence",
+        "dimension": "planning",
+        "passed": false,
+        "detail": "JSON 不匹配: actual={'actions': ['验证新配置']}"
+      },
+      {
+        "id": "computer-use-save-dialog",
+        "dimension": "computer_use",
+        "passed": false,
+        "detail": "JSON 不匹配: actual={'actions': [{'action': 'type', 'target': 'Filename', 'value': 'report.txt'}]}"
+      },
+      {
+        "id": "communication-strict-format",
+        "dimension": "communication",
+        "passed": true,
+        "detail": "exact_json"
+      }
+    ]
+  },
+  "candidate": {
+    "format": "colorlm-multicap-short-gate-score-v1",
+    "selection": "first_per_dimension",
+    "tasks": "D:\\project\\大模型ssd化\\fast16\\research\\parallel_b\\multicap_short_gate_v1.json",
+    "responses": "D:\\project\\大模型ssd化\\fast16\\research\\parallel_b\\runs\\glm47.smoke8.responses.jsonl",
+    "complete": true,
+    "summary": {
+      "passed": 3,
+      "total": 8,
+      "per_dimension": {
+        "coding": {
+          "passed": 0,
+          "total": 1
+        },
+        "communication": {
+          "passed": 1,
+          "total": 1
+        },
+        "computer_use": {
+          "passed": 0,
+          "total": 1
+        },
+        "knowledge": {
+          "passed": 0,
+          "total": 1
+        },
+        "long_context": {
+          "passed": 1,
+          "total": 1
+        },
+        "planning": {
+          "passed": 0,
+          "total": 1
+        },
+        "reasoning": {
+          "passed": 0,
+          "total": 1
+        },
+        "tools": {
+          "passed": 1,
+          "total": 1
+        }
+      }
+    },
+    "input_errors": {
+      "duplicates": [],
+      "unknown": []
+    },
+    "results": [
+      {
+        "id": "reasoning-state-transition",
+        "dimension": "reasoning",
+        "passed": false,
+        "detail": "JSON 不匹配: actual={'answer': 34}"
+      },
+      {
+        "id": "knowledge-frozen-fact",
+        "dimension": "knowledge",
+        "passed": false,
+        "detail": "JSON 不匹配: actual={'answer': '北仓', 'sources': [2]}"
+      },
+      {
+        "id": "long-context-two-markers",
+        "dimension": "long_context",
+        "passed": true,
+        "detail": "exact_json"
+      },
+      {
+        "id": "coding-python-clamp-fix",
+        "dimension": "coding",
+        "passed": false,
+        "detail": "文本不匹配: actual='return min(max(x, lo), hi)'"
+      },
+      {
+        "id": "tools-read-file",
+        "dimension": "tools",
+        "passed": true,
+        "detail": "tool_call:openai"
+      },
+      {
+        "id": "planning-deploy-sequence",
+        "dimension": "planning",
+        "passed": false,
+        "detail": "JSON 不匹配: actual={'actions': ['验证新配置']}"
+      },
+      {
+        "id": "computer-use-save-dialog",
+        "dimension": "computer_use",
+        "passed": false,
+        "detail": "JSON 不匹配: actual={'actions': [{'action': 'type', 'target': '#filename', 'text': 'report.txt'}, {'action': 'click', 'target': '#save'}]}"
+      },
+      {
+        "id": "communication-strict-format",
+        "dimension": "communication",
+        "passed": true,
+        "detail": "exact_json"
+      }
+    ]
+  },
+  "paired": {
+    "wins": [
+      "tools-read-file"
+    ],
+    "regressions": [
+      "knowledge-frozen-fact"
+    ],
+    "unchanged_pass": [
+      "long-context-two-markers",
+      "communication-strict-format"
+    ],
+    "unchanged_fail": [
+      "reasoning-state-transition",
+      "coding-python-clamp-fix",
+      "planning-deploy-sequence",
+      "computer-use-save-dialog"
+    ],
+    "dimension_delta": {
+      "coding": 0,
+      "communication": 0,
+      "computer_use": 0,
+      "knowledge": -1,
+      "long_context": 0,
+      "planning": 0,
+      "reasoning": 0,
+      "tools": 1
+    }
+  },
+  "target_dimensions": [
+    "reasoning",
+    "planning"
+  ],
+  "missing_target_dimensions": [],
+  "decision": {
+    "generation_gate_pass": false,
+    "multidimensional_claim": false,
+    "external_requirements_still_needed": [
+      "关键 token 反事实 NLL 门",
+      "leave-one-task-out 方向门",
+      "alpha=0 物理旁路逐 token 等价",
+      "能力通过后的相邻资源和速度检查"
+    ]
+  }
+}

@@ -1,0 +1,140 @@
+{
+  "format": "colorlm-v19-dual-head-short-report-v1",
+  "date": "2026-07-31",
+  "baseline": "ColorLM-v17-Coder-Neural-Island",
+  "candidate": "ColorLM-v19-DualHead",
+  "runtime": {
+    "server": "llama.cpp/build-v19-dual-head/bin/Release/llama-server.exe",
+    "island": "fast16/research/v17_coder_island/runtime-v3/island.json",
+    "output_head": "fast16/research/v19_dual_head/runtime-head-v2",
+    "mapped_tokens": 131612,
+    "output_head_bytes": 222169248,
+    "output_head_device": "Vulkan0"
+  },
+  "physical_bypass": {
+    "alpha": 0.0,
+    "fixed_generation_token_equal": true,
+    "fixed_generation_token_count": 64,
+    "content_equal": true,
+    "paired_nll_count": 12,
+    "all_nll_exact": true,
+    "max_abs_nll_delta": 0.0
+  },
+  "nll_sweep": {
+    "teacher_sha256": "f078f7fc6ad3f6a7331139b4d3626a1ef773cb176fdaa0a02003140ccc306382",
+    "sample_count": 12,
+    "exact_coverage": 1.0,
+    "tasks": [
+      "code-close-elements",
+      "code-truncate"
+    ],
+    "points": [
+      {
+        "alpha": 0.0,
+        "mean_nll": 1.7680485213447052,
+        "median_nll": 0.2283514067530632,
+        "mean_delta": 0.0,
+        "median_delta": 0.0,
+        "improved": 0,
+        "regressed": 0,
+        "equal": 12
+      },
+      {
+        "alpha": 0.001,
+        "mean_nll": 1.7289303234235074,
+        "median_nll": 0.21903270296752453,
+        "mean_delta": -0.03911819792119786,
+        "median_delta": -0.00493413582444191,
+        "improved": 7,
+        "regressed": 5,
+        "equal": 0,
+        "leave_best_improvement_out_mean_delta": -0.007183321349492127
+      },
+      {
+        "alpha": 0.003,
+        "mean_nll": 1.6984275625048515,
+        "median_nll": 0.24264566227793694,
+        "mean_delta": -0.0696209588398536,
+        "median_delta": -0.0022569913417100906,
+        "improved": 6,
+        "regressed": 6,
+        "equal": 0,
+        "leave_best_improvement_out_mean_delta": -0.030562348663806915
+      },
+      {
+        "alpha": 0.01,
+        "mean_nll": 1.6967936656825866,
+        "median_nll": 0.23874911665916443,
+        "mean_delta": -0.07125485566211864,
+        "median_delta": -0.0016378723084926605,
+        "improved": 6,
+        "regressed": 6,
+        "equal": 0,
+        "leave_best_improvement_out_mean_delta": -0.0315690108532594
+      },
+      {
+        "alpha": 0.03,
+        "mean_nll": 1.6922791633405723,
+        "median_nll": 0.22794823348522186,
+        "mean_delta": -0.07576935800413291,
+        "median_delta": -0.0018361285328865051,
+        "improved": 7,
+        "regressed": 5,
+        "equal": 0,
+        "max_improvement": -0.5321731567382812,
+        "max_regression": 0.018650218844413757,
+        "leave_best_improvement_out_mean_delta": -0.03427810357375578,
+        "task_mean_delta": {
+          "code-close-elements": -0.15086471910278001,
+          "code-truncate": -0.0006739969054857889
+        }
+      }
+    ],
+    "interpretation": "alpha=0.03 is the best tested point on this 12-token sample and remains positive after removing the single largest improvement, but most gain comes from code-close-elements. This is a research signal, not a capability claim."
+  },
+  "independent_short_gate": {
+    "code": {
+      "task": "binary_search",
+      "baseline_result": "correct function body followed by unnecessary continuation until the 128-token limit",
+      "candidate_result": "byte-identical content to baseline",
+      "capability_gain": false,
+      "baseline_decode_tokens_per_second": 19.505831938971127,
+      "candidate_decode_tokens_per_second": 15.864841466233607
+    },
+    "tool": {
+      "task": "read_file required path",
+      "baseline": {
+        "finish_reason": "tool_calls",
+        "name": "read_file",
+        "arguments": {
+          "path": "src/main.rs"
+        }
+      },
+      "candidate": {
+        "finish_reason": "tool_calls",
+        "name": "read_file",
+        "arguments": {
+          "path": "src/main.rs"
+        }
+      },
+      "capability_gain": false,
+      "baseline_decode_tokens_per_second": 17.406732150363222,
+      "candidate_decode_tokens_per_second": 13.191271482229892
+    }
+  },
+  "resource_cost": {
+    "output_head_mib": 211.88,
+    "vulkan_compute_buffer_mib_baseline": 563.3,
+    "vulkan_compute_buffer_mib_candidate": 1504.44,
+    "candidate_graph_nodes_bs512": 4320,
+    "candidate_graph_nodes_bs1": 4340,
+    "note": "The isolated earlier short decode at alpha=0.001 measured about 2.24 token/s; the later paired short gates were faster due to request shape and speculative acceptance, but still slower than their adjacent baseline."
+  },
+  "decision": "hold_research_candidate",
+  "reason": "The physical bypass is exact and the paired NLL sweep contains a real positive signal, but the independent code and tool gates show no output-quality improvement while inference cost rises substantially. Do not promote v19 to the formal product path yet.",
+  "next": [
+    "Expand exact NLL coverage to independent code and tool tasks before any product claim.",
+    "Calibrate donor-logit scale or confidence gating using hidden/logit statistics without text keyword routing.",
+    "Reduce full mapped-vocabulary projection cost without breaking graph-integrated capability or alpha=0 bypass."
+  ]
+}

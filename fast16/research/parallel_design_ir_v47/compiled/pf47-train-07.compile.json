@@ -1,0 +1,41 @@
+{
+  "schema_version": "design-genome-compile-report-v1",
+  "compiler": "parallel-design-genome-compiler-v1",
+  "genome_bytes": 315,
+  "copy_slot_bytes": 100,
+  "html_bytes": 18436,
+  "expansion_ratio_html_per_genome_byte": 58.527,
+  "component_genes": 5,
+  "actions": [
+    "filter",
+    "accordion",
+    "favorite",
+    "announce"
+  ],
+  "responsive_transforms": [
+    "schedule>accordion",
+    "drawer>full"
+  ],
+  "compiler_guarantees": [
+    "document_closure",
+    "semantic_landmarks",
+    "focus_visible",
+    "reduced_motion",
+    "live_region",
+    "escape_and_focus_restore",
+    "responsive_breakpoints",
+    "no_external_dependency"
+  ],
+  "model_owned": [
+    "layout_gene",
+    "component_genes",
+    "interaction_genes",
+    "responsive_transforms",
+    "visual_genes",
+    "copy_slot_references"
+  ],
+  "copy_owned": [
+    "title",
+    "lede"
+  ]
+}

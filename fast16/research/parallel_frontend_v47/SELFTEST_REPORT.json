@@ -1,0 +1,146 @@
+{
+  "schema_version": "parallel-frontend-selftest-v1",
+  "ok": true,
+  "cpu_static_only": true,
+  "tests": 13,
+  "checks": [
+    {
+      "name": "deterministic",
+      "passed": true,
+      "evidence": "36385b64610b8a79e02d19c158c45f3e10e0c09a6f7af3809aea41a8f695e1a3"
+    },
+    {
+      "name": "dimension_bounds",
+      "passed": true,
+      "evidence": {
+        "structure": 16.5,
+        "responsive": 13.5,
+        "interaction": 12.0,
+        "visual_complexity": 17.6,
+        "dependency_safety": 10.0,
+        "accessibility": 20.0
+      }
+    },
+    {
+      "name": "final_formula",
+      "passed": true,
+      "evidence": {
+        "gross_score": 89.6,
+        "template_penalty": 0.0,
+        "final_score": 89.6,
+        "tier": "advanced"
+      }
+    },
+    {
+      "name": "ordinary_template_detected",
+      "passed": true,
+      "evidence": {
+        "gross_score": 59.85,
+        "template_penalty": 17.0,
+        "final_score": 42.85,
+        "tier": "template_or_incomplete"
+      }
+    },
+    {
+      "name": "advanced_beats_template",
+      "passed": true,
+      "evidence": {
+        "advanced": {
+          "gross_score": 89.6,
+          "template_penalty": 0.0,
+          "final_score": 89.6,
+          "tier": "advanced"
+        },
+        "baseline": {
+          "gross_score": 59.85,
+          "template_penalty": 17.0,
+          "final_score": 42.85,
+          "tier": "template_or_incomplete"
+        }
+      }
+    },
+    {
+      "name": "advanced_low_template_penalty",
+      "passed": true,
+      "evidence": 0.0
+    },
+    {
+      "name": "gate_contract",
+      "passed": true,
+      "evidence": {
+        "schema_version": "parallel-frontend-gate-check-v1",
+        "ok": true,
+        "gate_count": 24,
+        "split_counts": {
+          "train": 8,
+          "validation": 8,
+          "blind": 8
+        },
+        "family_counts": {
+          "train": 8,
+          "validation": 8,
+          "blind": 8
+        },
+        "cross_split_family_overlaps": {
+          "train:validation": [],
+          "train:blind": [],
+          "validation:blind": []
+        },
+        "prompt_sha256_unique": 24,
+        "errors": []
+      }
+    },
+    {
+      "name": "exactly_24_gates",
+      "passed": true,
+      "evidence": 24
+    },
+    {
+      "name": "split_isolation",
+      "passed": true,
+      "evidence": {
+        "train:validation": [],
+        "train:blind": [],
+        "validation:blind": []
+      }
+    },
+    {
+      "name": "report_ranking",
+      "passed": true,
+      "evidence": [
+        {
+          "rank": 1,
+          "file": "advanced_reference.html",
+          "final_score": 89.6
+        },
+        {
+          "rank": 2,
+          "file": "ordinary_three_cards.html",
+          "final_score": 42.85
+        }
+      ]
+    },
+    {
+      "name": "six_sample_report",
+      "passed": true,
+      "evidence": {
+        "sample_count": 6,
+        "items": 6
+      }
+    },
+    {
+      "name": "json_contracts_parse",
+      "passed": true,
+      "evidence": [
+        "parallel-frontend-contract-v1",
+        "https://json-schema.org/draft/2020-12/schema",
+        "https://json-schema.org/draft/2020-12/schema"
+      ]
+    },
+    {
+      "name": "frozen_manifest",
+      "passed": true,
+      "evidence": []
+    }
+  ]
+}

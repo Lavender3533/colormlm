@@ -1,0 +1,3293 @@
+{
+  "schema_version": "parallel-frontend-audit-report-v1",
+  "contract_version": "parallel-frontend-contract-v1",
+  "scorer_version": "parallel-frontend-static-v1.0.0",
+  "source_root": "C:\\Users\\Kangnaixi\\Desktop\\新建文件夹",
+  "sample_count": 6,
+  "ranking": [
+    {
+      "rank": 1,
+      "file": "index.v17版本产出.html",
+      "final_score": 75.55
+    },
+    {
+      "rank": 2,
+      "file": "index.v7版本产出.html",
+      "final_score": 75.45
+    },
+    {
+      "rank": 3,
+      "file": "index.html",
+      "final_score": 75.35
+    },
+    {
+      "rank": 4,
+      "file": "index46.html",
+      "final_score": 70.61
+    },
+    {
+      "rank": 5,
+      "file": "index38.html",
+      "final_score": 68.99
+    },
+    {
+      "rank": 6,
+      "file": "index.v19测试版产出.html",
+      "final_score": 67.55
+    }
+  ],
+  "items": [
+    {
+      "schema_version": "parallel-frontend-audit-item-v1",
+      "scorer_version": "parallel-frontend-static-v1.0.0",
+      "file": "index.html",
+      "source": "C:\\Users\\Kangnaixi\\Desktop\\新建文件夹\\index.html",
+      "sha256": "e6c08d4db2e22720e624b11c9b5bc15fd692b9011921a77c4b151a5a0f07f6ae",
+      "bytes": 10548,
+      "encoding": {
+        "valid_utf8": true,
+        "bom": false
+      },
+      "summary": {
+        "gross_score": 78.35,
+        "template_penalty": 3.0,
+        "final_score": 75.35,
+        "tier": "advanced"
+      },
+      "dimensions": {
+        "structure": {
+          "score": 17.0,
+          "max": 18,
+          "checks": [
+            {
+              "id": "doctype",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": "HTML5 doctype"
+            },
+            {
+              "id": "single_document_skeleton",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "html": 1,
+                "head": 1,
+                "body": 1
+              }
+            },
+            {
+              "id": "title",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": 1
+            },
+            {
+              "id": "charset_utf8",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": "meta charset=utf-8"
+            },
+            {
+              "id": "one_h1",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": 1
+            },
+            {
+              "id": "semantic_landmarks",
+              "earned": 2.0,
+              "max": 3.0,
+              "passed": false,
+              "evidence": [
+                "header",
+                "nav"
+              ]
+            },
+            {
+              "id": "unique_ids",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": []
+            },
+            {
+              "id": "balanced_tags",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": []
+            }
+          ]
+        },
+        "responsive": {
+          "score": 14.0,
+          "max": 16,
+          "checks": [
+            {
+              "id": "viewport",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": "width=device-width"
+            },
+            {
+              "id": "media_queries",
+              "earned": 2.0,
+              "max": 4.0,
+              "passed": false,
+              "evidence": {
+                "count": 1,
+                "breakpoints": [
+                  "768px"
+                ]
+              }
+            },
+            {
+              "id": "fluid_layout",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": [
+                "0%",
+                "100%",
+                "100vh",
+                "20%",
+                "30%",
+                "40%",
+                "60%",
+                "70%",
+                "8vw",
+                "minmax("
+              ]
+            },
+            {
+              "id": "adaptive_layout_modes",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": [
+                "grid",
+                "flex"
+              ]
+            },
+            {
+              "id": "responsive_media",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": "媒体 max-width 或无位图媒体"
+            },
+            {
+              "id": "no_obvious_horizontal_overflow",
+              "earned": 2.5,
+              "max": 2.5,
+              "passed": true,
+              "evidence": {
+                "oversized_px": []
+              }
+            }
+          ]
+        },
+        "interaction": {
+          "score": 11.25,
+          "max": 16,
+          "checks": [
+            {
+              "id": "meaningful_controls",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "interactive": 5,
+                "meaningful_links": 0,
+                "buttons": 1
+              }
+            },
+            {
+              "id": "event_wiring",
+              "earned": 3.75,
+              "max": 4.0,
+              "passed": false,
+              "evidence": [
+                "addEventListener",
+                "classList.",
+                "querySelector"
+              ]
+            },
+            {
+              "id": "interaction_states",
+              "earned": 1.0,
+              "max": 3.0,
+              "passed": false,
+              "evidence": [
+                "hover"
+              ]
+            },
+            {
+              "id": "bounded_transition",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": "150–300ms transition"
+            },
+            {
+              "id": "no_obvious_dead_controls",
+              "earned": 0.0,
+              "max": 2.5,
+              "passed": false,
+              "evidence": {
+                "placeholder_link_lines": [
+                  278,
+                  279,
+                  280,
+                  281
+                ],
+                "inert_button_risk": false
+              }
+            },
+            {
+              "id": "form_path",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": {
+                "forms": 0
+              }
+            }
+          ]
+        },
+        "visual_complexity": {
+          "score": 15.6,
+          "max": 20,
+          "checks": [
+            {
+              "id": "css_depth",
+              "earned": 4.0,
+              "max": 4.0,
+              "passed": true,
+              "evidence": {
+                "rules": 34,
+                "properties": 159
+              }
+            },
+            {
+              "id": "content_composition",
+              "earned": 1.6,
+              "max": 4.0,
+              "passed": false,
+              "evidence": {
+                "sections_articles": 1,
+                "landmarks": 2
+              }
+            },
+            {
+              "id": "visual_techniques",
+              "earned": 5.0,
+              "max": 5.0,
+              "passed": true,
+              "evidence": [
+                "grid",
+                "flex",
+                "gradient",
+                "shadow",
+                "filter",
+                "animation",
+                "transform",
+                "custom-properties",
+                "pseudo-elements"
+              ]
+            },
+            {
+              "id": "design_tokens",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "colors": 16,
+                "font_stacks": 1
+              }
+            },
+            {
+              "id": "visual_assets",
+              "earned": 0.5,
+              "max": 2.0,
+              "passed": false,
+              "evidence": {
+                "media": 0
+              }
+            },
+            {
+              "id": "typography_system",
+              "earned": 1.5,
+              "max": 2.0,
+              "passed": false,
+              "evidence": [
+                "weight",
+                "line-height",
+                "letter-spacing"
+              ]
+            }
+          ]
+        },
+        "dependency_safety": {
+          "score": 8.5,
+          "max": 10,
+          "checks": [
+            {
+              "id": "external_dependency_risk",
+              "earned": 8.5,
+              "max": 10.0,
+              "passed": false,
+              "evidence": {
+                "total": 3,
+                "active": 3,
+                "http": 0,
+                "third_party_scripts": 0,
+                "unpinned_active": 0,
+                "remote_assets": 3,
+                "hosts": [
+                  "images.unsplash.com"
+                ]
+              }
+            }
+          ]
+        },
+        "accessibility": {
+          "score": 12.0,
+          "max": 20,
+          "checks": [
+            {
+              "id": "document_language",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": "zh-CN"
+            },
+            {
+              "id": "image_alternatives",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "images": 0,
+                "missing_alt_lines": []
+              }
+            },
+            {
+              "id": "form_labels",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "controls": 0,
+                "unlabeled_lines": []
+              }
+            },
+            {
+              "id": "control_names",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": {
+                "unnamed_icon_buttons": 0,
+                "buttons_checked": 1
+              }
+            },
+            {
+              "id": "heading_order",
+              "earned": 0.0,
+              "max": 2.0,
+              "passed": false,
+              "evidence": {
+                "levels": [
+                  1,
+                  3,
+                  3,
+                  3
+                ],
+                "jumps": [
+                  [
+                    1,
+                    3
+                  ]
+                ]
+              }
+            },
+            {
+              "id": "landmarks",
+              "earned": 1.0,
+              "max": 2.0,
+              "passed": false,
+              "evidence": [
+                "header",
+                "nav"
+              ]
+            },
+            {
+              "id": "visible_focus",
+              "earned": 0.0,
+              "max": 2.5,
+              "passed": false,
+              "evidence": ":focus/:focus-visible"
+            },
+            {
+              "id": "reduced_motion",
+              "earned": 0.0,
+              "max": 1.5,
+              "passed": false,
+              "evidence": {
+                "motion": true,
+                "reduced_motion_rule": false
+              }
+            },
+            {
+              "id": "skip_navigation",
+              "earned": 0.0,
+              "max": 1.0,
+              "passed": false,
+              "evidence": {
+                "skip_link": false,
+                "nav": 1
+              }
+            },
+            {
+              "id": "semantic_click_targets",
+              "earned": 1.0,
+              "max": 1.0,
+              "passed": true,
+              "evidence": []
+            }
+          ]
+        }
+      },
+      "template_penalty": {
+        "score": 3.0,
+        "max": 20,
+        "checks": [
+          {
+            "id": "exact_three_card_signature",
+            "penalty": 0.0,
+            "max_penalty": 6,
+            "triggered": false,
+            "evidence": {
+              "max_generic_class_repeat": 3,
+              "generic_class_repeats": {
+                "card": 3,
+                "card-img": 3
+              },
+              "articles": 0,
+              "distinctive_techniques": 8
+            }
+          },
+          {
+            "id": "low_composition",
+            "penalty": 3.0,
+            "max_penalty": 3,
+            "triggered": true,
+            "evidence": {
+              "sections_articles": 1
+            }
+          },
+          {
+            "id": "no_distinct_visual_asset",
+            "penalty": 0.0,
+            "max_penalty": 3,
+            "triggered": false,
+            "evidence": {
+              "media": 0
+            }
+          },
+          {
+            "id": "generic_landing_copy",
+            "penalty": 0.0,
+            "max_penalty": 2,
+            "triggered": false,
+            "evidence": {
+              "matches": 0
+            }
+          },
+          {
+            "id": "shallow_style_system",
+            "penalty": 0.0,
+            "max_penalty": 3,
+            "triggered": false,
+            "evidence": {
+              "css_rules": 34
+            }
+          },
+          {
+            "id": "three_cards_without_behavior",
+            "penalty": 0.0,
+            "max_penalty": 3,
+            "triggered": false,
+            "evidence": {
+              "ordinary_three_cards": false,
+              "behavior": true
+            }
+          }
+        ],
+        "reasons": [
+          "页面内容层级单薄。"
+        ]
+      },
+      "inventory": {
+        "elements": 37,
+        "tags": {
+          "a": 4,
+          "body": 1,
+          "br": 1,
+          "button": 1,
+          "div": 11,
+          "h1": 1,
+          "h3": 3,
+          "head": 1,
+          "header": 1,
+          "html": 1,
+          "meta": 2,
+          "nav": 1,
+          "p": 4,
+          "script": 1,
+          "section": 1,
+          "span": 1,
+          "style": 1,
+          "title": 1
+        },
+        "css_bytes": 7657,
+        "script_bytes": 1073,
+        "external_dependencies": [
+          {
+            "tag": "css",
+            "attribute": "url",
+            "url": "https://images.unsplash.com/photo-1550745165-9bc0b2922448?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80",
+            "host": "images.unsplash.com",
+            "active": true,
+            "integrity": false,
+            "crossorigin": false
+          },
+          {
+            "tag": "css",
+            "attribute": "url",
+            "url": "https://images.unsplash.com/photo-1618005182384-a83b80b48f80?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80",
+            "host": "images.unsplash.com",
+            "active": true,
+            "integrity": false,
+            "crossorigin": false
+          },
+          {
+            "tag": "css",
+            "attribute": "url",
+            "url": "https://images.unsplash.com/photo-1634535265876-4d94f070b778?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80",
+            "host": "images.unsplash.com",
+            "active": true,
+            "integrity": false,
+            "crossorigin": false
+          }
+        ]
+      },
+      "findings": [
+        {
+          "dimension": "interaction",
+          "severity": "warning",
+          "message": "发现 4 个空链接或 href=#。"
+        },
+        {
+          "dimension": "dependency_safety",
+          "severity": "warning",
+          "message": "存在 3 个运行时远程视觉/媒体依赖，离线渲染可能缺失。"
+        },
+        {
+          "dimension": "accessibility",
+          "severity": "warning",
+          "message": "未发现可靠的键盘焦点可见样式。"
+        },
+        {
+          "dimension": "accessibility",
+          "severity": "warning",
+          "message": "存在动画/过渡，但未尊重 prefers-reduced-motion。"
+        }
+      ],
+      "limitations": [
+        "静态评分不执行 JavaScript，不能证明控件在真实浏览器中可用。",
+        "静态评分不栅格化页面，不能证明断点无溢出、颜色达到 WCAG 对比度或视觉审美优良。",
+        "复杂度得分只衡量可观察的结构/样式多样性，不等价于设计质量。"
+      ]
+    },
+    {
+      "schema_version": "parallel-frontend-audit-item-v1",
+      "scorer_version": "parallel-frontend-static-v1.0.0",
+      "file": "index.v17版本产出.html",
+      "source": "C:\\Users\\Kangnaixi\\Desktop\\新建文件夹\\index.v17版本产出.html",
+      "sha256": "e1177cbe8f30097ca3d725e1e56620b906f03b84309b3d896ef80c217e53c365",
+      "bytes": 6415,
+      "encoding": {
+        "valid_utf8": true,
+        "bom": false
+      },
+      "summary": {
+        "gross_score": 83.55,
+        "template_penalty": 8.0,
+        "final_score": 75.55,
+        "tier": "competent"
+      },
+      "dimensions": {
+        "structure": {
+          "score": 18.0,
+          "max": 18,
+          "checks": [
+            {
+              "id": "doctype",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": "HTML5 doctype"
+            },
+            {
+              "id": "single_document_skeleton",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "html": 1,
+                "head": 1,
+                "body": 1
+              }
+            },
+            {
+              "id": "title",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": 1
+            },
+            {
+              "id": "charset_utf8",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": "meta charset=utf-8"
+            },
+            {
+              "id": "one_h1",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": 1
+            },
+            {
+              "id": "semantic_landmarks",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": [
+                "footer",
+                "header",
+                "nav"
+              ]
+            },
+            {
+              "id": "unique_ids",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": []
+            },
+            {
+              "id": "balanced_tags",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": []
+            }
+          ]
+        },
+        "responsive": {
+          "score": 14.0,
+          "max": 16,
+          "checks": [
+            {
+              "id": "viewport",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": "width=device-width"
+            },
+            {
+              "id": "media_queries",
+              "earned": 2.0,
+              "max": 4.0,
+              "passed": false,
+              "evidence": {
+                "count": 1,
+                "breakpoints": [
+                  "768px"
+                ]
+              }
+            },
+            {
+              "id": "fluid_layout",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": [
+                "0%",
+                "100%",
+                "100vh",
+                "minmax("
+              ]
+            },
+            {
+              "id": "adaptive_layout_modes",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": [
+                "grid",
+                "flex"
+              ]
+            },
+            {
+              "id": "responsive_media",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": "媒体 max-width 或无位图媒体"
+            },
+            {
+              "id": "no_obvious_horizontal_overflow",
+              "earned": 2.5,
+              "max": 2.5,
+              "passed": true,
+              "evidence": {
+                "oversized_px": []
+              }
+            }
+          ]
+        },
+        "interaction": {
+          "score": 11.25,
+          "max": 16,
+          "checks": [
+            {
+              "id": "meaningful_controls",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "interactive": 4,
+                "meaningful_links": 3,
+                "buttons": 1
+              }
+            },
+            {
+              "id": "event_wiring",
+              "earned": 1.25,
+              "max": 4.0,
+              "passed": false,
+              "evidence": [
+                "onclick="
+              ]
+            },
+            {
+              "id": "interaction_states",
+              "earned": 1.0,
+              "max": 3.0,
+              "passed": false,
+              "evidence": [
+                "hover"
+              ]
+            },
+            {
+              "id": "bounded_transition",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": "150–300ms transition"
+            },
+            {
+              "id": "no_obvious_dead_controls",
+              "earned": 2.5,
+              "max": 2.5,
+              "passed": true,
+              "evidence": {
+                "placeholder_link_lines": [],
+                "inert_button_risk": false
+              }
+            },
+            {
+              "id": "form_path",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": {
+                "forms": 0
+              }
+            }
+          ]
+        },
+        "visual_complexity": {
+          "score": 15.8,
+          "max": 20,
+          "checks": [
+            {
+              "id": "css_depth",
+              "earned": 4.0,
+              "max": 4.0,
+              "passed": true,
+              "evidence": {
+                "rules": 26,
+                "properties": 90
+              }
+            },
+            {
+              "id": "content_composition",
+              "earned": 2.8,
+              "max": 4.0,
+              "passed": false,
+              "evidence": {
+                "sections_articles": 2,
+                "landmarks": 3
+              }
+            },
+            {
+              "id": "visual_techniques",
+              "earned": 5.0,
+              "max": 5.0,
+              "passed": true,
+              "evidence": [
+                "grid",
+                "flex",
+                "gradient",
+                "shadow",
+                "animation",
+                "transform",
+                "custom-properties"
+              ]
+            },
+            {
+              "id": "design_tokens",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "colors": 8,
+                "font_stacks": 1
+              }
+            },
+            {
+              "id": "visual_assets",
+              "earned": 0.0,
+              "max": 2.0,
+              "passed": false,
+              "evidence": {
+                "media": 0
+              }
+            },
+            {
+              "id": "typography_system",
+              "earned": 1.0,
+              "max": 2.0,
+              "passed": false,
+              "evidence": [
+                "weight",
+                "line-height"
+              ]
+            }
+          ]
+        },
+        "dependency_safety": {
+          "score": 10.0,
+          "max": 10,
+          "checks": [
+            {
+              "id": "external_dependency_risk",
+              "earned": 10.0,
+              "max": 10.0,
+              "passed": true,
+              "evidence": {
+                "total": 0,
+                "active": 0,
+                "http": 0,
+                "third_party_scripts": 0,
+                "unpinned_active": 0,
+                "remote_assets": 0,
+                "hosts": []
+              }
+            }
+          ]
+        },
+        "accessibility": {
+          "score": 14.5,
+          "max": 20,
+          "checks": [
+            {
+              "id": "document_language",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": "zh-CN"
+            },
+            {
+              "id": "image_alternatives",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "images": 0,
+                "missing_alt_lines": []
+              }
+            },
+            {
+              "id": "form_labels",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "controls": 0,
+                "unlabeled_lines": []
+              }
+            },
+            {
+              "id": "control_names",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": {
+                "unnamed_icon_buttons": 0,
+                "buttons_checked": 1
+              }
+            },
+            {
+              "id": "heading_order",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": {
+                "levels": [
+                  1,
+                  2,
+                  3,
+                  3,
+                  3
+                ],
+                "jumps": []
+              }
+            },
+            {
+              "id": "landmarks",
+              "earned": 1.5,
+              "max": 2.0,
+              "passed": false,
+              "evidence": [
+                "footer",
+                "header",
+                "nav"
+              ]
+            },
+            {
+              "id": "visible_focus",
+              "earned": 0.0,
+              "max": 2.5,
+              "passed": false,
+              "evidence": ":focus/:focus-visible"
+            },
+            {
+              "id": "reduced_motion",
+              "earned": 0.0,
+              "max": 1.5,
+              "passed": false,
+              "evidence": {
+                "motion": true,
+                "reduced_motion_rule": false
+              }
+            },
+            {
+              "id": "skip_navigation",
+              "earned": 0.0,
+              "max": 1.0,
+              "passed": false,
+              "evidence": {
+                "skip_link": false,
+                "nav": 1
+              }
+            },
+            {
+              "id": "semantic_click_targets",
+              "earned": 1.0,
+              "max": 1.0,
+              "passed": true,
+              "evidence": []
+            }
+          ]
+        }
+      },
+      "template_penalty": {
+        "score": 8.0,
+        "max": 20,
+        "checks": [
+          {
+            "id": "exact_three_card_signature",
+            "penalty": 6.0,
+            "max_penalty": 6,
+            "triggered": true,
+            "evidence": {
+              "max_generic_class_repeat": 3,
+              "generic_class_repeats": {
+                "card": 3
+              },
+              "articles": 0,
+              "distinctive_techniques": 6
+            }
+          },
+          {
+            "id": "low_composition",
+            "penalty": 0.0,
+            "max_penalty": 3,
+            "triggered": false,
+            "evidence": {
+              "sections_articles": 2
+            }
+          },
+          {
+            "id": "no_distinct_visual_asset",
+            "penalty": 0.0,
+            "max_penalty": 3,
+            "triggered": false,
+            "evidence": {
+              "media": 0
+            }
+          },
+          {
+            "id": "generic_landing_copy",
+            "penalty": 2.0,
+            "max_penalty": 2,
+            "triggered": true,
+            "evidence": {
+              "matches": 4
+            }
+          },
+          {
+            "id": "shallow_style_system",
+            "penalty": 0.0,
+            "max_penalty": 3,
+            "triggered": false,
+            "evidence": {
+              "css_rules": 26
+            }
+          },
+          {
+            "id": "three_cards_without_behavior",
+            "penalty": 0.0,
+            "max_penalty": 3,
+            "triggered": false,
+            "evidence": {
+              "ordinary_three_cards": true,
+              "behavior": true
+            }
+          }
+        ],
+        "reasons": [
+          "命中恰好三张通用卡片/文章的模板签名。",
+          "通用落地页套话密度较高。"
+        ]
+      },
+      "inventory": {
+        "elements": 37,
+        "tags": {
+          "a": 3,
+          "body": 1,
+          "button": 1,
+          "div": 5,
+          "footer": 1,
+          "h1": 1,
+          "h2": 1,
+          "h3": 3,
+          "head": 1,
+          "header": 1,
+          "html": 1,
+          "li": 3,
+          "meta": 2,
+          "nav": 1,
+          "p": 6,
+          "script": 1,
+          "section": 2,
+          "style": 1,
+          "title": 1,
+          "ul": 1
+        },
+        "css_bytes": 4238,
+        "script_bytes": 236,
+        "external_dependencies": []
+      },
+      "findings": [
+        {
+          "dimension": "accessibility",
+          "severity": "warning",
+          "message": "未发现可靠的键盘焦点可见样式。"
+        },
+        {
+          "dimension": "accessibility",
+          "severity": "warning",
+          "message": "存在动画/过渡，但未尊重 prefers-reduced-motion。"
+        }
+      ],
+      "limitations": [
+        "静态评分不执行 JavaScript，不能证明控件在真实浏览器中可用。",
+        "静态评分不栅格化页面，不能证明断点无溢出、颜色达到 WCAG 对比度或视觉审美优良。",
+        "复杂度得分只衡量可观察的结构/样式多样性，不等价于设计质量。"
+      ]
+    },
+    {
+      "schema_version": "parallel-frontend-audit-item-v1",
+      "scorer_version": "parallel-frontend-static-v1.0.0",
+      "file": "index.v19测试版产出.html",
+      "source": "C:\\Users\\Kangnaixi\\Desktop\\新建文件夹\\index.v19测试版产出.html",
+      "sha256": "7d7858ca25c230bafdc2d9aa346f749725b0dbdd9cb186cd4588937e3d906575",
+      "bytes": 6178,
+      "encoding": {
+        "valid_utf8": true,
+        "bom": false
+      },
+      "summary": {
+        "gross_score": 78.55,
+        "template_penalty": 11.0,
+        "final_score": 67.55,
+        "tier": "template_or_incomplete"
+      },
+      "dimensions": {
+        "structure": {
+          "score": 18.0,
+          "max": 18,
+          "checks": [
+            {
+              "id": "doctype",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": "HTML5 doctype"
+            },
+            {
+              "id": "single_document_skeleton",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "html": 1,
+                "head": 1,
+                "body": 1
+              }
+            },
+            {
+              "id": "title",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": 1
+            },
+            {
+              "id": "charset_utf8",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": "meta charset=utf-8"
+            },
+            {
+              "id": "one_h1",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": 1
+            },
+            {
+              "id": "semantic_landmarks",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": [
+                "footer",
+                "header",
+                "nav"
+              ]
+            },
+            {
+              "id": "unique_ids",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": []
+            },
+            {
+              "id": "balanced_tags",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": []
+            }
+          ]
+        },
+        "responsive": {
+          "score": 14.0,
+          "max": 16,
+          "checks": [
+            {
+              "id": "viewport",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": "width=device-width"
+            },
+            {
+              "id": "media_queries",
+              "earned": 2.0,
+              "max": 4.0,
+              "passed": false,
+              "evidence": {
+                "count": 1,
+                "breakpoints": [
+                  "768px"
+                ]
+              }
+            },
+            {
+              "id": "fluid_layout",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": [
+                "0%",
+                "100%",
+                "100vh",
+                "5%",
+                "minmax("
+              ]
+            },
+            {
+              "id": "adaptive_layout_modes",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": [
+                "grid",
+                "flex"
+              ]
+            },
+            {
+              "id": "responsive_media",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": "媒体 max-width 或无位图媒体"
+            },
+            {
+              "id": "no_obvious_horizontal_overflow",
+              "earned": 2.5,
+              "max": 2.5,
+              "passed": true,
+              "evidence": {
+                "oversized_px": []
+              }
+            }
+          ]
+        },
+        "interaction": {
+          "score": 7.5,
+          "max": 16,
+          "checks": [
+            {
+              "id": "meaningful_controls",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "interactive": 5,
+                "meaningful_links": 4,
+                "buttons": 0
+              }
+            },
+            {
+              "id": "event_wiring",
+              "earned": 0.0,
+              "max": 4.0,
+              "passed": false,
+              "evidence": []
+            },
+            {
+              "id": "interaction_states",
+              "earned": 1.0,
+              "max": 3.0,
+              "passed": false,
+              "evidence": [
+                "hover"
+              ]
+            },
+            {
+              "id": "bounded_transition",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": "150–300ms transition"
+            },
+            {
+              "id": "no_obvious_dead_controls",
+              "earned": 0.0,
+              "max": 2.5,
+              "passed": false,
+              "evidence": {
+                "placeholder_link_lines": [
+                  192
+                ],
+                "inert_button_risk": false
+              }
+            },
+            {
+              "id": "form_path",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": {
+                "forms": 0
+              }
+            }
+          ]
+        },
+        "visual_complexity": {
+          "score": 14.55,
+          "max": 20,
+          "checks": [
+            {
+              "id": "css_depth",
+              "earned": 4.0,
+              "max": 4.0,
+              "passed": true,
+              "evidence": {
+                "rules": 25,
+                "properties": 86
+              }
+            },
+            {
+              "id": "content_composition",
+              "earned": 2.8,
+              "max": 4.0,
+              "passed": false,
+              "evidence": {
+                "sections_articles": 2,
+                "landmarks": 3
+              }
+            },
+            {
+              "id": "visual_techniques",
+              "earned": 3.75,
+              "max": 5.0,
+              "passed": false,
+              "evidence": [
+                "grid",
+                "flex",
+                "gradient",
+                "shadow",
+                "transform"
+              ]
+            },
+            {
+              "id": "design_tokens",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "colors": 10,
+                "font_stacks": 1
+              }
+            },
+            {
+              "id": "visual_assets",
+              "earned": 0.0,
+              "max": 2.0,
+              "passed": false,
+              "evidence": {
+                "media": 0
+              }
+            },
+            {
+              "id": "typography_system",
+              "earned": 1.0,
+              "max": 2.0,
+              "passed": false,
+              "evidence": [
+                "weight",
+                "line-height"
+              ]
+            }
+          ]
+        },
+        "dependency_safety": {
+          "score": 10.0,
+          "max": 10,
+          "checks": [
+            {
+              "id": "external_dependency_risk",
+              "earned": 10.0,
+              "max": 10.0,
+              "passed": true,
+              "evidence": {
+                "total": 0,
+                "active": 0,
+                "http": 0,
+                "third_party_scripts": 0,
+                "unpinned_active": 0,
+                "remote_assets": 0,
+                "hosts": []
+              }
+            }
+          ]
+        },
+        "accessibility": {
+          "score": 14.5,
+          "max": 20,
+          "checks": [
+            {
+              "id": "document_language",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": "zh-CN"
+            },
+            {
+              "id": "image_alternatives",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "images": 0,
+                "missing_alt_lines": []
+              }
+            },
+            {
+              "id": "form_labels",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "controls": 0,
+                "unlabeled_lines": []
+              }
+            },
+            {
+              "id": "control_names",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": {
+                "unnamed_icon_buttons": 0,
+                "buttons_checked": 0
+              }
+            },
+            {
+              "id": "heading_order",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": {
+                "levels": [
+                  1,
+                  2,
+                  3,
+                  3,
+                  3
+                ],
+                "jumps": []
+              }
+            },
+            {
+              "id": "landmarks",
+              "earned": 1.5,
+              "max": 2.0,
+              "passed": false,
+              "evidence": [
+                "footer",
+                "header",
+                "nav"
+              ]
+            },
+            {
+              "id": "visible_focus",
+              "earned": 0.0,
+              "max": 2.5,
+              "passed": false,
+              "evidence": ":focus/:focus-visible"
+            },
+            {
+              "id": "reduced_motion",
+              "earned": 0.0,
+              "max": 1.5,
+              "passed": false,
+              "evidence": {
+                "motion": true,
+                "reduced_motion_rule": false
+              }
+            },
+            {
+              "id": "skip_navigation",
+              "earned": 0.0,
+              "max": 1.0,
+              "passed": false,
+              "evidence": {
+                "skip_link": false,
+                "nav": 1
+              }
+            },
+            {
+              "id": "semantic_click_targets",
+              "earned": 1.0,
+              "max": 1.0,
+              "passed": true,
+              "evidence": []
+            }
+          ]
+        }
+      },
+      "template_penalty": {
+        "score": 11.0,
+        "max": 20,
+        "checks": [
+          {
+            "id": "exact_three_card_signature",
+            "penalty": 6.0,
+            "max_penalty": 6,
+            "triggered": true,
+            "evidence": {
+              "max_generic_class_repeat": 3,
+              "generic_class_repeats": {
+                "card-container": 1,
+                "card": 3
+              },
+              "articles": 0,
+              "distinctive_techniques": 4
+            }
+          },
+          {
+            "id": "low_composition",
+            "penalty": 0.0,
+            "max_penalty": 3,
+            "triggered": false,
+            "evidence": {
+              "sections_articles": 2
+            }
+          },
+          {
+            "id": "no_distinct_visual_asset",
+            "penalty": 0.0,
+            "max_penalty": 3,
+            "triggered": false,
+            "evidence": {
+              "media": 0
+            }
+          },
+          {
+            "id": "generic_landing_copy",
+            "penalty": 2.0,
+            "max_penalty": 2,
+            "triggered": true,
+            "evidence": {
+              "matches": 5
+            }
+          },
+          {
+            "id": "shallow_style_system",
+            "penalty": 0.0,
+            "max_penalty": 3,
+            "triggered": false,
+            "evidence": {
+              "css_rules": 25
+            }
+          },
+          {
+            "id": "three_cards_without_behavior",
+            "penalty": 3.0,
+            "max_penalty": 3,
+            "triggered": true,
+            "evidence": {
+              "ordinary_three_cards": true,
+              "behavior": false
+            }
+          }
+        ],
+        "reasons": [
+          "命中恰好三张通用卡片/文章的模板签名。",
+          "通用落地页套话密度较高。",
+          "三卡片结构没有行为层。"
+        ]
+      },
+      "inventory": {
+        "elements": 40,
+        "tags": {
+          "a": 5,
+          "body": 1,
+          "div": 5,
+          "footer": 1,
+          "h1": 1,
+          "h2": 1,
+          "h3": 3,
+          "head": 1,
+          "header": 1,
+          "html": 1,
+          "li": 4,
+          "meta": 2,
+          "nav": 1,
+          "p": 5,
+          "section": 2,
+          "span": 3,
+          "style": 1,
+          "title": 1,
+          "ul": 1
+        },
+        "css_bytes": 4129,
+        "script_bytes": 0,
+        "external_dependencies": []
+      },
+      "findings": [
+        {
+          "dimension": "interaction",
+          "severity": "warning",
+          "message": "发现 1 个空链接或 href=#。"
+        },
+        {
+          "dimension": "accessibility",
+          "severity": "warning",
+          "message": "未发现可靠的键盘焦点可见样式。"
+        },
+        {
+          "dimension": "accessibility",
+          "severity": "warning",
+          "message": "存在动画/过渡，但未尊重 prefers-reduced-motion。"
+        }
+      ],
+      "limitations": [
+        "静态评分不执行 JavaScript，不能证明控件在真实浏览器中可用。",
+        "静态评分不栅格化页面，不能证明断点无溢出、颜色达到 WCAG 对比度或视觉审美优良。",
+        "复杂度得分只衡量可观察的结构/样式多样性，不等价于设计质量。"
+      ]
+    },
+    {
+      "schema_version": "parallel-frontend-audit-item-v1",
+      "scorer_version": "parallel-frontend-static-v1.0.0",
+      "file": "index.v7版本产出.html",
+      "source": "C:\\Users\\Kangnaixi\\Desktop\\新建文件夹\\index.v7版本产出.html",
+      "sha256": "74bebeefa23cfee3cc98eba9db1125794852d6b6fc86d6d425fef8410bd6e87e",
+      "bytes": 8229,
+      "encoding": {
+        "valid_utf8": true,
+        "bom": false
+      },
+      "summary": {
+        "gross_score": 81.45,
+        "template_penalty": 6.0,
+        "final_score": 75.45,
+        "tier": "competent"
+      },
+      "dimensions": {
+        "structure": {
+          "score": 15.0,
+          "max": 18,
+          "checks": [
+            {
+              "id": "doctype",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": "HTML5 doctype"
+            },
+            {
+              "id": "single_document_skeleton",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "html": 1,
+                "head": 1,
+                "body": 1
+              }
+            },
+            {
+              "id": "title",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": 1
+            },
+            {
+              "id": "charset_utf8",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": "meta charset=utf-8"
+            },
+            {
+              "id": "one_h1",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": 1
+            },
+            {
+              "id": "semantic_landmarks",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": [
+                "footer",
+                "header",
+                "nav"
+              ]
+            },
+            {
+              "id": "unique_ids",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": []
+            },
+            {
+              "id": "balanced_tags",
+              "earned": 0.0,
+              "max": 3.0,
+              "passed": false,
+              "evidence": [
+                "orphan:button",
+                "orphan:h2",
+                "h3->div"
+              ]
+            }
+          ]
+        },
+        "responsive": {
+          "score": 13.25,
+          "max": 16,
+          "checks": [
+            {
+              "id": "viewport",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": "width=device-width"
+            },
+            {
+              "id": "media_queries",
+              "earned": 2.0,
+              "max": 4.0,
+              "passed": false,
+              "evidence": {
+                "count": 1,
+                "breakpoints": [
+                  "768px"
+                ]
+              }
+            },
+            {
+              "id": "fluid_layout",
+              "earned": 2.25,
+              "max": 3.0,
+              "passed": false,
+              "evidence": [
+                "0%",
+                "100%",
+                "minmax("
+              ]
+            },
+            {
+              "id": "adaptive_layout_modes",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": [
+                "grid",
+                "flex"
+              ]
+            },
+            {
+              "id": "responsive_media",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": "媒体 max-width 或无位图媒体"
+            },
+            {
+              "id": "no_obvious_horizontal_overflow",
+              "earned": 2.5,
+              "max": 2.5,
+              "passed": true,
+              "evidence": {
+                "oversized_px": []
+              }
+            }
+          ]
+        },
+        "interaction": {
+          "score": 14.0,
+          "max": 16,
+          "checks": [
+            {
+              "id": "meaningful_controls",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "interactive": 5,
+                "meaningful_links": 5,
+                "buttons": 0
+              }
+            },
+            {
+              "id": "event_wiring",
+              "earned": 4.0,
+              "max": 4.0,
+              "passed": true,
+              "evidence": [
+                "addEventListener",
+                "classList.",
+                "onclick=",
+                "querySelector"
+              ]
+            },
+            {
+              "id": "interaction_states",
+              "earned": 1.0,
+              "max": 3.0,
+              "passed": false,
+              "evidence": [
+                "hover"
+              ]
+            },
+            {
+              "id": "bounded_transition",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": "150–300ms transition"
+            },
+            {
+              "id": "no_obvious_dead_controls",
+              "earned": 2.5,
+              "max": 2.5,
+              "passed": true,
+              "evidence": {
+                "placeholder_link_lines": [],
+                "inert_button_risk": false
+              }
+            },
+            {
+              "id": "form_path",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": {
+                "forms": 0
+              }
+            }
+          ]
+        },
+        "visual_complexity": {
+          "score": 15.7,
+          "max": 20,
+          "checks": [
+            {
+              "id": "css_depth",
+              "earned": 4.0,
+              "max": 4.0,
+              "passed": true,
+              "evidence": {
+                "rules": 32,
+                "properties": 112
+              }
+            },
+            {
+              "id": "content_composition",
+              "earned": 3.2,
+              "max": 4.0,
+              "passed": false,
+              "evidence": {
+                "sections_articles": 2,
+                "landmarks": 4
+              }
+            },
+            {
+              "id": "visual_techniques",
+              "earned": 4.5,
+              "max": 5.0,
+              "passed": false,
+              "evidence": [
+                "grid",
+                "flex",
+                "gradient",
+                "shadow",
+                "transform",
+                "custom-properties"
+              ]
+            },
+            {
+              "id": "design_tokens",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "colors": 14,
+                "font_stacks": 1
+              }
+            },
+            {
+              "id": "visual_assets",
+              "earned": 0.0,
+              "max": 2.0,
+              "passed": false,
+              "evidence": {
+                "media": 0
+              }
+            },
+            {
+              "id": "typography_system",
+              "earned": 1.0,
+              "max": 2.0,
+              "passed": false,
+              "evidence": [
+                "weight",
+                "line-height"
+              ]
+            }
+          ]
+        },
+        "dependency_safety": {
+          "score": 10.0,
+          "max": 10,
+          "checks": [
+            {
+              "id": "external_dependency_risk",
+              "earned": 10.0,
+              "max": 10.0,
+              "passed": true,
+              "evidence": {
+                "total": 0,
+                "active": 0,
+                "http": 0,
+                "third_party_scripts": 0,
+                "unpinned_active": 0,
+                "remote_assets": 0,
+                "hosts": []
+              }
+            }
+          ]
+        },
+        "accessibility": {
+          "score": 13.5,
+          "max": 20,
+          "checks": [
+            {
+              "id": "document_language",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": "zh-CN"
+            },
+            {
+              "id": "image_alternatives",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "images": 0,
+                "missing_alt_lines": []
+              }
+            },
+            {
+              "id": "form_labels",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "controls": 0,
+                "unlabeled_lines": []
+              }
+            },
+            {
+              "id": "control_names",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": {
+                "unnamed_icon_buttons": 0,
+                "buttons_checked": 0
+              }
+            },
+            {
+              "id": "heading_order",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": {
+                "levels": [
+                  1,
+                  2,
+                  3,
+                  3,
+                  3
+                ],
+                "jumps": []
+              }
+            },
+            {
+              "id": "landmarks",
+              "earned": 1.5,
+              "max": 2.0,
+              "passed": false,
+              "evidence": [
+                "footer",
+                "header",
+                "nav"
+              ]
+            },
+            {
+              "id": "visible_focus",
+              "earned": 0.0,
+              "max": 2.5,
+              "passed": false,
+              "evidence": ":focus/:focus-visible"
+            },
+            {
+              "id": "reduced_motion",
+              "earned": 0.0,
+              "max": 1.5,
+              "passed": false,
+              "evidence": {
+                "motion": true,
+                "reduced_motion_rule": false
+              }
+            },
+            {
+              "id": "skip_navigation",
+              "earned": 0.0,
+              "max": 1.0,
+              "passed": false,
+              "evidence": {
+                "skip_link": false,
+                "nav": 2
+              }
+            },
+            {
+              "id": "semantic_click_targets",
+              "earned": 0.0,
+              "max": 1.0,
+              "passed": false,
+              "evidence": [
+                197
+              ]
+            }
+          ]
+        }
+      },
+      "template_penalty": {
+        "score": 6.0,
+        "max": 20,
+        "checks": [
+          {
+            "id": "exact_three_card_signature",
+            "penalty": 6.0,
+            "max_penalty": 6,
+            "triggered": true,
+            "evidence": {
+              "max_generic_class_repeat": 3,
+              "generic_class_repeats": {
+                "card": 3,
+                "card-icon": 3
+              },
+              "articles": 0,
+              "distinctive_techniques": 5
+            }
+          },
+          {
+            "id": "low_composition",
+            "penalty": 0.0,
+            "max_penalty": 3,
+            "triggered": false,
+            "evidence": {
+              "sections_articles": 2
+            }
+          },
+          {
+            "id": "no_distinct_visual_asset",
+            "penalty": 0.0,
+            "max_penalty": 3,
+            "triggered": false,
+            "evidence": {
+              "media": 0
+            }
+          },
+          {
+            "id": "generic_landing_copy",
+            "penalty": 0.0,
+            "max_penalty": 2,
+            "triggered": false,
+            "evidence": {
+              "matches": 1
+            }
+          },
+          {
+            "id": "shallow_style_system",
+            "penalty": 0.0,
+            "max_penalty": 3,
+            "triggered": false,
+            "evidence": {
+              "css_rules": 32
+            }
+          },
+          {
+            "id": "three_cards_without_behavior",
+            "penalty": 0.0,
+            "max_penalty": 3,
+            "triggered": false,
+            "evidence": {
+              "ordinary_three_cards": true,
+              "behavior": true
+            }
+          }
+        ],
+        "reasons": [
+          "命中恰好三张通用卡片/文章的模板签名。"
+        ]
+      },
+      "inventory": {
+        "elements": 43,
+        "tags": {
+          "a": 5,
+          "body": 1,
+          "br": 1,
+          "div": 12,
+          "footer": 1,
+          "h1": 1,
+          "h2": 1,
+          "h3": 3,
+          "head": 1,
+          "header": 1,
+          "html": 1,
+          "meta": 2,
+          "nav": 2,
+          "p": 6,
+          "script": 1,
+          "section": 2,
+          "style": 1,
+          "title": 1
+        },
+        "css_bytes": 5072,
+        "script_bytes": 636,
+        "external_dependencies": []
+      },
+      "findings": [
+        {
+          "dimension": "structure",
+          "severity": "warning",
+          "message": "静态栈检查发现 3 个标签闭合异常。"
+        },
+        {
+          "dimension": "accessibility",
+          "severity": "warning",
+          "message": "未发现可靠的键盘焦点可见样式。"
+        },
+        {
+          "dimension": "accessibility",
+          "severity": "warning",
+          "message": "存在动画/过渡，但未尊重 prefers-reduced-motion。"
+        }
+      ],
+      "limitations": [
+        "静态评分不执行 JavaScript，不能证明控件在真实浏览器中可用。",
+        "静态评分不栅格化页面，不能证明断点无溢出、颜色达到 WCAG 对比度或视觉审美优良。",
+        "复杂度得分只衡量可观察的结构/样式多样性，不等价于设计质量。"
+      ]
+    },
+    {
+      "schema_version": "parallel-frontend-audit-item-v1",
+      "scorer_version": "parallel-frontend-static-v1.0.0",
+      "file": "index38.html",
+      "source": "C:\\Users\\Kangnaixi\\Desktop\\新建文件夹\\index38.html",
+      "sha256": "23d1718816a0e4a8e393ade763638db617f73bd06a0106ca85593941496b6de0",
+      "bytes": 6761,
+      "encoding": {
+        "valid_utf8": true,
+        "bom": false
+      },
+      "summary": {
+        "gross_score": 76.99,
+        "template_penalty": 8.0,
+        "final_score": 68.99,
+        "tier": "competent"
+      },
+      "dimensions": {
+        "structure": {
+          "score": 18.0,
+          "max": 18,
+          "checks": [
+            {
+              "id": "doctype",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": "HTML5 doctype"
+            },
+            {
+              "id": "single_document_skeleton",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "html": 1,
+                "head": 1,
+                "body": 1
+              }
+            },
+            {
+              "id": "title",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": 1
+            },
+            {
+              "id": "charset_utf8",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": "meta charset=utf-8"
+            },
+            {
+              "id": "one_h1",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": 1
+            },
+            {
+              "id": "semantic_landmarks",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": [
+                "footer",
+                "header",
+                "nav"
+              ]
+            },
+            {
+              "id": "unique_ids",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": []
+            },
+            {
+              "id": "balanced_tags",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": []
+            }
+          ]
+        },
+        "responsive": {
+          "score": 10.5,
+          "max": 16,
+          "checks": [
+            {
+              "id": "viewport",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": "width=device-width"
+            },
+            {
+              "id": "media_queries",
+              "earned": 0.0,
+              "max": 4.0,
+              "passed": false,
+              "evidence": {
+                "count": 0,
+                "breakpoints": []
+              }
+            },
+            {
+              "id": "fluid_layout",
+              "earned": 1.5,
+              "max": 3.0,
+              "passed": false,
+              "evidence": [
+                "100%",
+                "100vh"
+              ]
+            },
+            {
+              "id": "adaptive_layout_modes",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": [
+                "flex",
+                "wrap"
+              ]
+            },
+            {
+              "id": "responsive_media",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": "媒体 max-width 或无位图媒体"
+            },
+            {
+              "id": "no_obvious_horizontal_overflow",
+              "earned": 2.5,
+              "max": 2.5,
+              "passed": true,
+              "evidence": {
+                "oversized_px": []
+              }
+            }
+          ]
+        },
+        "interaction": {
+          "score": 13.75,
+          "max": 16,
+          "checks": [
+            {
+              "id": "meaningful_controls",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "interactive": 8,
+                "meaningful_links": 4,
+                "buttons": 1
+              }
+            },
+            {
+              "id": "event_wiring",
+              "earned": 3.75,
+              "max": 4.0,
+              "passed": false,
+              "evidence": [
+                "addEventListener",
+                "onsubmit=",
+                "querySelector"
+              ]
+            },
+            {
+              "id": "interaction_states",
+              "earned": 1.0,
+              "max": 3.0,
+              "passed": false,
+              "evidence": [
+                "hover"
+              ]
+            },
+            {
+              "id": "bounded_transition",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": "150–300ms transition"
+            },
+            {
+              "id": "no_obvious_dead_controls",
+              "earned": 2.5,
+              "max": 2.5,
+              "passed": true,
+              "evidence": {
+                "placeholder_link_lines": [],
+                "inert_button_risk": false
+              }
+            },
+            {
+              "id": "form_path",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": {
+                "forms": 1
+              }
+            }
+          ]
+        },
+        "visual_complexity": {
+          "score": 13.74,
+          "max": 20,
+          "checks": [
+            {
+              "id": "css_depth",
+              "earned": 3.89,
+              "max": 4.0,
+              "passed": false,
+              "evidence": {
+                "rules": 22,
+                "properties": 91
+              }
+            },
+            {
+              "id": "content_composition",
+              "earned": 3.6,
+              "max": 4.0,
+              "passed": false,
+              "evidence": {
+                "sections_articles": 3,
+                "landmarks": 3
+              }
+            },
+            {
+              "id": "visual_techniques",
+              "earned": 2.25,
+              "max": 5.0,
+              "passed": false,
+              "evidence": [
+                "flex",
+                "gradient",
+                "shadow"
+              ]
+            },
+            {
+              "id": "design_tokens",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "colors": 11,
+                "font_stacks": 1
+              }
+            },
+            {
+              "id": "visual_assets",
+              "earned": 0.0,
+              "max": 2.0,
+              "passed": false,
+              "evidence": {
+                "media": 0
+              }
+            },
+            {
+              "id": "typography_system",
+              "earned": 1.0,
+              "max": 2.0,
+              "passed": false,
+              "evidence": [
+                "weight",
+                "line-height"
+              ]
+            }
+          ]
+        },
+        "dependency_safety": {
+          "score": 9.5,
+          "max": 10,
+          "checks": [
+            {
+              "id": "external_dependency_risk",
+              "earned": 9.5,
+              "max": 10.0,
+              "passed": false,
+              "evidence": {
+                "total": 1,
+                "active": 1,
+                "http": 0,
+                "third_party_scripts": 0,
+                "unpinned_active": 0,
+                "remote_assets": 1,
+                "hosts": [
+                  "source.unsplash.com"
+                ]
+              }
+            }
+          ]
+        },
+        "accessibility": {
+          "score": 11.5,
+          "max": 20,
+          "checks": [
+            {
+              "id": "document_language",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": "zh-CN"
+            },
+            {
+              "id": "image_alternatives",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "images": 0,
+                "missing_alt_lines": []
+              }
+            },
+            {
+              "id": "form_labels",
+              "earned": 0.0,
+              "max": 3.0,
+              "passed": false,
+              "evidence": {
+                "controls": 3,
+                "unlabeled_lines": [
+                  214,
+                  215,
+                  216
+                ]
+              }
+            },
+            {
+              "id": "control_names",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": {
+                "unnamed_icon_buttons": 0,
+                "buttons_checked": 1
+              }
+            },
+            {
+              "id": "heading_order",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": {
+                "levels": [
+                  1,
+                  2,
+                  3,
+                  3,
+                  3,
+                  2
+                ],
+                "jumps": []
+              }
+            },
+            {
+              "id": "landmarks",
+              "earned": 1.5,
+              "max": 2.0,
+              "passed": false,
+              "evidence": [
+                "footer",
+                "header",
+                "nav"
+              ]
+            },
+            {
+              "id": "visible_focus",
+              "earned": 0.0,
+              "max": 2.5,
+              "passed": false,
+              "evidence": ":focus/:focus-visible"
+            },
+            {
+              "id": "reduced_motion",
+              "earned": 0.0,
+              "max": 1.5,
+              "passed": false,
+              "evidence": {
+                "motion": true,
+                "reduced_motion_rule": false
+              }
+            },
+            {
+              "id": "skip_navigation",
+              "earned": 0.0,
+              "max": 1.0,
+              "passed": false,
+              "evidence": {
+                "skip_link": false,
+                "nav": 1
+              }
+            },
+            {
+              "id": "semantic_click_targets",
+              "earned": 1.0,
+              "max": 1.0,
+              "passed": true,
+              "evidence": []
+            }
+          ]
+        }
+      },
+      "template_penalty": {
+        "score": 8.0,
+        "max": 20,
+        "checks": [
+          {
+            "id": "exact_three_card_signature",
+            "penalty": 6.0,
+            "max_penalty": 6,
+            "triggered": true,
+            "evidence": {
+              "max_generic_class_repeat": 3,
+              "generic_class_repeats": {
+                "feature-card": 3
+              },
+              "articles": 0,
+              "distinctive_techniques": 2
+            }
+          },
+          {
+            "id": "low_composition",
+            "penalty": 0.0,
+            "max_penalty": 3,
+            "triggered": false,
+            "evidence": {
+              "sections_articles": 3
+            }
+          },
+          {
+            "id": "no_distinct_visual_asset",
+            "penalty": 0.0,
+            "max_penalty": 3,
+            "triggered": false,
+            "evidence": {
+              "media": 0
+            }
+          },
+          {
+            "id": "generic_landing_copy",
+            "penalty": 2.0,
+            "max_penalty": 2,
+            "triggered": true,
+            "evidence": {
+              "matches": 11
+            }
+          },
+          {
+            "id": "shallow_style_system",
+            "penalty": 0.0,
+            "max_penalty": 3,
+            "triggered": false,
+            "evidence": {
+              "css_rules": 22
+            }
+          },
+          {
+            "id": "three_cards_without_behavior",
+            "penalty": 0.0,
+            "max_penalty": 3,
+            "triggered": false,
+            "evidence": {
+              "ordinary_three_cards": true,
+              "behavior": true
+            }
+          }
+        ],
+        "reasons": [
+          "命中恰好三张通用卡片/文章的模板签名。",
+          "通用落地页套话密度较高。"
+        ]
+      },
+      "inventory": {
+        "elements": 43,
+        "tags": {
+          "a": 4,
+          "body": 1,
+          "button": 1,
+          "div": 5,
+          "footer": 1,
+          "form": 1,
+          "h1": 1,
+          "h2": 2,
+          "h3": 3,
+          "head": 1,
+          "header": 1,
+          "html": 1,
+          "input": 2,
+          "li": 3,
+          "meta": 2,
+          "nav": 1,
+          "p": 5,
+          "script": 1,
+          "section": 3,
+          "style": 1,
+          "textarea": 1,
+          "title": 1,
+          "ul": 1
+        },
+        "css_bytes": 4036,
+        "script_bytes": 390,
+        "external_dependencies": [
+          {
+            "tag": "css",
+            "attribute": "url",
+            "url": "https://source.unsplash.com/random/1600x900/?technology",
+            "host": "source.unsplash.com",
+            "active": true,
+            "integrity": false,
+            "crossorigin": false
+          }
+        ]
+      },
+      "findings": [
+        {
+          "dimension": "responsive",
+          "severity": "warning",
+          "message": "未发现媒体查询，无法证明断点适配。"
+        },
+        {
+          "dimension": "dependency_safety",
+          "severity": "warning",
+          "message": "存在 1 个运行时远程视觉/媒体依赖，离线渲染可能缺失。"
+        },
+        {
+          "dimension": "accessibility",
+          "severity": "warning",
+          "message": "有 3 个表单控件缺少可识别标签。"
+        },
+        {
+          "dimension": "accessibility",
+          "severity": "warning",
+          "message": "未发现可靠的键盘焦点可见样式。"
+        },
+        {
+          "dimension": "accessibility",
+          "severity": "warning",
+          "message": "存在动画/过渡，但未尊重 prefers-reduced-motion。"
+        }
+      ],
+      "limitations": [
+        "静态评分不执行 JavaScript，不能证明控件在真实浏览器中可用。",
+        "静态评分不栅格化页面，不能证明断点无溢出、颜色达到 WCAG 对比度或视觉审美优良。",
+        "复杂度得分只衡量可观察的结构/样式多样性，不等价于设计质量。"
+      ]
+    },
+    {
+      "schema_version": "parallel-frontend-audit-item-v1",
+      "scorer_version": "parallel-frontend-static-v1.0.0",
+      "file": "index46.html",
+      "source": "C:\\Users\\Kangnaixi\\Desktop\\新建文件夹\\index46.html",
+      "sha256": "d55e39464fd3d848e9af315a21cd16d559582817e5f547a6e699637fd5374aa4",
+      "bytes": 5962,
+      "encoding": {
+        "valid_utf8": true,
+        "bom": false
+      },
+      "summary": {
+        "gross_score": 78.61,
+        "template_penalty": 8.0,
+        "final_score": 70.61,
+        "tier": "competent"
+      },
+      "dimensions": {
+        "structure": {
+          "score": 18.0,
+          "max": 18,
+          "checks": [
+            {
+              "id": "doctype",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": "HTML5 doctype"
+            },
+            {
+              "id": "single_document_skeleton",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "html": 1,
+                "head": 1,
+                "body": 1
+              }
+            },
+            {
+              "id": "title",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": 1
+            },
+            {
+              "id": "charset_utf8",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": "meta charset=utf-8"
+            },
+            {
+              "id": "one_h1",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": 1
+            },
+            {
+              "id": "semantic_landmarks",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": [
+                "footer",
+                "header",
+                "nav"
+              ]
+            },
+            {
+              "id": "unique_ids",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": []
+            },
+            {
+              "id": "balanced_tags",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": []
+            }
+          ]
+        },
+        "responsive": {
+          "score": 13.25,
+          "max": 16,
+          "checks": [
+            {
+              "id": "viewport",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": "width=device-width"
+            },
+            {
+              "id": "media_queries",
+              "earned": 2.0,
+              "max": 4.0,
+              "passed": false,
+              "evidence": {
+                "count": 1,
+                "breakpoints": [
+                  "768px"
+                ]
+              }
+            },
+            {
+              "id": "fluid_layout",
+              "earned": 2.25,
+              "max": 3.0,
+              "passed": false,
+              "evidence": [
+                "0%",
+                "100%",
+                "minmax("
+              ]
+            },
+            {
+              "id": "adaptive_layout_modes",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": [
+                "grid",
+                "flex"
+              ]
+            },
+            {
+              "id": "responsive_media",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": "媒体 max-width 或无位图媒体"
+            },
+            {
+              "id": "no_obvious_horizontal_overflow",
+              "earned": 2.5,
+              "max": 2.5,
+              "passed": true,
+              "evidence": {
+                "oversized_px": []
+              }
+            }
+          ]
+        },
+        "interaction": {
+          "score": 10.0,
+          "max": 16,
+          "checks": [
+            {
+              "id": "meaningful_controls",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "interactive": 5,
+                "meaningful_links": 4,
+                "buttons": 0
+              }
+            },
+            {
+              "id": "event_wiring",
+              "earned": 2.5,
+              "max": 4.0,
+              "passed": false,
+              "evidence": [
+                "addEventListener",
+                "querySelector"
+              ]
+            },
+            {
+              "id": "interaction_states",
+              "earned": 1.0,
+              "max": 3.0,
+              "passed": false,
+              "evidence": [
+                "hover"
+              ]
+            },
+            {
+              "id": "bounded_transition",
+              "earned": 1.5,
+              "max": 1.5,
+              "passed": true,
+              "evidence": "150–300ms transition"
+            },
+            {
+              "id": "no_obvious_dead_controls",
+              "earned": 0.0,
+              "max": 2.5,
+              "passed": false,
+              "evidence": {
+                "placeholder_link_lines": [
+                  155
+                ],
+                "inert_button_risk": false
+              }
+            },
+            {
+              "id": "form_path",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": {
+                "forms": 0
+              }
+            }
+          ]
+        },
+        "visual_complexity": {
+          "score": 14.86,
+          "max": 20,
+          "checks": [
+            {
+              "id": "css_depth",
+              "earned": 3.56,
+              "max": 4.0,
+              "passed": false,
+              "evidence": {
+                "rules": 21,
+                "properties": 75
+              }
+            },
+            {
+              "id": "content_composition",
+              "earned": 2.8,
+              "max": 4.0,
+              "passed": false,
+              "evidence": {
+                "sections_articles": 2,
+                "landmarks": 3
+              }
+            },
+            {
+              "id": "visual_techniques",
+              "earned": 4.5,
+              "max": 5.0,
+              "passed": false,
+              "evidence": [
+                "grid",
+                "flex",
+                "gradient",
+                "shadow",
+                "transform",
+                "custom-properties"
+              ]
+            },
+            {
+              "id": "design_tokens",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "colors": 10,
+                "font_stacks": 1
+              }
+            },
+            {
+              "id": "visual_assets",
+              "earned": 0.0,
+              "max": 2.0,
+              "passed": false,
+              "evidence": {
+                "media": 0
+              }
+            },
+            {
+              "id": "typography_system",
+              "earned": 1.0,
+              "max": 2.0,
+              "passed": false,
+              "evidence": [
+                "weight",
+                "line-height"
+              ]
+            }
+          ]
+        },
+        "dependency_safety": {
+          "score": 10.0,
+          "max": 10,
+          "checks": [
+            {
+              "id": "external_dependency_risk",
+              "earned": 10.0,
+              "max": 10.0,
+              "passed": true,
+              "evidence": {
+                "total": 0,
+                "active": 0,
+                "http": 0,
+                "third_party_scripts": 0,
+                "unpinned_active": 0,
+                "remote_assets": 0,
+                "hosts": []
+              }
+            }
+          ]
+        },
+        "accessibility": {
+          "score": 12.5,
+          "max": 20,
+          "checks": [
+            {
+              "id": "document_language",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": "zh-CN"
+            },
+            {
+              "id": "image_alternatives",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "images": 0,
+                "missing_alt_lines": []
+              }
+            },
+            {
+              "id": "form_labels",
+              "earned": 3.0,
+              "max": 3.0,
+              "passed": true,
+              "evidence": {
+                "controls": 0,
+                "unlabeled_lines": []
+              }
+            },
+            {
+              "id": "control_names",
+              "earned": 2.0,
+              "max": 2.0,
+              "passed": true,
+              "evidence": {
+                "unnamed_icon_buttons": 0,
+                "buttons_checked": 0
+              }
+            },
+            {
+              "id": "heading_order",
+              "earned": 0.0,
+              "max": 2.0,
+              "passed": false,
+              "evidence": {
+                "levels": [
+                  1,
+                  3,
+                  3,
+                  3
+                ],
+                "jumps": [
+                  [
+                    1,
+                    3
+                  ]
+                ]
+              }
+            },
+            {
+              "id": "landmarks",
+              "earned": 1.5,
+              "max": 2.0,
+              "passed": false,
+              "evidence": [
+                "footer",
+                "header",
+                "nav"
+              ]
+            },
+            {
+              "id": "visible_focus",
+              "earned": 0.0,
+              "max": 2.5,
+              "passed": false,
+              "evidence": ":focus/:focus-visible"
+            },
+            {
+              "id": "reduced_motion",
+              "earned": 0.0,
+              "max": 1.5,
+              "passed": false,
+              "evidence": {
+                "motion": true,
+                "reduced_motion_rule": false
+              }
+            },
+            {
+              "id": "skip_navigation",
+              "earned": 0.0,
+              "max": 1.0,
+              "passed": false,
+              "evidence": {
+                "skip_link": false,
+                "nav": 1
+              }
+            },
+            {
+              "id": "semantic_click_targets",
+              "earned": 1.0,
+              "max": 1.0,
+              "passed": true,
+              "evidence": []
+            }
+          ]
+        }
+      },
+      "template_penalty": {
+        "score": 8.0,
+        "max": 20,
+        "checks": [
+          {
+            "id": "exact_three_card_signature",
+            "penalty": 6.0,
+            "max_penalty": 6,
+            "triggered": true,
+            "evidence": {
+              "max_generic_class_repeat": 3,
+              "generic_class_repeats": {
+                "card": 3
+              },
+              "articles": 0,
+              "distinctive_techniques": 5
+            }
+          },
+          {
+            "id": "low_composition",
+            "penalty": 0.0,
+            "max_penalty": 3,
+            "triggered": false,
+            "evidence": {
+              "sections_articles": 2
+            }
+          },
+          {
+            "id": "no_distinct_visual_asset",
+            "penalty": 0.0,
+            "max_penalty": 3,
+            "triggered": false,
+            "evidence": {
+              "media": 0
+            }
+          },
+          {
+            "id": "generic_landing_copy",
+            "penalty": 2.0,
+            "max_penalty": 2,
+            "triggered": true,
+            "evidence": {
+              "matches": 5
+            }
+          },
+          {
+            "id": "shallow_style_system",
+            "penalty": 0.0,
+            "max_penalty": 3,
+            "triggered": false,
+            "evidence": {
+              "css_rules": 21
+            }
+          },
+          {
+            "id": "three_cards_without_behavior",
+            "penalty": 0.0,
+            "max_penalty": 3,
+            "triggered": false,
+            "evidence": {
+              "ordinary_three_cards": true,
+              "behavior": true
+            }
+          }
+        ],
+        "reasons": [
+          "命中恰好三张通用卡片/文章的模板签名。",
+          "通用落地页套话密度较高。"
+        ]
+      },
+      "inventory": {
+        "elements": 34,
+        "tags": {
+          "a": 5,
+          "body": 1,
+          "div": 3,
+          "footer": 1,
+          "h1": 1,
+          "h3": 3,
+          "head": 1,
+          "header": 1,
+          "html": 1,
+          "li": 3,
+          "meta": 2,
+          "nav": 1,
+          "p": 5,
+          "script": 1,
+          "section": 2,
+          "style": 1,
+          "title": 1,
+          "ul": 1
+        },
+        "css_bytes": 3648,
+        "script_bytes": 587,
+        "external_dependencies": []
+      },
+      "findings": [
+        {
+          "dimension": "interaction",
+          "severity": "warning",
+          "message": "发现 1 个空链接或 href=#。"
+        },
+        {
+          "dimension": "accessibility",
+          "severity": "warning",
+          "message": "未发现可靠的键盘焦点可见样式。"
+        },
+        {
+          "dimension": "accessibility",
+          "severity": "warning",
+          "message": "存在动画/过渡，但未尊重 prefers-reduced-motion。"
+        }
+      ],
+      "limitations": [
+        "静态评分不执行 JavaScript，不能证明控件在真实浏览器中可用。",
+        "静态评分不栅格化页面，不能证明断点无溢出、颜色达到 WCAG 对比度或视觉审美优良。",
+        "复杂度得分只衡量可观察的结构/样式多样性，不等价于设计质量。"
+      ]
+    }
+  ]
+}

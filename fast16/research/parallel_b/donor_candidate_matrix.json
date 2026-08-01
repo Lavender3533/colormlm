@@ -1,0 +1,188 @@
+{
+  "format": "colorlm-parallel-b-second-donor-screen-v1",
+  "date": "2026-07-31",
+  "decision": {
+    "direct_admission": null,
+    "reason": "没有候选同时通过连续性、深层可运输性、运行可执行性、相对 v17 互补性和单位成本五个硬门。",
+    "nearest_testable_candidate": "moonshotai/Kimi-K3",
+    "continuous_island_audit_primary": "zai-org/GLM-5",
+    "engineering_fallback": "XiaomiMiMo/MiMo-V2-Flash"
+  },
+  "score_definition": {
+    "range": "0..5，5 最优",
+    "weights": {
+      "local_causal_evidence": 25,
+      "capability_complementarity": 20,
+      "continuous_block_feasibility": 15,
+      "llama_runtime_reuse": 15,
+      "deep_transport_readiness": 10,
+      "local_asset_readiness": 10,
+      "license_clarity": 5
+    },
+    "warning": "加权分只决定研究顺序，不覆盖硬门。unknown 和 partial 均不算通过。"
+  },
+  "candidates": [
+    {
+      "rank": 1,
+      "id": "moonshotai/Kimi-K3",
+      "role": "近期可测第二 donor",
+      "official_snapshot": {
+        "license": "Kimi K3 License",
+        "total_parameters": "2.8T",
+        "active_parameters": "104B",
+        "layers": 93,
+        "hidden_size": 7168,
+        "experts": 896,
+        "experts_per_token": 16,
+        "context": 1048576,
+        "architecture": "KDA + AttnRes + Stable LatentMoE",
+        "source": "https://huggingface.co/moonshotai/Kimi-K3"
+      },
+      "local_evidence": [
+        "已有 7168->2048 运输、真实 MXFP4 宏胶囊和运行时接入资产。",
+        "v13 的 72 个反事实 teacher token 上，L12 固定 K3 相对 no-op 平均 NLL 从 2.487283 降到 2.438846。",
+        "12 个任务中 8 个改善，5 个工具任务中 5 个改善；但该集合参与过选择，不能外推到 v17。",
+        "现有证据来自孤立 latent 专家，不是连续 KDA/AttnRes 层块。"
+      ],
+      "scores": {
+        "local_causal_evidence": 5,
+        "capability_complementarity": 5,
+        "continuous_block_feasibility": 1,
+        "llama_runtime_reuse": 2,
+        "deep_transport_readiness": 2,
+        "local_asset_readiness": 5,
+        "license_clarity": 2
+      },
+      "weighted_score": 70,
+      "hard_gates": {
+        "continuity": "fail",
+        "deep_transport": "fail",
+        "runtime_execution": "partial",
+        "complementarity_vs_v17": "unknown",
+        "unit_cost": "partial"
+      },
+      "next_decision": "只把现有 L12 固定双胶囊作为 v17 上的第二 donor 反事实候选，先跑冻结多能力门；不得据此称为连续岛。"
+    },
+    {
+      "rank": 2,
+      "id": "zai-org/GLM-5",
+      "role": "新连续岛结构审计首选",
+      "official_snapshot": {
+        "license": "MIT",
+        "total_parameters": "744B",
+        "active_parameters": "40B",
+        "layers": 78,
+        "hidden_size": 6144,
+        "experts": 256,
+        "experts_per_token": 8,
+        "context": 202752,
+        "architecture": "MLA + DeepSeek Sparse Attention + MoE",
+        "source": "https://huggingface.co/zai-org/GLM-5"
+      },
+      "local_evidence": [
+        "官方目标覆盖复杂系统工程、长程 Agent、推理、工具和中文，能力槽与 Coder-Next 不完全重合。",
+        "当前 llama.cpp 已有 LLM_ARCH_GLM_DSA、转换器、DSA indexer 和 744B.A40B 类型路径。",
+        "本地没有 GLM-5 权重、深层激活、坐标桥或相对 v17 的反事实能力证据。"
+      ],
+      "scores": {
+        "local_causal_evidence": 1,
+        "capability_complementarity": 5,
+        "continuous_block_feasibility": 3,
+        "llama_runtime_reuse": 5,
+        "deep_transport_readiness": 1,
+        "local_asset_readiness": 1,
+        "license_clarity": 5
+      },
+      "weighted_score": 58,
+      "hard_gates": {
+        "continuity": "unknown",
+        "deep_transport": "fail",
+        "runtime_execution": "partial",
+        "complementarity_vs_v17": "unknown",
+        "unit_cost": "unknown"
+      },
+      "next_decision": "只做连续 3-4 层的张量索引、Range、状态槽和算子复用审计；在独立能力证据出现前不分配大权重预算。"
+    },
+    {
+      "rank": 3,
+      "id": "XiaomiMiMo/MiMo-V2-Flash",
+      "role": "连续岛工程备选",
+      "official_snapshot": {
+        "license": "MIT",
+        "total_parameters": "309B",
+        "active_parameters": "15B",
+        "layers": 48,
+        "hidden_size": 4096,
+        "experts": 256,
+        "experts_per_token": 8,
+        "context": 262144,
+        "architecture": "Local SWA + Global Attention + MoE + MTP",
+        "source": "https://huggingface.co/XiaomiMiMo/MiMo-V2-Flash"
+      },
+      "local_evidence": [
+        "四个新候选中 active 参数最小、隐藏宽度较低，连续块成本最有希望受控。",
+        "当前 llama.cpp 已有 LLM_ARCH_MIMO2、SWA/全注意力和 MoE 图路径。",
+        "官方重点仍偏代码、推理和 Agent，与 Coder-Next 的能力重叠高于 GLM-5/K3。",
+        "本地没有权重、深层激活或相对 v17 的因果证据。"
+      ],
+      "scores": {
+        "local_causal_evidence": 1,
+        "capability_complementarity": 3,
+        "continuous_block_feasibility": 4,
+        "llama_runtime_reuse": 5,
+        "deep_transport_readiness": 2,
+        "local_asset_readiness": 1,
+        "license_clarity": 5
+      },
+      "weighted_score": 55,
+      "hard_gates": {
+        "continuity": "unknown",
+        "deep_transport": "fail",
+        "runtime_execution": "partial",
+        "complementarity_vs_v17": "unknown",
+        "unit_cost": "unknown"
+      },
+      "next_decision": "当 GLM-5 的单块估算超过预算或 DSA 状态接入不可控时，转为首个连续块元数据预检。"
+    },
+    {
+      "rank": 4,
+      "id": "deepseek-ai/DeepSeek-V3.2",
+      "role": "暂缓候选",
+      "official_snapshot": {
+        "license": "MIT",
+        "total_parameters": "约 671B",
+        "active_parameters": "约 37B",
+        "layers": 61,
+        "hidden_size": 7168,
+        "experts": 256,
+        "experts_per_token": 8,
+        "context": 163840,
+        "architecture": "MLA + sparse attention + MoE",
+        "source": "https://huggingface.co/deepseek-ai/DeepSeek-V3.2"
+      },
+      "local_evidence": [
+        "当前 llama.cpp 已有 DeepSeek2/MLA 图路径，整模算子复用成熟度较高。",
+        "7168->2048 深层桥、稀疏注意力状态和大块成本均未验证。",
+        "代码/推理定位与 Coder-Next、GLM-5 重叠，当前没有足以抵消迁移成本的本地互补证据。"
+      ],
+      "scores": {
+        "local_causal_evidence": 1,
+        "capability_complementarity": 3,
+        "continuous_block_feasibility": 2,
+        "llama_runtime_reuse": 5,
+        "deep_transport_readiness": 1,
+        "local_asset_readiness": 1,
+        "license_clarity": 5
+      },
+      "weighted_score": 47,
+      "hard_gates": {
+        "continuity": "unknown",
+        "deep_transport": "fail",
+        "runtime_execution": "partial",
+        "complementarity_vs_v17": "unknown",
+        "unit_cost": "unknown"
+      },
+      "next_decision": "保留元数据候选，不进入近期 Range、桥或运行时工作。"
+    }
+  ]
+}

@@ -1,0 +1,385 @@
+{
+  "format": "colorlm-neural-block-runtime-v1",
+  "name": "ColorLM-v17-Coder-Neural-Block-L46",
+  "formal": true,
+  "source_abi": "D:\\project\\大模型ssd化\\fast16\\research\\v17_coder_island\\plans\\layer46.json",
+  "source_abi_sha256": "333431813d1823c38edc97ebaeaaf48d4db81870383e4af467ce99cebbd38b6b",
+  "runtime_layout": "single-aligned-tensor-blob-v1",
+  "alignment": 64,
+  "weights": {
+    "file": "weights.bin",
+    "bytes": 944203648,
+    "sha256": "253551de42d376c277b1f859012c55db9bfcae01db1a213d1ba2fa0c335d979a"
+  },
+  "source": {
+    "repo": "Qwen/Qwen3-Coder-Next",
+    "revision": "master",
+    "architecture": "Qwen3NextForCausalLM",
+    "layer": 46,
+    "layer_type": "gated_deltanet",
+    "index_sha256": "4a23cf5b586da565eee0032cbad4aeb088dbbb7593b62ffeb1b8e0399f1d0d7e",
+    "config_sha256": "a7b8098d3b05777f12bb5677a26bf1240a1bb09def1b06b29e6be86cae2e84f8"
+  },
+  "interface": {
+    "input_width": 2048,
+    "output_width": 2048,
+    "input_transport": "colorlm-to-coder-2048x2048",
+    "output_transport": "coder-to-colorlm-2048x2048",
+    "residual_contract": "h_out=h_native+alpha*energy_gate*transport_out(block(transport_in(h_native))-transport_in(h_native))",
+    "hard_bypass": "alpha=0 does not load weights, allocate memory, or create graph nodes",
+    "transport": {
+      "method": "shared-token-orthogonal-procrustes",
+      "source_to_target_file": "coder_next_to_colorlm_orthogonal_f32.npy",
+      "source_to_target_sha256": "7209781fa72220c337314e8456497c83cf1b51798d2b4321414200a98de04d12",
+      "shape": [
+        2048,
+        2048
+      ],
+      "runtime_dtype": "F16",
+      "input": "T maps ColorLM column hidden states into Coder coordinates",
+      "output": "transpose(T) maps Coder column hidden states back into ColorLM coordinates"
+    }
+  },
+  "attention": {
+    "type": "gated_deltanet",
+    "query_heads": 16,
+    "kv_heads": 2,
+    "head_dim": 256,
+    "partial_rotary_factor": 0.25,
+    "rope_theta": 5000000.0,
+    "memory": "independent-recurrent-state-required"
+  },
+  "moe": {
+    "expert_count": 512,
+    "experts_per_token": 10,
+    "expert_width": 512,
+    "shared_expert_width": 512,
+    "paging": "exact-top-k-only; cache miss must wait or take the whole block no-op path"
+  },
+  "target": {
+    "base": "ColorLM-v13-Causal-Sparse-L12",
+    "site": 35,
+    "site_policy": "L35 full-token residual station; donor L46 uses island-private state",
+    "base_hidden_width": 2048,
+    "base_query_heads": 16,
+    "base_kv_heads": 2,
+    "base_rope_theta": 10000000.0,
+    "donor_rope_is_independent": true
+  },
+  "transport": {
+    "method": "shared-token-orthogonal-procrustes",
+    "source_to_target_file": "coder_next_to_colorlm_orthogonal_f32.npy",
+    "source_to_target_sha256": "7209781fa72220c337314e8456497c83cf1b51798d2b4321414200a98de04d12",
+    "shape": [
+      2048,
+      2048
+    ],
+    "runtime_dtype": "F16",
+    "input": "T maps ColorLM column hidden states into Coder coordinates",
+    "output": "transpose(T) maps Coder column hidden states back into ColorLM coordinates"
+  },
+  "tensor_count": 19,
+  "tensors": [
+    {
+      "name": "model.layers.46.input_layernorm.weight",
+      "role": "input_norm",
+      "dtype": "F32",
+      "source_shape": [
+        2048
+      ],
+      "ggml_shape": [
+        2048
+      ],
+      "offset": 0,
+      "bytes": 8192,
+      "sha256": "45519d814cc44f633838263e0303f7378a6ded3c58b8a57b5b4a4d10fc477082"
+    },
+    {
+      "name": "model.layers.46.linear_attn.A_log",
+      "role": "gated_deltanet",
+      "dtype": "F32",
+      "source_shape": [
+        32
+      ],
+      "ggml_shape": [
+        32
+      ],
+      "offset": 8192,
+      "bytes": 128,
+      "sha256": "7b38c96d608a159dacb1a3b313fe2c8b5b04ef0d0e6cf8ad25fca55896802902"
+    },
+    {
+      "name": "model.layers.46.linear_attn.conv1d.weight",
+      "role": "gated_deltanet",
+      "dtype": "F32",
+      "source_shape": [
+        8192,
+        1,
+        4
+      ],
+      "ggml_shape": [
+        4,
+        8192
+      ],
+      "offset": 8320,
+      "bytes": 131072,
+      "sha256": "3b311c3c5a5ba66cb0f324433a597c4fd5c89f39fce4d7141e4409253f1ae37d"
+    },
+    {
+      "name": "model.layers.46.linear_attn.dt_bias",
+      "role": "gated_deltanet",
+      "dtype": "F32",
+      "source_shape": [
+        32
+      ],
+      "ggml_shape": [
+        32
+      ],
+      "offset": 139392,
+      "bytes": 128,
+      "sha256": "7ebe667b06eaa3da9d76e43bd0314e8ddced6415f9e28d9459b076668b587adc"
+    },
+    {
+      "name": "model.layers.46.linear_attn.in_proj_ba.weight",
+      "role": "gated_deltanet",
+      "dtype": "Q4_0",
+      "source_shape": [
+        64,
+        2048
+      ],
+      "ggml_shape": [
+        2048,
+        64
+      ],
+      "offset": 139520,
+      "bytes": 73728,
+      "sha256": "1cde6ded44968a3f5a2c3131f56d99e7fa9cf0e4afe8cd6ea852a0d8231a4069"
+    },
+    {
+      "name": "model.layers.46.linear_attn.in_proj_qkvz.weight",
+      "role": "gated_deltanet",
+      "dtype": "Q4_0",
+      "source_shape": [
+        12288,
+        2048
+      ],
+      "ggml_shape": [
+        2048,
+        12288
+      ],
+      "offset": 213248,
+      "bytes": 14155776,
+      "sha256": "ccaf261e9a7cc45baa1f6f188da6aa1d1a8afdee687d2b59ed6c8b416eca0ed1"
+    },
+    {
+      "name": "model.layers.46.linear_attn.norm.weight",
+      "role": "gated_deltanet",
+      "dtype": "F32",
+      "source_shape": [
+        128
+      ],
+      "ggml_shape": [
+        128
+      ],
+      "offset": 14369024,
+      "bytes": 512,
+      "sha256": "52b2bee0333e43228b9e163d3245b281f3ea1e4ab6003de2fb3f7039e55723ae"
+    },
+    {
+      "name": "model.layers.46.linear_attn.out_proj.weight",
+      "role": "gated_deltanet",
+      "dtype": "Q4_0",
+      "source_shape": [
+        2048,
+        4096
+      ],
+      "ggml_shape": [
+        4096,
+        2048
+      ],
+      "offset": 14369536,
+      "bytes": 4718592,
+      "sha256": "3b00537ff3dc91c76163df23bcd5ba96be88d314247f6c1f0066a0774bec48f3"
+    },
+    {
+      "name": "model.layers.46.mlp.gate.weight",
+      "role": "expert_router",
+      "dtype": "Q4_0",
+      "source_shape": [
+        512,
+        2048
+      ],
+      "ggml_shape": [
+        2048,
+        512
+      ],
+      "offset": 19088128,
+      "bytes": 589824,
+      "sha256": "4065b502250d67f41030bb1e33916becfad089ccfa87d2a61db41e87cd73ceb9"
+    },
+    {
+      "name": "model.layers.46.mlp.shared_expert.down_proj.weight",
+      "role": "shared_expert",
+      "dtype": "Q4_0",
+      "source_shape": [
+        2048,
+        512
+      ],
+      "ggml_shape": [
+        512,
+        2048
+      ],
+      "offset": 19677952,
+      "bytes": 589824,
+      "sha256": "f115455006c9cb545709a9a85cd5e411951947fc9c94ec5ed816800891c274cc"
+    },
+    {
+      "name": "model.layers.46.mlp.shared_expert.gate_proj.weight",
+      "role": "shared_expert",
+      "dtype": "Q4_0",
+      "source_shape": [
+        512,
+        2048
+      ],
+      "ggml_shape": [
+        2048,
+        512
+      ],
+      "offset": 20267776,
+      "bytes": 589824,
+      "sha256": "aea7247186e111fc2116932558c4f82c5b7cf0307755404fa2c751335e611517"
+    },
+    {
+      "name": "model.layers.46.mlp.shared_expert.up_proj.weight",
+      "role": "shared_expert",
+      "dtype": "Q4_0",
+      "source_shape": [
+        512,
+        2048
+      ],
+      "ggml_shape": [
+        2048,
+        512
+      ],
+      "offset": 20857600,
+      "bytes": 589824,
+      "sha256": "20c2a8f2677677b9ff4f4ddbdcaa6195e491766543270afcd7cf2d4efcc4e105"
+    },
+    {
+      "name": "model.layers.46.mlp.shared_expert_gate.weight",
+      "role": "shared_expert_gate",
+      "dtype": "Q4_0",
+      "source_shape": [
+        1,
+        2048
+      ],
+      "ggml_shape": [
+        2048,
+        1
+      ],
+      "offset": 21447424,
+      "bytes": 1152,
+      "sha256": "d5ec0611e685582ba4f56e3cf2720df24b9915ae52fe4f8735286427303961c4"
+    },
+    {
+      "name": "model.layers.46.post_attention_layernorm.weight",
+      "role": "post_attention_norm",
+      "dtype": "F32",
+      "source_shape": [
+        2048
+      ],
+      "ggml_shape": [
+        2048
+      ],
+      "offset": 21448576,
+      "bytes": 8192,
+      "sha256": "218ee1e63fc13da9444804da6fed21a864f3468bcbdd065883b51dfc69bdc149"
+    },
+    {
+      "name": "model.layers.46.mlp.experts.gate_proj.weight",
+      "role": "routed_expert_bank",
+      "dtype": "Q4_0",
+      "source_shape": [
+        512,
+        512,
+        2048
+      ],
+      "ggml_shape": [
+        2048,
+        512,
+        512
+      ],
+      "offset": 21456768,
+      "bytes": 301989888,
+      "sha256": "4cce86a776375b9bc4b7584340798639428137e6767f38964b948a4b7ecf4238"
+    },
+    {
+      "name": "model.layers.46.mlp.experts.up_proj.weight",
+      "role": "routed_expert_bank",
+      "dtype": "Q4_0",
+      "source_shape": [
+        512,
+        512,
+        2048
+      ],
+      "ggml_shape": [
+        2048,
+        512,
+        512
+      ],
+      "offset": 323446656,
+      "bytes": 301989888,
+      "sha256": "26762095bbd9f3aa43fbcb9c4343d0bf93cd763bef2fd593bb670f86db68edda"
+    },
+    {
+      "name": "model.layers.46.mlp.experts.down_proj.weight",
+      "role": "routed_expert_bank",
+      "dtype": "Q4_0",
+      "source_shape": [
+        512,
+        2048,
+        512
+      ],
+      "ggml_shape": [
+        512,
+        2048,
+        512
+      ],
+      "offset": 625436544,
+      "bytes": 301989888,
+      "sha256": "9058c4a72326ad89ba7a297717fa2fc029fd15ce6e00605356f2be790bc60b18"
+    },
+    {
+      "name": "colorlm.neural_block.transport_in.weight",
+      "role": "input_transport",
+      "dtype": "F16",
+      "source_shape": [
+        2048,
+        2048
+      ],
+      "ggml_shape": [
+        2048,
+        2048
+      ],
+      "offset": 927426432,
+      "bytes": 8388608,
+      "sha256": "8e14fe6427e4a5a6b22d83a1b362570b35614295496b716611e7bf382990e83f"
+    },
+    {
+      "name": "colorlm.neural_block.transport_out.weight",
+      "role": "output_transport",
+      "dtype": "F16",
+      "source_shape": [
+        2048,
+        2048
+      ],
+      "ggml_shape": [
+        2048,
+        2048
+      ],
+      "offset": 935815040,
+      "bytes": 8388608,
+      "sha256": "9b2c9ce54ccedc94d615b7467b2ee116f41883b78c9ed4df055053227eaca433"
+    }
+  ]
+}

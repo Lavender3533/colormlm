@@ -1,0 +1,77 @@
+{
+  "format": "colorlm-neural-output-head-runtime-v1",
+  "name": "ColorLM-v19-Coder-Next-Terminal-Output-Head",
+  "formal": true,
+  "runtime_layout": "single-aligned-tensor-blob-v1",
+  "alignment": 64,
+  "source": {
+    "architecture": "Qwen3NextForCausalLM",
+    "gguf": "D:\\project\\大模型ssd化\\fast16\\models\\donor\\qwen3-coder-next-iq3s\\Qwen3-Coder-Next-UD-IQ3_S.gguf",
+    "vocab_size": 151936,
+    "hidden_size": 2048,
+    "output_tied_to_embedding": false
+  },
+  "target": {
+    "architecture": "ColorLMV4",
+    "vocab_size": 248320
+  },
+  "mapping": {
+    "method": "exact-tokenizer.ggml.tokens-raw-bytes",
+    "report": "D:\\project\\大模型ssd化\\fast16\\research\\v19_dual_head\\token_map_report.json",
+    "report_sha256": "a10db52dc6f4f43bf91bdcc175dc725d87882f51d0468b09d097aebfbd15a26c",
+    "source_map_sha256": "3a54dfdbfbc5e04280cafe5b4164d4b7ac944aac1aaefcd50b7d4c0cf8be3020",
+    "mapped_tokens": 131612,
+    "donor_coverage": 0.866233150800337,
+    "base_vocab_coverage": 0.5300096649484536,
+    "target_collisions": 0
+  },
+  "weights": {
+    "file": "weights.bin",
+    "bytes": 256840032,
+    "sha256": "e17d4f2fee27983cb32df3dc9a22c548d4530b98ea30c00650a529d509f9fe23"
+  },
+  "tensor_count": 4,
+  "tensors": [
+    {
+      "name": "output_norm.weight",
+      "dtype": "F32",
+      "ggml_shape": [
+        2048
+      ],
+      "offset": 0,
+      "bytes": 8192,
+      "sha256": "0de3e7fda28f600b1161a1e286fd9fdaca514b0e0455827bb72b3f081943adbd"
+    },
+    {
+      "name": "output.weight",
+      "dtype": "Q6_K",
+      "ggml_shape": [
+        2048,
+        151936
+      ],
+      "offset": 8192,
+      "bytes": 255252480,
+      "sha256": "85e74917e40e36033c9abd27c1b877588576ec916cd039d6dddc81bba70c2340"
+    },
+    {
+      "name": "mapping.donor_ids",
+      "dtype": "I32",
+      "ggml_shape": [
+        131612
+      ],
+      "offset": 255260672,
+      "bytes": 526448,
+      "sha256": "c85d1adef0e7bc42aff4a46807c5f774fc025b4566d0ad7acfded0b8c3aa05fe"
+    },
+    {
+      "name": "mapping.base_ids",
+      "dtype": "I64",
+      "ggml_shape": [
+        131612
+      ],
+      "offset": 255787136,
+      "bytes": 1052896,
+      "sha256": "57df7d6c69e7b63e0fc14a2797fcc2fb99775ef6735f6157fdca62e7ba8cb6b7"
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "format": "colorlm-neural-bus-capsule-v2",
+  "donor": "Qwen/Qwen3-Coder-Next layer 47 expert 0",
+  "source_expert": 0,
+  "reference_colorlm_expert": 255,
+  "transport": "shared-token-orthogonal-procrustes, baked into weights",
+  "dtype": "Q4_0",
+  "input_width": 2048,
+  "intermediate_width": 512,
+  "output_width": 2048,
+  "expert_beta": 0.25110505840699576,
+  "base_energy": 7.05722715102377e-05,
+  "donor_energy_before_scale": 0.0002810467935530508,
+  "router": {
+    "file": "router.f32",
+    "dtype": "F32",
+    "shape": [
+      2048,
+      1
+    ],
+    "common_scale": 0.7646515608425083,
+    "bytes": 8192,
+    "sha256": "04cffe27a003be2192132811ff2a0bc2d484ba293a2bdee9d0bded0795e26fd3"
+  },
+  "tensors": {
+    "gate": {
+      "file": "gate.q4_0",
+      "bytes": 589824,
+      "sha256": "29688cff40f9fa6c69b370e74ac477b4e533a3b2e0e463158bafa536fe9cdb7e"
+    },
+    "up": {
+      "file": "up.q4_0",
+      "bytes": 589824,
+      "sha256": "41eec5fa53ebc213fee52ef7c0b3b788b43534b74be71ebd75782a073ae2d6c5"
+    },
+    "down": {
+      "file": "down.q4_0",
+      "bytes": 589824,
+      "sha256": "689db1b3d670bd42e9671fe44d9f6944e5ca840c2edb87c1d4520fb1a0998a3b"
+    }
+  },
+  "source_sha256": {
+    "model.layers.47.mlp.experts.0.gate_proj.weight.bin": "939e59ad8ceea4184c87b8f9f411071f4e8127114104ba70d94954983b7b43de",
+    "model.layers.47.mlp.experts.0.up_proj.weight.bin": "ab95a80fed1076fbf9a31f64ff8d4cd6ab5b628c0429af32dfa842090d1c8212",
+    "model.layers.47.mlp.experts.0.down_proj.weight.bin": "2e8d7a9e360e5d44a0754f0d4ed9111476901563bdb99e4178deadef234329a8"
+  }
+}

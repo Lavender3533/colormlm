@@ -1,0 +1,98 @@
+{
+  "format": "colorlm-neural-island-runtime-v1",
+  "name": "ColorLM-v18-Coder-Neural-Island-Activation-Bridge",
+  "formal": true,
+  "target_site": 35,
+  "source_architecture": "Qwen3NextForCausalLM",
+  "source_layers": [
+    44,
+    45,
+    46,
+    47
+  ],
+  "execution": "contiguous-donor-coordinates-single-entry-single-exit",
+  "state": {
+    "recurrent_layers": [
+      44,
+      45,
+      46
+    ],
+    "attention_layers": [
+      47
+    ],
+    "memory": "llama-context-sequence-native",
+    "sidecar_slots": {
+      "recurrent": [
+        3,
+        7,
+        11
+      ],
+      "attention_kv": 34
+    }
+  },
+  "total_weight_bytes": 3773072128,
+  "layers": [
+    {
+      "source_layer": 44,
+      "layer_type": "gated_deltanet",
+      "package": "fast16/research/v18_activation_bridge/runtime-v1/layer44",
+      "manifest_sha256": "566e925b56a740c3d9be865c88416b7157b44c2b0204bb0d6669426e385cc926",
+      "weights_bytes": 944203648,
+      "weights_sha256": "a550a99a46b0cf8f3a46bbd4c35bcbad81e92bf83ef6fd3034b243612387e1ba",
+      "tensor_count": 19
+    },
+    {
+      "source_layer": 45,
+      "layer_type": "gated_deltanet",
+      "package": "fast16/research/v18_activation_bridge/runtime-v1/layer45",
+      "manifest_sha256": "0913cd967e91be8b15fcfe427cbe54ded647bf17e9155e0b2b607d77a8ecb7dc",
+      "weights_bytes": 944203648,
+      "weights_sha256": "ef8edf455271bc0f9efb88c7e4c70af69de9762a38a04c6c29d63419798612ee",
+      "tensor_count": 19
+    },
+    {
+      "source_layer": 46,
+      "layer_type": "gated_deltanet",
+      "package": "fast16/research/v18_activation_bridge/runtime-v1/layer46",
+      "manifest_sha256": "83681b786166a0de577789d424d5c3886c2d099eaaefc80029fd906e4e3965be",
+      "weights_bytes": 944203648,
+      "weights_sha256": "23ea4db3c087eac96518dcaadb51e0d53b0ee8e1907b2df9b6a939b8949cc7ae",
+      "tensor_count": 19
+    },
+    {
+      "source_layer": 47,
+      "layer_type": "full_attention",
+      "package": "fast16/research/v18_activation_bridge/runtime-v1/layer47",
+      "manifest_sha256": "96115710653aff3aacffd6810d2f63f862fa23d47fd0b60416702fa66288ed16",
+      "weights_bytes": 940461184,
+      "weights_sha256": "700d70a294ecb644261a7b15d80895f6e7dc66d0211c0ff162a3a82bbce5d0da",
+      "tensor_count": 18
+    }
+  ],
+  "transport": {
+    "method": "paired-deep-activation-prior-anchored-scaled-orthogonal-procrustes",
+    "bridge_report": "D:\\project\\大模型ssd化\\fast16\\research\\v18_activation_bridge\\candidate-v18-native-scale\\activation_bridge_report.json",
+    "bridge_report_sha256": "d4954f98b9aff5ceaf2610ba8579bf5b7c95169864dc5c2e4b1424c67bff5e17",
+    "shape": [
+      2048,
+      2048
+    ],
+    "runtime_dtype": "F16",
+    "input": {
+      "source_file": "coder_activation_input_weight_f32.npy",
+      "source_sha256": "07123474cd0ffe74aa1cda867d6184a0bf5a70675dd6f3d8d564eded5b49b61a",
+      "contract": "donor_column = W_in @ colorlm_column"
+    },
+    "output": {
+      "source_file": "coder_activation_output_weight_f32.npy",
+      "source_sha256": "311459f4bf36a85e96c5fff53cb4294532632ec565bc15a902a2b20cd7f1d505",
+      "contract": "colorlm_delta_column = W_out @ donor_delta_column"
+    }
+  },
+  "activation_bridge": {
+    "report": "D:\\project\\大模型ssd化\\fast16\\research\\v18_activation_bridge\\candidate-v18-native-scale\\activation_bridge_report.json",
+    "report_sha256": "d4954f98b9aff5ceaf2610ba8579bf5b7c95169864dc5c2e4b1424c67bff5e17",
+    "decision": "candidate",
+    "cycle_rmse_f32": 3.413356353121344e-08
+  }
+}

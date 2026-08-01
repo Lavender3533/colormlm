@@ -1,0 +1,173 @@
+{
+  "format": "colorlm-coordinate-transport-v1",
+  "source": "Qwen/Qwen3-Coder-Next",
+  "target": "ColorLM-v6-Q3Router-Fused-A1.gguf",
+  "method": "shared-token orthogonal Procrustes",
+  "matched_tokens": 3961,
+  "train_tokens": 3072,
+  "test_tokens": 889,
+  "embedding_cosine": {
+    "train_before": {
+      "mean": 0.0010648367460817099,
+      "median": 0.0010499302297830582,
+      "p05": -0.03594282269477844,
+      "p95": 0.038214344531297684,
+      "min": -0.08573693782091141,
+      "max": 0.07920193672180176
+    },
+    "train_after": {
+      "mean": 0.7983332276344299,
+      "median": 0.7987051010131836,
+      "p05": 0.7471832036972046,
+      "p95": 0.8488913178443909,
+      "min": 0.6185414791107178,
+      "max": 0.8915353417396545
+    },
+    "test_before": {
+      "mean": 0.0012884257594123483,
+      "median": 0.0013514421880245209,
+      "p05": -0.035231929272413254,
+      "p95": 0.03536888211965561,
+      "min": -0.07063592970371246,
+      "max": 0.07761833071708679
+    },
+    "test_after": {
+      "mean": 0.4691646695137024,
+      "median": 0.4579083323478699,
+      "p05": 0.2816693186759949,
+      "p95": 0.6942702531814575,
+      "min": 0.11284564435482025,
+      "max": 0.8357089161872864
+    }
+  },
+  "test_token_retrieval_top1": 0.9853768278965129,
+  "router_best_cosine": {
+    "before": {
+      "mean": 0.041519246995449066,
+      "median": 0.041396208107471466,
+      "p05": 0.0193262230604887,
+      "p95": 0.06633441895246506,
+      "min": -0.005037679336965084,
+      "max": 0.07691822946071625
+    },
+    "after_transport": {
+      "mean": 0.04256453365087509,
+      "median": 0.04056825861334801,
+      "p05": 0.013900491409003735,
+      "p95": 0.07275346666574478,
+      "min": -0.012781127355992794,
+      "max": 0.1089547872543335
+    }
+  },
+  "top_unique_router_pairs": [
+    {
+      "donor_expert": 471,
+      "target_expert": 201,
+      "router_cosine_before": 0.03892888128757477,
+      "router_cosine_after": 0.1089547872543335
+    },
+    {
+      "donor_expert": 66,
+      "target_expert": 141,
+      "router_cosine_before": 0.037276506423950195,
+      "router_cosine_after": 0.10701259225606918
+    },
+    {
+      "donor_expert": 11,
+      "target_expert": 134,
+      "router_cosine_before": 0.006046075373888016,
+      "router_cosine_after": 0.10226656496524811
+    },
+    {
+      "donor_expert": 407,
+      "target_expert": 142,
+      "router_cosine_before": 0.03036118857562542,
+      "router_cosine_after": 0.09448067843914032
+    },
+    {
+      "donor_expert": 490,
+      "target_expert": 224,
+      "router_cosine_before": 0.023040439933538437,
+      "router_cosine_after": 0.09369685500860214
+    },
+    {
+      "donor_expert": 246,
+      "target_expert": 23,
+      "router_cosine_before": -0.010288669727742672,
+      "router_cosine_after": 0.09272544085979462
+    },
+    {
+      "donor_expert": 8,
+      "target_expert": 74,
+      "router_cosine_before": 0.01803705096244812,
+      "router_cosine_after": 0.09012030065059662
+    },
+    {
+      "donor_expert": 462,
+      "target_expert": 91,
+      "router_cosine_before": 0.032710351049900055,
+      "router_cosine_after": 0.0839771255850792
+    },
+    {
+      "donor_expert": 144,
+      "target_expert": 246,
+      "router_cosine_before": 0.0065439799800515175,
+      "router_cosine_after": 0.07697714865207672
+    },
+    {
+      "donor_expert": 244,
+      "target_expert": 42,
+      "router_cosine_before": 0.000799081870354712,
+      "router_cosine_after": 0.07601325213909149
+    },
+    {
+      "donor_expert": 404,
+      "target_expert": 136,
+      "router_cosine_before": 0.03209090232849121,
+      "router_cosine_after": 0.07529740035533905
+    },
+    {
+      "donor_expert": 175,
+      "target_expert": 250,
+      "router_cosine_before": 0.0010420558974146843,
+      "router_cosine_after": 0.07361840456724167
+    },
+    {
+      "donor_expert": 496,
+      "target_expert": 161,
+      "router_cosine_before": 0.0330040380358696,
+      "router_cosine_after": 0.0727129578590393
+    },
+    {
+      "donor_expert": 214,
+      "target_expert": 153,
+      "router_cosine_before": 0.018972720950841904,
+      "router_cosine_after": 0.0718512162566185
+    },
+    {
+      "donor_expert": 163,
+      "target_expert": 26,
+      "router_cosine_before": -0.00493052089586854,
+      "router_cosine_after": 0.0714426338672638
+    },
+    {
+      "donor_expert": 171,
+      "target_expert": 198,
+      "router_cosine_before": 0.042024679481983185,
+      "router_cosine_after": 0.07121165096759796
+    }
+  ],
+  "transport": {
+    "shape": [
+      2048,
+      2048
+    ],
+    "dtype": "float32",
+    "orthogonality_rmse": 7.859706130375343e-08,
+    "singular_value_min": 4.1889674321282655e-05,
+    "singular_value_median": 0.5144304037094116,
+    "singular_value_max": 172.10763549804688,
+    "file": "coder_next_to_colorlm_orthogonal_f32.npy",
+    "bytes": 16777344
+  }
+}

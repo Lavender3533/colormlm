@@ -1,0 +1,366 @@
+{
+  "format": "colorlm-v19.1-smoke-diagnostic-v1",
+  "candidate_point": 0.03,
+  "candidate_status": "failed_smoke_point",
+  "overall": {
+    "count": 60,
+    "mean_delta": 0.008769576617244942,
+    "median_delta": 0.00010388856753706932,
+    "improved": 20,
+    "regressed": 35,
+    "equal": 5,
+    "worst_regression": 0.21067428588867188,
+    "best_improvement": -0.06588459014892578
+  },
+  "mapped_targets": {
+    "count": 60,
+    "mean_delta": 0.008769576617244942,
+    "median_delta": 0.00010388856753706932,
+    "improved": 20,
+    "regressed": 35,
+    "equal": 5,
+    "worst_regression": 0.21067428588867188,
+    "best_improvement": -0.06588459014892578
+  },
+  "unmapped_targets": {
+    "count": 0,
+    "mean_delta": null,
+    "median_delta": null,
+    "improved": 0,
+    "regressed": 0,
+    "equal": 0,
+    "worst_regression": null,
+    "best_improvement": null
+  },
+  "by_token_index": {
+    "0": {
+      "count": 10,
+      "mean_delta": 0.002747418120270595,
+      "median_delta": 0.00020364089868962765,
+      "improved": 4,
+      "regressed": 6,
+      "equal": 0,
+      "worst_regression": 0.0495353639125824,
+      "best_improvement": -0.0227968692779541
+    },
+    "1": {
+      "count": 10,
+      "mean_delta": -0.003821513056755066,
+      "median_delta": 0.0,
+      "improved": 4,
+      "regressed": 1,
+      "equal": 5,
+      "worst_regression": 0.003055185079574585,
+      "best_improvement": -0.02161240577697754
+    },
+    "2": {
+      "count": 10,
+      "mean_delta": 0.02907964512705803,
+      "median_delta": 0.009606834501028061,
+      "improved": 3,
+      "regressed": 7,
+      "equal": 0,
+      "worst_regression": 0.21067428588867188,
+      "best_improvement": -0.06345367431640625
+    },
+    "3": {
+      "count": 10,
+      "mean_delta": 0.005905019538477063,
+      "median_delta": 0.0010087201371788979,
+      "improved": 4,
+      "regressed": 6,
+      "equal": 0,
+      "worst_regression": 0.0875546932220459,
+      "best_improvement": -0.06588459014892578
+    },
+    "4": {
+      "count": 10,
+      "mean_delta": 0.016343954676995055,
+      "median_delta": 0.00018879433628171682,
+      "improved": 3,
+      "regressed": 7,
+      "equal": 0,
+      "worst_regression": 0.1746811866760254,
+      "best_improvement": -0.012928098440170288
+    },
+    "5": {
+      "count": 10,
+      "mean_delta": 0.0023629352974239735,
+      "median_delta": 0.00012134714052081108,
+      "improved": 2,
+      "regressed": 8,
+      "equal": 0,
+      "worst_regression": 0.022157341241836548,
+      "best_improvement": -0.0003023720346391201
+    }
+  },
+  "largest_regressions": [
+    {
+      "sample_id": "tool-run-command:0002",
+      "task_id": "tool-run-command",
+      "group": "tool",
+      "token_index": 2,
+      "target_token_id": 4754,
+      "target_is_mapped": true,
+      "baseline_nll": 21.79326820373535,
+      "candidate_nll": 22.003942489624023,
+      "delta": 0.21067428588867188
+    },
+    {
+      "sample_id": "code-rust-max:0004",
+      "task_id": "code-rust-max",
+      "group": "code",
+      "token_index": 4,
+      "target_token_id": 36479,
+      "target_is_mapped": true,
+      "baseline_nll": 2.1227805614471436,
+      "candidate_nll": 2.297461748123169,
+      "delta": 0.1746811866760254
+    },
+    {
+      "sample_id": "tool-write-file:0002",
+      "task_id": "tool-write-file",
+      "group": "tool",
+      "token_index": 2,
+      "target_token_id": 4754,
+      "target_is_mapped": true,
+      "baseline_nll": 23.804933547973633,
+      "candidate_nll": 23.919021606445312,
+      "delta": 0.11408805847167969
+    },
+    {
+      "sample_id": "tool-write-file:0003",
+      "task_id": "tool-write-file",
+      "group": "tool",
+      "token_index": 3,
+      "target_token_id": 591,
+      "target_is_mapped": true,
+      "baseline_nll": 3.778988838195801,
+      "candidate_nll": 3.8665435314178467,
+      "delta": 0.0875546932220459
+    },
+    {
+      "sample_id": "tool-run-command:0003",
+      "task_id": "tool-run-command",
+      "group": "tool",
+      "token_index": 3,
+      "target_token_id": 591,
+      "target_is_mapped": true,
+      "baseline_nll": 4.525801658630371,
+      "candidate_nll": 4.59884786605835,
+      "delta": 0.07304620742797852
+    },
+    {
+      "sample_id": "code-typescript-unique:0000",
+      "task_id": "code-typescript-unique",
+      "group": "code",
+      "token_index": 0,
+      "target_token_id": 220,
+      "target_is_mapped": true,
+      "baseline_nll": 0.3756679594516754,
+      "candidate_nll": 0.4252033233642578,
+      "delta": 0.0495353639125824
+    },
+    {
+      "sample_id": "tool-glob-files:0002",
+      "task_id": "tool-glob-files",
+      "group": "tool",
+      "token_index": 2,
+      "target_token_id": 4754,
+      "target_is_mapped": true,
+      "baseline_nll": 21.025619506835938,
+      "candidate_nll": 21.067562103271484,
+      "delta": 0.041942596435546875
+    },
+    {
+      "sample_id": "tool-glob-files:0005",
+      "task_id": "tool-glob-files",
+      "group": "tool",
+      "token_index": 5,
+      "target_token_id": 328,
+      "target_is_mapped": true,
+      "baseline_nll": 0.18017375469207764,
+      "candidate_nll": 0.20233109593391418,
+      "delta": 0.022157341241836548
+    },
+    {
+      "sample_id": "tool-read-file:0003",
+      "task_id": "tool-read-file",
+      "group": "tool",
+      "token_index": 3,
+      "target_token_id": 591,
+      "target_is_mapped": true,
+      "baseline_nll": 7.277620315551758,
+      "candidate_nll": 7.298375606536865,
+      "delta": 0.020755290985107422
+    },
+    {
+      "sample_id": "tool-read-file:0002",
+      "task_id": "tool-read-file",
+      "group": "tool",
+      "token_index": 2,
+      "target_token_id": 4754,
+      "target_is_mapped": true,
+      "baseline_nll": 24.555179595947266,
+      "candidate_nll": 24.574010848999023,
+      "delta": 0.018831253051757812
+    },
+    {
+      "sample_id": "code-binary-search:0002",
+      "task_id": "code-binary-search",
+      "group": "code",
+      "token_index": 2,
+      "target_token_id": 11,
+      "target_is_mapped": true,
+      "baseline_nll": 0.6043632626533508,
+      "candidate_nll": 0.6184543967247009,
+      "delta": 0.014091134071350098
+    },
+    {
+      "sample_id": "code-python-clamp:0003",
+      "task_id": "code-python-clamp",
+      "group": "code",
+      "token_index": 3,
+      "target_token_id": 68652,
+      "target_is_mapped": true,
+      "baseline_nll": 0.443306028842926,
+      "candidate_nll": 0.4487816095352173,
+      "delta": 0.00547558069229126
+    }
+  ],
+  "largest_improvements": [
+    {
+      "sample_id": "tool-glob-files:0003",
+      "task_id": "tool-glob-files",
+      "group": "tool",
+      "token_index": 3,
+      "target_token_id": 591,
+      "target_is_mapped": true,
+      "baseline_nll": 9.357728004455566,
+      "candidate_nll": 9.29184341430664,
+      "delta": -0.06588459014892578
+    },
+    {
+      "sample_id": "tool-search-text:0002",
+      "task_id": "tool-search-text",
+      "group": "tool",
+      "token_index": 2,
+      "target_token_id": 4754,
+      "target_is_mapped": true,
+      "baseline_nll": 20.92742919921875,
+      "candidate_nll": 20.863975524902344,
+      "delta": -0.06345367431640625
+    },
+    {
+      "sample_id": "tool-search-text:0003",
+      "task_id": "tool-search-text",
+      "group": "tool",
+      "token_index": 3,
+      "target_token_id": 591,
+      "target_is_mapped": true,
+      "baseline_nll": 10.648659706115723,
+      "candidate_nll": 10.58560562133789,
+      "delta": -0.06305408477783203
+    },
+    {
+      "sample_id": "code-typescript-unique:0002",
+      "task_id": "code-typescript-unique",
+      "group": "code",
+      "token_index": 2,
+      "target_token_id": 15824,
+      "target_is_mapped": true,
+      "baseline_nll": 0.974556565284729,
+      "candidate_nll": 0.9234557747840881,
+      "delta": -0.05110079050064087
+    },
+    {
+      "sample_id": "tool-glob-files:0000",
+      "task_id": "tool-glob-files",
+      "group": "tool",
+      "token_index": 0,
+      "target_token_id": 248058,
+      "target_is_mapped": true,
+      "baseline_nll": 2.5289080142974854,
+      "candidate_nll": 2.5061111450195312,
+      "delta": -0.0227968692779541
+    },
+    {
+      "sample_id": "code-typescript-unique:0001",
+      "task_id": "code-typescript-unique",
+      "group": "code",
+      "token_index": 1,
+      "target_token_id": 460,
+      "target_is_mapped": true,
+      "baseline_nll": 0.6602543592453003,
+      "candidate_nll": 0.6386419534683228,
+      "delta": -0.02161240577697754
+    },
+    {
+      "sample_id": "tool-write-file:0004",
+      "task_id": "tool-write-file",
+      "group": "tool",
+      "token_index": 4,
+      "target_token_id": 763,
+      "target_is_mapped": true,
+      "baseline_nll": 0.19164499640464783,
+      "candidate_nll": 0.17871689796447754,
+      "delta": -0.012928098440170288
+    },
+    {
+      "sample_id": "code-java-add:0001",
+      "task_id": "code-java-add",
+      "group": "code",
+      "token_index": 1,
+      "target_token_id": 460,
+      "target_is_mapped": true,
+      "baseline_nll": 0.7653014063835144,
+      "candidate_nll": 0.7529420256614685,
+      "delta": -0.012359380722045898
+    },
+    {
+      "sample_id": "code-python-clamp:0001",
+      "task_id": "code-python-clamp",
+      "group": "code",
+      "token_index": 1,
+      "target_token_id": 460,
+      "target_is_mapped": true,
+      "baseline_nll": 0.3979478180408478,
+      "candidate_nll": 0.3923127353191376,
+      "delta": -0.005635082721710205
+    },
+    {
+      "sample_id": "tool-read-file:0000",
+      "task_id": "tool-read-file",
+      "group": "tool",
+      "token_index": 0,
+      "target_token_id": 248058,
+      "target_is_mapped": true,
+      "baseline_nll": 0.47353875637054443,
+      "candidate_nll": 0.46921297907829285,
+      "delta": -0.004325777292251587
+    },
+    {
+      "sample_id": "code-python-clamp:0002",
+      "task_id": "code-python-clamp",
+      "group": "code",
+      "token_index": 2,
+      "target_token_id": 1866,
+      "target_is_mapped": true,
+      "baseline_nll": 0.10478373616933823,
+      "candidate_nll": 0.10079532861709595,
+      "delta": -0.003988407552242279
+    },
+    {
+      "sample_id": "code-binary-search:0001",
+      "task_id": "code-binary-search",
+      "group": "code",
+      "token_index": 1,
+      "target_token_id": 3238,
+      "target_is_mapped": true,
+      "baseline_nll": 2.4003045558929443,
+      "candidate_nll": 2.3986411094665527,
+      "delta": -0.0016634464263916016
+    }
+  ],
+  "interpretation_rule": "This report diagnoses the failed smoke point only. It must not be used to cherry-pick decision tokens, which were frozen separately before any new candidate."
+}

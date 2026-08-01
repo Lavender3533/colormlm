@@ -1,0 +1,23 @@
+{
+  "schema_version": "capability-selftest-report-v1",
+  "date": "2026-07-31",
+  "command": "python -X utf8 fast16/research/capability_eval/selftest.py",
+  "ok": true,
+  "tests": 8,
+  "task_count": 48,
+  "schema_backend": "internal-strict-checks",
+  "optional_jsonschema_installed": false,
+  "checks": [
+    "三个 JSON Schema 可解析且为 Draft 2020-12",
+    "48 个 task 记录满足字段、类型与引用答案一致性约束",
+    "每维 6 题且 dev/task_holdout/final_holdout 为 3/2/1",
+    "跨 split 的 task id 与 family 均不重复",
+    "合成任务级留出比较满足四维四胜和所有 LOTO 折为正",
+    "合成最终留出比较满足两维两胜且总晋级通过",
+    "基线正确题回归会阻断晋级",
+    "缺题、重复记录和工具调用夹带文本会被拒绝"
+  ],
+  "model_started": false,
+  "gpu_used": false,
+  "cmake_run": false
+}

@@ -1,0 +1,20 @@
+{
+  "format": "colorlm-v13-counterfactual-teacher-manifest-v1",
+  "source_tasks": "D:\\project\\大模型ssd化\\fast16\\research\\v30_dynamic_lexical_policy\\grounded_independent_tasks_v1.jsonl",
+  "source_tasks_sha256": "16c91dd8923b177d7831d2905a43917c45146a8b46deb747131bd3d3b39e4ed1",
+  "teacher": "grounded-teacher.jsonl",
+  "teacher_sha256": "f26ea3fb4830e5ff68a3776376d74c08a5914c2d7bdde9cfe209925cd8026c03",
+  "sample_count": 178,
+  "task_count": 12,
+  "boundary_fallbacks": 0,
+  "max_target_tokens": 32,
+  "max_prefix_tokens": 4096,
+  "tokenizer_endpoint": {
+    "endpoint": "http://127.0.0.1:8122",
+    "models": [
+      "ColorLM-v30-Grounded-Capture"
+    ],
+    "model_path": "fast16/models/ColorLM-v6-Q3Router-Fused-A1.gguf",
+    "context": 4096
+  }
+}

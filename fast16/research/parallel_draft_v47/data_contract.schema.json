@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "colorlm-v47-parallel-draft-dataset-manifest-v1",
+  "title": "ColorLM v47 多token草稿数据契约",
+  "type": "object",
+  "required": [
+    "format",
+    "base_model",
+    "tokenizer_sha256",
+    "rows",
+    "arrays",
+    "capture",
+    "split_contract"
+  ],
+  "properties": {
+    "format": {"const": "colorlm-v47-parallel-draft-dataset-manifest-v1"},
+    "base_model": {"const": "ColorLM-v38-Qwen36-Shared-Sequence-Policy"},
+    "tokenizer_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "rows": {
+      "type": "object",
+      "required": ["path", "sha256", "count"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "count": {"type": "integer", "minimum": 1}
+      }
+    },
+    "arrays": {
+      "type": "object",
+      "required": ["path", "sha256", "hidden", "native_top_ids", "native_top_logits"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "hidden": {"const": {"dtype": "float32", "shape": ["N", 2048]}},
+        "native_top_ids": {"const": {"dtype": "int32", "shape": ["N", 32]}},
+        "native_top_logits": {"const": {"dtype": "float32", "shape": ["N", 32]}}
+      }
+    },
+    "capture": {
+      "type": "object",
+      "required": ["mode", "temperature", "seed", "validator", "first_token_native_logits"],
+      "properties": {
+        "mode": {"const": "one-anchor-free-greedy-rollout"},
+        "temperature": {"const": 0},
+        "seed": {"type": "integer"},
+        "validator": {"const": "v38-native"},
+        "first_token_native_logits": {"const": true}
+      }
+    },
+    "split_contract": {
+      "type": "object",
+      "required": ["group_disjoint", "template_cluster_disjoint", "test_used_once"],
+      "properties": {
+        "group_disjoint": {"const": true},
+        "template_cluster_disjoint": {"const": true},
+        "test_used_once": {"const": true}
+      }
+    }
+  },
+  "$comment": "rows JSONL每行还必须包含record、anchor_id、trajectory_id、group_id、template_cluster_id、split、context_bucket、recent_token_ids、validator_token_ids、validator_terminated、validator_source、oracle_token_ids、oracle_terminated。validator_token_ids是从同一anchor自由贪心滚动得到的1..4个v38 token，不能由teacher-forced目标替代；oracle仅用于必要覆盖。"
+}

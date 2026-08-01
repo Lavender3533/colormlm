@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.colormlm/capability-eval/report.schema.json",
+  "title": "ColorLM capability short-gate report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "created_utc", "mode", "split_reports", "decision"],
+  "properties": {
+    "schema_version": {"const": "capability-report-v1"},
+    "created_utc": {"type": "string", "format": "date-time"},
+    "mode": {"enum": ["score", "compare", "promote"]},
+    "split_reports": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["split", "task_file", "task_sha256", "complete", "baseline", "candidate", "paired", "loto", "gate"],
+        "properties": {
+          "split": {"enum": ["dev", "task_holdout", "final_holdout"]},
+          "task_file": {"type": "string"},
+          "task_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "complete": {"type": "boolean"},
+          "baseline": {"type": ["object", "null"]},
+          "candidate": {"type": "object"},
+          "paired": {"type": ["object", "null"]},
+          "loto": {"type": ["object", "null"]},
+          "gate": {"type": "object"}
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "required": ["promotable", "status", "reasons", "claim_ceiling"],
+      "properties": {
+        "promotable": {"type": "boolean"},
+        "status": {"enum": ["score_only", "dev_only", "task_holdout_pass", "task_holdout_fail", "final_holdout_pass", "final_holdout_fail", "promote", "reject"]},
+        "reasons": {"type": "array", "items": {"type": "string"}},
+        "claim_ceiling": {"type": "string"}
+      }
+    }
+  }
+}

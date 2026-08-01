@@ -1,0 +1,522 @@
+{
+  "format": "colormlm-qwen36-candidate-short-gate-report-v1",
+  "contract": "fast16/research/v31_qwen36_expert_pair/v33_gate.json",
+  "contract_sha256": "4404996d51cba3da00bee05f84b6cc2263f3cb3bdd7b00c294f7df776149ef0c",
+  "models": [
+    {
+      "alias": "ColorLM-v6-v31-control",
+      "model": "ColorLM-v6-Q3Router-Fused-A1.gguf",
+      "model_bytes": 13731822496,
+      "load_seconds": 16.78856210000231,
+      "passed": 5,
+      "total": 8,
+      "responses": [
+        {
+          "id": "reasoning-boolean-chain-v33",
+          "output": "{\"P\":true,\"Q\":false,\"R\":false}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 14,
+            "prompt_tokens": 67,
+            "total_tokens": 81,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 67,
+            "prompt_ms": 737.286,
+            "prompt_per_token_ms": 11.004268656716418,
+            "prompt_per_second": 90.87382643912947,
+            "predicted_n": 14,
+            "predicted_ms": 474.256,
+            "predicted_per_token_ms": 33.87542857142857,
+            "predicted_per_second": 29.519921730036103
+          },
+          "passed": true,
+          "detail": "exact_json"
+        },
+        {
+          "id": "knowledge-precedence-v33",
+          "output": "{\"code\":\"N7\",\"source\":\"F2\"}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 12,
+            "prompt_tokens": 95,
+            "total_tokens": 107,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 95,
+            "prompt_ms": 815.871,
+            "prompt_per_token_ms": 8.588115789473685,
+            "prompt_per_second": 116.43997641784057,
+            "predicted_n": 12,
+            "predicted_ms": 425.864,
+            "predicted_per_token_ms": 35.48866666666667,
+            "predicted_per_second": 28.1780098810888
+          },
+          "passed": true,
+          "detail": "exact_json"
+        },
+        {
+          "id": "long-context-multi-field-v33",
+          "output": "{\"region\":\"west\",\"quota\":120}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 12,
+            "prompt_tokens": 121,
+            "total_tokens": 133,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 121,
+            "prompt_ms": 852.574,
+            "prompt_per_token_ms": 7.046066115702479,
+            "prompt_per_second": 141.92316444085793,
+            "predicted_n": 12,
+            "predicted_ms": 408.345,
+            "predicted_per_token_ms": 34.02875,
+            "predicted_per_second": 29.386915475884358
+          },
+          "passed": false,
+          "detail": "JSON 不匹配: actual={'region': 'west', 'quota': 120}"
+        },
+        {
+          "id": "coding-async-order-v33",
+          "output": "{\"replacement\":\"results.append(await fetch(url))\",\"keyword\":\"await\"}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 15,
+            "prompt_tokens": 74,
+            "total_tokens": 89,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 74,
+            "prompt_ms": 702.362,
+            "prompt_per_token_ms": 9.491378378378378,
+            "prompt_per_second": 105.35877510457571,
+            "predicted_n": 15,
+            "predicted_ms": 523.17,
+            "predicted_per_token_ms": 34.878,
+            "predicted_per_second": 28.671368771145136
+          },
+          "passed": true,
+          "detail": "exact_json"
+        },
+        {
+          "id": "tools-write-json-v33",
+          "output": "",
+          "finish_reason": "tool_calls",
+          "usage": {
+            "completion_tokens": 44,
+            "prompt_tokens": 359,
+            "total_tokens": 403,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 359,
+            "prompt_ms": 1525.791,
+            "prompt_per_token_ms": 4.250114206128133,
+            "prompt_per_second": 235.28779498633824,
+            "predicted_n": 44,
+            "predicted_ms": 1569.29,
+            "predicted_per_token_ms": 35.66568181818182,
+            "predicted_per_second": 28.03815738327524
+          },
+          "tool_calls": [
+            {
+              "type": "function",
+              "function": {
+                "name": "write_json",
+                "arguments": "{\"path\":\"out/status.json\",\"content\":\"{\\\"ok\\\":true}\"}"
+              },
+              "id": "4X2h2hUCTWf8DDnia0gMSrzbDKtUEiVl"
+            }
+          ],
+          "passed": true,
+          "detail": "tool_call:openai"
+        },
+        {
+          "id": "planning-dependent-knapsack-v33",
+          "output": "{\"choose\":[\"A\",\"B\",\"C\"],\"cost\":11,\"value\":18}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 20,
+            "prompt_tokens": 92,
+            "total_tokens": 112,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 92,
+            "prompt_ms": 799.913,
+            "prompt_per_token_ms": 8.69470652173913,
+            "prompt_per_second": 115.01250761020262,
+            "predicted_n": 20,
+            "predicted_ms": 713.068,
+            "predicted_per_token_ms": 35.6534,
+            "predicted_per_second": 28.047815916574578
+          },
+          "passed": false,
+          "detail": "JSON 不匹配: actual={'choose': ['A', 'B', 'C'], 'cost': 11, 'value': 18}"
+        },
+        {
+          "id": "computer-use-download-warning-v33",
+          "output": "{\"actions\":[{\"action\":\"click\",\"target\":\"More actions\"},{\"action\":\"click\",\"target\":\"Keep\"}]}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 22,
+            "prompt_tokens": 80,
+            "total_tokens": 102,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 80,
+            "prompt_ms": 722.999,
+            "prompt_per_token_ms": 9.037487500000001,
+            "prompt_per_second": 110.65022219947744,
+            "predicted_n": 22,
+            "predicted_ms": 777.495,
+            "predicted_per_token_ms": 35.34068181818182,
+            "predicted_per_second": 28.296001903549218
+          },
+          "passed": true,
+          "detail": "exact_json"
+        },
+        {
+          "id": "communication-terminology-v33",
+          "output": "```json\n{\n  \"term\": \"供体\",\n  \"status\": \"validating\"\n}\n```",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 27,
+            "prompt_tokens": 67,
+            "total_tokens": 94,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 67,
+            "prompt_ms": 727.938,
+            "prompt_per_token_ms": 10.864746268656717,
+            "prompt_per_second": 92.04080567301061,
+            "predicted_n": 27,
+            "predicted_ms": 960.313,
+            "predicted_per_token_ms": 35.56714814814815,
+            "predicted_per_second": 28.115833066927138
+          },
+          "passed": false,
+          "detail": "output 不是纯 JSON: Expecting value"
+        }
+      ],
+      "speed": {
+        "output": "<think>\n1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 3",
+        "finish_reason": "length",
+        "usage": {
+          "completion_tokens": 96,
+          "prompt_tokens": 31,
+          "total_tokens": 127,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 31,
+          "prompt_ms": 506.387,
+          "prompt_per_token_ms": 16.335064516129034,
+          "prompt_per_second": 61.218001252006864,
+          "predicted_n": 96,
+          "predicted_ms": 3476.244,
+          "predicted_per_token_ms": 36.210875,
+          "predicted_per_second": 27.616013145222254
+        }
+      }
+    },
+    {
+      "alias": "ColorLM-v33-Qwen36-Global-MoE-Pair",
+      "model": "ColorLM-v33-Qwen36-Global-MoE-Pair.gguf",
+      "model_bytes": 21689990304,
+      "load_seconds": 29.398637800004508,
+      "passed": 6,
+      "total": 8,
+      "responses": [
+        {
+          "id": "reasoning-boolean-chain-v33",
+          "output": "{\"P\":true,\"Q\":false,\"R\":false}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 14,
+            "prompt_tokens": 67,
+            "total_tokens": 81,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 67,
+            "prompt_ms": 944.605,
+            "prompt_per_token_ms": 14.09858208955224,
+            "prompt_per_second": 70.92911852043976,
+            "predicted_n": 14,
+            "predicted_ms": 526.507,
+            "predicted_per_token_ms": 37.60764285714286,
+            "predicted_per_second": 26.590339729576247
+          },
+          "passed": true,
+          "detail": "exact_json"
+        },
+        {
+          "id": "knowledge-precedence-v33",
+          "output": "{\"code\":\"N7\",\"source\":\"F2\"}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 12,
+            "prompt_tokens": 95,
+            "total_tokens": 107,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 95,
+            "prompt_ms": 1043.812,
+            "prompt_per_token_ms": 10.987494736842104,
+            "prompt_per_second": 91.0125578169249,
+            "predicted_n": 12,
+            "predicted_ms": 438.1,
+            "predicted_per_token_ms": 36.50833333333333,
+            "predicted_per_second": 27.391006619493268
+          },
+          "passed": true,
+          "detail": "exact_json"
+        },
+        {
+          "id": "long-context-multi-field-v33",
+          "output": "{\"region\":\"east\",\"quota\":120}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 12,
+            "prompt_tokens": 121,
+            "total_tokens": 133,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 121,
+            "prompt_ms": 1061.42,
+            "prompt_per_token_ms": 8.77206611570248,
+            "prompt_per_second": 113.99822878785022,
+            "predicted_n": 12,
+            "predicted_ms": 423.747,
+            "predicted_per_token_ms": 35.31225,
+            "predicted_per_second": 28.318784557766783
+          },
+          "passed": false,
+          "detail": "JSON 不匹配: actual={'region': 'east', 'quota': 120}"
+        },
+        {
+          "id": "coding-async-order-v33",
+          "output": "{\"replacement\":\"results.append(await fetch(url))\",\"keyword\":\"await\"}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 15,
+            "prompt_tokens": 74,
+            "total_tokens": 89,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 74,
+            "prompt_ms": 881.401,
+            "prompt_per_token_ms": 11.910824324324324,
+            "prompt_per_second": 83.95724534008924,
+            "predicted_n": 15,
+            "predicted_ms": 542.802,
+            "predicted_per_token_ms": 36.1868,
+            "predicted_per_second": 27.634386019211423
+          },
+          "passed": true,
+          "detail": "exact_json"
+        },
+        {
+          "id": "tools-write-json-v33",
+          "output": "",
+          "finish_reason": "tool_calls",
+          "usage": {
+            "completion_tokens": 44,
+            "prompt_tokens": 359,
+            "total_tokens": 403,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 359,
+            "prompt_ms": 1844.562,
+            "prompt_per_token_ms": 5.138055710306406,
+            "prompt_per_second": 194.62614973093883,
+            "predicted_n": 44,
+            "predicted_ms": 1646.295,
+            "predicted_per_token_ms": 37.41579545454545,
+            "predicted_per_second": 26.726680212234136
+          },
+          "tool_calls": [
+            {
+              "type": "function",
+              "function": {
+                "name": "write_json",
+                "arguments": "{\"path\":\"out/status.json\",\"content\":\"{\\\"ok\\\":true}\"}"
+              },
+              "id": "vSjeLsHbafpujPvth5BVSJy5OQkBx7OW"
+            }
+          ],
+          "passed": true,
+          "detail": "tool_call:openai"
+        },
+        {
+          "id": "planning-dependent-knapsack-v33",
+          "output": "{\"choose\":[\"A\",\"B\"],\"cost\":6,\"value\":10}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 17,
+            "prompt_tokens": 92,
+            "total_tokens": 109,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 92,
+            "prompt_ms": 992.666,
+            "prompt_per_token_ms": 10.789847826086957,
+            "prompt_per_second": 92.67971301525387,
+            "predicted_n": 17,
+            "predicted_ms": 630.383,
+            "predicted_per_token_ms": 37.081352941176476,
+            "predicted_per_second": 26.967732315116365
+          },
+          "passed": false,
+          "detail": "JSON 不匹配: actual={'choose': ['A', 'B'], 'cost': 6, 'value': 10}"
+        },
+        {
+          "id": "computer-use-download-warning-v33",
+          "output": "{\"actions\":[{\"action\":\"click\",\"target\":\"More actions\"},{\"action\":\"click\",\"target\":\"Keep\"}]}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 22,
+            "prompt_tokens": 80,
+            "total_tokens": 102,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 80,
+            "prompt_ms": 900.483,
+            "prompt_per_token_ms": 11.2560375,
+            "prompt_per_second": 88.84121077244102,
+            "predicted_n": 22,
+            "predicted_ms": 800.861,
+            "predicted_per_token_ms": 36.402772727272726,
+            "predicted_per_second": 27.470434944391098
+          },
+          "passed": true,
+          "detail": "exact_json"
+        },
+        {
+          "id": "communication-terminology-v33",
+          "output": "{\"term\":\"供体\",\"status\":\"validating\"}",
+          "finish_reason": "stop",
+          "usage": {
+            "completion_tokens": 12,
+            "prompt_tokens": 67,
+            "total_tokens": 79,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 67,
+            "prompt_ms": 904.507,
+            "prompt_per_token_ms": 13.50010447761194,
+            "prompt_per_second": 74.07350081315015,
+            "predicted_n": 12,
+            "predicted_ms": 427.649,
+            "predicted_per_token_ms": 35.63741666666667,
+            "predicted_per_second": 28.060395324202794
+          },
+          "passed": true,
+          "detail": "exact_json"
+        }
+      ],
+      "speed": {
+        "output": "<think>\n\n</think>\n\n1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34",
+        "finish_reason": "length",
+        "usage": {
+          "completion_tokens": 96,
+          "prompt_tokens": 31,
+          "total_tokens": 127,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 31,
+          "prompt_ms": 354.043,
+          "prompt_per_token_ms": 11.420741935483871,
+          "prompt_per_second": 87.55998565146042,
+          "predicted_n": 96,
+          "predicted_ms": 3737.498,
+          "predicted_per_token_ms": 38.932270833333334,
+          "predicted_per_second": 25.685632473917046
+        }
+      }
+    }
+  ],
+  "comparison": {
+    "wins": [
+      "communication-terminology-v33"
+    ],
+    "regressions": [],
+    "score_delta": 1,
+    "base_tokens_per_second": 27.616013145222254,
+    "candidate_tokens_per_second": 25.685632473917046,
+    "speed_delta": -0.06990077319104904,
+    "generation_gate_pass": true,
+    "speed_gate_pass": false,
+    "prototype_advances": false
+  }
+}

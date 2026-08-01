@@ -1,0 +1,190 @@
+{
+  "format": "colorlm-v25-l47-decode-micro-fit-v1",
+  "dump": "D:\\project\\大模型ssd化\\fast16\\research\\v25_stateful_micro_island\\teacher-stage-20260801.bin",
+  "contract": "prefill始终走完整L47；微层仅替换n_tokens==1的decode",
+  "split_tokens": {
+    "train": 37,
+    "validation": 30,
+    "test": 28
+  },
+  "validation_candidates": [
+    {
+      "requested_rank": 8,
+      "rank": 8,
+      "rho": 0.0,
+      "ridge": 0.001,
+      "ridge_absolute": 26.34691796875,
+      "weights_bytes_f16": 106496,
+      "input_projection_shape": [
+        8,
+        2048
+      ],
+      "output_projection_shape": [
+        16,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.834115743637085,
+      "metrics": {
+        "rmse": 0.05253171548247337,
+        "reference_rms": 0.047460466623306274,
+        "relative_rmse": 1.1068520545959473,
+        "cosine_mean": 0.3250327408313751,
+        "cosine_median": 0.22940415143966675,
+        "cosine_positive_fraction": 0.8
+      },
+      "per_sequence": [
+        {
+          "rmse": 0.0576852485537529,
+          "reference_rms": 0.040590278804302216,
+          "relative_rmse": 1.421159267425537,
+          "cosine_mean": 0.15353979170322418,
+          "cosine_median": 0.10958126932382584,
+          "cosine_positive_fraction": 0.7391304347826086
+        },
+        {
+          "rmse": 0.029887674376368523,
+          "reference_rms": 0.06511609256267548,
+          "relative_rmse": 0.45899060368537903,
+          "cosine_mean": 0.8885095715522766,
+          "cosine_median": 0.9300716519355774,
+          "cosine_positive_fraction": 1.0
+        }
+      ]
+    },
+    {
+      "requested_rank": 16,
+      "rank": 16,
+      "rho": 0.0,
+      "ridge": 0.001,
+      "ridge_absolute": 14.55118359375,
+      "weights_bytes_f16": 204800,
+      "input_projection_shape": [
+        16,
+        2048
+      ],
+      "output_projection_shape": [
+        32,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.9213503003120422,
+      "metrics": {
+        "rmse": 0.057106442749500275,
+        "reference_rms": 0.047460466623306274,
+        "relative_rmse": 1.203242301940918,
+        "cosine_mean": 0.2623209059238434,
+        "cosine_median": 0.20017705857753754,
+        "cosine_positive_fraction": 0.7
+      },
+      "per_sequence": [
+        {
+          "rmse": 0.06087878718972206,
+          "reference_rms": 0.040590278804302216,
+          "relative_rmse": 1.4998366832733154,
+          "cosine_mean": 0.11847138404846191,
+          "cosine_median": 0.13961195945739746,
+          "cosine_positive_fraction": 0.6086956521739131
+        },
+        {
+          "rmse": 0.04241152107715607,
+          "reference_rms": 0.06511609256267548,
+          "relative_rmse": 0.6513216495513916,
+          "cosine_mean": 0.734969437122345,
+          "cosine_median": 0.8733277916908264,
+          "cosine_positive_fraction": 1.0
+        }
+      ]
+    },
+    {
+      "requested_rank": 32,
+      "rank": 32,
+      "rho": 0.0,
+      "ridge": 0.001,
+      "ridge_absolute": 7.8365502929687505,
+      "weights_bytes_f16": 401408,
+      "input_projection_shape": [
+        32,
+        2048
+      ],
+      "output_projection_shape": [
+        64,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.9923878312110901,
+      "metrics": {
+        "rmse": 0.0594811737537384,
+        "reference_rms": 0.047460466623306274,
+        "relative_rmse": 1.253278374671936,
+        "cosine_mean": 0.2251974493265152,
+        "cosine_median": 0.11369512230157852,
+        "cosine_positive_fraction": 0.7
+      },
+      "per_sequence": [
+        {
+          "rmse": 0.06344912946224213,
+          "reference_rms": 0.040590278804302216,
+          "relative_rmse": 1.56316077709198,
+          "cosine_mean": 0.07476101070642471,
+          "cosine_median": 0.06601071357727051,
+          "cosine_positive_fraction": 0.6521739130434783
+        },
+        {
+          "rmse": 0.0439920537173748,
+          "reference_rms": 0.06511609256267548,
+          "relative_rmse": 0.6755942106246948,
+          "cosine_mean": 0.7194886803627014,
+          "cosine_median": 0.854578971862793,
+          "cosine_positive_fraction": 0.8571428571428571
+        }
+      ]
+    }
+  ],
+  "selected": {
+    "requested_rank": 8,
+    "rho": 0.0
+  },
+  "test": {
+    "requested_rank": 8,
+    "rank": 8,
+    "rho": 0.0,
+    "ridge": 0.001,
+    "ridge_absolute": 36.83739453125,
+    "weights_bytes_f16": 106496,
+    "input_projection_shape": [
+      8,
+      2048
+    ],
+    "output_projection_shape": [
+      16,
+      2048
+    ],
+    "singular_values_kept_fraction": 0.708967924118042,
+    "metrics": {
+      "rmse": 0.03584038093686104,
+      "reference_rms": 0.046090319752693176,
+      "relative_rmse": 0.7776119112968445,
+      "cosine_mean": 0.6988211274147034,
+      "cosine_median": 0.7723791599273682,
+      "cosine_positive_fraction": 1.0
+    },
+    "per_sequence": [
+      {
+        "rmse": 0.03419755771756172,
+        "reference_rms": 0.045800164341926575,
+        "relative_rmse": 0.7466688752174377,
+        "cosine_mean": 0.7256467938423157,
+        "cosine_median": 0.7925770282745361,
+        "cosine_positive_fraction": 1.0
+      },
+      {
+        "rmse": 0.038240715861320496,
+        "reference_rms": 0.046535179018974304,
+        "relative_rmse": 0.8217592835426331,
+        "cosine_mean": 0.6573636531829834,
+        "cosine_median": 0.7225942015647888,
+        "cosine_positive_fraction": 1.0
+      }
+    ]
+  },
+  "gate_passed": true,
+  "artifact": "D:\\project\\大模型ssd化\\fast16\\research\\v25_stateful_micro_island\\l47-decode-selected.npz"
+}

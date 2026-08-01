@@ -1,0 +1,25 @@
+{
+  "format": "colorlm-v13-counterfactual-route-shard-manifest-v1",
+  "route": "v44-critical-v36-base",
+  "route_attestation": "process-level --force-path plus expected API alias",
+  "teacher": "D:\\project\\大模型ssd化\\fast16\\research\\v44_critical_action_bus\\critical-teacher-dev-v1.jsonl",
+  "teacher_sha256": "eb53164aa60c47881fc2ef11985ddf0f040c197fbcdaff9f83f932313d84b6aa",
+  "shard": "critical-nll-dev-v1.jsonl",
+  "shard_sha256": "0d5fb64bf6bb032645a27a1d10b4ed9c592f9ef87d72c0efc656ca53a14473db",
+  "sample_count": 408,
+  "exact_count": 408,
+  "exact_coverage": 1.0,
+  "n_probs": 1,
+  "elapsed_seconds": 783.96086,
+  "server": {
+    "endpoint": "http://127.0.0.1:8144",
+    "models": [
+      "ColorLM-v44-Critical-Capture"
+    ],
+    "model_path": "fast16\\models\\ColorLM-v36-Qwen36-Global-Shared-Backbone.gguf",
+    "context": 4096
+  },
+  "expected_model": "ColorLM-v44-Critical-Capture",
+  "hidden": null,
+  "k3_features": null
+}

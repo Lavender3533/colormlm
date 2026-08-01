@@ -1,0 +1,257 @@
+{
+  "format": "colorlm-v15-residual-aware-router-audit-v1",
+  "date": "2026-07-30",
+  "status": "rejected_control",
+  "hypothesis": "An L12-conditioned binary gate can safely decide whether L28 should be added.",
+  "data": {
+    "samples": 72,
+    "tasks": 12,
+    "feature": "six standardized L28 K3 residual features",
+    "feature_trajectory": "l12_plus_l28_raw_delta",
+    "decision_mode": "l28_after_l12",
+    "allowed_routes": [
+      "l12_k3",
+      "both_k3"
+    ],
+    "source_sha256": {
+      "no_op": "ca1f5d1e2922e8fb5b5c951e152d9b5db8420acf01f9d441e09e379e5279f83f",
+      "l12_k3": "1d9b1fbe49a3d542d6504cf5ead364c9916d900481e42ff8d201020b482b0b12",
+      "l28_k3": "804d8dd3cbb08f846617ce464be8856ab3a7d211d6f06e90edcbf94a2aa88d83",
+      "both_k3": "1580c1dd1e6bc7f376eb18155792e0d10ff63e8752105fdce963ca20fa76d59d",
+      "feature_hidden": "3d3cd3d5fffc0200801f4dffe8b5d48da81792018c25d804a017139a598e80e7"
+    }
+  },
+  "counterfactual_surface": {
+    "route_mean_nll": {
+      "no_op": 2.4872833700447083,
+      "l12_k3": 2.4388460118126343,
+      "l28_k3": 2.455791965589741,
+      "both_k3": 2.4437175390183765
+    },
+    "token_oracle_mean_nll": 2.3899425285552045,
+    "allowed_token_oracle_mean_nll": 2.4180724971064906,
+    "allowed_token_oracle_relative_improvement_vs_l12": 0.008517763977523142,
+    "token_oracle_relative_improvement_vs_l12": 0.0200518946340048,
+    "token_oracle_best_route_counts": {
+      "no_op": 15,
+      "l12_k3": 20,
+      "l28_k3": 23,
+      "both_k3": 14
+    },
+    "task_oracle_mean_nll": 2.4184650819047246,
+    "task_oracle_routes": {
+      "code-binary-search": "both_k3",
+      "code-close-elements": "l28_k3",
+      "code-java-add": "no_op",
+      "code-python-clamp": "l28_k3",
+      "code-rust-max": "l28_k3",
+      "code-truncate": "both_k3",
+      "code-typescript-unique": "l12_k3",
+      "tool-glob-files": "both_k3",
+      "tool-read-file": "both_k3",
+      "tool-run-command": "l12_k3",
+      "tool-search-text": "l12_k3",
+      "tool-write-file": "l12_k3"
+    },
+    "mean_additive_interaction_nll": 0.03636293166070913,
+    "both_isolated_good_but_joint_bad_tokens": 6
+  },
+  "nested_loto": {
+    "protocol": "outer leave-one-task-out; inner leave-one-task-out selects kernel/regularization/margin",
+    "objective": "actual routed next-token NLL, not route classification accuracy",
+    "routed_mean_nll": 2.4419638261741268,
+    "fixed_l12_mean_nll": 2.4388460118126343,
+    "relative_improvement_vs_l12": -0.001278397384005082,
+    "tasks_improved": 5,
+    "tasks_total": 12,
+    "task_mean_gain_nll": {
+      "code-binary-search": 0.002947594039142132,
+      "code-close-elements": -0.0005736195792754492,
+      "code-java-add": 0.0019411784984792273,
+      "code-python-clamp": 8.360298428063592e-06,
+      "code-rust-max": 0.0,
+      "code-truncate": 6.401174080868562e-05,
+      "code-typescript-unique": -0.0003575495599458615,
+      "tool-glob-files": 0.0,
+      "tool-read-file": 0.0072241319964329405,
+      "tool-run-command": -0.006220995758970578,
+      "tool-search-text": -0.002912367380455786,
+      "tool-write-file": -0.039534516632556915
+    },
+    "task_bootstrap_90pct_gain_ci": [
+      -0.009405088471966869,
+      0.001160749975355832
+    ],
+    "selected_route_counts": {
+      "no_op": 0,
+      "l12_k3": 46,
+      "l28_k3": 0,
+      "both_k3": 26
+    },
+    "folds": [
+      {
+        "heldout_task": "code-binary-search",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "rbf",
+          "scale": 2.0,
+          "alpha": 0.1,
+          "margin": 0.0
+        },
+        "inner_mean_nll": 2.608112546170812,
+        "heldout_routed_mean_nll": 0.5084808350851139,
+        "heldout_l12_mean_nll": 0.511428429124256
+      },
+      {
+        "heldout_task": "code-close-elements",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "rbf",
+          "scale": 2.0,
+          "alpha": 0.1,
+          "margin": 0.0
+        },
+        "inner_mean_nll": 2.356928990158729,
+        "heldout_routed_mean_nll": 3.195340372622013,
+        "heldout_l12_mean_nll": 3.1947667530427375
+      },
+      {
+        "heldout_task": "code-java-add",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "linear",
+          "scale": 1.0,
+          "alpha": 1.0,
+          "margin": 0.01
+        },
+        "inner_mean_nll": 2.6475741217569384,
+        "heldout_routed_mean_nll": 0.12179608214258526,
+        "heldout_l12_mean_nll": 0.1237372606410645
+      },
+      {
+        "heldout_task": "code-python-clamp",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "rbf",
+          "scale": 2.0,
+          "alpha": 0.1,
+          "margin": 0.0
+        },
+        "inner_mean_nll": 2.6337280771518734,
+        "heldout_routed_mean_nll": 0.15408665174618363,
+        "heldout_l12_mean_nll": 0.1540950120446117
+      },
+      {
+        "heldout_task": "code-rust-max",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "rbf",
+          "scale": 2.0,
+          "alpha": 0.1,
+          "margin": 0.0
+        },
+        "inner_mean_nll": 2.606713803259265,
+        "heldout_routed_mean_nll": 0.45743088057497516,
+        "heldout_l12_mean_nll": 0.45743088057497516
+      },
+      {
+        "heldout_task": "code-truncate",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "rbf",
+          "scale": 2.0,
+          "alpha": 0.1,
+          "margin": 0.01
+        },
+        "inner_mean_nll": 2.628350826542102,
+        "heldout_routed_mean_nll": 0.22171824992013475,
+        "heldout_l12_mean_nll": 0.22178226166094342
+      },
+      {
+        "heldout_task": "code-typescript-unique",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "rbf",
+          "scale": 2.0,
+          "alpha": 0.1,
+          "margin": 0.0
+        },
+        "inner_mean_nll": 2.616741453455307,
+        "heldout_routed_mean_nll": 0.34678888889417675,
+        "heldout_l12_mean_nll": 0.34643133933423087
+      },
+      {
+        "heldout_task": "tool-glob-files",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "rbf",
+          "scale": 0.5,
+          "alpha": 10.0,
+          "margin": 0.0
+        },
+        "inner_mean_nll": 2.14186149552133,
+        "heldout_routed_mean_nll": 5.696758581053804,
+        "heldout_l12_mean_nll": 5.696758581053804
+      },
+      {
+        "heldout_task": "tool-read-file",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "linear",
+          "scale": 1.0,
+          "alpha": 0.1,
+          "margin": 0.01
+        },
+        "inner_mean_nll": 2.2008627755188557,
+        "heldout_routed_mean_nll": 5.022959836031077,
+        "heldout_l12_mean_nll": 5.030183968027511
+      },
+      {
+        "heldout_task": "tool-run-command",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "rbf",
+          "scale": 2.0,
+          "alpha": 0.1,
+          "margin": 0.01
+        },
+        "inner_mean_nll": 2.2665659876400994,
+        "heldout_routed_mean_nll": 4.184315846689671,
+        "heldout_l12_mean_nll": 4.178094850930701
+      },
+      {
+        "heldout_task": "tool-search-text",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "rbf",
+          "scale": 2.0,
+          "alpha": 0.1,
+          "margin": 0.0
+        },
+        "inner_mean_nll": 2.2388704844201945,
+        "heldout_routed_mean_nll": 4.660963579912125,
+        "heldout_l12_mean_nll": 4.65805121253167
+      },
+      {
+        "heldout_task": "tool-write-file",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "rbf",
+          "scale": 2.0,
+          "alpha": 0.1,
+          "margin": 0.01
+        },
+        "inner_mean_nll": 2.2229913493845936,
+        "heldout_routed_mean_nll": 4.732926109417662,
+        "heldout_l12_mean_nll": 4.693391592785105
+      }
+    ]
+  },
+  "promotion_gate": {
+    "relative_nll_improvement_at_least": 0.002,
+    "tasks_improved_at_least": 7,
+    "bootstrap_90pct_lower_bound_above_zero": true,
+    "passed": false
+  },
+  "decision": "Stop the joint kernel router; retain v13 fixed L12 as the formal graph."
+}

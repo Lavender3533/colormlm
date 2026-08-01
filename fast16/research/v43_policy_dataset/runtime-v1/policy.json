@@ -1,0 +1,92 @@
+{
+  "format": "colorlm-sequence-policy-runtime-v3",
+  "formal": true,
+  "architecture": "ColorLMV4",
+  "mode": "pca-rank8-multiclass-noop-sparse",
+  "hidden_size": 2048,
+  "base_vocab_size": 248320,
+  "candidate_token_count": 8,
+  "class_count": 9,
+  "pca_rank": 8,
+  "no_op_class": 0,
+  "no_op_rule": "exact-no-op-iff-class-0-is-argmax",
+  "hidden_normalization": "per-sample-l2",
+  "correction_strength": 12.0,
+  "correction_min": 0.0,
+  "correction_max": 12.0,
+  "source_contract_sha256": "2d372a24bbfdf35a8ebd2a8126b4e276c1b27f459c8962b06001ef3431ae05a9",
+  "source_report_sha256": "d901f2179c718189cf7959772942c291205c5cb9e373f802ad469e6ce7066d5d",
+  "source_weights_sha256": "42ac597a164141054c0b387b4400548e750f83d1bef79c3fa36d5f0d3e019fd7",
+  "runtime_layout": "single-aligned-tensor-blob-v1",
+  "alignment": 64,
+  "tensor_count": 6,
+  "tensors": [
+    {
+      "name": "policy.base_ids",
+      "dtype": "I64",
+      "ggml_shape": [
+        8
+      ],
+      "offset": 0,
+      "bytes": 64,
+      "sha256": "cd560c26287b90ba31184ef60c692a40349265954143aa5870e6ead35e2415c5"
+    },
+    {
+      "name": "policy.hidden_mean",
+      "dtype": "F32",
+      "ggml_shape": [
+        2048
+      ],
+      "offset": 64,
+      "bytes": 8192,
+      "sha256": "7f9537912ad219cd98b5a952d9b79a6d9c028bfd46396866b3a88286a3a76818"
+    },
+    {
+      "name": "policy.pca_components",
+      "dtype": "F32",
+      "ggml_shape": [
+        2048,
+        8
+      ],
+      "offset": 8256,
+      "bytes": 65536,
+      "sha256": "dabb89038e0588dd396f4429206b8c82d2f09ce504c1cf18184b8a02d068d77b"
+    },
+    {
+      "name": "policy.classifier",
+      "dtype": "F32",
+      "ggml_shape": [
+        8,
+        9
+      ],
+      "offset": 73792,
+      "bytes": 288,
+      "sha256": "72860865cc5c75c063f59b9550cc4fc25cc95ab5d7cfb2493f76e62f25911ba4"
+    },
+    {
+      "name": "policy.classifier_bias",
+      "dtype": "F32",
+      "ggml_shape": [
+        9
+      ],
+      "offset": 74112,
+      "bytes": 36,
+      "sha256": "5eb7b3db87a0458d00add3cd404bb268523bd9e0a6d12a7137082954e53c2310"
+    },
+    {
+      "name": "policy.correction_strength",
+      "dtype": "F32",
+      "ggml_shape": [
+        1
+      ],
+      "offset": 74176,
+      "bytes": 4,
+      "sha256": "d9fc8a51763953481a1808af3156bcb8144c2f925e96dec623c886f6d9d975b2"
+    }
+  ],
+  "weights": {
+    "file": "weights.bin",
+    "bytes": 74180,
+    "sha256": "e24b7bcb063f075663bf7474828eb986b48b58a3494a31a4ea4bedc0e82d786f"
+  }
+}

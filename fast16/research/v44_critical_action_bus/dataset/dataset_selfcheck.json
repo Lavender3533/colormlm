@@ -1,0 +1,181 @@
+{
+  "format": "colorlm-v44-critical-action-dataset-selfcheck-v1",
+  "passed": true,
+  "errors": [],
+  "inputs": {
+    "generator_sha256": "e152cfcb9c661dc20887efc552a16be0b8d842252198f3ff488e3f9781c13f82",
+    "tasks_sha256": "7527c3473f5ee613f7c1611d4e5171bf78a0bd56844f04b68cc3001f1bee0477",
+    "oracle_sha256": "232f1ea79c7aa24fd25f792efd1e9153da0620e0575bd58ead3124b54a64ef3f",
+    "contract_sha256": "9c1263bff8d0cb4b946591f67c55ac4157bfd6a1d000b7831c05a943d9228d13",
+    "manifest_sha256": "74507c2c34ae38fa06423ae3623a0e9eb131f3110690a23e6a0ff8a9eb252d10"
+  },
+  "counts": {
+    "tasks": 240,
+    "groups": 120,
+    "template_clusters": 24,
+    "splits": {
+      "blind": 60,
+      "train": 120,
+      "validation": 60
+    },
+    "capabilities": {
+      "code_debugging": 40,
+      "computer_operation": 40,
+      "continue_or_finish": 40,
+      "missing_parameter_clarification": 40,
+      "multi_step_planning": 40,
+      "tool_argument_repair": 40
+    },
+    "labels": {
+      "ask_user": 40,
+      "continue_tool": 160,
+      "finish": 40
+    }
+  },
+  "template_clusters": {
+    "code_debugging": {
+      "train": [
+        "code_debugging.compiler_diagnostic.v1",
+        "code_debugging.unit_test_failure.v1"
+      ],
+      "validation": [
+        "code_debugging.lint_recovery.v1"
+      ],
+      "blind": [
+        "code_debugging.post_patch_regression.v1"
+      ]
+    },
+    "computer_operation": {
+      "train": [
+        "computer_operation.overwrite_dialog.v1",
+        "computer_operation.save_dialog.v1"
+      ],
+      "validation": [
+        "computer_operation.filter_menu.v1"
+      ],
+      "blind": [
+        "computer_operation.submit_form.v1"
+      ]
+    },
+    "continue_or_finish": {
+      "train": [
+        "continue_or_finish.paginated_read.v1",
+        "continue_or_finish.test_result.v1"
+      ],
+      "validation": [
+        "continue_or_finish.artifact_verification.v1"
+      ],
+      "blind": [
+        "continue_or_finish.asynchronous_job.v1"
+      ]
+    },
+    "missing_parameter_clarification": {
+      "train": [
+        "missing_parameter_clarification.deployment_environment.v1",
+        "missing_parameter_clarification.overwrite_confirmation.v1"
+      ],
+      "validation": [
+        "missing_parameter_clarification.schedule_timezone.v1"
+      ],
+      "blind": [
+        "missing_parameter_clarification.repository_scope.v1"
+      ]
+    },
+    "multi_step_planning": {
+      "train": [
+        "multi_step_planning.backup_then_migrate.v1",
+        "multi_step_planning.validate_then_activate.v1"
+      ],
+      "validation": [
+        "multi_step_planning.build_then_deploy.v1"
+      ],
+      "blind": [
+        "multi_step_planning.health_then_rollback.v1"
+      ]
+    },
+    "tool_argument_repair": {
+      "train": [
+        "tool_argument_repair.invalid_enum.v1",
+        "tool_argument_repair.wrong_scalar_type.v1"
+      ],
+      "validation": [
+        "tool_argument_repair.missing_path_resolution.v1"
+      ],
+      "blind": [
+        "tool_argument_repair.cross_field_dependency.v1"
+      ]
+    }
+  },
+  "leakage": {
+    "group_split_overlap": 0,
+    "template_cluster_split_overlap": 0,
+    "normalized_input_fingerprint_overlap": 0,
+    "fixture_id_split_overlap": 0
+  },
+  "counterfactual_pairs": {
+    "groups": 120,
+    "two_variants": 120,
+    "same_split_cluster_tools": 120,
+    "one_observation_message_difference": 120,
+    "one_state_field_difference": 120,
+    "different_expected_action": 120,
+    "coarse_state_label_flips": 80
+  },
+  "deterministic_oracle": {
+    "labels_rederived": 240,
+    "oracle_commitments_verified": 240,
+    "actions_matching_declared_tool_schema": 240,
+    "critical_semantics_rederived": 240
+  },
+  "judge": {
+    "expected_actions_accepted": 240,
+    "false_rejects": 0,
+    "mutations_tested": 960,
+    "mutation_false_accepts": 0
+  },
+  "reproducibility": {
+    "tasks": true,
+    "oracle": true,
+    "contract": true
+  },
+  "encoding": [
+    {
+      "file": "generate_v44_dataset.py",
+      "valid_utf8": true,
+      "has_bom": false
+    },
+    {
+      "file": "trajectory_tasks_v1.jsonl",
+      "valid_utf8": true,
+      "has_bom": false
+    },
+    {
+      "file": "trajectory_oracle_v1.jsonl",
+      "valid_utf8": true,
+      "has_bom": false
+    },
+    {
+      "file": "dataset_contract.json",
+      "valid_utf8": true,
+      "has_bom": false
+    },
+    {
+      "file": "dataset_manifest.json",
+      "valid_utf8": true,
+      "has_bom": false
+    },
+    {
+      "file": "validate_v44_dataset.py",
+      "valid_utf8": true,
+      "has_bom": false
+    }
+  ],
+  "scientific_limits": [
+    "这是确定性合成关键动作集，不是实际Claude Code仓库任务成功率。",
+    "computer_operation使用结构化可访问性状态，不含截图视觉理解。",
+    "code_debugging只监督下一关键动作，不执行真实补丁和隐藏单元测试。",
+    "blind表示模板簇隔离但目标仍在本地文件中，不是密码学隐藏盲测。",
+    "每个validation/blind能力目前各只有一个模板簇，适合短门，不足以支持前沿模型声明。",
+    "精确语义judge假设唯一动作；真实环境中的多条等价计划需要另建终态模拟器。"
+  ]
+}

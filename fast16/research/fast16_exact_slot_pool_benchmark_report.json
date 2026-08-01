@@ -1,0 +1,82 @@
+{
+  "format": "fast16-exact-slot-pool-sweep-v1",
+  "model": "ColorLM-v6-Q3Router-Fused-A1.gguf",
+  "date": "2026-07-29",
+  "hardware": {
+    "gpu": "AMD Radeon RX 5700 XT 8 GiB",
+    "cpu": "Intel Core i5-12400F"
+  },
+  "settings": {
+    "decode_tokens": 64,
+    "repetitions": 3,
+    "threads": 8,
+    "n_gpu_layers": 99,
+    "n_cpu_moe": 29,
+    "flash_attention": true,
+    "mmap": false,
+    "merge_cpu_sync": true,
+    "skip_cpu_final_sync": true
+  },
+  "correctness": {
+    "fixed_prompt_greedy_tokens": 16,
+    "baseline_and_slot_pool_output_identical": true,
+    "first_staged_expert_byte_spot_check": "passed",
+    "invalid_slot_zero_fallback_used": false
+  },
+  "sweep": [
+    {
+      "label": "baseline",
+      "layers": 0,
+      "slots_per_layer": 0,
+      "tokens_per_second": 22.52,
+      "stddev_tokens_per_second": 1.30
+    },
+    {
+      "label": "29x8",
+      "layers": 29,
+      "slots_per_layer": 8,
+      "tokens_per_second": 22.19,
+      "stddev_tokens_per_second": 0.21,
+      "observed_hit_rate_percent": "25-27"
+    },
+    {
+      "label": "14x16",
+      "layers": 14,
+      "slots_per_layer": 16,
+      "tokens_per_second": 22.47,
+      "stddev_tokens_per_second": 1.31
+    },
+    {
+      "label": "7x32",
+      "layers": 7,
+      "slots_per_layer": 32,
+      "tokens_per_second": 24.16,
+      "stddev_tokens_per_second": 0.40
+    },
+    {
+      "label": "8x28",
+      "layers": 8,
+      "slots_per_layer": 28,
+      "pool_vram_mib": 239.75,
+      "tokens_per_second": 24.23,
+      "stddev_tokens_per_second": 0.18,
+      "speedup_percent": 7.59,
+      "selected_in_initial_sweep": true
+    },
+    {
+      "label": "6x38",
+      "layers": 6,
+      "slots_per_layer": 38,
+      "tokens_per_second": 20.05,
+      "stddev_tokens_per_second": 3.97
+    }
+  ],
+  "adjacent_recheck": {
+    "decode_tokens": 128,
+    "slot_pool_8x28_tokens_per_second": 16.98,
+    "baseline_tokens_per_second": 22.52,
+    "slot_pool_delta_percent": -24.60,
+    "note": "The initial sweep did not reproduce under an adjacent same-state A/B; machine state also drifted across later runs."
+  },
+  "decision": "Keep the exact slot pool as an explicit experimental option only; disable it by default until an adjacent repeated A/B demonstrates a stable gain."
+}

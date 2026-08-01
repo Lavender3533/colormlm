@@ -1,0 +1,122 @@
+{
+  "format": "colorlm-v47-shortlist-coverage-report-v1",
+  "status": "development_feasibility_only",
+  "warning": "teacher-forced v43 states and consumed same-template splits; not a v47 ability or speed result",
+  "capture": "D:\\project\\大模型ssd化\\fast16\\research\\v43_policy_dataset\\v36-states.cnob",
+  "capture_sha256": "dfa3cea982a307eac6cc075fb5bf1a3d8d17f9918c5433d0f08b07dde4762f3c",
+  "teacher": "D:\\project\\大模型ssd化\\fast16\\research\\v43_policy_dataset\\teacher.jsonl",
+  "teacher_sha256": "1d2be3d8a67ac9e75a5d01c58a4dea656bb373001cb9417db56270d23b9271f9",
+  "configuration": {
+    "native_top_k": 32,
+    "prompt_suffix": 96,
+    "frequent_train": 64,
+    "candidate_limit": 192,
+    "rank": 64,
+    "priority": [
+      "native_topk",
+      "recent_prompt_tokens",
+      "train_frequent_targets"
+    ]
+  },
+  "overall": {
+    "sample_count": 720,
+    "covered": 720,
+    "coverage": 1.0,
+    "native_topk_coverage": 1.0,
+    "mean_candidate_count": 92.65555555555555,
+    "maximum_candidate_count": 107
+  },
+  "by_split": {
+    "test": {
+      "sample_count": 144,
+      "covered": 144,
+      "coverage": 1.0,
+      "native_topk_coverage": 1.0,
+      "mean_candidate_count": 92.625,
+      "maximum_candidate_count": 107
+    },
+    "train": {
+      "sample_count": 432,
+      "covered": 432,
+      "coverage": 1.0,
+      "native_topk_coverage": 1.0,
+      "mean_candidate_count": 92.52546296296296,
+      "maximum_candidate_count": 106
+    },
+    "validation": {
+      "sample_count": 144,
+      "covered": 144,
+      "coverage": 1.0,
+      "native_topk_coverage": 1.0,
+      "mean_candidate_count": 93.07638888888889,
+      "maximum_candidate_count": 105
+    }
+  },
+  "by_capability": {
+    "code_debugging": {
+      "sample_count": 120,
+      "covered": 120,
+      "coverage": 1.0,
+      "native_topk_coverage": 1.0,
+      "mean_candidate_count": 96.61666666666666,
+      "maximum_candidate_count": 101
+    },
+    "computer_operation": {
+      "sample_count": 120,
+      "covered": 120,
+      "coverage": 1.0,
+      "native_topk_coverage": 1.0,
+      "mean_candidate_count": 101.95833333333333,
+      "maximum_candidate_count": 107
+    },
+    "continue_or_finish": {
+      "sample_count": 120,
+      "covered": 120,
+      "coverage": 1.0,
+      "native_topk_coverage": 1.0,
+      "mean_candidate_count": 80.14166666666667,
+      "maximum_candidate_count": 99
+    },
+    "missing_parameter_clarification": {
+      "sample_count": 120,
+      "covered": 120,
+      "coverage": 1.0,
+      "native_topk_coverage": 1.0,
+      "mean_candidate_count": 96.19166666666666,
+      "maximum_candidate_count": 101
+    },
+    "multi_step_planning": {
+      "sample_count": 120,
+      "covered": 120,
+      "coverage": 1.0,
+      "native_topk_coverage": 1.0,
+      "mean_candidate_count": 92.78333333333333,
+      "maximum_candidate_count": 100
+    },
+    "tool_argument_repair": {
+      "sample_count": 120,
+      "covered": 120,
+      "coverage": 1.0,
+      "native_topk_coverage": 1.0,
+      "mean_candidate_count": 88.24166666666666,
+      "maximum_candidate_count": 93
+    }
+  },
+  "projection_cost": {
+    "dense_2048x248320_macs": 508559360,
+    "rank_times_mean_candidates_macs": 5929.955555555555,
+    "shortlist_to_dense_ratio": 1.1660301671678122e-05,
+    "does_not_include": [
+      "feature_fusion",
+      "candidate_construction",
+      "v38_verification"
+    ]
+  },
+  "gate": {
+    "validation_coverage_min": 0.995,
+    "test_coverage_min": 0.995,
+    "passed": true
+  },
+  "elapsed_seconds": 2.0387600000001385,
+  "misses": []
+}

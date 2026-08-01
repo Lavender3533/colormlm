@@ -1,0 +1,34 @@
+{
+  "format": "colorlm-v40-native-norm-matched-contract-v1",
+  "date": "2026-08-01",
+  "candidate": "native_weight_norm_matched",
+  "base_model": "fast16/models/ColorLM-v36-Qwen36-Global-Shared-Backbone.gguf",
+  "old_policy_weights": "fast16/research/v29_sequence_policy_head/policy-head-weights.npz",
+  "old_policy_weights_sha256": "ecc14dee2860332f245de90c76ba8d1690e980b2d6b1e0a72f45d5df6116f7c1",
+  "native_policy_weights": "fast16/research/v39_v36_native_policy/policy-head-weights.npz",
+  "native_policy_weights_sha256": "9748b4b659f4e3585a5b967aa4bb7f87a324ba439fc6439c3da9b674957e33f5",
+  "transform": {
+    "formula": "W40 = W39 * (l2(W29) / l2(W39)); b40 and correction bounds use the same scale",
+    "scale_is_data_independent": true,
+    "parameter_scan_allowed": false,
+    "expected_scale": 0.26028262778480454
+  },
+  "development_evidence": {
+    "tasks_are_consumed": true,
+    "report": "fast16/research/v40_conservative_policy/dev-analysis.json",
+    "mean_target_nll_delta": -0.5871603473893078,
+    "improved_tasks": 17,
+    "regressed_tasks": 3,
+    "worst_task_mean_nll_regression": 0.03767237445602101
+  },
+  "blind_gate": {
+    "tasks": "fast16/research/v40_conservative_policy/blind_tasks_v1.jsonl",
+    "tasks_sha256": "e708fe20acad8992e893950eb3cc8024141391eee37f1d48229e060869883cc5",
+    "task_count": 12,
+    "minimum_net_wins_vs_v36": 1,
+    "maximum_regressions_vs_v36": 0,
+    "no_tools_exact_bypass": true,
+    "maximum_speed_regression": 0.05
+  },
+  "failure_action": "stop v40; keep v38; do not scan scale against blind results"
+}

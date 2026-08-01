@@ -1,0 +1,425 @@
+{
+ "arm": "opus-no-tools",
+ "answers": [
+  {
+   "id": "q000",
+   "answer": "52",
+   "confidence": "high",
+   "work": "⌊320/9⌋=35, ⌊320/11⌋=29, ⌊320/99⌋=3 → 61; 减去被7整除者 ⌊320/63⌋=5, ⌊320/77⌋=4, ⌊320/693⌋=0 → 9; 61-9=52",
+   "family": "divisibility"
+  },
+  {
+   "id": "q001",
+   "answer": "0",
+   "confidence": "high",
+   "work": "6 和 8 的倍数全是偶数, 与\"不能被2整除\"矛盾, 故为空集",
+   "family": "divisibility"
+  },
+  {
+   "id": "q002",
+   "answer": "229",
+   "confidence": "high",
+   "work": "⌊800/4⌋=200, ⌊800/9⌋=88, ⌊800/36⌋=22 → 266; 被7整除者 ⌊800/28⌋=28, ⌊800/63⌋=12, ⌊800/252⌋=3 → 37; 266-37=229",
+   "family": "divisibility"
+  },
+  {
+   "id": "q003",
+   "answer": "122",
+   "confidence": "high",
+   "work": "⌊360/3⌋=120, ⌊360/11⌋=32, ⌊360/33⌋=10 → 142; 被7整除者 ⌊360/21⌋=17, ⌊360/77⌋=4, ⌊360/231⌋=1 → 20; 142-20=122",
+   "family": "divisibility"
+  },
+  {
+   "id": "q004",
+   "answer": "11",
+   "confidence": "high",
+   "work": "6 的倍数全偶被排除; 13 的奇数倍: ⌊290/13⌋=22, k=1..22 中奇数 11 个",
+   "family": "divisibility"
+  },
+  {
+   "id": "q005",
+   "answer": "29",
+   "confidence": "high",
+   "work": "6 的倍数全偶被排除; 7 的奇数倍: ⌊400/7⌋=57, k=1..57 中奇数 29 个",
+   "family": "divisibility"
+  },
+  {
+   "id": "q006",
+   "answer": "182",
+   "confidence": "high",
+   "work": "⌊680/4⌋=170, ⌊680/6⌋=113, ⌊680/12⌋=56 → 227; 被5整除者 ⌊680/20⌋=34, ⌊680/30⌋=22, ⌊680/60⌋=11 → 45; 227-45=182",
+   "family": "divisibility"
+  },
+  {
+   "id": "q007",
+   "answer": "44",
+   "confidence": "high",
+   "work": "奇数倍: 7 有 ⌊400/7⌋=57→29 个奇 k; 11 有 36→18; 77 有 5→3; 29+18-3=44",
+   "family": "divisibility"
+  },
+  {
+   "id": "q008",
+   "answer": "33",
+   "confidence": "high",
+   "work": "⌊220/8⌋=27, ⌊220/13⌋=16, ⌊220/104⌋=2 → 41; 被5整除者 ⌊220/40⌋=5, ⌊220/65⌋=3, ⌊220/520⌋=0 → 8; 41-8=33",
+   "family": "divisibility"
+  },
+  {
+   "id": "q009",
+   "answer": "198",
+   "confidence": "high",
+   "work": "⌊640/3⌋=213, ⌊640/13⌋=49, ⌊640/39⌋=16 → 246; 被5整除者 ⌊640/15⌋=42, ⌊640/65⌋=9, ⌊640/195⌋=3 → 48; 246-48=198",
+   "family": "divisibility"
+  },
+  {
+   "id": "q010",
+   "answer": "95/194",
+   "confidence": "high",
+   "work": "(1/100)(0.95)=95/10000; 分母 95/10000+(99/100)(0.01)=194/10000 → 95/194",
+   "family": "bayes"
+  },
+  {
+   "id": "q011",
+   "answer": "8/1007",
+   "confidence": "high",
+   "work": "(1/1000)(0.8)=8/10000; 分母 8/10000+(999/1000)(0.1)=1007/10000 → 8/1007 (1007=19·53)",
+   "family": "bayes"
+  },
+  {
+   "id": "q012",
+   "answer": "80/99",
+   "confidence": "high",
+   "work": "(1/20)(0.8)=80/2000; 分母 80/2000+(19/20)(0.01)=99/2000 → 80/99",
+   "family": "bayes"
+  },
+  {
+   "id": "q013",
+   "answer": "99/589",
+   "confidence": "high",
+   "work": "(1/50)(0.99)=99/5000; 分母 99/5000+(49/50)(0.1)=589/5000 → 99/589 (589=19·31)",
+   "family": "bayes"
+  },
+  {
+   "id": "q014",
+   "answer": "99/1094",
+   "confidence": "high",
+   "work": "(1/200)(0.99)=99/20000; 分母 99/20000+(199/200)(0.05)=1094/20000 → 99/1094 (1094=2·547)",
+   "family": "bayes"
+  },
+  {
+   "id": "q015",
+   "answer": "11/233",
+   "confidence": "high",
+   "work": "99/100000 ÷ (99+1998)/100000 = 99/2097, 约去 9 → 11/233",
+   "family": "bayes"
+  },
+  {
+   "id": "q016",
+   "answer": "80/279",
+   "confidence": "high",
+   "work": "(1/200)(0.8)=80/20000; 分母 80/20000+(199/200)(0.01)=279/20000 → 80/279 (279=9·31)",
+   "family": "bayes"
+  },
+  {
+   "id": "q017",
+   "answer": "11/122",
+   "confidence": "high",
+   "work": "99/100000 ÷ 1098/100000 = 99/1098, 约去 9 → 11/122",
+   "family": "bayes"
+  },
+  {
+   "id": "q018",
+   "answer": "1/2",
+   "confidence": "high",
+   "work": "(1/20)(0.95)=19/400; 假阳性 (19/20)(0.05)=19/400, 两者相等 → 1/2",
+   "family": "bayes"
+  },
+  {
+   "id": "q019",
+   "answer": "18/217",
+   "confidence": "high",
+   "work": "(1/200)(0.9)=18/4000; 分母 18/4000+(199/200)(0.05)=217/4000 → 18/217 (217=7·31)",
+   "family": "bayes"
+  },
+  {
+   "id": "q020",
+   "answer": "丙",
+   "confidence": "high",
+   "work": "甲⟺乙 使甲乙同类，故丙的\"恰好一个骗子\"必假→丙骗子；则乙⟺¬丙=真，乙诚实，甲诚实。唯一自洽。",
+   "family": "truthteller"
+  },
+  {
+   "id": "q021",
+   "answer": "甲",
+   "confidence": "high",
+   "work": "设甲真则乙丙皆骗，但丙⟺¬甲=假、乙⟺(甲丙恰一骗)=真，矛盾；设甲假则丙⟺¬甲=真诚实，乙⟺恰一骗=真诚实，甲的断言假，自洽。",
+   "family": "truthteller"
+  },
+  {
+   "id": "q022",
+   "answer": "甲,乙,丙",
+   "confidence": "high",
+   "work": "甲⟺丙使二者同类，故乙\"恰好一个骗子\"假→乙骗；丙⟺乙=假→丙骗；甲=丙=假→甲骗。三人全骗子且自洽。",
+   "family": "truthteller"
+  },
+  {
+   "id": "q023",
+   "answer": "甲,乙",
+   "confidence": "high",
+   "work": "甲⟺乙同类；若乙真则甲真，但乙称甲是骗子，矛盾→乙假、甲假；丙⟺¬乙=真，丙诚实。自洽。",
+   "family": "truthteller"
+  },
+  {
+   "id": "q024",
+   "answer": "丙",
+   "confidence": "high",
+   "work": "乙⟺甲。甲真→乙真→丙⟺(¬甲∧¬乙)=假，丙骗，乙丙中恰一骗成立，自洽；甲假分支矛盾。",
+   "family": "truthteller"
+  },
+  {
+   "id": "q025",
+   "answer": "甲,乙",
+   "confidence": "high",
+   "work": "甲真则乙真，但甲称乙骗，矛盾→甲假，乙⟺甲=假；丙⟺(¬甲∧¬乙)=真，丙诚实。自洽。",
+   "family": "truthteller"
+  },
+  {
+   "id": "q026",
+   "answer": "乙,丙",
+   "confidence": "high",
+   "work": "甲真→乙假、丙⟺¬甲=假，乙的\"甲丙皆骗\"确为假、丙的\"甲是骗子\"确为假，自洽；甲假分支矛盾。",
+   "family": "truthteller"
+  },
+  {
+   "id": "q027",
+   "answer": "乙,丙",
+   "confidence": "high",
+   "work": "甲真→丙假、乙⟺¬甲=假；丙断言(¬甲∧¬乙)=假与丙骗一致，自洽；甲假分支导致丙需真却断言为假，矛盾。",
+   "family": "truthteller"
+  },
+  {
+   "id": "q028",
+   "answer": "甲",
+   "confidence": "high",
+   "work": "丙⟺乙使乙丙同类→甲\"恰好一个骗子\"必假→甲骗；乙⟺¬甲=真诚实，丙⟺乙=真诚实。自洽。",
+   "family": "truthteller"
+  },
+  {
+   "id": "q029",
+   "answer": "乙,丙",
+   "confidence": "high",
+   "work": "甲真→乙假丙假；乙⟺丙(假=假)一致，丙⟺(¬甲∧¬乙)=假一致，自洽；甲假的两个子分支均矛盾。",
+   "family": "truthteller"
+  },
+  {
+   "id": "q030",
+   "answer": "20",
+   "confidence": "high",
+   "work": "S=t(m-1)/(k-m)=40*1/(4-2)=20;验证 20/80 -> 60/120=2倍",
+   "family": "ages"
+  },
+  {
+   "id": "q031",
+   "answer": "8",
+   "confidence": "high",
+   "work": "S=12*(3-1)/(6-3)=8;验证 8/48 -> 20/60=3倍",
+   "family": "ages"
+  },
+  {
+   "id": "q032",
+   "answer": "6",
+   "confidence": "high",
+   "work": "S=6*(2-1)/(3-2)=6;验证 6/18 -> 12/24=2倍",
+   "family": "ages"
+  },
+  {
+   "id": "q033",
+   "answer": "16",
+   "confidence": "high",
+   "work": "S=8*(3-1)/(4-3)=16;验证 16/64 -> 24/72=3倍",
+   "family": "ages"
+  },
+  {
+   "id": "q034",
+   "answer": "17",
+   "confidence": "high",
+   "work": "S=34*(3-1)/(7-3)=17;验证 17/119 -> 51/153=3倍",
+   "family": "ages"
+  },
+  {
+   "id": "q035",
+   "answer": "18",
+   "confidence": "high",
+   "work": "S=36*(2-1)/(4-2)=18;验证 18/72 -> 54/108=2倍",
+   "family": "ages"
+  },
+  {
+   "id": "q036",
+   "answer": "6",
+   "confidence": "high",
+   "work": "S=12*(2-1)/(4-2)=6;验证 6/24 -> 18/36=2倍",
+   "family": "ages"
+  },
+  {
+   "id": "q037",
+   "answer": "15",
+   "confidence": "high",
+   "work": "S=15*(3-1)/(5-3)=15;验证 15/75 -> 30/90=3倍",
+   "family": "ages"
+  },
+  {
+   "id": "q038",
+   "answer": "6",
+   "confidence": "high",
+   "work": "S=12*(3-1)/(7-3)=6;验证 6/42 -> 18/54=3倍",
+   "family": "ages"
+  },
+  {
+   "id": "q039",
+   "answer": "26",
+   "confidence": "high",
+   "work": "S=26*(3-1)/(5-3)=26;验证 26/130 -> 52/156=3倍",
+   "family": "ages"
+  },
+  {
+   "id": "q040",
+   "answer": "58",
+   "confidence": "high",
+   "work": "x=11k+3, 4k+3≡2 mod7 → k≡5 mod7, k=5 → 58; 58=7·8+2=11·5+3",
+   "family": "remainder"
+  },
+  {
+   "id": "q041",
+   "answer": "49",
+   "confidence": "high",
+   "work": "x=11k+5, 11k+5≡4 mod5 → k≡4 mod5, k=4 → 49; 49=5·9+4=11·4+5",
+   "family": "remainder"
+  },
+  {
+   "id": "q042",
+   "answer": "4",
+   "confidence": "high",
+   "work": "余数同为4 → x≡4 mod lcm(6,7)=42, 最小正整数 4",
+   "family": "remainder"
+  },
+  {
+   "id": "q043",
+   "answer": "19",
+   "confidence": "high",
+   "work": "x=11k+8, 4k+1≡5 mod7 → k≡1, k=1 → 19; 19=7·2+5=11·1+8",
+   "family": "remainder"
+  },
+  {
+   "id": "q044",
+   "answer": "22",
+   "confidence": "high",
+   "work": "x=6k+4, k+4≡2 mod5 → k≡3, k=3 → 22; 22=5·4+2=6·3+4",
+   "family": "remainder"
+  },
+  {
+   "id": "q045",
+   "answer": "102",
+   "confidence": "high",
+   "work": "x=13k+11, k+11≡6 mod12 → k≡7, k=7 → 102; 102=12·8+6=13·7+11",
+   "family": "remainder"
+  },
+  {
+   "id": "q046",
+   "answer": "36",
+   "confidence": "high",
+   "work": "x=8k+4, k+4≡1 mod7 → k≡4, k=4 → 36; 36=7·5+1=8·4+4",
+   "family": "remainder"
+  },
+  {
+   "id": "q047",
+   "answer": "21",
+   "confidence": "high",
+   "work": "x=9k+3, k+3≡5 mod8 → k≡2, k=2 → 21; 21=8·2+5=9·2+3",
+   "family": "remainder"
+  },
+  {
+   "id": "q048",
+   "answer": "45",
+   "confidence": "high",
+   "work": "x=11k+1, 5k+1≡3 mod6 → k≡4, k=4 → 45; 45=6·7+3=11·4+1",
+   "family": "remainder"
+  },
+  {
+   "id": "q049",
+   "answer": "107",
+   "confidence": "high",
+   "work": "x=12k+11, k≡8 mod11, k=8 → 107; 107=11·9+8=12·8+11",
+   "family": "remainder"
+  },
+  {
+   "id": "q050",
+   "answer": "5",
+   "confidence": "high",
+   "work": "女只能取5(共5女): C(5,5)*C(5,1)=5",
+   "family": "combinatorics"
+  },
+  {
+   "id": "q051",
+   "answer": "10",
+   "confidence": "high",
+   "work": "女=3: C(5,3)*C(6,0)=10",
+   "family": "combinatorics"
+  },
+  {
+   "id": "q052",
+   "answer": "140",
+   "confidence": "high",
+   "work": "女=2: C(3,2)C(7,4)=3*35=105; 女=3: C(3,3)C(7,3)=35; 合计140",
+   "family": "combinatorics"
+  },
+  {
+   "id": "q053",
+   "answer": "8",
+   "confidence": "high",
+   "work": "女=5: C(5,5)*C(8,1)=8; 女=6不可能",
+   "family": "combinatorics"
+  },
+  {
+   "id": "q054",
+   "answer": "252",
+   "confidence": "high",
+   "work": "女=3: C(4,3)C(8,3)=4*56=224; 女=4: C(4,4)C(8,2)=28; 合计252",
+   "family": "combinatorics"
+  },
+  {
+   "id": "q055",
+   "answer": "480",
+   "confidence": "high",
+   "work": "C(12,4)-C(6,4)=495-15=480",
+   "family": "combinatorics"
+  },
+  {
+   "id": "q056",
+   "answer": "195",
+   "confidence": "high",
+   "work": "C(10,4)-C(6,4)=210-15=195",
+   "family": "combinatorics"
+  },
+  {
+   "id": "q057",
+   "answer": "35",
+   "confidence": "high",
+   "work": "女=3: C(7,3)=35",
+   "family": "combinatorics"
+  },
+  {
+   "id": "q058",
+   "answer": "4",
+   "confidence": "high",
+   "work": "女=3: C(4,3)=4",
+   "family": "combinatorics"
+  },
+  {
+   "id": "q059",
+   "answer": "20",
+   "confidence": "high",
+   "work": "女最多3, 女=3: C(3,3)*C(6,3)=20",
+   "family": "combinatorics"
+  }
+ ]
+}

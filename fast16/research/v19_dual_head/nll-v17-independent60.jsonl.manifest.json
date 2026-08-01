@@ -1,0 +1,25 @@
+{
+  "format": "colorlm-v13-counterfactual-route-shard-manifest-v1",
+  "route": "v17-independent60",
+  "route_attestation": "process-level --force-path plus expected API alias",
+  "teacher": "D:\\project\\大模型ssd化\\fast16\\research\\v19_dual_head\\teacher_v19_independent_60.jsonl",
+  "teacher_sha256": "6b43aac70cae2d92912254fbba25ddc50183704ad8e5320ce40b271916778e1a",
+  "shard": "nll-v17-independent60.jsonl",
+  "shard_sha256": "8c154f2cc5dd27c323bc7a6146b4bcc1f62b6caf0fee72403216c957e3e88a70",
+  "sample_count": 60,
+  "exact_count": 60,
+  "exact_coverage": 1.0,
+  "n_probs": 1,
+  "elapsed_seconds": 130.115869,
+  "server": {
+    "endpoint": "http://127.0.0.1:8105",
+    "models": [
+      "ColorLM-v17-Coder-Neural-Island"
+    ],
+    "model_path": "fast16/models/ColorLM-v6-Q3Router-Fused-A1.gguf",
+    "context": 16384
+  },
+  "expected_model": "ColorLM-v17-Coder-Neural-Island",
+  "hidden": null,
+  "k3_features": null
+}

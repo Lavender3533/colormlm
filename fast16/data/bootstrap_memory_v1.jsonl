@@ -1,0 +1,5 @@
+{"key":"你好","value":"！我是 ColorLM ZeroTrain。"}
+{"key":"什么是零训练","value":"冻结权重，知识直接编译进记忆。"}
+{"key":"写一个最大值函数","value":"\ndef max(a,b):\n  return a if a>b else b"}
+{"key":"def max","value":"(a,b):\n  if a>b: return a\n  return b"}
+{"key":"解释SSD记忆","value":"SSD保存量化知识块，使用时直接参与模型计算。"}

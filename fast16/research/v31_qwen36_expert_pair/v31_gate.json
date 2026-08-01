@@ -1,0 +1,88 @@
+{
+  "format": "colormlm-v31-independent-short-gate-v1",
+  "date": "2026-08-01",
+  "frozen_before_generation": true,
+  "purpose": "独立检查 Qwen3.6 L39 闭合 MoE 配对是否带来跨能力净改善。",
+  "dimensions": [
+    "reasoning",
+    "knowledge",
+    "long_context",
+    "coding",
+    "tools",
+    "planning",
+    "computer_use",
+    "communication"
+  ],
+  "items": [
+    {
+      "id": "reasoning-inventory-transition-v31",
+      "dimension": "reasoning",
+      "max_output_tokens": 24,
+      "prompt": "箱中初始有红球8个、蓝球5个。依次执行：移出3个红球；加入2个蓝球；最后用1个蓝球换入2个红球。只输出合法JSON：{\"red\":整数,\"blue\":整数}。",
+      "validator": {"type": "exact_json", "expected": {"red": 7, "blue": 6}}
+    },
+    {
+      "id": "knowledge-evidence-scope-v31",
+      "dimension": "knowledge",
+      "max_output_tokens": 32,
+      "prompt": "只依据给定事实：K1：Orchid的主数据库在东区。K2：Orchid的离线副本在南柜。K3：南柜每周五盘点。问Orchid离线副本的位置及直接证据。只输出{\"location\":字符串,\"source\":字符串}。",
+      "validator": {"type": "exact_json", "expected": {"location": "南柜", "source": "K2"}}
+    },
+    {
+      "id": "long-context-active-config-v31",
+      "dimension": "long_context",
+      "max_output_tokens": 32,
+      "prompt": "记录1 owner=Kai。记录2 endpoint=/old，已废弃。记录3 retry=2。记录4 token=R9。记录5 endpoint=/v3，状态active。记录6 retry=5，revision=7。记录7 retry=3，revision=4。规则：endpoint只取active记录；retry取revision最大者。只输出{\"endpoint\":字符串,\"retry\":整数}。",
+      "validator": {"type": "exact_json", "expected": {"endpoint": "/v3", "retry": 5}}
+    },
+    {
+      "id": "coding-js-comparator-v31",
+      "dimension": "coding",
+      "max_output_tokens": 48,
+      "prompt": "JavaScript数组items需要按score降序；score相同按字符串id升序。当前错误代码是items.sort((a,b)=>a.score>b.score)。只输出修正后的单行代码，不要Markdown或解释。",
+      "validator": {"type": "exact_text", "expected": "items.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));"}
+    },
+    {
+      "id": "tools-move-file-v31",
+      "dimension": "tools",
+      "max_output_tokens": 40,
+      "prompt": "可用工具只有move_file(source:string,destination:string)。把tmp/result.json移动到reports/final.json。不要输出文本，只发起一次工具调用。",
+      "validator": {
+        "type": "tool_call",
+        "expected_name": "move_file",
+        "expected_arguments": {"source": "tmp/result.json", "destination": "reports/final.json"},
+        "expected_finish_reason": "tool_calls"
+      }
+    },
+    {
+      "id": "planning-dependency-chain-v31",
+      "dimension": "planning",
+      "max_output_tokens": 40,
+      "prompt": "任务A无依赖；B依赖A；C依赖A；D同时依赖B和C。每轮可并行执行所有依赖已完成的任务。只输出最少轮次计划：{\"rounds\":[[字符串]]}，同轮按字母排序。",
+      "validator": {"type": "exact_json", "expected": {"rounds": [["A"], ["B", "C"], ["D"]]}}
+    },
+    {
+      "id": "computer-use-overwrite-dialog-v31",
+      "dimension": "computer_use",
+      "max_output_tokens": 80,
+      "prompt": "离线界面状态：Save As对话框打开；Filename输入框为空且已聚焦；目标名data.csv；Save按钮可用；点击Save后会出现确认框，按钮为Replace和Cancel。只输出动作JSON，不解释。动作只能用type或click。",
+      "validator": {
+        "type": "exact_json",
+        "expected": {
+          "actions": [
+            {"action": "type", "text": "data.csv"},
+            {"action": "click", "target": "Save"},
+            {"action": "click", "target": "Replace"}
+          ]
+        }
+      }
+    },
+    {
+      "id": "communication-calibrated-status-v31",
+      "dimension": "communication",
+      "max_output_tokens": 32,
+      "prompt": "事实：原型已构建，但能力短门尚未运行。只输出合法JSON，字段只能是ready和claim；ready为false，claim为中文“尚未证明能力提升”。",
+      "validator": {"type": "exact_json", "expected": {"ready": false, "claim": "尚未证明能力提升"}}
+    }
+  ]
+}

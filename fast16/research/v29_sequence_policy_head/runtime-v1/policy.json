@@ -1,0 +1,54 @@
+{
+  "format": "colorlm-sequence-policy-runtime-v1",
+  "formal": true,
+  "architecture": "ColorLMV4",
+  "hidden_size": 2048,
+  "base_vocab_size": 248320,
+  "candidate_token_count": 16,
+  "normalization": "per-sample-l2",
+  "correction_min": -2.0,
+  "correction_max": 8.0,
+  "source_contract_sha256": "9e1dac2b61fdc3198678e1056db5c315dadf4b1a8d80eeacdbd87c538b81aa61",
+  "source_report_sha256": "1018eee7edf54c73ab33f0f8209133aa2565672ba6b75d345c5b6ddbfcd5d617",
+  "runtime_layout": "single-aligned-tensor-blob-v1",
+  "alignment": 64,
+  "tensor_count": 3,
+  "tensors": [
+    {
+      "name": "policy.weight",
+      "dtype": "F32",
+      "ggml_shape": [
+        2048,
+        16
+      ],
+      "offset": 0,
+      "bytes": 131072,
+      "sha256": "f785c8e04c73a289115bc9bbc79780f5c9b44aba443e38142fcb31d8bffed982"
+    },
+    {
+      "name": "policy.bias",
+      "dtype": "F32",
+      "ggml_shape": [
+        16
+      ],
+      "offset": 131072,
+      "bytes": 64,
+      "sha256": "a48896f44cd917b88cfa2617618afa6c70de9858654d6a8592f6231294a65a04"
+    },
+    {
+      "name": "policy.base_ids",
+      "dtype": "I64",
+      "ggml_shape": [
+        16
+      ],
+      "offset": 131136,
+      "bytes": 128,
+      "sha256": "253f65518e496fbabe44e8e36717fcf89aea70368775bc942f9042a9dc419a58"
+    }
+  ],
+  "weights": {
+    "file": "weights.bin",
+    "bytes": 131264,
+    "sha256": "5e649b4fbbaed446906f790c2074a9cedb953f72e6cb739b78a26806521654cc"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "format": "colorlm-v47-parallel-genome-ontology-v1",
+  "fields": [
+    {"name": "mode", "values": ["light", "dark", "paper"]},
+    {"name": "palette", "values": ["cyan", "indigo", "coral", "green", "amber", "violet", "blue"]},
+    {"name": "density", "values": ["compact", "normal", "airy"]},
+    {"name": "shape", "values": ["square", "soft", "round"]},
+    {"name": "layout", "values": ["dashboard", "editorial", "timeline", "split", "docs", "settings", "schedule", "story"]},
+    {"name": "mobile", "values": ["stack", "cards", "drawer", "accordion"]},
+    {"name": "breakpoint", "values": ["0", "1", "2"]},
+    {"name": "primary", "values": ["none", "hero.plain", "hero.editorial", "hero.story", "sidebar.docs", "sidebar.settings", "sidebar.generic", "metrics.ops", "metrics.story", "metrics.generic"]},
+    {"name": "controls", "values": ["none", "filters.status", "filters.catalog", "filters.project", "filters.date-stage", "filters.year", "filters.generic", "form.booking", "form.search", "form.generic", "toggles.privacy", "toggles.generic"]},
+    {"name": "content", "values": ["none", "table.ops", "table.devices", "table.data", "table.generic", "products.magazine", "products.catalog", "timeline.case-study", "timeline.process", "code.request", "code.response", "code.generic", "schedule.stages", "schedule.generic", "chart.year-series", "chart.spark", "chart.generic"]},
+    {"name": "detail", "values": ["none", "drawer.detail", "drawer.navigation", "dialog.confirm", "dialog.preview", "dialog.danger", "dialog.success", "compare.before-after", "compare.range", "tabs.response", "tabs.language", "tabs.generic"]},
+    {"name": "support", "values": ["none", "bag.counter", "note.source", "note.method", "note.generic", "metrics.ops", "metrics.story", "metrics.generic", "dialog.confirm", "dialog.preview", "dialog.danger", "dialog.success"]},
+    {"name": "data_action", "values": ["none", "filter", "sort", "year", "validate"]},
+    {"name": "view_action", "values": ["none", "open", "compare", "copy", "tab", "accordion"]},
+    {"name": "commit_action", "values": ["none", "confirm", "count", "validate", "copy"]},
+    {"name": "state_action", "values": ["none", "toggle", "favorite", "count", "filter"]},
+    {"name": "main_responsive", "values": ["none", "table>cards", "grid>stack", "schedule>accordion", "chart>scroll", "code>scroll"]},
+    {"name": "overlay_responsive", "values": ["none", "drawer>full", "aside>drawer"]},
+    {"name": "accessibility", "values": ["127", "255"]},
+    {"name": "asset_policy", "values": ["inline", "none"]}
+  ],
+  "role_order": ["primary", "controls", "content", "detail", "support"],
+  "action_order": ["data_action", "view_action", "commit_action", "state_action"],
+  "responsive_order": ["main_responsive", "overlay_responsive"],
+  "inference_contract": {
+    "all_fields_predicted_in_parallel": true,
+    "free_text_generated": false,
+    "copy_slots_are_separate": true,
+    "minimum_non_none_components": 3,
+    "maximum_non_none_components": 5
+  }
+}

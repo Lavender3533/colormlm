@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "colorlm-parallel-speed-v47-short-gate-v1",
+  "type": "object",
+  "required": ["format", "manifest", "offline_only", "inputs_are_frozen", "gates", "decision_vocabulary"],
+  "properties": {
+    "format": {"const": "colorlm-parallel-speed-v47-short-gate-v1"},
+    "manifest": {"const": "manifest.json"},
+    "offline_only": {"const": true},
+    "inputs_are_frozen": {"const": true},
+    "gates": {
+      "type": "object",
+      "required": ["common", "A_draft_head", "B_latent_recursion", "C_paging"]
+    },
+    "decision_vocabulary": {
+      "type": "object",
+      "required": ["offline_feasible", "needs_runtime_evidence", "reject"]
+    }
+  }
+}

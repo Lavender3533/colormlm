@@ -1,0 +1,73 @@
+{
+  "format": "colorlm-neural-island-runtime-v1",
+  "name": "ColorLM-v17-Coder-Neural-Island-L44-L47",
+  "formal": true,
+  "target_site": 35,
+  "source_architecture": "Qwen3NextForCausalLM",
+  "source_layers": [
+    44,
+    45,
+    46,
+    47
+  ],
+  "execution": "contiguous-donor-coordinates-single-entry-single-exit",
+  "state": {
+    "recurrent_layers": [
+      44,
+      45,
+      46
+    ],
+    "attention_layers": [
+      47
+    ],
+    "memory": "llama-context-sequence-native",
+    "sidecar_slots": {
+      "recurrent": [
+        3,
+        7,
+        11
+      ],
+      "attention_kv": 34
+    }
+  },
+  "transport_sha256": "7209781fa72220c337314e8456497c83cf1b51798d2b4321414200a98de04d12",
+  "total_weight_bytes": 3773072128,
+  "layers": [
+    {
+      "source_layer": 44,
+      "layer_type": "gated_deltanet",
+      "package": "fast16/research/v17_coder_island/runtime-v3/layer44",
+      "manifest_sha256": "e824cc1c5fba564a86334993257714615045e092a62af03e04944dd9f38b0657",
+      "weights_bytes": 944203648,
+      "weights_sha256": "fc98e4b21767de4db6b840adf156f0e3dbf11da3af461f0d09e1d7d95117c7fd",
+      "tensor_count": 19
+    },
+    {
+      "source_layer": 45,
+      "layer_type": "gated_deltanet",
+      "package": "fast16/research/v17_coder_island/runtime-v3/layer45",
+      "manifest_sha256": "ef76266fc36ac09615cb94d62d89c3c8a6ef4819c05d0a7be0c5d0230b917840",
+      "weights_bytes": 944203648,
+      "weights_sha256": "19d10f0efd195c3636d8ec8dae2365bbadfdb0b4ac21984e1121cd639d56df5d",
+      "tensor_count": 19
+    },
+    {
+      "source_layer": 46,
+      "layer_type": "gated_deltanet",
+      "package": "fast16/research/v17_coder_island/runtime-v3/layer46",
+      "manifest_sha256": "07cd353028c5183bf96c186cdce8616819c135be23d66b7c05188c1d5f339514",
+      "weights_bytes": 944203648,
+      "weights_sha256": "253551de42d376c277b1f859012c55db9bfcae01db1a213d1ba2fa0c335d979a",
+      "tensor_count": 19
+    },
+    {
+      "source_layer": 47,
+      "layer_type": "full_attention",
+      "package": "fast16/research/neural_blocks/qwen3_coder_next_l47/q4_0",
+      "manifest_sha256": "a2bf92638e012338486eca8f175efefd4eac44c4e954cdf89f950b45b6362578",
+      "weights_bytes": 940461184,
+      "weights_sha256": "eda3d32940538fbc135f7fa44ba2d39b1ee475d6b998d0aea81600515c2a188e",
+      "tensor_count": 18
+    }
+  ]
+}

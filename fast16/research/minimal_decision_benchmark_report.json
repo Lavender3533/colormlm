@@ -1,0 +1,460 @@
+{
+  "format": "colorlm-minimal-decision-benchmark-v1",
+  "code_suite": "ColorLM-Code8-v1 (HumanEval-style fallback)",
+  "code_task_ids": [
+    "Code8/close_elements",
+    "Code8/paren_groups",
+    "Code8/truncate",
+    "Code8/below_zero",
+    "Code8/intersperse",
+    "Code8/rolling_max",
+    "Code8/string_xor",
+    "Code8/longest"
+  ],
+  "tool_task_ids": [
+    "weather",
+    "read_file",
+    "search_java",
+    "calculate"
+  ],
+  "models": [
+    {
+      "alias": "ColorLM-v6-Q3-Fused",
+      "model": "ColorLM-v6-Q3Router-Fused-A1.gguf",
+      "code": [
+        {
+          "id": "Code8/close_elements",
+          "passed": true,
+          "seconds": 12.800284900000406,
+          "output_tokens": 195,
+          "detail": "",
+          "response": "def has_close_elements(numbers: List[float], threshold: float) -> bool:\n    if len(numbers) < 2:\n        return False\n    \n    seen = set()\n    for num in numbers:\n        # Check if there's a number in the set within the threshold\n        # We need to find if there exists x in seen such that abs(num - x) < threshold\n        # Since we can't efficiently query a set for range, we'll use a different approach\n        # Actually, for a simple implementation without sorting, we can just compare all pairs\n        # But let's do the O(n^2) approach as it's straightforward and correct for the requirement\n        pass\n    \n    n = len(numbers)\n    for i in range(n):\n        for j in range(i + 1, n):\n            if abs(numbers[i] - numbers[j]) < threshold:\n                return True\n    return False"
+        },
+        {
+          "id": "Code8/paren_groups",
+          "passed": true,
+          "seconds": 8.526098099999217,
+          "output_tokens": 122,
+          "detail": "",
+          "response": "def separate_paren_groups(paren_string: str) -> List[str]:\n    result = []\n    current_group = []\n    balance = 0\n    \n    for char in paren_string:\n        if char == '(':\n            balance += 1\n            current_group.append(char)\n        elif char == ')':\n            balance -= 1\n            current_group.append(char)\n        elif char == ' ':\n            continue\n        \n        if balance == 0 and current_group:\n            result.append(''.join(current_group))\n            current_group = []\n    \n    return result"
+        },
+        {
+          "id": "Code8/truncate",
+          "passed": true,
+          "seconds": 2.146944700001768,
+          "output_tokens": 20,
+          "detail": "",
+          "response": "def truncate_number(number: float) -> float:\n    return number % 1.0"
+        },
+        {
+          "id": "Code8/below_zero",
+          "passed": true,
+          "seconds": 3.793951100000413,
+          "output_tokens": 47,
+          "detail": "",
+          "response": "def below_zero(operations: List[int]) -> bool:\n    balance = 0\n    for op in operations:\n        balance += op\n        if balance < 0:\n            return True\n    return False"
+        },
+        {
+          "id": "Code8/intersperse",
+          "passed": true,
+          "seconds": 5.513035299998592,
+          "output_tokens": 76,
+          "detail": "",
+          "response": "def intersperse(numbers: List[int], delimiter: int) -> List[int]:\n    if len(numbers) <= 1:\n        return numbers[:]\n    result = []\n    for i in range(len(numbers) - 1):\n        result.append(numbers[i])\n        result.append(delimiter)\n    result.append(numbers[-1])\n    return result"
+        },
+        {
+          "id": "Code8/rolling_max",
+          "passed": true,
+          "seconds": 4.497362099999009,
+          "output_tokens": 59,
+          "detail": "",
+          "response": "def rolling_max(numbers: List[int]) -> List[int]:\n    result = []\n    current_max = float('-inf')\n    for num in numbers:\n        if num > current_max:\n            current_max = num\n        result.append(current_max)\n    return result"
+        },
+        {
+          "id": "Code8/string_xor",
+          "passed": true,
+          "seconds": 4.500638299999991,
+          "output_tokens": 58,
+          "detail": "",
+          "response": "def string_xor(a: str, b: str) -> str:\n    result = []\n    for char_a, char_b in zip(a, b):\n        result.append('1' if char_a != char_b else '0')\n    return ''.join(result)"
+        },
+        {
+          "id": "Code8/longest",
+          "passed": true,
+          "seconds": 2.8703438000011374,
+          "output_tokens": 31,
+          "detail": "",
+          "response": "def longest(strings: List[str]) -> Optional[str]:\n    if not strings:\n        return None\n    return max(strings, key=len)"
+        }
+      ],
+      "tools": [
+        {
+          "id": "weather",
+          "passed": true,
+          "seconds": 5.168889100001252,
+          "output_tokens": 39,
+          "expected": {
+            "name": "get_weather",
+            "input": {
+              "location": "杭州",
+              "unit": "celsius"
+            }
+          },
+          "actual": {
+            "type": "tool_use",
+            "id": "j35CRWnjioCUZXhlMp33n8Y2vWCuQZMD",
+            "name": "get_weather",
+            "input": {
+              "location": "杭州",
+              "unit": "celsius"
+            }
+          },
+          "response": [
+            {
+              "type": "tool_use",
+              "id": "j35CRWnjioCUZXhlMp33n8Y2vWCuQZMD",
+              "name": "get_weather",
+              "input": {
+                "location": "杭州",
+                "unit": "celsius"
+              }
+            }
+          ]
+        },
+        {
+          "id": "read_file",
+          "passed": true,
+          "seconds": 5.654533099997934,
+          "output_tokens": 49,
+          "expected": {
+            "name": "read_file",
+            "input": {
+              "path": "src/main.rs"
+            }
+          },
+          "actual": {
+            "type": "tool_use",
+            "id": "6kUDzGYGkBF5MTtGY4gcnqNypwxJi4Xv",
+            "name": "read_file",
+            "input": {
+              "path": "src/main.rs"
+            }
+          },
+          "response": [
+            {
+              "type": "text",
+              "text": "我将使用 `read_file` 工具来读取 `src/main.rs` 文件的内容。\n</think>\n\n"
+            },
+            {
+              "type": "tool_use",
+              "id": "6kUDzGYGkBF5MTtGY4gcnqNypwxJi4Xv",
+              "name": "read_file",
+              "input": {
+                "path": "src/main.rs"
+              }
+            }
+          ]
+        },
+        {
+          "id": "search_java",
+          "passed": true,
+          "seconds": 4.443468600002234,
+          "output_tokens": 29,
+          "expected": {
+            "name": "glob_files",
+            "input": {
+              "pattern": "src/**/*.java"
+            }
+          },
+          "actual": {
+            "type": "tool_use",
+            "id": "sbM4hrEU1VNu5UNsBvZQRBMyexz6pUBW",
+            "name": "glob_files",
+            "input": {
+              "pattern": "src/**/*.java"
+            }
+          },
+          "response": [
+            {
+              "type": "tool_use",
+              "id": "sbM4hrEU1VNu5UNsBvZQRBMyexz6pUBW",
+              "name": "glob_files",
+              "input": {
+                "pattern": "src/**/*.java"
+              }
+            }
+          ]
+        },
+        {
+          "id": "calculate",
+          "passed": true,
+          "seconds": 5.772205299999769,
+          "output_tokens": 50,
+          "expected": {
+            "name": "calculator",
+            "input": {
+              "operation": "multiply",
+              "a": 17,
+              "b": 23
+            }
+          },
+          "actual": {
+            "type": "tool_use",
+            "id": "YveDKjvuoMOBMe48EdWZ1JE3AIn9ya89",
+            "name": "calculator",
+            "input": {
+              "operation": "multiply",
+              "a": 17,
+              "b": 23
+            }
+          },
+          "response": [
+            {
+              "type": "tool_use",
+              "id": "YveDKjvuoMOBMe48EdWZ1JE3AIn9ya89",
+              "name": "calculator",
+              "input": {
+                "operation": "multiply",
+                "a": 17,
+                "b": 23
+              }
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "code": {
+          "passed": 8,
+          "total": 8,
+          "mean_seconds": 5.581082287500067,
+          "output_tokens": 608
+        },
+        "tools": {
+          "passed": 4,
+          "total": 4,
+          "mean_seconds": 5.259774025000297,
+          "output_tokens": 167
+        }
+      }
+    },
+    {
+      "alias": "ColorLM-v8-CoderNext-Transport-E471",
+      "model": "ColorLM-v8-CoderNext-Transport-E471.gguf",
+      "code": [
+        {
+          "id": "Code8/close_elements",
+          "passed": true,
+          "seconds": 7.120569999999134,
+          "output_tokens": 101,
+          "detail": "",
+          "response": "from typing import List\n\ndef has_close_elements(numbers: List[float], threshold: float) -> bool:\n    \"\"\"Return True when two distinct numbers are closer than threshold.\"\"\"\n    n = len(numbers)\n    if n < 2:\n        return False\n    \n    sorted_numbers = sorted(numbers)\n    \n    for i in range(n - 1):\n        if sorted_numbers[i + 1] - sorted_numbers[i] < threshold:\n            return True\n            \n    return False"
+        },
+        {
+          "id": "Code8/paren_groups",
+          "passed": true,
+          "seconds": 8.523897700000816,
+          "output_tokens": 124,
+          "detail": "",
+          "response": "from typing import List\n\ndef separate_paren_groups(paren_string: str) -> List[str]:\n    result = []\n    current_group = []\n    balance = 0\n    \n    for char in paren_string:\n        if char == ' ':\n            continue\n        elif char == '(':\n            balance += 1\n            current_group.append(char)\n        elif char == ')':\n            balance -= 1\n            current_group.append(char)\n            if balance == 0:\n                result.append(''.join(current_group))\n                current_group = []\n    \n    return result"
+        },
+        {
+          "id": "Code8/truncate",
+          "passed": true,
+          "seconds": 2.228203400001803,
+          "output_tokens": 19,
+          "detail": "",
+          "response": "def truncate_number(number: float) -> float:\n    return number - int(number)"
+        },
+        {
+          "id": "Code8/below_zero",
+          "passed": true,
+          "seconds": 4.09081050000168,
+          "output_tokens": 52,
+          "detail": "",
+          "response": "from typing import List\n\ndef below_zero(operations: List[int]) -> bool:\n    balance = 0\n    for op in operations:\n        balance += op\n        if balance < 0:\n            return True\n    return False"
+        },
+        {
+          "id": "Code8/intersperse",
+          "passed": false,
+          "seconds": 8.084100500000204,
+          "output_tokens": 117,
+          "detail": "Traceback (most recent call last):\n  File \"<string>\", line 17, in <module>\n  File \"<string>\", line 13, in check\nAssertionError",
+          "response": "def intersperse(numbers: List[int], delimiter: int) -> List[int]:\n    return [numbers[i] if i % 2 == 0 else delimiter for i in range(len(numbers) * 2 - 1) if i < len(numbers) * 2 - 1 and i % 2 != 0] if False else []\n    result = []\n    for i in range(len(numbers)):\n        result.append(numbers[i])\n        if i < len(numbers) - 1:\n            result.append(delimiter)\n    return result"
+        },
+        {
+          "id": "Code8/rolling_max",
+          "passed": true,
+          "seconds": 5.01738689999911,
+          "output_tokens": 69,
+          "detail": "",
+          "response": "```python\nfrom typing import List\n\ndef rolling_max(numbers: List[int]) -> List[int]:\n    result = []\n    current_max = float('-inf')\n    for num in numbers:\n        if num > current_max:\n            current_max = num\n        result.append(current_max)\n    return result\n```"
+        },
+        {
+          "id": "Code8/string_xor",
+          "passed": true,
+          "seconds": 3.375649400000839,
+          "output_tokens": 41,
+          "detail": "",
+          "response": "def string_xor(a: str, b: str) -> str:\n    return ''.join('1' if x != y else '0' for x, y in zip(a, b))"
+        },
+        {
+          "id": "Code8/longest",
+          "passed": true,
+          "seconds": 2.680466999998316,
+          "output_tokens": 31,
+          "detail": "",
+          "response": "def longest(strings: List[str]) -> Optional[str]:\n    if not strings:\n        return None\n    return max(strings, key=len)"
+        }
+      ],
+      "tools": [
+        {
+          "id": "weather",
+          "passed": true,
+          "seconds": 5.096987700002501,
+          "output_tokens": 39,
+          "expected": {
+            "name": "get_weather",
+            "input": {
+              "location": "杭州",
+              "unit": "celsius"
+            }
+          },
+          "actual": {
+            "type": "tool_use",
+            "id": "j98T0JTOOmRlZyFcjldOl738IzTTr4z2",
+            "name": "get_weather",
+            "input": {
+              "location": "杭州",
+              "unit": "celsius"
+            }
+          },
+          "response": [
+            {
+              "type": "tool_use",
+              "id": "j98T0JTOOmRlZyFcjldOl738IzTTr4z2",
+              "name": "get_weather",
+              "input": {
+                "location": "杭州",
+                "unit": "celsius"
+              }
+            }
+          ]
+        },
+        {
+          "id": "read_file",
+          "passed": true,
+          "seconds": 5.6036868000010145,
+          "output_tokens": 49,
+          "expected": {
+            "name": "read_file",
+            "input": {
+              "path": "src/main.rs"
+            }
+          },
+          "actual": {
+            "type": "tool_use",
+            "id": "dKveBWlwBEf6wSaugGW97ftpAHPoDla7",
+            "name": "read_file",
+            "input": {
+              "path": "src/main.rs"
+            }
+          },
+          "response": [
+            {
+              "type": "text",
+              "text": "我将使用 `read_file` 工具来读取 `src/main.rs` 文件的内容。\n</think>\n\n"
+            },
+            {
+              "type": "tool_use",
+              "id": "dKveBWlwBEf6wSaugGW97ftpAHPoDla7",
+              "name": "read_file",
+              "input": {
+                "path": "src/main.rs"
+              }
+            }
+          ]
+        },
+        {
+          "id": "search_java",
+          "passed": true,
+          "seconds": 4.543451300000015,
+          "output_tokens": 31,
+          "expected": {
+            "name": "glob_files",
+            "input": {
+              "pattern": "src/**/*.java"
+            }
+          },
+          "actual": {
+            "type": "tool_use",
+            "id": "l6gnIPPKJvXoGDWNcghO2OsJ4fkyONFU",
+            "name": "glob_files",
+            "input": {
+              "pattern": "src/**/*.java"
+            }
+          },
+          "response": [
+            {
+              "type": "tool_use",
+              "id": "l6gnIPPKJvXoGDWNcghO2OsJ4fkyONFU",
+              "name": "glob_files",
+              "input": {
+                "pattern": "src/**/*.java"
+              }
+            }
+          ]
+        },
+        {
+          "id": "calculate",
+          "passed": true,
+          "seconds": 5.670994100000826,
+          "output_tokens": 50,
+          "expected": {
+            "name": "calculator",
+            "input": {
+              "operation": "multiply",
+              "a": 17,
+              "b": 23
+            }
+          },
+          "actual": {
+            "type": "tool_use",
+            "id": "Op9JD9kk5Qkdg8wSx2sDlqNwpspV33TZ",
+            "name": "calculator",
+            "input": {
+              "operation": "multiply",
+              "a": 17,
+              "b": 23
+            }
+          },
+          "response": [
+            {
+              "type": "tool_use",
+              "id": "Op9JD9kk5Qkdg8wSx2sDlqNwpspV33TZ",
+              "name": "calculator",
+              "input": {
+                "operation": "multiply",
+                "a": 17,
+                "b": 23
+              }
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "code": {
+          "passed": 7,
+          "total": 8,
+          "mean_seconds": 5.140135675000238,
+          "output_tokens": 554
+        },
+        "tools": {
+          "passed": 4,
+          "total": 4,
+          "mean_seconds": 5.228779975001089,
+          "output_tokens": 169
+        }
+      }
+    }
+  ]
+}

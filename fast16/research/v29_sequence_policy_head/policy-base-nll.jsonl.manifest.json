@@ -1,0 +1,25 @@
+{
+  "format": "colorlm-v13-counterfactual-route-shard-manifest-v1",
+  "route": "v29-base",
+  "route_attestation": "process-level --force-path plus expected API alias",
+  "teacher": "D:\\project\\大模型ssd化\\fast16\\research\\v29_sequence_policy_head\\policy-teacher.jsonl",
+  "teacher_sha256": "82757d28663f0d1ce7d892a59573f443606217306e20c48b08a73a19d2a0c563",
+  "shard": "policy-base-nll.jsonl",
+  "shard_sha256": "556871a31b66493926ae2f454e5a5286523172d259938a9e46d23ceb9f3a66f1",
+  "sample_count": 192,
+  "exact_count": 192,
+  "exact_coverage": 1.0,
+  "n_probs": 1,
+  "elapsed_seconds": 386.560656,
+  "server": {
+    "endpoint": "http://127.0.0.1:8120",
+    "models": [
+      "ColorLM-v29-Policy-Capture"
+    ],
+    "model_path": "fast16/models/ColorLM-v6-Q3Router-Fused-A1.gguf",
+    "context": 4096
+  },
+  "expected_model": "ColorLM-v29-Policy-Capture",
+  "hidden": null,
+  "k3_features": null
+}

@@ -1,0 +1,8 @@
+{
+  "format": "colorlm-parallel-speed-v47-selftest-v1",
+  "passed": true,
+  "tests": 13,
+  "records": 512,
+  "cpu_only": true,
+  "gpu_used": false
+}

@@ -1,0 +1,20 @@
+{
+  "format": "colorlm-v13-counterfactual-teacher-manifest-v1",
+  "source_tasks": "D:\\project\\大模型ssd化\\fast16\\research\\v13_counterfactual_tasks.jsonl",
+  "source_tasks_sha256": "04f9386b6c1276d0867ff902f0914549f1483e45492ac4cf537a4b382e346397",
+  "teacher": "teacher_v19_full_targets.jsonl",
+  "teacher_sha256": "dafc2e6c6d0dafc5eb4f9514ceca06655c1220f73469363eaddeed441e834918",
+  "sample_count": 289,
+  "task_count": 12,
+  "boundary_fallbacks": 0,
+  "max_target_tokens": 128,
+  "max_prefix_tokens": 512,
+  "tokenizer_endpoint": {
+    "endpoint": "http://127.0.0.1:8105",
+    "models": [
+      "ColorLM-v17-Coder-Neural-Island"
+    ],
+    "model_path": "fast16/models/ColorLM-v6-Q3Router-Fused-A1.gguf",
+    "context": 16384
+  }
+}

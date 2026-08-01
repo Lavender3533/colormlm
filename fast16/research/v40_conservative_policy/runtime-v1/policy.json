@@ -1,0 +1,58 @@
+{
+  "format": "colorlm-sequence-policy-runtime-v1",
+  "formal": true,
+  "research_status": "pre-registered-blind-candidate",
+  "architecture": "ColorLMV4",
+  "hidden_size": 2048,
+  "base_vocab_size": 248320,
+  "candidate_token_count": 16,
+  "normalization": "per-sample-l2",
+  "correction_min": -0.5205652555696092,
+  "correction_max": 2.082261022278437,
+  "source_contract_sha256": "c983ee8266320b24c7c7a46885ee921563185ae64a954f3b772a1dc00feb497c",
+  "source_native_weights_sha256": "9748b4b659f4e3585a5b967aa4bb7f87a324ba439fc6439c3da9b674957e33f5",
+  "source_old_weights_sha256": "ecc14dee2860332f245de90c76ba8d1690e980b2d6b1e0a72f45d5df6116f7c1",
+  "transform": "native-weight-norm-matched-to-old-v29",
+  "scale": 0.2602826277848046,
+  "runtime_layout": "single-aligned-tensor-blob-v1",
+  "alignment": 64,
+  "tensor_count": 3,
+  "tensors": [
+    {
+      "name": "policy.weight",
+      "dtype": "F32",
+      "ggml_shape": [
+        2048,
+        16
+      ],
+      "offset": 0,
+      "bytes": 131072,
+      "sha256": "f1b5195c113e8ad7129b43b7b7bac7cf42315792241fb978f77fdf7fa8c2f49a"
+    },
+    {
+      "name": "policy.bias",
+      "dtype": "F32",
+      "ggml_shape": [
+        16
+      ],
+      "offset": 131072,
+      "bytes": 64,
+      "sha256": "badc726e393d16bffa1419d49a9b072213a8a44cf5adf997c7e62366eea9f02b"
+    },
+    {
+      "name": "policy.base_ids",
+      "dtype": "I64",
+      "ggml_shape": [
+        16
+      ],
+      "offset": 131136,
+      "bytes": 128,
+      "sha256": "253f65518e496fbabe44e8e36717fcf89aea70368775bc942f9042a9dc419a58"
+    }
+  ],
+  "weights": {
+    "file": "weights.bin",
+    "bytes": 131264,
+    "sha256": "ff730876593628036d52012015f9f4725a2248ac77c096d1c05e48910350276e"
+  }
+}

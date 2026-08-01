@@ -1,0 +1,158 @@
+{
+  "format": "colorlm-v47-frontend-ir-single-task-ab-v1",
+  "status": "train_task_development_hybrid",
+  "task_id": "pf47-train-01",
+  "baseline": {
+    "file": "D:\\project\\大模型ssd化\\fast16\\research\\parallel_frontend_v47\\fixtures\\ordinary_three_cards.html",
+    "final_score": 42.85,
+    "template_penalty": 17.0,
+    "passed": false,
+    "critical": {
+      "valid_utf8": true,
+      "no_bom": true,
+      "single_html": true,
+      "task_signals": false,
+      "no_forbidden": true
+    },
+    "score_checks": {
+      "final": false,
+      "structure": true,
+      "responsive": true,
+      "interaction": false,
+      "visual_complexity": false,
+      "dependency_safety": true,
+      "accessibility": true,
+      "max_template_penalty": false
+    },
+    "signals": {
+      "required": [
+        {
+          "pattern": "<(table|[a-z]+[^>]+role=[\\\"']table)",
+          "matched": false
+        },
+        {
+          "pattern": "(drawer|抽屉|dialog)",
+          "matched": false
+        },
+        {
+          "pattern": "(sort|排序)",
+          "matched": false
+        }
+      ],
+      "required_any": [
+        {
+          "patterns": [
+            "<select",
+            "role=[\\\"']combobox"
+          ],
+          "matched_patterns": [],
+          "passed": false
+        },
+        {
+          "patterns": [
+            "aria-live",
+            "role=[\\\"']status"
+          ],
+          "matched_patterns": [],
+          "passed": false
+        }
+      ],
+      "forbidden": [
+        {
+          "pattern": "onclick=[\\\"']location\\.href",
+          "matched": false
+        }
+      ],
+      "task_signals_pass": false,
+      "no_forbidden_pass": true
+    }
+  },
+  "candidate": {
+    "file": "D:\\project\\大模型ssd化\\fast16\\research\\v47_dual_tempo_bus\\frontend_ir_ab_train01_retry1\\candidate.html",
+    "final_score": 80.55,
+    "template_penalty": 6.0,
+    "passed": true,
+    "critical": {
+      "valid_utf8": true,
+      "no_bom": true,
+      "single_html": true,
+      "task_signals": true,
+      "no_forbidden": true
+    },
+    "score_checks": {
+      "final": true,
+      "structure": true,
+      "responsive": true,
+      "interaction": true,
+      "visual_complexity": true,
+      "dependency_safety": true,
+      "accessibility": true,
+      "max_template_penalty": true
+    },
+    "signals": {
+      "required": [
+        {
+          "pattern": "<(table|[a-z]+[^>]+role=[\\\"']table)",
+          "matched": true
+        },
+        {
+          "pattern": "(drawer|抽屉|dialog)",
+          "matched": true
+        },
+        {
+          "pattern": "(sort|排序)",
+          "matched": true
+        }
+      ],
+      "required_any": [
+        {
+          "patterns": [
+            "<select",
+            "role=[\\\"']combobox"
+          ],
+          "matched_patterns": [
+            "<select"
+          ],
+          "passed": true
+        },
+        {
+          "patterns": [
+            "aria-live",
+            "role=[\\\"']status"
+          ],
+          "matched_patterns": [
+            "aria-live",
+            "role=[\\\"']status"
+          ],
+          "passed": true
+        }
+      ],
+      "forbidden": [
+        {
+          "pattern": "onclick=[\\\"']location\\.href",
+          "matched": false
+        }
+      ],
+      "task_signals_pass": true,
+      "no_forbidden_pass": true
+    },
+    "dimensions": {
+      "structure": 14.0,
+      "responsive": 16.0,
+      "interaction": 15.0,
+      "visual_complexity": 12.55,
+      "dependency_safety": 10.0,
+      "accessibility": 19.0
+    }
+  },
+  "delta": {
+    "final_score": 37.699999999999996,
+    "template_penalty": -11.0
+  },
+  "decision": {
+    "single_task_direction_positive": true,
+    "allow_general_claim": false,
+    "next_gate": "validation_8_after_embedded_short_ir_decoder_and_length_controller"
+  },
+  "claim_limit": "候选含确定性尾部编译，且只是一条 train 开发题；不能宣称 v38 或 v47 模型能力已经晋级。"
+}

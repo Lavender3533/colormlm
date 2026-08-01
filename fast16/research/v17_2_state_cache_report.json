@@ -1,0 +1,159 @@
+{
+  "format": "colorlm-v17.2-state-cache-report-v1",
+  "date": "2026-07-31",
+  "model": "ColorLM-v17-Coder-Neural-Island",
+  "status": "state-lifecycle-and-exact-cache-short-validation-passed",
+  "runtime": {
+    "url": "http://127.0.0.1:8105/v1",
+    "backend": "Vulkan0 / AMD Radeon RX 5700 XT",
+    "context_tokens": 16384,
+    "base_model": "fast16/models/ColorLM-v6-Q3Router-Fused-A1.gguf",
+    "base_weight_bytes": 13731822496,
+    "base_weight_gib": 12.788756281137466,
+    "island_manifest": "fast16/research/v17_coder_island/runtime-v3/island.json",
+    "island_manifest_sha256": "7ea2b40a2551ba30bf4dd664043c0bc33d9c486785a62ce2793e7c3ec8ff3cba",
+    "island_weight_bytes": 3773072128,
+    "island_weight_gib": 3.5139472484588623,
+    "effective_weight_bytes": 17504894624,
+    "effective_weight_gib": 16.30270352959633,
+    "target_site": 35,
+    "alpha": 0.02,
+    "launcher": "fast16/run-colormlm-v17-coder-island.bat"
+  },
+  "architecture": {
+    "execution": "single-entry contiguous donor-coordinate island with a single residual exit",
+    "source_layers": [44, 45, 46, 47],
+    "layer_types": [
+      "gated_deltanet",
+      "gated_deltanet",
+      "gated_deltanet",
+      "full_attention"
+    ],
+    "moe": {
+      "experts_per_layer": 512,
+      "experts_per_token": 10,
+      "shared_expert_preserved": true
+    },
+    "transport": {
+      "entry": "2048-dimensional bridge into donor coordinates",
+      "exit": "2048-dimensional bridge from donor delta to ColorLM coordinates",
+      "current_fit_source": "shared-token embedding Procrustes",
+      "known_quality_risk": "the bridge has not yet been refit from real layer-44 hidden activations"
+    }
+  },
+  "state_lifecycle": {
+    "result": "passed-for-single-sequence-short-validation",
+    "implementation": "llama.cpp native hybrid memory owned by llama_context and sequence lifecycle",
+    "recurrent_slots": {
+      "44": 3,
+      "45": 7,
+      "46": 11
+    },
+    "attention_kv_slot": {
+      "47": 34
+    },
+    "removed_private_state": [
+      "private recurrent buffers",
+      "private attention K/V buffers",
+      "private reset hook"
+    ],
+    "guards": [
+      "Neural Block and Neural Island cannot be enabled together",
+      "COLORLM_V4_KERNEL_LAYERS cannot occupy recurrent sidecar slots 3, 7, or 11 while the island is enabled"
+    ],
+    "validation": {
+      "long_prompt_tokens": 4235,
+      "long_prompt_marker_retrieved": true,
+      "fresh_request_expected": "NONE",
+      "fresh_request_observed": "NONE",
+      "request_state_isolated": true
+    },
+    "scope": "This validates the current one-slot, one-sequence service path. Multi-sequence concurrency was not tested."
+  },
+  "exact_expert_cache": {
+    "enabled_by_default": true,
+    "slots_per_layer": 32,
+    "layers": 4,
+    "gpu_cache_bytes": 226492416,
+    "gpu_cache_mib": 216.0,
+    "source_bank": "complete quantized expert banks in Vulkan_Host",
+    "activation_scope": "single-token decode only",
+    "prefill_path": "complete host-visible expert bank",
+    "miss_contract": "wait for the selected logical experts to be uploaded before executing MUL_MAT_ID",
+    "eviction_contract": "pin all experts selected by the current token before choosing LRU victims",
+    "upload_contract": "queue all misses, update the exact LUT, then synchronize the upload backend once",
+    "wrong_expert_fallback": false
+  },
+  "short_validation": {
+    "protocol": "same request shapes across two sequential single-instance runs; this is a short comparison, not a repeated statistical benchmark",
+    "cache_disabled": {
+      "rust_request": {
+        "prompt_tokens": 59,
+        "completion_tokens": 160,
+        "prompt_tokens_per_second": 50.71,
+        "generation_tokens_per_second": 4.45,
+        "server_total_seconds": 37.1302,
+        "observed_wall_seconds": 37.37,
+        "hit_output_limit": true,
+        "capability_result": "not-scored"
+      },
+      "long_context_marker": {
+        "prompt_tokens": 4235,
+        "completion_tokens": 13,
+        "prompt_tokens_per_second": 228.23,
+        "generation_tokens_per_second": 5.8,
+        "marker_retrieved": true
+      }
+    },
+    "cache_32": {
+      "rust_request": {
+        "prompt_tokens": 59,
+        "completion_tokens": 160,
+        "prompt_tokens_per_second": 56.67,
+        "generation_tokens_per_second": 10.41,
+        "server_total_seconds": 16.41768,
+        "observed_wall_seconds": 16.62,
+        "hit_output_limit": true,
+        "capability_result": "not-scored"
+      },
+      "long_context_marker": {
+        "prompt_tokens": 4235,
+        "completion_tokens": 13,
+        "prompt_tokens_per_second": 241.35,
+        "generation_tokens_per_second": 13.39,
+        "marker_retrieved": true
+      }
+    },
+    "comparison": {
+      "rust_generation_speedup": 2.339325842696629,
+      "long_context_generation_speedup": 2.3086206896551724,
+      "prefill_attribution": "not claimed because the expert cache is decode-only and the prompt rates come from separate short runs"
+    },
+    "evidence_log": "fast16/runtime/fast16-v1-optimized-neural-island-l35.stderr.log"
+  },
+  "build": {
+    "cmake_refresh": "passed",
+    "llama_vcxproj_incremental_release_build": "passed",
+    "python_runtime_py_compile": "passed",
+    "private_state_symbol_scan": "zero matches",
+    "llama_dll_sha256": "a03d8701fe054b71aaa87d6ebaa85eea6b67a0f0ed085709fdadf20538dfe72e",
+    "llama_server_sha256": "5d3340e91945a7e423b53e646fcc152ae6a7cfaff6d73b40fbd2d496a77d9c04"
+  },
+  "claims": {
+    "four_layer_island_executes_in_one_model_graph": true,
+    "native_state_lifecycle_short_validation_passed": true,
+    "exact_decode_cache_short_validation_passed": true,
+    "generation_speed_improved_in_the_two_recorded_short_comparisons": true,
+    "rust_task_completed": false,
+    "coding_quality_improvement_verified": false,
+    "broad_capability_improvement_verified": false,
+    "frontier_model_parity_verified": false
+  },
+  "limitations": [
+    "The Rust sample was capped at 160 generated tokens and is not a completed-task quality result.",
+    "The speed comparison has one run per condition and should not be reported as a stable universal multiplier.",
+    "Cache hit-rate and upload-byte distributions were not captured in this short validation.",
+    "Multi-sequence and concurrent-request state isolation were not tested."
+  ],
+  "next_quality_gate": "Refit the entry and exit transport from real Qwen3-Coder-Next layer-44 hidden activations, then run one short coding task and one tool round before considering an eight-layer island or a second donor island."
+}

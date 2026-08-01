@@ -1,0 +1,292 @@
+{
+  "format": "colorlm-v24-neural-island-route-analysis-v1",
+  "dump": "D:\\project\\大模型ssd化\\fast16\\research\\v24_speed_quality_bus\\routes-none-20260801.bin",
+  "records": 512,
+  "layers": {
+    "44": {
+      "records": 128,
+      "unique_experts": 327,
+      "frequency_top10": [
+        [
+          183,
+          32
+        ],
+        [
+          233,
+          29
+        ],
+        [
+          102,
+          25
+        ],
+        [
+          475,
+          22
+        ],
+        [
+          208,
+          19
+        ],
+        [
+          76,
+          18
+        ],
+        [
+          94,
+          18
+        ],
+        [
+          284,
+          18
+        ],
+        [
+          169,
+          17
+        ],
+        [
+          163,
+          16
+        ]
+      ],
+      "lru": {
+        "hits": 412,
+        "misses": 868,
+        "hit_rate_percent": 32.1875
+      },
+      "belady_upper_bound": {
+        "hits": 674,
+        "misses": 606,
+        "hit_rate_percent": 52.65625
+      },
+      "decay_lfu_0.9": {
+        "hits": 427,
+        "misses": 853,
+        "hit_rate_percent": 33.359375
+      },
+      "decay_lfu_0.97": {
+        "hits": 427,
+        "misses": 853,
+        "hit_rate_percent": 33.359375
+      },
+      "decay_lfu_0.99": {
+        "hits": 413,
+        "misses": 867,
+        "hit_rate_percent": 32.265625
+      }
+    },
+    "45": {
+      "records": 128,
+      "unique_experts": 355,
+      "frequency_top10": [
+        [
+          356,
+          23
+        ],
+        [
+          3,
+          20
+        ],
+        [
+          151,
+          19
+        ],
+        [
+          144,
+          18
+        ],
+        [
+          162,
+          16
+        ],
+        [
+          431,
+          16
+        ],
+        [
+          274,
+          14
+        ],
+        [
+          142,
+          14
+        ],
+        [
+          382,
+          13
+        ],
+        [
+          341,
+          12
+        ]
+      ],
+      "lru": {
+        "hits": 297,
+        "misses": 983,
+        "hit_rate_percent": 23.203125
+      },
+      "belady_upper_bound": {
+        "hits": 591,
+        "misses": 689,
+        "hit_rate_percent": 46.171875
+      },
+      "decay_lfu_0.9": {
+        "hits": 317,
+        "misses": 963,
+        "hit_rate_percent": 24.765625
+      },
+      "decay_lfu_0.97": {
+        "hits": 321,
+        "misses": 959,
+        "hit_rate_percent": 25.078125
+      },
+      "decay_lfu_0.99": {
+        "hits": 316,
+        "misses": 964,
+        "hit_rate_percent": 24.6875
+      }
+    },
+    "46": {
+      "records": 128,
+      "unique_experts": 361,
+      "frequency_top10": [
+        [
+          144,
+          29
+        ],
+        [
+          67,
+          29
+        ],
+        [
+          100,
+          26
+        ],
+        [
+          241,
+          25
+        ],
+        [
+          4,
+          22
+        ],
+        [
+          211,
+          22
+        ],
+        [
+          298,
+          18
+        ],
+        [
+          166,
+          15
+        ],
+        [
+          488,
+          15
+        ],
+        [
+          465,
+          14
+        ]
+      ],
+      "lru": {
+        "hits": 265,
+        "misses": 1015,
+        "hit_rate_percent": 20.703125
+      },
+      "belady_upper_bound": {
+        "hits": 568,
+        "misses": 712,
+        "hit_rate_percent": 44.375
+      },
+      "decay_lfu_0.9": {
+        "hits": 300,
+        "misses": 980,
+        "hit_rate_percent": 23.4375
+      },
+      "decay_lfu_0.97": {
+        "hits": 332,
+        "misses": 948,
+        "hit_rate_percent": 25.9375
+      },
+      "decay_lfu_0.99": {
+        "hits": 331,
+        "misses": 949,
+        "hit_rate_percent": 25.859375
+      }
+    },
+    "47": {
+      "records": 128,
+      "unique_experts": 329,
+      "frequency_top10": [
+        [
+          58,
+          48
+        ],
+        [
+          128,
+          43
+        ],
+        [
+          300,
+          40
+        ],
+        [
+          214,
+          26
+        ],
+        [
+          320,
+          24
+        ],
+        [
+          79,
+          18
+        ],
+        [
+          373,
+          18
+        ],
+        [
+          312,
+          17
+        ],
+        [
+          473,
+          17
+        ],
+        [
+          433,
+          16
+        ]
+      ],
+      "lru": {
+        "hits": 328,
+        "misses": 952,
+        "hit_rate_percent": 25.625
+      },
+      "belady_upper_bound": {
+        "hits": 618,
+        "misses": 662,
+        "hit_rate_percent": 48.28125
+      },
+      "decay_lfu_0.9": {
+        "hits": 392,
+        "misses": 888,
+        "hit_rate_percent": 30.625
+      },
+      "decay_lfu_0.97": {
+        "hits": 420,
+        "misses": 860,
+        "hit_rate_percent": 32.8125
+      },
+      "decay_lfu_0.99": {
+        "hits": 421,
+        "misses": 859,
+        "hit_rate_percent": 32.890625
+      }
+    }
+  },
+  "decision_rule": "only implement an online policy if it beats LRU on held-out continuation and preserves exact outputs"
+}

@@ -1,0 +1,405 @@
+{
+  "format": "colorlm-anchored-ridge-activation-bridge-v1",
+  "pairing": {
+    "base": {
+      "receipt": "D:\\project\\大模型ssd化\\fast16\\research\\v18_activation_bridge\\captures\\run-20260731\\base.receipt.json",
+      "model": "ColorLM-v18-Bridge-Base",
+      "layer": 35,
+      "stage": "attn_residual"
+    },
+    "donor": {
+      "receipt": "D:\\project\\大模型ssd化\\fast16\\research\\v21_glm_agent_island\\captures\\glm_l42.receipt.json",
+      "model": "GLM-4.7-Agent-Island-Capture",
+      "layer": 42,
+      "stage": "l_out"
+    },
+    "common_prompts": 12,
+    "paired_prompts": 12,
+    "total_base_tokens": 815,
+    "total_donor_tokens": 769,
+    "total_matched_tokens": 766,
+    "mean_match_coverage": 0.9470892833804992,
+    "prompt_alignment": [
+      {
+        "prompt_id": "agent-tool",
+        "prompt_utf8_bytes": 276,
+        "base_tokens": 57,
+        "donor_tokens": 57,
+        "base_mappable_tokens": 57,
+        "donor_mappable_tokens": 57,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 57,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 276,
+        "paired": true
+      },
+      {
+        "prompt_id": "chinese-code-spec",
+        "prompt_utf8_bytes": 318,
+        "base_tokens": 62,
+        "donor_tokens": 63,
+        "base_mappable_tokens": 62,
+        "donor_mappable_tokens": 63,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 62,
+        "match_coverage": 0.9841269841269841,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 0.9841269841269841,
+        "last_matched_end_byte": 318,
+        "paired": true
+      },
+      {
+        "prompt_id": "cpp-lifetime",
+        "prompt_utf8_bytes": 287,
+        "base_tokens": 66,
+        "donor_tokens": 61,
+        "base_mappable_tokens": 66,
+        "donor_mappable_tokens": 61,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 60,
+        "match_coverage": 0.9090909090909091,
+        "base_match_coverage": 0.9090909090909091,
+        "donor_match_coverage": 0.9836065573770492,
+        "last_matched_end_byte": 287,
+        "paired": true
+      },
+      {
+        "prompt_id": "debug-stack",
+        "prompt_utf8_bytes": 296,
+        "base_tokens": 69,
+        "donor_tokens": 63,
+        "base_mappable_tokens": 69,
+        "donor_mappable_tokens": 63,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 63,
+        "match_coverage": 0.9130434782608695,
+        "base_match_coverage": 0.9130434782608695,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 296,
+        "paired": true
+      },
+      {
+        "prompt_id": "go-context",
+        "prompt_utf8_bytes": 329,
+        "base_tokens": 86,
+        "donor_tokens": 77,
+        "base_mappable_tokens": 86,
+        "donor_mappable_tokens": 77,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 77,
+        "match_coverage": 0.8953488372093024,
+        "base_match_coverage": 0.8953488372093024,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 329,
+        "paired": true
+      },
+      {
+        "prompt_id": "java-race",
+        "prompt_utf8_bytes": 325,
+        "base_tokens": 80,
+        "donor_tokens": 73,
+        "base_mappable_tokens": 80,
+        "donor_mappable_tokens": 73,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 73,
+        "match_coverage": 0.9125,
+        "base_match_coverage": 0.9125,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 325,
+        "paired": true
+      },
+      {
+        "prompt_id": "json-contract",
+        "prompt_utf8_bytes": 301,
+        "base_tokens": 57,
+        "donor_tokens": 57,
+        "base_mappable_tokens": 57,
+        "donor_mappable_tokens": 57,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 57,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 301,
+        "paired": true
+      },
+      {
+        "prompt_id": "python-async",
+        "prompt_utf8_bytes": 371,
+        "base_tokens": 84,
+        "donor_tokens": 79,
+        "base_mappable_tokens": 84,
+        "donor_mappable_tokens": 79,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 79,
+        "match_coverage": 0.9404761904761905,
+        "base_match_coverage": 0.9404761904761905,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 371,
+        "paired": true
+      },
+      {
+        "prompt_id": "react-state",
+        "prompt_utf8_bytes": 255,
+        "base_tokens": 43,
+        "donor_tokens": 43,
+        "base_mappable_tokens": 43,
+        "donor_mappable_tokens": 43,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 43,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 255,
+        "paired": true
+      },
+      {
+        "prompt_id": "rust-borrow",
+        "prompt_utf8_bytes": 306,
+        "base_tokens": 82,
+        "donor_tokens": 75,
+        "base_mappable_tokens": 82,
+        "donor_mappable_tokens": 75,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 74,
+        "match_coverage": 0.9024390243902439,
+        "base_match_coverage": 0.9024390243902439,
+        "donor_match_coverage": 0.9866666666666667,
+        "last_matched_end_byte": 306,
+        "paired": true
+      },
+      {
+        "prompt_id": "sql-transaction",
+        "prompt_utf8_bytes": 231,
+        "base_tokens": 42,
+        "donor_tokens": 42,
+        "base_mappable_tokens": 42,
+        "donor_mappable_tokens": 42,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 42,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 231,
+        "paired": true
+      },
+      {
+        "prompt_id": "typescript-types",
+        "prompt_utf8_bytes": 333,
+        "base_tokens": 87,
+        "donor_tokens": 79,
+        "base_mappable_tokens": 87,
+        "donor_mappable_tokens": 79,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 79,
+        "match_coverage": 0.9080459770114943,
+        "base_match_coverage": 0.9080459770114943,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 333,
+        "paired": true
+      }
+    ],
+    "skipped": []
+  },
+  "split": {
+    "seed": 18,
+    "outer_train_prompts": [
+      "chinese-code-spec",
+      "cpp-lifetime",
+      "debug-stack",
+      "go-context",
+      "json-contract",
+      "python-async",
+      "react-state",
+      "rust-borrow",
+      "typescript-types"
+    ],
+    "outer_test_prompts": [
+      "agent-tool",
+      "java-race",
+      "sql-transaction"
+    ],
+    "inner_train_prompts": [
+      "cpp-lifetime",
+      "debug-stack",
+      "go-context",
+      "json-contract",
+      "python-async",
+      "react-state",
+      "typescript-types"
+    ],
+    "inner_test_prompts": [
+      "chinese-code-spec",
+      "rust-borrow"
+    ]
+  },
+  "regularization_selection": [
+    {
+      "factor": 0.0001,
+      "relative_rmse": 1.2385811805725098,
+      "median_cosine": 0.16439910233020782
+    },
+    {
+      "factor": 0.0003,
+      "relative_rmse": 1.237305998802185,
+      "median_cosine": 0.16478581726551056
+    },
+    {
+      "factor": 0.001,
+      "relative_rmse": 1.2328821420669556,
+      "median_cosine": 0.16523170471191406
+    },
+    {
+      "factor": 0.003,
+      "relative_rmse": 1.2207189798355103,
+      "median_cosine": 0.16812628507614136
+    },
+    {
+      "factor": 0.01,
+      "relative_rmse": 1.1842808723449707,
+      "median_cosine": 0.18055208027362823
+    },
+    {
+      "factor": 0.03,
+      "relative_rmse": 1.1138792037963867,
+      "median_cosine": 0.19614523649215698
+    },
+    {
+      "factor": 0.1,
+      "relative_rmse": 1.0056978464126587,
+      "median_cosine": 0.2108171433210373
+    },
+    {
+      "factor": 0.3,
+      "relative_rmse": 0.9249529242515564,
+      "median_cosine": 0.27703309059143066
+    },
+    {
+      "factor": 1.0,
+      "relative_rmse": 0.8964328765869141,
+      "median_cosine": 0.37163132429122925
+    },
+    {
+      "factor": 3.0,
+      "relative_rmse": 0.924061119556427,
+      "median_cosine": 0.3516598641872406
+    }
+  ],
+  "chosen_factor": 1.0,
+  "baseline_train_scale": 4.397706031799316,
+  "candidate_train_scale": 1.3005437850952148,
+  "heldout": {
+    "baseline": {
+      "cosine": {
+        "mean": 0.010041167959570885,
+        "median": 0.012624233961105347,
+        "p05": -0.037397921085357666,
+        "p95": 0.047588229179382324
+      },
+      "relative_rmse": 1.0110039710998535
+    },
+    "candidate": {
+      "cosine": {
+        "mean": 0.702177882194519,
+        "median": 0.7329050302505493,
+        "p05": 0.4832538366317749,
+        "p95": 0.8129416108131409
+      },
+      "relative_rmse": 0.9834226369857788
+    },
+    "median_cosine_lift": 0.720280796289444,
+    "nrmse_ratio": 0.9727188666884568,
+    "positive_prompt_rate": 1.0,
+    "per_prompt": [
+      {
+        "prompt_id": "agent-tool",
+        "tokens": 57,
+        "baseline_median_cosine": 0.00910345371812582,
+        "candidate_median_cosine": 0.7425879240036011,
+        "lift": 0.7334844702854753
+      },
+      {
+        "prompt_id": "java-race",
+        "tokens": 73,
+        "baseline_median_cosine": 0.015704656019806862,
+        "candidate_median_cosine": 0.7102354168891907,
+        "lift": 0.6945307608693838
+      },
+      {
+        "prompt_id": "sql-transaction",
+        "tokens": 42,
+        "baseline_median_cosine": 0.009753191843628883,
+        "candidate_median_cosine": 0.717258632183075,
+        "lift": 0.7075054403394461
+      }
+    ]
+  },
+  "stability": {
+    "raw_singular_min": 0.0008224523044191301,
+    "raw_singular_median": 1.0000001192092896,
+    "raw_singular_max": 339.59710693359375,
+    "runtime_singular_clip": [
+      0.25,
+      8.0
+    ],
+    "runtime_global_scale": 1.3005437850952148,
+    "cycle_rmse": 6.63557528923775e-08
+  },
+  "runtime": {
+    "input_weight": {
+      "file": "glm_activation_input_weight_f32.npy",
+      "sha256": "47076076134cb7e4aae192ef1f8f6593a3b958b7aed46afa05b6eb35ea17f0e8"
+    },
+    "output_weight": {
+      "file": "glm_activation_output_weight_f32.npy",
+      "sha256": "bd1124e1965232120d041810ec32deabd2cd9c95a3474eb8c2bd4b8f8484ccc9"
+    }
+  },
+  "promotion": {
+    "gates": {
+      "cosine_lift": true,
+      "nrmse_ratio": false,
+      "positive_prompt_rate": true,
+      "cycle_rmse": true
+    },
+    "decision": "reject"
+  }
+}

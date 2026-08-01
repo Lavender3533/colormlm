@@ -1,0 +1,244 @@
+{
+  "format": "colorlm-v26-l47-moe-micro-fit-v1",
+  "dump": "D:\\project\\大模型ssd化\\fast16\\research\\v26_l47_moe_micro\\teacher-l47-moe-20260801.bin",
+  "target": "L47 post-attention norm -> exact MoE + shared expert residual",
+  "dropped_leading_sequence_tokens": [
+    2
+  ],
+  "split_tokens": {
+    "train": 420,
+    "validation": 440,
+    "test": 174
+  },
+  "validation_candidates": [
+    {
+      "requested_rank": 32,
+      "rank": 32,
+      "rho": 0.0,
+      "ridge": 0.001,
+      "ridge_absolute": 0.5093890075683594,
+      "weights_bytes_f16": 401408,
+      "input_projection_shape": [
+        32,
+        2048
+      ],
+      "output_projection_shape": [
+        64,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.5991686582565308,
+      "metrics": {
+        "rmse": 0.019634533673524857,
+        "reference_rms": 0.02385103888809681,
+        "relative_rmse": 0.8232150077819824,
+        "cosine_mean": 0.5007672309875488,
+        "cosine_median": 0.561435341835022,
+        "cosine_positive_fraction": 0.9295454545454546
+      },
+      "per_sequence": [
+        {
+          "rmse": 0.020049571990966797,
+          "reference_rms": 0.024293527007102966,
+          "relative_rmse": 0.8253051042556763,
+          "cosine_mean": 0.48416393995285034,
+          "cosine_median": 0.5204421877861023,
+          "cosine_positive_fraction": 0.9346590909090909
+        },
+        {
+          "rmse": 0.01787828840315342,
+          "reference_rms": 0.02199222706258297,
+          "relative_rmse": 0.8129367232322693,
+          "cosine_mean": 0.5671805739402771,
+          "cosine_median": 0.6991561651229858,
+          "cosine_positive_fraction": 0.9090909090909091
+        }
+      ]
+    },
+    {
+      "requested_rank": 64,
+      "rank": 64,
+      "rho": 0.0,
+      "ridge": 0.001,
+      "ridge_absolute": 0.3027197265625,
+      "weights_bytes_f16": 794624,
+      "input_projection_shape": [
+        64,
+        2048
+      ],
+      "output_projection_shape": [
+        128,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.7121480107307434,
+      "metrics": {
+        "rmse": 0.019346265122294426,
+        "reference_rms": 0.02385103888809681,
+        "relative_rmse": 0.8111287951469421,
+        "cosine_mean": 0.5095093250274658,
+        "cosine_median": 0.5575118660926819,
+        "cosine_positive_fraction": 0.925
+      },
+      "per_sequence": [
+        {
+          "rmse": 0.01974371448159218,
+          "reference_rms": 0.024293527007102966,
+          "relative_rmse": 0.8127150535583496,
+          "cosine_mean": 0.4909982979297638,
+          "cosine_median": 0.5232364535331726,
+          "cosine_positive_fraction": 0.9289772727272727
+        },
+        {
+          "rmse": 0.01766727864742279,
+          "reference_rms": 0.02199222706258297,
+          "relative_rmse": 0.8033419251441956,
+          "cosine_mean": 0.5835534930229187,
+          "cosine_median": 0.6609463691711426,
+          "cosine_positive_fraction": 0.9090909090909091
+        }
+      ]
+    },
+    {
+      "requested_rank": 128,
+      "rank": 128,
+      "rho": 0.0,
+      "ridge": 0.001,
+      "ridge_absolute": 0.17846482849121095,
+      "weights_bytes_f16": 1581056,
+      "input_projection_shape": [
+        128,
+        2048
+      ],
+      "output_projection_shape": [
+        256,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.8396767973899841,
+      "metrics": {
+        "rmse": 0.01952465996146202,
+        "reference_rms": 0.02385103888809681,
+        "relative_rmse": 0.8186083436012268,
+        "cosine_mean": 0.513853132724762,
+        "cosine_median": 0.5319886207580566,
+        "cosine_positive_fraction": 0.9477272727272728
+      },
+      "per_sequence": [
+        {
+          "rmse": 0.019978821277618408,
+          "reference_rms": 0.024293527007102966,
+          "relative_rmse": 0.8223927617073059,
+          "cosine_mean": 0.49633702635765076,
+          "cosine_median": 0.5084859132766724,
+          "cosine_positive_fraction": 0.9488636363636364
+        },
+        {
+          "rmse": 0.017591148614883423,
+          "reference_rms": 0.02199222706258297,
+          "relative_rmse": 0.7998802661895752,
+          "cosine_mean": 0.5839173793792725,
+          "cosine_median": 0.6579070091247559,
+          "cosine_positive_fraction": 0.9431818181818182
+        }
+      ]
+    },
+    {
+      "requested_rank": 256,
+      "rank": 256,
+      "rho": 0.0,
+      "ridge": 0.001,
+      "ridge_absolute": 0.1017029266357422,
+      "weights_bytes_f16": 3153920,
+      "input_projection_shape": [
+        256,
+        2048
+      ],
+      "output_projection_shape": [
+        512,
+        2048
+      ],
+      "singular_values_kept_fraction": 0.957024335861206,
+      "metrics": {
+        "rmse": 0.0201701857149601,
+        "reference_rms": 0.02385103888809681,
+        "relative_rmse": 0.8456732630729675,
+        "cosine_mean": 0.5042176842689514,
+        "cosine_median": 0.5261733531951904,
+        "cosine_positive_fraction": 0.9454545454545454
+      },
+      "per_sequence": [
+        {
+          "rmse": 0.020635422319173813,
+          "reference_rms": 0.024293527007102966,
+          "relative_rmse": 0.8494206070899963,
+          "cosine_mean": 0.4914722442626953,
+          "cosine_median": 0.5006929636001587,
+          "cosine_positive_fraction": 0.9488636363636364
+        },
+        {
+          "rmse": 0.01819063536822796,
+          "reference_rms": 0.02199222706258297,
+          "relative_rmse": 0.8271393179893494,
+          "cosine_mean": 0.5551992058753967,
+          "cosine_median": 0.628632664680481,
+          "cosine_positive_fraction": 0.9318181818181818
+        }
+      ]
+    }
+  ],
+  "selected": {
+    "requested_rank": 64,
+    "rho": 0.0
+  },
+  "test": {
+    "requested_rank": 64,
+    "rank": 64,
+    "rho": 0.0,
+    "ridge": 0.001,
+    "ridge_absolute": 0.5844986572265625,
+    "weights_bytes_f16": 794624,
+    "input_projection_shape": [
+      64,
+      2048
+    ],
+    "output_projection_shape": [
+      128,
+      2048
+    ],
+    "singular_values_kept_fraction": 0.6607819199562073,
+    "metrics": {
+      "rmse": 0.01705155335366726,
+      "reference_rms": 0.021649310365319252,
+      "relative_rmse": 0.7876257300376892,
+      "cosine_mean": 0.5476211905479431,
+      "cosine_median": 0.6618177890777588,
+      "cosine_positive_fraction": 0.9310344827586207
+    },
+    "per_sequence": [
+      {
+        "rmse": 0.019053570926189423,
+        "reference_rms": 0.022617461159825325,
+        "relative_rmse": 0.8424274921417236,
+        "cosine_mean": 0.5241619944572449,
+        "cosine_median": 0.6133755445480347,
+        "cosine_positive_fraction": 0.9072164948453608
+      },
+      {
+        "rmse": 0.014131440781056881,
+        "reference_rms": 0.02036428637802601,
+        "relative_rmse": 0.6939325332641602,
+        "cosine_mean": 0.5771738290786743,
+        "cosine_median": 0.6802391409873962,
+        "cosine_positive_fraction": 0.961038961038961
+      }
+    ]
+  },
+  "runtime_gate": {
+    "passed": true,
+    "requirements": {
+      "relative_rmse_max": 0.8,
+      "cosine_median_min": 0.5,
+      "all_test_sequences_beat_zero": true
+    },
+    "next_action": "允许接入保留Attention/KV的decode微MoE候选"
+  },
+  "artifact": "D:\\project\\大模型ssd化\\fast16\\research\\v26_l47_moe_micro\\l47-moe-selected.npz"
+}

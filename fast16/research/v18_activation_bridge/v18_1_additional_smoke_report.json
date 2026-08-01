@@ -1,0 +1,37 @@
+{
+  "format": "colorlm-v18.1-additional-smoke-report-v1",
+  "date": "2026-07-31",
+  "candidate": "ColorLM-v18.1-Nullspace-Anchored-Island",
+  "runtime_manifest": "fast16/research/v18_activation_bridge/runtime-v2/island.json",
+  "runtime_manifest_sha256": "92daf6e6d90f833de6740f181aa6785f7f897fd89f4d8463660586b0e35940b3",
+  "llama_dll_sha256": "d1967a9310d45630c064c8a979b1a15284607cccd823b87c0cf567947a611eca",
+  "request": {
+    "temperature": 0.0,
+    "seed": 4242,
+    "max_tokens": 48,
+    "prompt_tokens": 37,
+    "completion_tokens": 39,
+    "prompt": "只输出一段可编译的 Rust 函数：输入整数切片，返回其中所有偶数的和。不要解释。"
+  },
+  "result": {
+    "finish_reason": "stop",
+    "wall_seconds": 7.132,
+    "prompt_tokens_per_second": 39.70800663660305,
+    "generation_tokens_per_second": 6.616164409310537,
+    "output": "fn sum_even_numbers(nums: &[i32]) -> i32 {\n    nums.iter().filter(|&&x| x % 2 == 0).sum()\n}",
+    "output_check": "complete and plausibly compilable"
+  },
+  "cache_at_step_32": {
+    "total_hits": 750,
+    "total_misses": 530,
+    "aggregate_hit_rate_percent": 58.59375,
+    "aggregate_upload_bytes": 937820160
+  },
+  "decision": "runtime-correctness-pass-speed-not-promoted",
+  "interpretation": "One cold short run proves startup, graph execution, exact expert routing, and a complete answer. It is not a stable throughput benchmark and does not establish a speed or capability gain over v17.",
+  "final_online_service": {
+    "url": "http://127.0.0.1:8105/v1",
+    "model": "ColorLM-v17-Coder-Neural-Island",
+    "verified": true
+  }
+}

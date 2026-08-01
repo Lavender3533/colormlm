@@ -1,0 +1,62 @@
+{
+  "format": "colorlm-neural-output-bus-capture-manifest-v1",
+  "capture": "D:\\project\\大模型ssd化\\fast16\\research\\inference_arch\\capture_smoke.npz",
+  "capture_sha256": "219c41de2d4cd3a9d544bd6afbf00eca379030e347350d26f02925fa0f8290aa",
+  "records_sha256": "c87f380726d936b11a1e6a36cbcff66611a1cfb0f5794a39e4d82a10b1a1a5bd",
+  "metadata_sha256": "80bd29d4cf8b9ecafba8d38961f24c287c1d0cfa0e956cc5957621123b94edb9",
+  "head_manifest_sha256": "a68c64f0e24b93fe7e1842b1ef441476c35484a80efeb725eed06b872b21d283",
+  "token_map_sha256": "3a54dfdbfbc5e04280cafe5b4164d4b7ac944aac1aaefcd50b7d4c0cf8be3020",
+  "rows": 1,
+  "arrays": {
+    "base_logits": {
+      "shape": [
+        1,
+        248320
+      ],
+      "dtype": "float32"
+    },
+    "donor_0_hidden": {
+      "shape": [
+        1,
+        2048
+      ],
+      "dtype": "float32"
+    },
+    "donor_0_logits": {
+      "shape": [
+        1,
+        131612
+      ],
+      "dtype": "float32"
+    },
+    "labels": {
+      "shape": [
+        1
+      ],
+      "dtype": "int64"
+    },
+    "task_ids": {
+      "shape": [
+        1
+      ],
+      "dtype": "<U19"
+    },
+    "sample_ids": {
+      "shape": [
+        1
+      ],
+      "dtype": "<U24"
+    },
+    "donor_0_base_ids": {
+      "shape": [
+        131612
+      ],
+      "dtype": "int64"
+    }
+  },
+  "invariants": {
+    "alpha0_exact_base": true,
+    "task_ids_are_metadata_only": true,
+    "donor_base_ids_unique": true
+  }
+}

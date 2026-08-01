@@ -1,0 +1,338 @@
+[
+  {
+    "task_id": "pf47-train-01",
+    "schema_version": "design-genome-compile-report-v1",
+    "compiler": "parallel-design-genome-compiler-v1",
+    "genome_bytes": 282,
+    "copy_slot_bytes": 87,
+    "html_bytes": 20389,
+    "expansion_ratio_html_per_genome_byte": 72.301,
+    "component_genes": 5,
+    "actions": [
+      "filter",
+      "open",
+      "confirm",
+      "sort"
+    ],
+    "responsive_transforms": [
+      "table>cards",
+      "drawer>full"
+    ],
+    "compiler_guarantees": [
+      "document_closure",
+      "semantic_landmarks",
+      "focus_visible",
+      "reduced_motion",
+      "live_region",
+      "escape_and_focus_restore",
+      "responsive_breakpoints",
+      "no_external_dependency"
+    ],
+    "model_owned": [
+      "layout_gene",
+      "component_genes",
+      "interaction_genes",
+      "responsive_transforms",
+      "visual_genes",
+      "copy_slot_references"
+    ],
+    "copy_owned": [
+      "title",
+      "lede"
+    ]
+  },
+  {
+    "task_id": "pf47-train-02",
+    "schema_version": "design-genome-compile-report-v1",
+    "compiler": "parallel-design-genome-compiler-v1",
+    "genome_bytes": 291,
+    "copy_slot_bytes": 105,
+    "html_bytes": 18908,
+    "expansion_ratio_html_per_genome_byte": 64.976,
+    "component_genes": 5,
+    "actions": [
+      "filter",
+      "open",
+      "count",
+      "reset"
+    ],
+    "responsive_transforms": [
+      "grid>stack",
+      "drawer>full"
+    ],
+    "compiler_guarantees": [
+      "document_closure",
+      "semantic_landmarks",
+      "focus_visible",
+      "reduced_motion",
+      "live_region",
+      "escape_and_focus_restore",
+      "responsive_breakpoints",
+      "no_external_dependency"
+    ],
+    "model_owned": [
+      "layout_gene",
+      "component_genes",
+      "interaction_genes",
+      "responsive_transforms",
+      "visual_genes",
+      "copy_slot_references"
+    ],
+    "copy_owned": [
+      "title",
+      "lede"
+    ]
+  },
+  {
+    "task_id": "pf47-train-03",
+    "schema_version": "design-genome-compile-report-v1",
+    "compiler": "parallel-design-genome-compiler-v1",
+    "genome_bytes": 295,
+    "copy_slot_bytes": 69,
+    "html_bytes": 17593,
+    "expansion_ratio_html_per_genome_byte": 59.637,
+    "component_genes": 5,
+    "actions": [
+      "filter",
+      "compare",
+      "none",
+      "announce"
+    ],
+    "responsive_transforms": [
+      "grid>stack",
+      "none"
+    ],
+    "compiler_guarantees": [
+      "document_closure",
+      "semantic_landmarks",
+      "focus_visible",
+      "reduced_motion",
+      "live_region",
+      "escape_and_focus_restore",
+      "responsive_breakpoints",
+      "no_external_dependency"
+    ],
+    "model_owned": [
+      "layout_gene",
+      "component_genes",
+      "interaction_genes",
+      "responsive_transforms",
+      "visual_genes",
+      "copy_slot_references"
+    ],
+    "copy_owned": [
+      "title",
+      "lede"
+    ]
+  },
+  {
+    "task_id": "pf47-train-04",
+    "schema_version": "design-genome-compile-report-v1",
+    "compiler": "parallel-design-genome-compiler-v1",
+    "genome_bytes": 286,
+    "copy_slot_bytes": 108,
+    "html_bytes": 18171,
+    "expansion_ratio_html_per_genome_byte": 63.535,
+    "component_genes": 5,
+    "actions": [
+      "filter",
+      "open",
+      "validate",
+      "reset"
+    ],
+    "responsive_transforms": [
+      "grid>stack",
+      "drawer>full"
+    ],
+    "compiler_guarantees": [
+      "document_closure",
+      "semantic_landmarks",
+      "focus_visible",
+      "reduced_motion",
+      "live_region",
+      "escape_and_focus_restore",
+      "responsive_breakpoints",
+      "no_external_dependency"
+    ],
+    "model_owned": [
+      "layout_gene",
+      "component_genes",
+      "interaction_genes",
+      "responsive_transforms",
+      "visual_genes",
+      "copy_slot_references"
+    ],
+    "copy_owned": [
+      "title",
+      "lede"
+    ]
+  },
+  {
+    "task_id": "pf47-train-05",
+    "schema_version": "design-genome-compile-report-v1",
+    "compiler": "parallel-design-genome-compiler-v1",
+    "genome_bytes": 289,
+    "copy_slot_bytes": 109,
+    "html_bytes": 18559,
+    "expansion_ratio_html_per_genome_byte": 64.218,
+    "component_genes": 5,
+    "actions": [
+      "navigate",
+      "tab",
+      "copy",
+      "announce"
+    ],
+    "responsive_transforms": [
+      "code>scroll",
+      "aside>drawer"
+    ],
+    "compiler_guarantees": [
+      "document_closure",
+      "semantic_landmarks",
+      "focus_visible",
+      "reduced_motion",
+      "live_region",
+      "escape_and_focus_restore",
+      "responsive_breakpoints",
+      "no_external_dependency"
+    ],
+    "model_owned": [
+      "layout_gene",
+      "component_genes",
+      "interaction_genes",
+      "responsive_transforms",
+      "visual_genes",
+      "copy_slot_references"
+    ],
+    "copy_owned": [
+      "title",
+      "lede"
+    ]
+  },
+  {
+    "task_id": "pf47-train-06",
+    "schema_version": "design-genome-compile-report-v1",
+    "compiler": "parallel-design-genome-compiler-v1",
+    "genome_bytes": 289,
+    "copy_slot_bytes": 97,
+    "html_bytes": 19511,
+    "expansion_ratio_html_per_genome_byte": 67.512,
+    "component_genes": 5,
+    "actions": [
+      "sort",
+      "open",
+      "confirm",
+      "toggle"
+    ],
+    "responsive_transforms": [
+      "table>cards",
+      "drawer>full"
+    ],
+    "compiler_guarantees": [
+      "document_closure",
+      "semantic_landmarks",
+      "focus_visible",
+      "reduced_motion",
+      "live_region",
+      "escape_and_focus_restore",
+      "responsive_breakpoints",
+      "no_external_dependency"
+    ],
+    "model_owned": [
+      "layout_gene",
+      "component_genes",
+      "interaction_genes",
+      "responsive_transforms",
+      "visual_genes",
+      "copy_slot_references"
+    ],
+    "copy_owned": [
+      "title",
+      "lede"
+    ]
+  },
+  {
+    "task_id": "pf47-train-07",
+    "schema_version": "design-genome-compile-report-v1",
+    "compiler": "parallel-design-genome-compiler-v1",
+    "genome_bytes": 315,
+    "copy_slot_bytes": 100,
+    "html_bytes": 18436,
+    "expansion_ratio_html_per_genome_byte": 58.527,
+    "component_genes": 5,
+    "actions": [
+      "filter",
+      "accordion",
+      "favorite",
+      "announce"
+    ],
+    "responsive_transforms": [
+      "schedule>accordion",
+      "drawer>full"
+    ],
+    "compiler_guarantees": [
+      "document_closure",
+      "semantic_landmarks",
+      "focus_visible",
+      "reduced_motion",
+      "live_region",
+      "escape_and_focus_restore",
+      "responsive_breakpoints",
+      "no_external_dependency"
+    ],
+    "model_owned": [
+      "layout_gene",
+      "component_genes",
+      "interaction_genes",
+      "responsive_transforms",
+      "visual_genes",
+      "copy_slot_references"
+    ],
+    "copy_owned": [
+      "title",
+      "lede"
+    ]
+  },
+  {
+    "task_id": "pf47-train-08",
+    "schema_version": "design-genome-compile-report-v1",
+    "compiler": "parallel-design-genome-compiler-v1",
+    "genome_bytes": 270,
+    "copy_slot_bytes": 69,
+    "html_bytes": 19973,
+    "expansion_ratio_html_per_genome_byte": 73.974,
+    "component_genes": 5,
+    "actions": [
+      "year",
+      "inspect",
+      "none",
+      "sort"
+    ],
+    "responsive_transforms": [
+      "chart>scroll",
+      "none"
+    ],
+    "compiler_guarantees": [
+      "document_closure",
+      "semantic_landmarks",
+      "focus_visible",
+      "reduced_motion",
+      "live_region",
+      "escape_and_focus_restore",
+      "responsive_breakpoints",
+      "no_external_dependency"
+    ],
+    "model_owned": [
+      "layout_gene",
+      "component_genes",
+      "interaction_genes",
+      "responsive_transforms",
+      "visual_genes",
+      "copy_slot_references"
+    ],
+    "copy_owned": [
+      "title",
+      "lede"
+    ]
+  }
+]

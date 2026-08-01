@@ -1,0 +1,42 @@
+{
+  "format": "colorlm-neural-bus-capsule-v1",
+  "source": "ColorLM-v8-CoderNext-Transport-E471.gguf",
+  "source_layer": 39,
+  "source_expert_slot": 201,
+  "donor": "Qwen/Qwen3-Coder-Next layer 47 expert 471",
+  "transport": "shared-token-orthogonal-procrustes, baked into weights",
+  "dtype": "Q4_0",
+  "input_width": 2048,
+  "intermediate_width": 512,
+  "output_width": 2048,
+  "activation": "SwiGLU",
+  "tensors": {
+    "gate": {
+      "file": "gate.q4_0",
+      "bytes": 589824,
+      "sha256": "e2a6ddac3a4c1f181a0bd024a8b205466cbfe990214ccd150475836c50efb70a",
+      "ggml_shape": [
+        2048,
+        512
+      ]
+    },
+    "up": {
+      "file": "up.q4_0",
+      "bytes": 589824,
+      "sha256": "7d5e81ee91c4f984865dce7377d61f27aa25583aade0ad95f2cd29d60d6bb534",
+      "ggml_shape": [
+        2048,
+        512
+      ]
+    },
+    "down": {
+      "file": "down.q4_0",
+      "bytes": 589824,
+      "sha256": "7a280af94c9506a11506d983f9f95b8f3b99e650a1c43b2ab6b82352a3719fec",
+      "ggml_shape": [
+        512,
+        2048
+      ]
+    }
+  }
+}

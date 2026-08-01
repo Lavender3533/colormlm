@@ -1,0 +1,137 @@
+{
+  "format": "colorlm-v47-shortlist-coverage-report-v1",
+  "status": "development_feasibility_only",
+  "warning": "teacher-forced v43 states and consumed same-template splits; not a v47 ability or speed result",
+  "capture": "D:\\project\\大模型ssd化\\fast16\\research\\v44_critical_action_bus\\critical-states-dev-v1.cnob",
+  "capture_sha256": "e41b9da7f9c7042418f1fcca866524d2b079b18740f43d757c4e6fc09e7a53b9",
+  "teacher": "D:\\project\\大模型ssd化\\fast16\\research\\v44_critical_action_bus\\critical-teacher-dev-v1.jsonl",
+  "teacher_sha256": "eb53164aa60c47881fc2ef11985ddf0f040c197fbcdaff9f83f932313d84b6aa",
+  "configuration": {
+    "native_top_k": 16,
+    "prompt_suffix": 64,
+    "frequent_train": 48,
+    "candidate_limit": 128,
+    "rank": 64,
+    "priority": [
+      "native_topk",
+      "recent_prompt_tokens",
+      "train_frequent_targets"
+    ]
+  },
+  "overall": {
+    "sample_count": 408,
+    "covered": 406,
+    "coverage": 0.9950980392156863,
+    "native_topk_coverage": 0.9901960784313726,
+    "mean_candidate_count": 86.42892156862744,
+    "maximum_candidate_count": 95
+  },
+  "by_split": {
+    "train": {
+      "sample_count": 306,
+      "covered": 306,
+      "coverage": 1.0,
+      "native_topk_coverage": 0.9934640522875817,
+      "mean_candidate_count": 86.16339869281046,
+      "maximum_candidate_count": 95
+    },
+    "validation": {
+      "sample_count": 102,
+      "covered": 100,
+      "coverage": 0.9803921568627451,
+      "native_topk_coverage": 0.9803921568627451,
+      "mean_candidate_count": 87.22549019607843,
+      "maximum_candidate_count": 94
+    }
+  },
+  "by_capability": {
+    "code_debugging": {
+      "sample_count": 56,
+      "covered": 54,
+      "coverage": 0.9642857142857143,
+      "native_topk_coverage": 0.9285714285714286,
+      "mean_candidate_count": 89.0,
+      "maximum_candidate_count": 93
+    },
+    "computer_operation": {
+      "sample_count": 64,
+      "covered": 64,
+      "coverage": 1.0,
+      "native_topk_coverage": 1.0,
+      "mean_candidate_count": 87.21875,
+      "maximum_candidate_count": 93
+    },
+    "continue_or_finish": {
+      "sample_count": 40,
+      "covered": 40,
+      "coverage": 1.0,
+      "native_topk_coverage": 1.0,
+      "mean_candidate_count": 78.0,
+      "maximum_candidate_count": 89
+    },
+    "missing_parameter_clarification": {
+      "sample_count": 96,
+      "covered": 96,
+      "coverage": 1.0,
+      "native_topk_coverage": 1.0,
+      "mean_candidate_count": 83.65625,
+      "maximum_candidate_count": 91
+    },
+    "multi_step_planning": {
+      "sample_count": 56,
+      "covered": 56,
+      "coverage": 1.0,
+      "native_topk_coverage": 1.0,
+      "mean_candidate_count": 84.75,
+      "maximum_candidate_count": 89
+    },
+    "tool_argument_repair": {
+      "sample_count": 96,
+      "covered": 96,
+      "coverage": 1.0,
+      "native_topk_coverage": 1.0,
+      "mean_candidate_count": 91.66666666666667,
+      "maximum_candidate_count": 95
+    }
+  },
+  "projection_cost": {
+    "dense_2048x248320_macs": 508559360,
+    "rank_times_mean_candidates_macs": 5531.450980392156,
+    "shortlist_to_dense_ratio": 1.0876706664866332e-05,
+    "does_not_include": [
+      "feature_fusion",
+      "candidate_construction",
+      "v38_verification"
+    ]
+  },
+  "gate": {
+    "validation_coverage_min": 0.995,
+    "test_coverage_min": 0.995,
+    "passed": false
+  },
+  "elapsed_seconds": 1.185651400000097,
+  "misses": [
+    {
+      "record": 352,
+      "task_id": "code_debugging-06-a",
+      "split": "validation",
+      "capability": "code_debugging",
+      "token_index": 12,
+      "target_token_id": 1896,
+      "candidate_count": 92,
+      "native_covered": false,
+      "covered": false
+    },
+    {
+      "record": 403,
+      "task_id": "code_debugging-07-a",
+      "split": "validation",
+      "capability": "code_debugging",
+      "token_index": 12,
+      "target_token_id": 2084,
+      "candidate_count": 92,
+      "native_covered": false,
+      "covered": false
+    }
+  ]
+}

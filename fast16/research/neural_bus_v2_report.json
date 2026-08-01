@@ -1,0 +1,57 @@
+{
+  "format": "colorlm-neural-bus-v2-report",
+  "date": "2026-07-29",
+  "status": "rejected_control",
+  "base_model": "ColorLM-v6-Q3Router-Fused-A1.gguf",
+  "implementation": {
+    "primary_capsule": "Qwen3-Coder-Next layer 47 expert 471",
+    "secondary_capsule": "Qwen3-Coder-Next layer 47 expert 0",
+    "total_capsule_mib": 3.39,
+    "router": "transported donor rows with hard primary/secondary/no-op competition",
+    "router_parameters": 4097,
+    "safety_gate": "v1 relative-energy gate after route selection",
+    "runtime_model": "ColorLM-Neural-Bus-v2"
+  },
+  "checks": {
+    "build": {
+      "passed": true,
+      "target": "llama.dll Release"
+    },
+    "runtime": {
+      "passed": true,
+      "port": 8097,
+      "observed_primary_share_layer_12_prefill": 0.041667,
+      "observed_primary_share_layer_28_prefill": 0.0,
+      "note": "The route and both capsules entered the GGML graph. The service was stopped after the ability gate."
+    },
+    "router_prior": {
+      "matched_tokens": 3961,
+      "test_accuracy_zero_bias": 0.7322834645669292,
+      "test_accuracy_fitted_bias": 0.7255343082114736,
+      "deployed_bias": 0.0,
+      "no_op_test_f1": 0.36649214659685864,
+      "note": "Embedding transfer is a transport sanity check, not a hidden-state capability calibration. The fitted bias was rejected because held-out accuracy regressed."
+    },
+    "short_code_gate": {
+      "passed": false,
+      "score": "2/3",
+      "passed_tasks": [
+        "Code8/paren_groups",
+        "Code8/truncate"
+      ],
+      "failed_tasks": [
+        "Code8/close_elements"
+      ],
+      "comparison": {
+        "v6": "2/3",
+        "neural_bus_v1": "3/3",
+        "neural_bus_v2": "2/3"
+      }
+    },
+    "speed": {
+      "skipped": true,
+      "reason": "The ability gate failed, so a speed benchmark could not change the promotion decision."
+    }
+  },
+  "decision": "Do not promote v2. Keep the implementation and capsules as a reproducible negative control, restore Neural Bus v1 on port 8097, and require counterfactual next-token loss labels before training the next router."
+}

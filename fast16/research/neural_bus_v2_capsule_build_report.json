@@ -1,0 +1,137 @@
+{
+  "format": "colorlm-neural-bus-v2-capsule-build",
+  "base": "ColorLM-v6-Q3Router-Fused-A1.gguf",
+  "transport": {
+    "file": "coder_next_to_colorlm_orthogonal_f32.npy",
+    "sha256": "7209781fa72220c337314e8456497c83cf1b51798d2b4321414200a98de04d12"
+  },
+  "capsules": {
+    "471": {
+      "format": "colorlm-neural-bus-capsule-v2",
+      "donor": "Qwen/Qwen3-Coder-Next layer 47 expert 471",
+      "source_expert": 471,
+      "reference_colorlm_expert": 201,
+      "transport": "shared-token-orthogonal-procrustes, baked into weights",
+      "dtype": "Q4_0",
+      "input_width": 2048,
+      "intermediate_width": 512,
+      "output_width": 2048,
+      "expert_beta": 0.25,
+      "base_energy": 5.289665766676336e-05,
+      "donor_energy_before_scale": 0.00026269731684860106,
+      "router": {
+        "file": "router.f32",
+        "dtype": "F32",
+        "shape": [
+          2048,
+          1
+        ],
+        "common_scale": 0.7646515608425083,
+        "bytes": 8192,
+        "sha256": "e3f0db1b49de4ebe533cd4ca203f384cf0d68918790c04b65a669332f052c700"
+      },
+      "tensors": {
+        "gate": {
+          "file": "gate.q4_0",
+          "bytes": 589824,
+          "sha256": "e2a6ddac3a4c1f181a0bd024a8b205466cbfe990214ccd150475836c50efb70a"
+        },
+        "up": {
+          "file": "up.q4_0",
+          "bytes": 589824,
+          "sha256": "7d5e81ee91c4f984865dce7377d61f27aa25583aade0ad95f2cd29d60d6bb534"
+        },
+        "down": {
+          "file": "down.q4_0",
+          "bytes": 589824,
+          "sha256": "7a280af94c9506a11506d983f9f95b8f3b99e650a1c43b2ab6b82352a3719fec"
+        }
+      },
+      "source_sha256": {
+        "model.layers.47.mlp.experts.471.gate_proj.weight.bin": "3fc17143a7cfb4865a71321f022342dc4ad9a8c16b9e5a7776d027cfe25319dd",
+        "model.layers.47.mlp.experts.471.up_proj.weight.bin": "118fe70b7d37adaa08b2386bf4197b91c04d39b274c1427cda3884061f168bc2",
+        "model.layers.47.mlp.experts.471.down_proj.weight.bin": "411e0b2ce4abcbaed7ff1f121e441c9df96e776df8d9d7eda0e6b6df41d55880"
+      }
+    },
+    "0": {
+      "format": "colorlm-neural-bus-capsule-v2",
+      "donor": "Qwen/Qwen3-Coder-Next layer 47 expert 0",
+      "source_expert": 0,
+      "reference_colorlm_expert": 255,
+      "transport": "shared-token-orthogonal-procrustes, baked into weights",
+      "dtype": "Q4_0",
+      "input_width": 2048,
+      "intermediate_width": 512,
+      "output_width": 2048,
+      "expert_beta": 0.25110505840699576,
+      "base_energy": 7.05722715102377e-05,
+      "donor_energy_before_scale": 0.0002810467935530508,
+      "router": {
+        "file": "router.f32",
+        "dtype": "F32",
+        "shape": [
+          2048,
+          1
+        ],
+        "common_scale": 0.7646515608425083,
+        "bytes": 8192,
+        "sha256": "04cffe27a003be2192132811ff2a0bc2d484ba293a2bdee9d0bded0795e26fd3"
+      },
+      "tensors": {
+        "gate": {
+          "file": "gate.q4_0",
+          "bytes": 589824,
+          "sha256": "29688cff40f9fa6c69b370e74ac477b4e533a3b2e0e463158bafa536fe9cdb7e"
+        },
+        "up": {
+          "file": "up.q4_0",
+          "bytes": 589824,
+          "sha256": "41eec5fa53ebc213fee52ef7c0b3b788b43534b74be71ebd75782a073ae2d6c5"
+        },
+        "down": {
+          "file": "down.q4_0",
+          "bytes": 589824,
+          "sha256": "689db1b3d670bd42e9671fe44d9f6944e5ca840c2edb87c1d4520fb1a0998a3b"
+        }
+      },
+      "source_sha256": {
+        "model.layers.47.mlp.experts.0.gate_proj.weight.bin": "939e59ad8ceea4184c87b8f9f411071f4e8127114104ba70d94954983b7b43de",
+        "model.layers.47.mlp.experts.0.up_proj.weight.bin": "ab95a80fed1076fbf9a31f64ff8d4cd6ab5b628c0429af32dfa842090d1c8212",
+        "model.layers.47.mlp.experts.0.down_proj.weight.bin": "2e8d7a9e360e5d44a0754f0d4ed9111476901563bdb99e4178deadef234329a8"
+      }
+    }
+  },
+  "router": {
+    "type": "transported Coder-Next hidden-state top-1",
+    "parameters": 4097,
+    "primary_expert": 471,
+    "secondary_expert": 0,
+    "common_scale": 0.7646515608425083,
+    "calibration": "shared-token embedding decision transfer",
+    "matched_tokens": 3961,
+    "train_tokens": 3072,
+    "test_tokens": 889,
+    "fitted_bias": -0.0006558291497640312,
+    "recommended_bias": 0.0,
+    "train_accuracy_fitted_bias": 0.818359375,
+    "test_accuracy_zero_bias": 0.7322834645669292,
+    "test_accuracy_fitted_bias": 0.7255343082114736,
+    "bias_decision": "reject fitted bias because held-out accuracy regressed",
+    "no_op": {
+      "donor_top_k": 10,
+      "threshold": 0.016813773661851883,
+      "train": {
+        "precision": 0.3712871287128713,
+        "recall": 0.646551724137931,
+        "f1": 0.47169811320754723
+      },
+      "test": {
+        "precision": 0.2777777777777778,
+        "recall": 0.5384615384615384,
+        "f1": 0.36649214659685864,
+        "predicted_active_rate": 0.14173228346456693,
+        "true_active_rate": 0.07311586051743532
+      }
+    }
+  }
+}

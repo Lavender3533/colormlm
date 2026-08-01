@@ -1,0 +1,58 @@
+{
+  "alpha_zero_exact": true,
+  "donor_index": 0,
+  "format": "colorlm-offline-alpha-replay-v1",
+  "points": [
+    {
+      "alpha": 0.0,
+      "equal": 1,
+      "losses": 0,
+      "mean_delta": 0.0,
+      "mean_nll": 0.06666399107663068,
+      "median_delta": 0.0,
+      "median_nll": 0.06666399107663068,
+      "wins": 0
+    },
+    {
+      "alpha": 0.001,
+      "equal": 0,
+      "losses": 1,
+      "mean_delta": 9.794565162479785e-06,
+      "mean_nll": 0.06667378564179316,
+      "median_delta": 9.794565162479785e-06,
+      "median_nll": 0.06667378564179316,
+      "wins": 0
+    },
+    {
+      "alpha": 0.003,
+      "equal": 0,
+      "losses": 1,
+      "mean_delta": 2.9400678130286906e-05,
+      "mean_nll": 0.06669339175476097,
+      "median_delta": 2.9400678130286906e-05,
+      "median_nll": 0.06669339175476097,
+      "wins": 0
+    },
+    {
+      "alpha": 0.01,
+      "equal": 0,
+      "losses": 1,
+      "mean_delta": 9.820209846367334e-05,
+      "mean_nll": 0.06676219317509435,
+      "median_delta": 9.820209846367334e-05,
+      "median_nll": 0.06676219317509435,
+      "wins": 0
+    },
+    {
+      "alpha": 0.03,
+      "equal": 0,
+      "losses": 1,
+      "mean_delta": 0.00029636445988501237,
+      "mean_nll": 0.06696035553651569,
+      "median_delta": 0.00029636445988501237,
+      "median_nll": 0.06696035553651569,
+      "wins": 0
+    }
+  ],
+  "sample_count": 1
+}

@@ -1,0 +1,60 @@
+{
+  "format": "colorlm-v18.1-runtime-short-report-v1",
+  "date": "2026-07-31",
+  "candidate": "ColorLM-v18.1-Nullspace-Anchored-Island",
+  "candidate_endpoint": "http://127.0.0.1:8106/v1",
+  "baseline": "ColorLM-v17-Coder-Neural-Island",
+  "baseline_endpoint": "http://127.0.0.1:8105/v1",
+  "bridge_evidence": {
+    "stability_decision": "stable_candidate",
+    "loto_nrmse_ratio": 0.919236024751037,
+    "multi_seed_pass_rate": 1.0,
+    "runtime_cycle_rmse": 5.9533590501814615e-08
+  },
+  "checks": [
+    {
+      "name": "startup_and_health",
+      "candidate": "pass",
+      "evidence": "runtime-v2 static validation passed and /health returned status=ok"
+    },
+    {
+      "name": "required_tool_argument",
+      "candidate": "pass",
+      "elapsed_seconds": 13.7160946,
+      "finish_reason": "tool_calls",
+      "tool_name": "read_file",
+      "arguments": {
+        "path": "src/main.rs"
+      }
+    },
+    {
+      "name": "tool_result_closure",
+      "candidate": "partial",
+      "elapsed_seconds": 48.3526419,
+      "finish_reason": "length",
+      "completion_tokens": 96,
+      "evidence": "did not call the tool again and described the file correctly, but verbosity exhausted the output budget before stating the final numeric result"
+    },
+    {
+      "name": "independent_rust_instruction_following_ab",
+      "prompt_contract": "return only a complete Rust function, no Markdown; implement Unicode first_non_repeating in O(n)",
+      "candidate": {
+        "elapsed_seconds": 63.0425513,
+        "finish_reason": "length",
+        "completion_tokens": 128,
+        "result": "fail",
+        "failure": "added a Markdown fence and unnecessary VecDeque, then truncated before completing the function"
+      },
+      "baseline": {
+        "elapsed_seconds": 42.6223714,
+        "finish_reason": "length",
+        "completion_tokens": 128,
+        "result": "fail",
+        "failure": "same Markdown/VecDeque pattern and the same truncation class"
+      }
+    }
+  ],
+  "decision": "hold_research_candidate",
+  "reason": "the bridge is geometrically stable and fixes required tool arguments, but the only independent code A/B shows no capability gain; v17 remains formal",
+  "final_online_service": "http://127.0.0.1:8105/v1"
+}

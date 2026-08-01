@@ -1,0 +1,147 @@
+{
+  "format": "colorlm-v13-intelligence-router-v1",
+  "status": "rejected_control",
+  "classes": [
+    "no_op",
+    "coder",
+    "k3"
+  ],
+  "input": {
+    "tensor": "attn_post_norm",
+    "transform": "per-token-l2-unit",
+    "n_embd": 2048,
+    "sites": [
+      12,
+      28
+    ]
+  },
+  "label": "argmin exact counterfactual next-token NLL",
+  "margin": 0.0001,
+  "sample_accounting": {
+    "teacher_total": 72,
+    "selected": 63,
+    "censored": 0,
+    "low_margin": 9,
+    "class_counts": {
+      "no_op": 15,
+      "coder": 21,
+      "k3": 27
+    },
+    "mean_margin": 0.12613217334543902
+  },
+  "split": {
+    "kind": "task_group",
+    "train": 47,
+    "heldout": 16,
+    "seed": 13
+  },
+  "optimizer": {
+    "name": "full-batch Adam softmax regression",
+    "epochs": 200,
+    "learning_rate": 0.03,
+    "l2": 10.0
+  },
+  "sites": [
+    {
+      "site": 12,
+      "train_accuracy": 0.40425531914893614,
+      "heldout_accuracy": 0.5,
+      "majority_route": "k3",
+      "majority_heldout_accuracy": 0.5,
+      "always_no_op_heldout_accuracy": 0.125,
+      "required_lift": 0.1,
+      "promotable": false,
+      "train_loss": 1.0855809450149536,
+      "final_fit_loss": 1.0706373453140259
+    },
+    {
+      "site": 28,
+      "train_accuracy": 0.40425531914893614,
+      "heldout_accuracy": 0.5,
+      "majority_route": "k3",
+      "majority_heldout_accuracy": 0.5,
+      "always_no_op_heldout_accuracy": 0.125,
+      "required_lift": 0.1,
+      "promotable": false,
+      "train_loss": 1.085601568222046,
+      "final_fit_loss": 1.0706582069396973
+    }
+  ],
+  "artifacts": [
+    {
+      "site": 12,
+      "directory": "layer_12",
+      "manifest": "router.json",
+      "manifest_sha256": "caec8f2102e2244a56b8c0e2895115c3ae18481779fc0832edecc770c058a532",
+      "weight": {
+        "file": "weight.f32",
+        "dtype": "float32-le",
+        "ggml_shape": [
+          2048,
+          3
+        ],
+        "bytes": 24576,
+        "sha256": "566e19b35df35c394b47028d579203a2536bac3eef2a5c7ef5cb58fd167bc424"
+      },
+      "bias": {
+        "file": "bias.f32",
+        "dtype": "float32-le",
+        "ggml_shape": [
+          3
+        ],
+        "bytes": 12,
+        "sha256": "5c2757bbbf2ab95d1e3de84392e0e463b9fd79635212a9143a86d33a1ba115ae"
+      }
+    },
+    {
+      "site": 28,
+      "directory": "layer_28",
+      "manifest": "router.json",
+      "manifest_sha256": "a159c9b38c6551b3a5e533ade3a1ccc6375cfa80b203a445437b0efed19b3cae",
+      "weight": {
+        "file": "weight.f32",
+        "dtype": "float32-le",
+        "ggml_shape": [
+          2048,
+          3
+        ],
+        "bytes": 24576,
+        "sha256": "2e886358a5d3c4fb38479cff95d51a9b1eebb34b4caec2cec78c035da56fef9b"
+      },
+      "bias": {
+        "file": "bias.f32",
+        "dtype": "float32-le",
+        "ggml_shape": [
+          3
+        ],
+        "bytes": 12,
+        "sha256": "adcd637ad540b6972725a0c244a4a662dbbd76afb84d355d5720cde328671376"
+      }
+    }
+  ],
+  "source_teacher_sha256": "f078f7fc6ad3f6a7331139b4d3626a1ef773cb176fdaa0a02003140ccc306382",
+  "source_shards": [
+    {
+      "route": "no_op",
+      "file": "D:\\project\\大模型ssd化\\fast16\\research\\v13_live\\no_op_v2.jsonl",
+      "sha256": "ca1f5d1e2922e8fb5b5c951e152d9b5db8420acf01f9d441e09e379e5279f83f"
+    },
+    {
+      "route": "coder",
+      "file": "D:\\project\\大模型ssd化\\fast16\\research\\v13_live\\coder_v2.jsonl",
+      "sha256": "de70b1c02a03045d2db5d8a3307d72b7bfb68a3e8876b721e9a38e0e1db4afb9"
+    },
+    {
+      "route": "k3",
+      "file": "D:\\project\\大模型ssd化\\fast16\\research\\v13_live\\k3_v2.jsonl",
+      "sha256": "b04d8b76c6e488eda33c9e2d484f45a59a75ca162f92c1276422a9cd5ff08e99"
+    }
+  ],
+  "runtime_contract": {
+    "logits": "W @ l2_unit(attn_post_norm) + bias",
+    "probabilities": "softmax(logits)",
+    "no_op": "must create no residual nodes when selected by a future lazy executor",
+    "current_runtime_support": true,
+    "execution": "dense-residual-v1"
+  }
+}

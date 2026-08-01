@@ -1,0 +1,21 @@
+{
+  "format": "colorlm-v43-v36-capture-manifest-v1",
+  "endpoint": "http://127.0.0.1:8143",
+  "model_alias": "ColorLM-v43-V36-Capture",
+  "tasks": "D:\\project\\大模型ssd化\\fast16\\research\\v43_policy_dataset\\trajectory_tasks_v1.jsonl",
+  "tasks_sha256": "a4ee853502a1326800b89d7cacd27fdf7b48266ad664d5b23cb14f8f6c2b2fcb",
+  "teacher": "D:\\project\\大模型ssd化\\fast16\\research\\v43_policy_dataset\\teacher.jsonl",
+  "teacher_sha256": "1d2be3d8a67ac9e75a5d01c58a4dea656bb373001cb9417db56270d23b9271f9",
+  "capture": "D:\\project\\大模型ssd化\\fast16\\research\\v43_policy_dataset\\v36-states.cnob",
+  "capture_sha256": "dfa3cea982a307eac6cc075fb5bf1a3d8d17f9918c5433d0f08b07dde4762f3c",
+  "capture_bytes": 721152000,
+  "nll": "D:\\project\\大模型ssd化\\fast16\\research\\v43_policy_dataset\\base-nll.jsonl",
+  "nll_sha256": "b1d105c4eb958aa439798129bd1373776ef69cd567b2cff3a57b2b57eea5afdd",
+  "index": "D:\\project\\大模型ssd化\\fast16\\research\\v43_policy_dataset\\capture-index.jsonl",
+  "index_sha256": "e7fcf9e903d6bc32de05c7423239616a4f5923c463b558a33f3cd29eed7bca8c",
+  "task_count": 120,
+  "sample_count": 720,
+  "exact_nll_count": 720,
+  "tensor_records": 1440,
+  "arm_removed": true
+}

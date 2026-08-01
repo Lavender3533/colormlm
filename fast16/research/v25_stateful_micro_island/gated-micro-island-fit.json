@@ -1,0 +1,132 @@
+{
+  "format": "colorlm-v25-gated-micro-island-fit-v1",
+  "dump": "D:\\project\\大模型ssd化\\fast16\\research\\v25_stateful_micro_island\\teacher-stateful-20260801.bin",
+  "dropped_leading_sequence_tokens": [
+    2
+  ],
+  "split": {
+    "train_sequences": 4,
+    "validation_sequences": 2,
+    "test_sequences": 2,
+    "train_tokens": 420,
+    "validation_tokens": 440,
+    "test_tokens": 174
+  },
+  "architecture": {
+    "input_pca_rank": 64,
+    "gated_hidden_rank": 128,
+    "target_pca_rank": 128,
+    "state": "z_t=sigmoid(decay)*z_(t-1)+SiLU(gate(q_t))*up(q_t)",
+    "output": "target_basis @ output(value_t + memory_gate(q_t)*z_(t-1))",
+    "trainable_parameters": 41600,
+    "total_f16_bytes_including_fixed_transforms": 878208
+  },
+  "training": {
+    "seed": 3407,
+    "max_seconds": 25.0,
+    "elapsed_seconds": 3.688000000001921,
+    "epochs_completed": 60,
+    "best_validation": {
+      "epoch": 20,
+      "metrics": {
+        "rmse": 1.7168837785720825,
+        "reference_rms": 1.7720868587493896,
+        "relative_rmse": 0.9688485264778137,
+        "cosine_mean": 0.27434590458869934,
+        "cosine_median": 0.23117519915103912,
+        "cosine_positive_fraction": 0.9636363636363636
+      },
+      "per_sequence": [
+        {
+          "rmse": 1.7712061405181885,
+          "reference_rms": 1.8227989673614502,
+          "relative_rmse": 0.9716958403587341,
+          "cosine_mean": 0.26620882749557495,
+          "cosine_median": 0.21984519064426422,
+          "cosine_positive_fraction": 0.9715909090909091
+        },
+        {
+          "rmse": 1.4797857999801636,
+          "reference_rms": 1.55276358127594,
+          "relative_rmse": 0.9530013799667358,
+          "cosine_mean": 0.3068942725658417,
+          "cosine_median": 0.27872300148010254,
+          "cosine_positive_fraction": 0.9318181818181818
+        }
+      ],
+      "memory_gate_mean": 0.020295027643442154
+    }
+  },
+  "test": {
+    "gated_state": {
+      "metrics": {
+        "rmse": 1.229298710823059,
+        "reference_rms": 1.307085394859314,
+        "relative_rmse": 0.9404884576797485,
+        "cosine_mean": 0.30285415053367615,
+        "cosine_median": 0.27177298069000244,
+        "cosine_positive_fraction": 0.9195402298850575
+      },
+      "per_sequence": [
+        {
+          "rmse": 1.135561466217041,
+          "reference_rms": 1.221759557723999,
+          "relative_rmse": 0.929447591304779,
+          "cosine_mean": 0.2977439761161804,
+          "cosine_median": 0.25575128197669983,
+          "cosine_positive_fraction": 0.9072164948453608
+        },
+        {
+          "rmse": 1.3380690813064575,
+          "reference_rms": 1.4072293043136597,
+          "relative_rmse": 0.9508536458015442,
+          "cosine_mean": 0.30929163098335266,
+          "cosine_median": 0.295266330242157,
+          "cosine_positive_fraction": 0.935064935064935
+        }
+      ],
+      "memory_gate_mean": 0.021469134837388992
+    },
+    "same_model_memory_disabled": {
+      "metrics": {
+        "rmse": 1.2298173904418945,
+        "reference_rms": 1.307085394859314,
+        "relative_rmse": 0.9408852458000183,
+        "cosine_mean": 0.3022557497024536,
+        "cosine_median": 0.27388298511505127,
+        "cosine_positive_fraction": 0.9195402298850575
+      },
+      "per_sequence": [
+        {
+          "rmse": 1.136176586151123,
+          "reference_rms": 1.221759557723999,
+          "relative_rmse": 0.9299510717391968,
+          "cosine_mean": 0.2971627712249756,
+          "cosine_median": 0.25840309262275696,
+          "cosine_positive_fraction": 0.9072164948453608
+        },
+        {
+          "rmse": 1.338488221168518,
+          "reference_rms": 1.4072293043136597,
+          "relative_rmse": 0.9511514902114868,
+          "cosine_mean": 0.3086715042591095,
+          "cosine_median": 0.2915438115596771,
+          "cosine_positive_fraction": 0.935064935064935
+        }
+      ],
+      "memory_gate_mean": 0.021469134837388992
+    },
+    "previous_linear_relative_rmse": 0.942562460899353
+  },
+  "runtime_integration_gate": {
+    "passed": false,
+    "requirements": {
+      "test_relative_rmse_max": 0.85,
+      "test_cosine_median_min": 0.5,
+      "gain_over_previous_linear_relative_rmse_min": 0.05,
+      "all_test_sequences_beat_zero": true
+    },
+    "next_action": "不接运行图；保留教师dump并转向分专家/分站蒸馏"
+  },
+  "artifact": "D:\\project\\大模型ssd化\\fast16\\research\\v25_stateful_micro_island\\gated-micro-island-selected.npz"
+}

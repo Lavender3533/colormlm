@@ -1,0 +1,811 @@
+{
+  "format": "colorlm-affine-anchored-ridge-external-v1",
+  "policy": {
+    "fit_and_selection": "v21 corpus only",
+    "external": "v22 corpus used once for final metrics only",
+    "seed": 18
+  },
+  "train_pairing": {
+    "base": {
+      "receipt": "D:\\project\\大模型ssd化\\fast16\\research\\v18_activation_bridge\\captures\\run-20260731\\base.receipt.json",
+      "model": "ColorLM-v18-Bridge-Base",
+      "layer": 35,
+      "stage": "attn_residual"
+    },
+    "donor": {
+      "receipt": "D:\\project\\大模型ssd化\\fast16\\research\\v21_glm_agent_island\\captures\\glm_l42.receipt.json",
+      "model": "GLM-4.7-Agent-Island-Capture",
+      "layer": 42,
+      "stage": "l_out"
+    },
+    "common_prompts": 12,
+    "paired_prompts": 12,
+    "total_base_tokens": 815,
+    "total_donor_tokens": 769,
+    "total_matched_tokens": 766,
+    "mean_match_coverage": 0.9470892833804992,
+    "prompt_alignment": [
+      {
+        "prompt_id": "agent-tool",
+        "prompt_utf8_bytes": 276,
+        "base_tokens": 57,
+        "donor_tokens": 57,
+        "base_mappable_tokens": 57,
+        "donor_mappable_tokens": 57,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 57,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 276,
+        "paired": true
+      },
+      {
+        "prompt_id": "chinese-code-spec",
+        "prompt_utf8_bytes": 318,
+        "base_tokens": 62,
+        "donor_tokens": 63,
+        "base_mappable_tokens": 62,
+        "donor_mappable_tokens": 63,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 62,
+        "match_coverage": 0.9841269841269841,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 0.9841269841269841,
+        "last_matched_end_byte": 318,
+        "paired": true
+      },
+      {
+        "prompt_id": "cpp-lifetime",
+        "prompt_utf8_bytes": 287,
+        "base_tokens": 66,
+        "donor_tokens": 61,
+        "base_mappable_tokens": 66,
+        "donor_mappable_tokens": 61,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 60,
+        "match_coverage": 0.9090909090909091,
+        "base_match_coverage": 0.9090909090909091,
+        "donor_match_coverage": 0.9836065573770492,
+        "last_matched_end_byte": 287,
+        "paired": true
+      },
+      {
+        "prompt_id": "debug-stack",
+        "prompt_utf8_bytes": 296,
+        "base_tokens": 69,
+        "donor_tokens": 63,
+        "base_mappable_tokens": 69,
+        "donor_mappable_tokens": 63,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 63,
+        "match_coverage": 0.9130434782608695,
+        "base_match_coverage": 0.9130434782608695,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 296,
+        "paired": true
+      },
+      {
+        "prompt_id": "go-context",
+        "prompt_utf8_bytes": 329,
+        "base_tokens": 86,
+        "donor_tokens": 77,
+        "base_mappable_tokens": 86,
+        "donor_mappable_tokens": 77,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 77,
+        "match_coverage": 0.8953488372093024,
+        "base_match_coverage": 0.8953488372093024,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 329,
+        "paired": true
+      },
+      {
+        "prompt_id": "java-race",
+        "prompt_utf8_bytes": 325,
+        "base_tokens": 80,
+        "donor_tokens": 73,
+        "base_mappable_tokens": 80,
+        "donor_mappable_tokens": 73,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 73,
+        "match_coverage": 0.9125,
+        "base_match_coverage": 0.9125,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 325,
+        "paired": true
+      },
+      {
+        "prompt_id": "json-contract",
+        "prompt_utf8_bytes": 301,
+        "base_tokens": 57,
+        "donor_tokens": 57,
+        "base_mappable_tokens": 57,
+        "donor_mappable_tokens": 57,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 57,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 301,
+        "paired": true
+      },
+      {
+        "prompt_id": "python-async",
+        "prompt_utf8_bytes": 371,
+        "base_tokens": 84,
+        "donor_tokens": 79,
+        "base_mappable_tokens": 84,
+        "donor_mappable_tokens": 79,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 79,
+        "match_coverage": 0.9404761904761905,
+        "base_match_coverage": 0.9404761904761905,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 371,
+        "paired": true
+      },
+      {
+        "prompt_id": "react-state",
+        "prompt_utf8_bytes": 255,
+        "base_tokens": 43,
+        "donor_tokens": 43,
+        "base_mappable_tokens": 43,
+        "donor_mappable_tokens": 43,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 43,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 255,
+        "paired": true
+      },
+      {
+        "prompt_id": "rust-borrow",
+        "prompt_utf8_bytes": 306,
+        "base_tokens": 82,
+        "donor_tokens": 75,
+        "base_mappable_tokens": 82,
+        "donor_mappable_tokens": 75,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 74,
+        "match_coverage": 0.9024390243902439,
+        "base_match_coverage": 0.9024390243902439,
+        "donor_match_coverage": 0.9866666666666667,
+        "last_matched_end_byte": 306,
+        "paired": true
+      },
+      {
+        "prompt_id": "sql-transaction",
+        "prompt_utf8_bytes": 231,
+        "base_tokens": 42,
+        "donor_tokens": 42,
+        "base_mappable_tokens": 42,
+        "donor_mappable_tokens": 42,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 42,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 231,
+        "paired": true
+      },
+      {
+        "prompt_id": "typescript-types",
+        "prompt_utf8_bytes": 333,
+        "base_tokens": 87,
+        "donor_tokens": 79,
+        "base_mappable_tokens": 87,
+        "donor_mappable_tokens": 79,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 79,
+        "match_coverage": 0.9080459770114943,
+        "base_match_coverage": 0.9080459770114943,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 333,
+        "paired": true
+      }
+    ],
+    "skipped": []
+  },
+  "external_pairing": {
+    "base": {
+      "receipt": "D:\\project\\大模型ssd化\\fast16\\research\\v22_glm_agent_bridge\\captures\\base_l35.receipt.json",
+      "model": "ColorLM-v22-Base-Capture",
+      "layer": 35,
+      "stage": "attn_residual"
+    },
+    "donor": {
+      "receipt": "D:\\project\\大模型ssd化\\fast16\\research\\v22_glm_agent_bridge\\captures\\glm_l42.receipt.json",
+      "model": "GLM-4.7-v22-Agent-Capture",
+      "layer": 42,
+      "stage": "l_out"
+    },
+    "common_prompts": 16,
+    "paired_prompts": 16,
+    "total_base_tokens": 1237,
+    "total_donor_tokens": 1229,
+    "total_matched_tokens": 1227,
+    "mean_match_coverage": 0.9924751133451606,
+    "prompt_alignment": [
+      {
+        "prompt_id": "async-shutdown",
+        "prompt_utf8_bytes": 425,
+        "base_tokens": 67,
+        "donor_tokens": 67,
+        "base_mappable_tokens": 67,
+        "donor_mappable_tokens": 67,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 67,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 425,
+        "paired": true
+      },
+      {
+        "prompt_id": "browser-form-state",
+        "prompt_utf8_bytes": 405,
+        "base_tokens": 78,
+        "donor_tokens": 78,
+        "base_mappable_tokens": 78,
+        "donor_mappable_tokens": 78,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 78,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 405,
+        "paired": true
+      },
+      {
+        "prompt_id": "chinese-agent-recovery",
+        "prompt_utf8_bytes": 370,
+        "base_tokens": 76,
+        "donor_tokens": 76,
+        "base_mappable_tokens": 76,
+        "donor_mappable_tokens": 76,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 74,
+        "match_coverage": 0.9736842105263158,
+        "base_match_coverage": 0.9736842105263158,
+        "donor_match_coverage": 0.9736842105263158,
+        "last_matched_end_byte": 370,
+        "paired": true
+      },
+      {
+        "prompt_id": "context-revision",
+        "prompt_utf8_bytes": 431,
+        "base_tokens": 75,
+        "donor_tokens": 75,
+        "base_mappable_tokens": 75,
+        "donor_mappable_tokens": 75,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 75,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 431,
+        "paired": true
+      },
+      {
+        "prompt_id": "database-migration-agent",
+        "prompt_utf8_bytes": 399,
+        "base_tokens": 71,
+        "donor_tokens": 71,
+        "base_mappable_tokens": 71,
+        "donor_mappable_tokens": 71,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 71,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 399,
+        "paired": true
+      },
+      {
+        "prompt_id": "dependency-upgrade",
+        "prompt_utf8_bytes": 429,
+        "base_tokens": 75,
+        "donor_tokens": 75,
+        "base_mappable_tokens": 75,
+        "donor_mappable_tokens": 75,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 75,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 429,
+        "paired": true
+      },
+      {
+        "prompt_id": "git-conflict-preservation",
+        "prompt_utf8_bytes": 358,
+        "base_tokens": 74,
+        "donor_tokens": 74,
+        "base_mappable_tokens": 74,
+        "donor_mappable_tokens": 74,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 74,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 358,
+        "paired": true
+      },
+      {
+        "prompt_id": "incident-priority",
+        "prompt_utf8_bytes": 394,
+        "base_tokens": 75,
+        "donor_tokens": 73,
+        "base_mappable_tokens": 75,
+        "donor_mappable_tokens": 73,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 73,
+        "match_coverage": 0.9733333333333334,
+        "base_match_coverage": 0.9733333333333334,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 394,
+        "paired": true
+      },
+      {
+        "prompt_id": "log-root-cause",
+        "prompt_utf8_bytes": 394,
+        "base_tokens": 89,
+        "donor_tokens": 83,
+        "base_mappable_tokens": 89,
+        "donor_mappable_tokens": 83,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 83,
+        "match_coverage": 0.9325842696629213,
+        "base_match_coverage": 0.9325842696629213,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 394,
+        "paired": true
+      },
+      {
+        "prompt_id": "multi-file-consistency",
+        "prompt_utf8_bytes": 402,
+        "base_tokens": 77,
+        "donor_tokens": 77,
+        "base_mappable_tokens": 77,
+        "donor_mappable_tokens": 77,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 77,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 402,
+        "paired": true
+      },
+      {
+        "prompt_id": "patch-scope-control",
+        "prompt_utf8_bytes": 383,
+        "base_tokens": 75,
+        "donor_tokens": 75,
+        "base_mappable_tokens": 75,
+        "donor_mappable_tokens": 75,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 75,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 383,
+        "paired": true
+      },
+      {
+        "prompt_id": "powershell-safety",
+        "prompt_utf8_bytes": 409,
+        "base_tokens": 82,
+        "donor_tokens": 82,
+        "base_mappable_tokens": 82,
+        "donor_mappable_tokens": 82,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 82,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 409,
+        "paired": true
+      },
+      {
+        "prompt_id": "repo-build-failure",
+        "prompt_utf8_bytes": 461,
+        "base_tokens": 85,
+        "donor_tokens": 85,
+        "base_mappable_tokens": 85,
+        "donor_mappable_tokens": 85,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 85,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 461,
+        "paired": true
+      },
+      {
+        "prompt_id": "tool-argument-contract",
+        "prompt_utf8_bytes": 412,
+        "base_tokens": 82,
+        "donor_tokens": 82,
+        "base_mappable_tokens": 82,
+        "donor_mappable_tokens": 82,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 82,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 412,
+        "paired": true
+      },
+      {
+        "prompt_id": "tool-result-recovery",
+        "prompt_utf8_bytes": 447,
+        "base_tokens": 87,
+        "donor_tokens": 87,
+        "base_mappable_tokens": 87,
+        "donor_mappable_tokens": 87,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 87,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 447,
+        "paired": true
+      },
+      {
+        "prompt_id": "web-race-debug",
+        "prompt_utf8_bytes": 408,
+        "base_tokens": 69,
+        "donor_tokens": 69,
+        "base_mappable_tokens": 69,
+        "donor_mappable_tokens": 69,
+        "base_excluded_tokens": 0,
+        "donor_excluded_tokens": 0,
+        "base_prompt_byte_coverage": 1.0,
+        "donor_prompt_byte_coverage": 1.0,
+        "matched_tokens": 69,
+        "match_coverage": 1.0,
+        "base_match_coverage": 1.0,
+        "donor_match_coverage": 1.0,
+        "last_matched_end_byte": 408,
+        "paired": true
+      }
+    ],
+    "skipped": []
+  },
+  "selection": {
+    "train_prompts": [
+      "chinese-code-spec",
+      "cpp-lifetime",
+      "debug-stack",
+      "go-context",
+      "json-contract",
+      "python-async",
+      "react-state",
+      "rust-borrow",
+      "typescript-types"
+    ],
+    "validation_prompts": [
+      "agent-tool",
+      "java-race",
+      "sql-transaction"
+    ],
+    "candidates": [
+      {
+        "factor": 0.0001,
+        "relative_rmse": 1.0111796855926514,
+        "median_cosine": 0.32066112756729126
+      },
+      {
+        "factor": 0.0003,
+        "relative_rmse": 1.0111422538757324,
+        "median_cosine": 0.3207221031188965
+      },
+      {
+        "factor": 0.001,
+        "relative_rmse": 1.0110200643539429,
+        "median_cosine": 0.3209466338157654
+      },
+      {
+        "factor": 0.003,
+        "relative_rmse": 1.0106618404388428,
+        "median_cosine": 0.32179802656173706
+      },
+      {
+        "factor": 0.01,
+        "relative_rmse": 1.0094401836395264,
+        "median_cosine": 0.32481858134269714
+      },
+      {
+        "factor": 0.03,
+        "relative_rmse": 1.0065271854400635,
+        "median_cosine": 0.3329225480556488
+      },
+      {
+        "factor": 0.1,
+        "relative_rmse": 1.0001435279846191,
+        "median_cosine": 0.3490094840526581
+      },
+      {
+        "factor": 0.3,
+        "relative_rmse": 0.9931187033653259,
+        "median_cosine": 0.3606448769569397
+      },
+      {
+        "factor": 1.0,
+        "relative_rmse": 0.9856808185577393,
+        "median_cosine": 0.36453136801719666
+      },
+      {
+        "factor": 3.0,
+        "relative_rmse": 0.9802771806716919,
+        "median_cosine": 0.3490373492240906
+      }
+    ],
+    "chosen_factor": 3.0
+  },
+  "fit": {
+    "all_old_prompts": 12,
+    "all_old_tokens": 766,
+    "baseline_scale": 4.451720714569092,
+    "candidate_centered_scale": 5.156386375427246,
+    "raw_singular_min": 0.0007214921060949564,
+    "raw_singular_median": 1.0000001192092896,
+    "raw_singular_max": 248.74627685546875,
+    "runtime_singular_clip": [
+      0.25,
+      8.0
+    ]
+  },
+  "external": {
+    "prompts": 16,
+    "paired_tokens": 1227,
+    "baseline": {
+      "cosine": {
+        "mean": 0.0080450139939785,
+        "median": 0.00743527989834547,
+        "p05": -0.02695484459400177,
+        "p95": 0.043789707124233246,
+        "min": -0.06062181666493416,
+        "max": 0.08670756965875626
+      },
+      "relative_rmse": 1.0170453786849976
+    },
+    "candidate": {
+      "cosine": {
+        "mean": 0.4217120409011841,
+        "median": 0.421564519405365,
+        "p05": 0.20765922963619232,
+        "p95": 0.608059823513031,
+        "min": 0.08033152669668198,
+        "max": 0.8908647298812866
+      },
+      "relative_rmse": 0.997655987739563
+    },
+    "median_cosine_lift": 0.4141292395070195,
+    "nrmse_ratio": 0.9809355694919883,
+    "positive_prompts": 16,
+    "per_prompt": [
+      {
+        "prompt_id": "async-shutdown",
+        "tokens": 67,
+        "baseline_median_cosine": -0.003609563922509551,
+        "candidate_median_cosine": 0.41114282608032227,
+        "lift": 0.4147523900028318
+      },
+      {
+        "prompt_id": "browser-form-state",
+        "tokens": 78,
+        "baseline_median_cosine": 0.0006511560641229153,
+        "candidate_median_cosine": 0.4116761088371277,
+        "lift": 0.41102495277300477
+      },
+      {
+        "prompt_id": "chinese-agent-recovery",
+        "tokens": 74,
+        "baseline_median_cosine": 0.009641408920288086,
+        "candidate_median_cosine": 0.46748366951942444,
+        "lift": 0.45784226059913635
+      },
+      {
+        "prompt_id": "context-revision",
+        "tokens": 75,
+        "baseline_median_cosine": 0.009298508986830711,
+        "candidate_median_cosine": 0.40010085701942444,
+        "lift": 0.3908023480325937
+      },
+      {
+        "prompt_id": "database-migration-agent",
+        "tokens": 71,
+        "baseline_median_cosine": 0.015940362587571144,
+        "candidate_median_cosine": 0.3728819489479065,
+        "lift": 0.35694158636033535
+      },
+      {
+        "prompt_id": "dependency-upgrade",
+        "tokens": 75,
+        "baseline_median_cosine": 0.011054102331399918,
+        "candidate_median_cosine": 0.4511427879333496,
+        "lift": 0.4400886856019497
+      },
+      {
+        "prompt_id": "git-conflict-preservation",
+        "tokens": 74,
+        "baseline_median_cosine": 0.012148678302764893,
+        "candidate_median_cosine": 0.45241960883140564,
+        "lift": 0.44027093052864075
+      },
+      {
+        "prompt_id": "incident-priority",
+        "tokens": 73,
+        "baseline_median_cosine": 0.009800277650356293,
+        "candidate_median_cosine": 0.39281001687049866,
+        "lift": 0.38300973922014236
+      },
+      {
+        "prompt_id": "log-root-cause",
+        "tokens": 83,
+        "baseline_median_cosine": 0.012493882328271866,
+        "candidate_median_cosine": 0.4042002260684967,
+        "lift": 0.39170634374022484
+      },
+      {
+        "prompt_id": "multi-file-consistency",
+        "tokens": 77,
+        "baseline_median_cosine": 0.00931507907807827,
+        "candidate_median_cosine": 0.44211581349372864,
+        "lift": 0.43280073441565037
+      },
+      {
+        "prompt_id": "patch-scope-control",
+        "tokens": 75,
+        "baseline_median_cosine": 0.003740869229659438,
+        "candidate_median_cosine": 0.48866355419158936,
+        "lift": 0.4849226849619299
+      },
+      {
+        "prompt_id": "powershell-safety",
+        "tokens": 82,
+        "baseline_median_cosine": 0.0027152143884450197,
+        "candidate_median_cosine": 0.39006733894348145,
+        "lift": 0.3873521245550364
+      },
+      {
+        "prompt_id": "repo-build-failure",
+        "tokens": 85,
+        "baseline_median_cosine": 0.00995164830237627,
+        "candidate_median_cosine": 0.4614202380180359,
+        "lift": 0.4514685897156596
+      },
+      {
+        "prompt_id": "tool-argument-contract",
+        "tokens": 82,
+        "baseline_median_cosine": 0.007822285406291485,
+        "candidate_median_cosine": 0.38356250524520874,
+        "lift": 0.37574021983891726
+      },
+      {
+        "prompt_id": "tool-result-recovery",
+        "tokens": 87,
+        "baseline_median_cosine": 0.009787993505597115,
+        "candidate_median_cosine": 0.41179192066192627,
+        "lift": 0.40200392715632915
+      },
+      {
+        "prompt_id": "web-race-debug",
+        "tokens": 69,
+        "baseline_median_cosine": 0.002505062147974968,
+        "candidate_median_cosine": 0.4453524649143219,
+        "lift": 0.44284740276634693
+      }
+    ]
+  },
+  "runtime": {
+    "input_weight": {
+      "file": "glm_affine_input_weight_f32.npy",
+      "sha256": "69ccb4207de36c779d2cdb3d887143daa538a524035382e942a440614ed8e093"
+    },
+    "output_weight": {
+      "file": "glm_affine_output_weight_f32.npy",
+      "sha256": "1466f320bf93cb1ce1adf448e28403814a390bd4721efb862d34e373cef853f4"
+    },
+    "input_bias": {
+      "file": "glm_affine_input_bias_f32.npy",
+      "sha256": "238c7ba971343c9c6a06d11a0fce704808835a5345619d1eb896d2d90be3d333"
+    },
+    "cycle_rmse": 6.970947907802838e-08
+  },
+  "promotion": {
+    "gates": {
+      "all_prompts_paired": true,
+      "enough_tokens": true,
+      "cosine_lift": true,
+      "nrmse_ratio": false,
+      "positive_prompts": true,
+      "cycle_rmse": true
+    },
+    "decision": "reject"
+  }
+}

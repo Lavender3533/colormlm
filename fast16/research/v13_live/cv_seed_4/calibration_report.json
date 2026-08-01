@@ -1,0 +1,147 @@
+{
+  "format": "colorlm-v13-intelligence-router-v1",
+  "status": "rejected_control",
+  "classes": [
+    "no_op",
+    "coder",
+    "k3"
+  ],
+  "input": {
+    "tensor": "attn_post_norm",
+    "transform": "per-token-l2-unit",
+    "n_embd": 2048,
+    "sites": [
+      12,
+      28
+    ]
+  },
+  "label": "argmin exact counterfactual next-token NLL",
+  "margin": 0.0001,
+  "sample_accounting": {
+    "teacher_total": 72,
+    "selected": 63,
+    "censored": 0,
+    "low_margin": 9,
+    "class_counts": {
+      "no_op": 15,
+      "coder": 21,
+      "k3": 27
+    },
+    "mean_margin": 0.12613217334543902
+  },
+  "split": {
+    "kind": "task_group",
+    "train": 48,
+    "heldout": 15,
+    "seed": 4
+  },
+  "optimizer": {
+    "name": "full-batch Adam softmax regression",
+    "epochs": 200,
+    "learning_rate": 0.03,
+    "l2": 0.001
+  },
+  "sites": [
+    {
+      "site": 12,
+      "train_accuracy": 0.9791666666666666,
+      "heldout_accuracy": 0.3333333333333333,
+      "majority_route": "k3",
+      "majority_heldout_accuracy": 0.5333333333333333,
+      "always_no_op_heldout_accuracy": 0.2,
+      "required_lift": 0.1,
+      "promotable": false,
+      "train_loss": 0.3829272389411926,
+      "final_fit_loss": 0.44765010476112366
+    },
+    {
+      "site": 28,
+      "train_accuracy": 1.0,
+      "heldout_accuracy": 0.26666666666666666,
+      "majority_route": "k3",
+      "majority_heldout_accuracy": 0.5333333333333333,
+      "always_no_op_heldout_accuracy": 0.2,
+      "required_lift": 0.1,
+      "promotable": false,
+      "train_loss": 0.37066784501075745,
+      "final_fit_loss": 0.42280468344688416
+    }
+  ],
+  "artifacts": [
+    {
+      "site": 12,
+      "directory": "layer_12",
+      "manifest": "router.json",
+      "manifest_sha256": "b4ce39de1cb1e87cff942402e42596ca3c38d3b1f9bd70513419018d7e095c46",
+      "weight": {
+        "file": "weight.f32",
+        "dtype": "float32-le",
+        "ggml_shape": [
+          2048,
+          3
+        ],
+        "bytes": 24576,
+        "sha256": "9912615de7f835c2d9677be43fe75435d37f7584bd19bf2f680c5ed0749ff843"
+      },
+      "bias": {
+        "file": "bias.f32",
+        "dtype": "float32-le",
+        "ggml_shape": [
+          3
+        ],
+        "bytes": 12,
+        "sha256": "97ae4ba63506e4e590475d1c68f639e811af5b6ee7b8633b3071d84da8a5eb5e"
+      }
+    },
+    {
+      "site": 28,
+      "directory": "layer_28",
+      "manifest": "router.json",
+      "manifest_sha256": "54325fbb5f7ea4ba15ac227785b50a57dbb1f86906fb469de38ad845b7a84326",
+      "weight": {
+        "file": "weight.f32",
+        "dtype": "float32-le",
+        "ggml_shape": [
+          2048,
+          3
+        ],
+        "bytes": 24576,
+        "sha256": "18557f972ee5cfb4e1e04b5d03ee2c5e14797e54b12fd5c66ad56157cd8cb7cd"
+      },
+      "bias": {
+        "file": "bias.f32",
+        "dtype": "float32-le",
+        "ggml_shape": [
+          3
+        ],
+        "bytes": 12,
+        "sha256": "0facc201b00322e28508663837c248d9351731edbd6b6f659b23a4ee6803fd9e"
+      }
+    }
+  ],
+  "source_teacher_sha256": "f078f7fc6ad3f6a7331139b4d3626a1ef773cb176fdaa0a02003140ccc306382",
+  "source_shards": [
+    {
+      "route": "no_op",
+      "file": "D:\\project\\大模型ssd化\\fast16\\research\\v13_live\\no_op_v2.jsonl",
+      "sha256": "ca1f5d1e2922e8fb5b5c951e152d9b5db8420acf01f9d441e09e379e5279f83f"
+    },
+    {
+      "route": "coder",
+      "file": "D:\\project\\大模型ssd化\\fast16\\research\\v13_live\\coder_v2.jsonl",
+      "sha256": "de70b1c02a03045d2db5d8a3307d72b7bfb68a3e8876b721e9a38e0e1db4afb9"
+    },
+    {
+      "route": "k3",
+      "file": "D:\\project\\大模型ssd化\\fast16\\research\\v13_live\\k3_v2.jsonl",
+      "sha256": "b04d8b76c6e488eda33c9e2d484f45a59a75ca162f92c1276422a9cd5ff08e99"
+    }
+  ],
+  "runtime_contract": {
+    "logits": "W @ l2_unit(attn_post_norm) + bias",
+    "probabilities": "softmax(logits)",
+    "no_op": "must create no residual nodes when selected by a future lazy executor",
+    "current_runtime_support": true,
+    "execution": "dense-residual-v1"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "format": "colorlm-v44-critical-capture-manifest-v1",
+  "model": "D:\\project\\大模型ssd化\\fast16\\models\\ColorLM-v36-Qwen36-Global-Shared-Backbone.gguf",
+  "model_alias": "ColorLM-v44-Critical-Capture",
+  "load_seconds": 17.351470199995674,
+  "teacher": "D:\\project\\大模型ssd化\\fast16\\research\\v44_critical_action_bus\\critical-teacher-dev-v1.jsonl",
+  "teacher_sha256": "eb53164aa60c47881fc2ef11985ddf0f040c197fbcdaff9f83f932313d84b6aa",
+  "capture": "D:\\project\\大模型ssd化\\fast16\\research\\v44_critical_action_bus\\critical-states-dev-v1.cnob",
+  "capture_sha256": "e41b9da7f9c7042418f1fcca866524d2b079b18740f43d757c4e6fc09e7a53b9",
+  "capture_bytes": 408652800,
+  "nll": "D:\\project\\大模型ssd化\\fast16\\research\\v44_critical_action_bus\\critical-nll-dev-v1.jsonl",
+  "nll_sha256": "0d5fb64bf6bb032645a27a1d10b4ed9c592f9ef87d72c0efc656ca53a14473db",
+  "index": "D:\\project\\大模型ssd化\\fast16\\research\\v44_critical_action_bus\\critical-capture-index-dev-v1.jsonl",
+  "index_sha256": "7a81c6556e8ea98491d33690e607762d3753764ecec14de5377058483521b54d",
+  "sample_count": 408,
+  "exact_nll_count": 408,
+  "tensor_records": 816,
+  "test_leakage_count": 0,
+  "arm_removed": true
+}

@@ -1,0 +1,240 @@
+{
+  "format": "colorlm-multicap-short-gate-v1",
+  "date": "2026-07-31",
+  "purpose": "用于第二 donor 的多能力短门；任务、答案、关键决策点在看到候选结果前冻结。",
+  "response_record_schema": {
+    "normal": {"id": "task id", "output": "模型最终文本", "finish_reason": "stop"},
+    "tool": {
+      "id": "task id",
+      "output": "",
+      "finish_reason": "tool_calls",
+      "tool_call": {"name": "工具名", "arguments": {"key": "value"}}
+    }
+  },
+  "dimensions": [
+    "reasoning",
+    "knowledge",
+    "long_context",
+    "coding",
+    "tools",
+    "planning",
+    "computer_use",
+    "communication"
+  ],
+  "items": [
+    {
+      "id": "reasoning-state-transition",
+      "dimension": "reasoning",
+      "max_output_tokens": 16,
+      "prompt": "从 x=7 开始，严格依次执行：x=x*3；x=x+5；若 x 为偶数则 x=x/2，否则 x=x+4。只输出合法 JSON，格式为 {\"answer\":整数}。",
+      "validator": {"type": "exact_json", "expected": {"answer": 13}},
+      "decision_points": [
+        {"category": "state_update", "value": 26, "reason": "前两步后的状态"},
+        {"category": "branch", "value": "even", "reason": "选择除以 2 分支"},
+        {"category": "answer", "value": 13, "reason": "最终状态"}
+      ]
+    },
+    {
+      "id": "reasoning-constraint-order",
+      "dimension": "reasoning",
+      "max_output_tokens": 24,
+      "prompt": "安排 A、B、C、D 四项且每项恰好一次。约束：D 第一；B 紧跟 A；C 在 B 之后。只输出合法 JSON，格式为 {\"order\":[四个字母]}。",
+      "validator": {"type": "exact_json", "expected": {"order": ["D", "A", "B", "C"]}},
+      "decision_points": [
+        {"category": "constraint", "value": "D@1", "reason": "固定首项"},
+        {"category": "adjacency", "value": "A,B", "reason": "保持紧邻顺序"},
+        {"category": "answer", "value": "DABC", "reason": "唯一可行排列"}
+      ]
+    },
+    {
+      "id": "knowledge-frozen-fact",
+      "dimension": "knowledge",
+      "max_output_tokens": 32,
+      "prompt": "只依据以下冻结事实回答，不使用外部知识。F1：Aster 项目负责人是林澄。F2：Aster 的离线备份位于北仓。F3：北仓每周二校验。问题：Aster 的离线备份在哪里？只输出 {\"answer\":字符串,\"sources\":[事实编号]}。",
+      "validator": {"type": "exact_json", "expected": {"answer": "北仓", "sources": ["F2"]}},
+      "decision_points": [
+        {"category": "evidence_selection", "value": "F2", "reason": "唯一直接支持答案的事实"},
+        {"category": "answer", "value": "北仓", "reason": "冻结事实中的位置"}
+      ]
+    },
+    {
+      "id": "knowledge-conflict",
+      "dimension": "knowledge",
+      "max_output_tokens": 40,
+      "prompt": "只依据以下冻结事实回答。F1：Zephyr v2 的正式发布日期是 4 月 12 日。F2：Zephyr v2 的正式发布日期是 4 月 19 日。没有额外证据可消解冲突。问题：正式发布日期是哪天？只输出 {\"answer\":null,\"status\":\"conflict\",\"sources\":[事实编号]}。",
+      "validator": {"type": "exact_json", "expected": {"answer": null, "status": "conflict", "sources": ["F1", "F2"]}},
+      "decision_points": [
+        {"category": "conflict_detection", "value": ["F1", "F2"], "reason": "两个直接事实互斥"},
+        {"category": "calibration", "value": null, "reason": "证据不足时不猜日期"}
+      ]
+    },
+    {
+      "id": "long-context-two-markers",
+      "dimension": "long_context",
+      "max_output_tokens": 24,
+      "prompt": "阅读全部记录后回答。段1：温度阈值 41。段2：入口钥匙 R7。段3：维护人宁夏。段4：旧校验 A1，已作废。段5：库存 63。段6：出口钥匙 L4。段7：当前校验 Q2。段8：告警级别低。问题：按“入口钥匙-当前校验”拼接。只输出 {\"answer\":字符串}。",
+      "validator": {"type": "exact_json", "expected": {"answer": "R7-Q2"}},
+      "decision_points": [
+        {"category": "retrieval", "value": "R7", "reason": "定位段2入口钥匙"},
+        {"category": "conflict_avoidance", "value": "Q2", "reason": "忽略已作废旧校验"},
+        {"category": "composition", "value": "R7-Q2", "reason": "按指定顺序拼接"}
+      ]
+    },
+    {
+      "id": "long-context-latest-revision",
+      "dimension": "long_context",
+      "max_output_tokens": 32,
+      "prompt": "同一配置有多条修订记录：rev3 cache_limit=96；rev7 owner=Wei；rev5 cache_limit=112；rev8 cache_limit=128；rev6 owner=Sun。规则：同一字段取修订号最大的记录。只输出 {\"cache_limit\":整数,\"source\":字符串}。",
+      "validator": {"type": "exact_json", "expected": {"cache_limit": 128, "source": "rev8"}},
+      "decision_points": [
+        {"category": "field_filter", "value": "cache_limit", "reason": "排除 owner 记录"},
+        {"category": "revision_resolution", "value": "rev8", "reason": "选择该字段最高修订号"},
+        {"category": "answer", "value": 128, "reason": "最新有效值"}
+      ]
+    },
+    {
+      "id": "coding-python-clamp-fix",
+      "dimension": "coding",
+      "max_output_tokens": 20,
+      "prompt": "Python 函数 clamp(x, lo, hi) 中错误的一行是 `return min(lo, max(hi, x))`。只输出修正后的这一行，不要 Markdown，不要解释；保留 4 个前导空格。",
+      "validator": {"type": "exact_text", "expected": "    return max(lo, min(hi, x))"},
+      "decision_points": [
+        {"category": "api_nesting", "value": "max(lo,min(hi,x))", "reason": "先施加上界再施加下界"},
+        {"category": "format", "value": "single_line", "reason": "禁止额外代码或解释"}
+      ]
+    },
+    {
+      "id": "coding-rust-boundary-fix",
+      "dimension": "coding",
+      "max_output_tokens": 12,
+      "prompt": "Rust 二分查找使用闭区间 [lo, hi]，当前循环头 `while lo < hi {` 会漏查 lo==hi 的元素。只输出修正后的循环头，不要围栏或解释。",
+      "validator": {"type": "exact_text", "expected": "while lo <= hi {"},
+      "decision_points": [
+        {"category": "boundary_condition", "value": "<=", "reason": "闭区间必须检查最后一个元素"}
+      ]
+    },
+    {
+      "id": "tools-read-file",
+      "dimension": "tools",
+      "max_output_tokens": 24,
+      "prompt": "可用工具只有 read_file(path:string)。读取 src/main.rs。不要输出文本，只发起一次工具调用。",
+      "validator": {
+        "type": "tool_call",
+        "expected_name": "read_file",
+        "expected_arguments": {"path": "src/main.rs"},
+        "expected_finish_reason": "tool_calls"
+      },
+      "decision_points": [
+        {"category": "tool_name", "value": "read_file", "reason": "任务要求读取文件"},
+        {"category": "argument_name", "value": "path", "reason": "必填 schema 字段"},
+        {"category": "argument_value", "value": "src/main.rs", "reason": "目标路径"},
+        {"category": "termination", "value": "tool_calls", "reason": "调用后停止文本生成"}
+      ]
+    },
+    {
+      "id": "tools-search-text",
+      "dimension": "tools",
+      "max_output_tokens": 40,
+      "prompt": "可用工具只有 search_text(query:string,path:string,glob:string)。在 src 下的 Rust 文件中搜索 TODO。不要输出文本，只发起一次工具调用。",
+      "validator": {
+        "type": "tool_call",
+        "expected_name": "search_text",
+        "expected_arguments": {"query": "TODO", "path": "src", "glob": "*.rs"},
+        "expected_finish_reason": "tool_calls"
+      },
+      "decision_points": [
+        {"category": "tool_name", "value": "search_text", "reason": "任务是文本搜索"},
+        {"category": "argument_value", "value": "TODO", "reason": "搜索词"},
+        {"category": "argument_value", "value": "src", "reason": "搜索目录"},
+        {"category": "argument_value", "value": "*.rs", "reason": "文件类型约束"}
+      ]
+    },
+    {
+      "id": "planning-deploy-sequence",
+      "dimension": "planning",
+      "max_output_tokens": 40,
+      "prompt": "状态：新配置已暂存但未验证。规则：激活前必须验证；激活后必须健康检查；只有健康检查失败才回滚。现在尚无失败结果。只输出下一阶段应执行的动作序列，格式 {\"actions\":[字符串]}。",
+      "validator": {"type": "exact_json", "expected": {"actions": ["validate", "activate", "health_check"]}},
+      "decision_points": [
+        {"category": "dependency", "value": "validate_before_activate", "reason": "满足前置约束"},
+        {"category": "verification", "value": "health_check", "reason": "激活后校验"},
+        {"category": "conditional_stop", "value": "no_rollback_yet", "reason": "尚未观测失败"}
+      ]
+    },
+    {
+      "id": "planning-budget-choice",
+      "dimension": "planning",
+      "max_output_tokens": 32,
+      "prompt": "预算为 5。候选 A 成本3收益5，B 成本2收益4，C 成本4收益6；每项最多选一次，最大化总收益，收益相同则成本更低。只输出 {\"choose\":[按字母排序],\"cost\":整数,\"value\":整数}。",
+      "validator": {"type": "exact_json", "expected": {"choose": ["A", "B"], "cost": 5, "value": 9}},
+      "decision_points": [
+        {"category": "budget", "value": 5, "reason": "不可超预算"},
+        {"category": "optimization", "value": "A+B", "reason": "可行组合中收益最高"},
+        {"category": "answer", "value": 9, "reason": "总收益"}
+      ]
+    },
+    {
+      "id": "computer-use-save-dialog",
+      "dimension": "computer_use",
+      "max_output_tokens": 64,
+      "prompt": "离线界面状态：Save As 对话框已打开；Filename 输入框为空且已聚焦；Save 按钮可用；目标文件名 report.txt。只输出动作 JSON：{\"actions\":[{\"action\":...,其余参数...}]}，不要解释。",
+      "validator": {
+        "type": "exact_json",
+        "expected": {
+          "actions": [
+            {"action": "type", "text": "report.txt"},
+            {"action": "click", "target": "Save"}
+          ]
+        }
+      },
+      "decision_points": [
+        {"category": "state_use", "value": "focused_empty_field", "reason": "无需额外点击或清空"},
+        {"category": "action_order", "value": "type_then_save", "reason": "先填写再提交"}
+      ]
+    },
+    {
+      "id": "computer-use-filter-menu",
+      "dimension": "computer_use",
+      "max_output_tokens": 80,
+      "prompt": "离线界面状态：筛选菜单已打开；Select All 已勾选；Error、Warning、Info 都已勾选；目标是只显示 Error；OK 按钮可用。只输出动作 JSON，不解释。动作名只能是 click，target 使用界面标签。",
+      "validator": {
+        "type": "exact_json",
+        "expected": {
+          "actions": [
+            {"action": "click", "target": "Select All"},
+            {"action": "click", "target": "Error"},
+            {"action": "click", "target": "OK"}
+          ]
+        }
+      },
+      "decision_points": [
+        {"category": "bulk_clear", "value": "Select All", "reason": "先清除全部勾选"},
+        {"category": "target_select", "value": "Error", "reason": "只恢复目标项"},
+        {"category": "commit", "value": "OK", "reason": "应用筛选"}
+      ]
+    },
+    {
+      "id": "communication-strict-format",
+      "dimension": "communication",
+      "max_output_tokens": 32,
+      "prompt": "校验和缺失，因此任务被阻塞。只输出合法 JSON，字段必须且只能是 status、reason；status 用 blocked，reason 用中文“缺少校验和”。",
+      "validator": {"type": "exact_json", "expected": {"status": "blocked", "reason": "缺少校验和"}},
+      "decision_points": [
+        {"category": "instruction_following", "value": ["status", "reason"], "reason": "精确字段集合"},
+        {"category": "status", "value": "blocked", "reason": "正确表达状态"}
+      ]
+    },
+    {
+      "id": "communication-preference-consistency",
+      "dimension": "communication",
+      "max_output_tokens": 20,
+      "prompt": "对话约束：用户已指定把 donor 一律称为“供体”，并要求一句话、不使用 Markdown。事实：第二供体尚未通过准入门。现在汇报状态。",
+      "validator": {"type": "exact_text", "expected": "第二供体尚未通过准入门。"},
+      "decision_points": [
+        {"category": "preference", "value": "供体", "reason": "保持用户术语"},
+        {"category": "brevity", "value": "one_sentence", "reason": "遵守一句话约束"},
+        {"category": "calibration", "value": "尚未通过", "reason": "不夸大当前状态"}
+      ]
+    }
+  ]
+}

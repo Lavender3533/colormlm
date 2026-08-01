@@ -1,0 +1,55 @@
+{
+  "format": "colorlm-kimi-k3-folded-latent-bridge-v1",
+  "repo": "moonshotai/Kimi-K3",
+  "revision": "master",
+  "layer": 92,
+  "raw_sha256": "c1574ed4913ca2762986599c0058bb1b8887cf9cb6a564b78234e6a079010b65",
+  "transport": {
+    "file": "fast16\\research\\kimi_k3_to_colorlm_semiorthogonal_f32.npy",
+    "shape": [
+      7168,
+      2048
+    ],
+    "sha256": "8ff9eb4760979135b05e31675b229128f275a951f3101fba98bbb63b41303c3b",
+    "direction": "kimi_row @ transport = colorlm_row"
+  },
+  "equations": {
+    "colorlm_to_latent": "routed_expert_down_proj @ transport",
+    "latent_to_colorlm": "transport.T @ routed_expert_up_proj"
+  },
+  "rms_norm_eps": 1e-05,
+  "matrices": {
+    "colorlm_to_latent": {
+      "file": "colorlm_to_latent.float16.npy",
+      "shape": [
+        3584,
+        2048
+      ],
+      "dtype": "float16",
+      "bytes": 14680192,
+      "sha256": "13f6521fee198c6d629355f4b5adf1a7c01cffb390f974645be3a88f563bee18",
+      "orientation": "pytorch-linear-out-in"
+    },
+    "latent_to_colorlm": {
+      "file": "latent_to_colorlm.float16.npy",
+      "shape": [
+        2048,
+        3584
+      ],
+      "dtype": "float16",
+      "bytes": 14680192,
+      "sha256": "b0ef3d9ae13afc5e1f5aa7a213c23eeaa9025f77e537971a9f2f8d5884980210",
+      "orientation": "pytorch-linear-out-in"
+    },
+    "latent_norm": {
+      "file": "latent_norm.float16.npy",
+      "shape": [
+        3584
+      ],
+      "dtype": "float16",
+      "bytes": 7296,
+      "sha256": "50763562fe0fff07a92b893167d80b4918d677d562a690c44c2944a838a88708",
+      "orientation": "vector"
+    }
+  }
+}

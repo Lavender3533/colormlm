@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "colorlm-v47-frontend-design-ir-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "identity", "audience", "content_hierarchy", "layout_intent", "visual_tokens",
+    "components", "interactions", "responsive_rules", "accessibility", "asset_policy"
+  ],
+  "properties": {
+    "identity": {"type": "string", "minLength": 3},
+    "audience": {"type": "string", "minLength": 3},
+    "content_hierarchy": {
+      "type": "array", "minItems": 3, "maxItems": 12,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "layout_intent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["composition", "anti_template_rule"],
+      "properties": {
+        "composition": {"type": "string", "minLength": 5},
+        "anti_template_rule": {"type": "string", "minLength": 5}
+      }
+    },
+    "visual_tokens": {
+      "type": "object", "additionalProperties": false,
+      "required": ["palette", "typography", "spacing", "surface"],
+      "properties": {
+        "palette": {"type": "array", "minItems": 3, "maxItems": 8, "items": {"type": "string"}},
+        "typography": {"type": "string"},
+        "spacing": {"type": "string"},
+        "surface": {"type": "string"}
+      }
+    },
+    "components": {"type": "array", "minItems": 4, "maxItems": 20, "items": {"type": "string"}},
+    "interactions": {"type": "array", "minItems": 2, "maxItems": 10, "items": {"type": "string"}},
+    "responsive_rules": {"type": "array", "minItems": 2, "maxItems": 10, "items": {"type": "string"}},
+    "accessibility": {"type": "array", "minItems": 3, "maxItems": 12, "items": {"type": "string"}},
+    "asset_policy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["allow_remote_random", "fallback"],
+      "properties": {
+        "allow_remote_random": {"const": false},
+        "fallback": {"type": "string", "minLength": 3}
+      }
+    }
+  }
+}

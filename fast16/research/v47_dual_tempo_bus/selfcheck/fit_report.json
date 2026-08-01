@@ -1,0 +1,277 @@
+{
+  "format": "colorlm-v47-sequence-island-fit-report-v1",
+  "status": "cpu_prototype_only",
+  "dataset": "D:\\project\\大模型ssd化\\fast16\\research\\v47_dual_tempo_bus\\selfcheck\\sequence_dataset.jsonl",
+  "dataset_sha256": "bc884d3c82755b64afcc1b3836df9387ce79a489b35bbb3ed6fb900c3bd61e9d",
+  "capture": "D:\\project\\大模型ssd化\\fast16\\research\\v47_dual_tempo_bus\\selfcheck\\initial_states.cnob",
+  "capture_sha256": "4d6f01879fa784c07ed3ff35ad10600abe1a7bf7514365e5ced1613de876237e",
+  "weights": "D:\\project\\大模型ssd化\\fast16\\research\\v47_dual_tempo_bus\\selfcheck\\sequence_island.npz",
+  "weights_sha256": "7fc3952114bb457a5ab2c28f1086d691d13236c09769dd1c39bf84c27636fbad",
+  "input_width": 32,
+  "latent_width": 128,
+  "train_vocabulary_size": 7,
+  "parameter_count": 154889,
+  "weight_mebibytes_f32": 0.5908546447753906,
+  "completed_epochs": 80,
+  "wall_seconds": 0.5825099999999566,
+  "loss_first": 2.010159432888031,
+  "loss_last": 0.0007822236511856318,
+  "metrics": {
+    "train": {
+      "evaluated": true,
+      "sample_count": 30,
+      "exact_sequence_rate": 1.0,
+      "aligned_token_accuracy": 1.0,
+      "mean_normalized_edit_distance": 0.0,
+      "oov_token_rate": 0.0,
+      "examples": [
+        {
+          "task_id": "synthetic-train-00",
+          "reference_token_ids": [
+            100,
+            200,
+            300
+          ],
+          "predicted_token_ids": [
+            100,
+            200,
+            300
+          ],
+          "exact": true
+        },
+        {
+          "task_id": "synthetic-train-01",
+          "reference_token_ids": [
+            101,
+            200,
+            301
+          ],
+          "predicted_token_ids": [
+            101,
+            200,
+            301
+          ],
+          "exact": true
+        },
+        {
+          "task_id": "synthetic-train-02",
+          "reference_token_ids": [
+            102,
+            200,
+            302
+          ],
+          "predicted_token_ids": [
+            102,
+            200,
+            302
+          ],
+          "exact": true
+        },
+        {
+          "task_id": "synthetic-train-03",
+          "reference_token_ids": [
+            100,
+            200,
+            300
+          ],
+          "predicted_token_ids": [
+            100,
+            200,
+            300
+          ],
+          "exact": true
+        },
+        {
+          "task_id": "synthetic-train-04",
+          "reference_token_ids": [
+            101,
+            200,
+            301
+          ],
+          "predicted_token_ids": [
+            101,
+            200,
+            301
+          ],
+          "exact": true
+        },
+        {
+          "task_id": "synthetic-train-05",
+          "reference_token_ids": [
+            102,
+            200,
+            302
+          ],
+          "predicted_token_ids": [
+            102,
+            200,
+            302
+          ],
+          "exact": true
+        },
+        {
+          "task_id": "synthetic-train-06",
+          "reference_token_ids": [
+            100,
+            200,
+            300
+          ],
+          "predicted_token_ids": [
+            100,
+            200,
+            300
+          ],
+          "exact": true
+        },
+        {
+          "task_id": "synthetic-train-07",
+          "reference_token_ids": [
+            101,
+            200,
+            301
+          ],
+          "predicted_token_ids": [
+            101,
+            200,
+            301
+          ],
+          "exact": true
+        }
+      ]
+    },
+    "validation": {
+      "evaluated": true,
+      "sample_count": 12,
+      "exact_sequence_rate": 1.0,
+      "aligned_token_accuracy": 1.0,
+      "mean_normalized_edit_distance": 0.0,
+      "oov_token_rate": 0.0,
+      "examples": [
+        {
+          "task_id": "synthetic-validation-00",
+          "reference_token_ids": [
+            100,
+            200,
+            300
+          ],
+          "predicted_token_ids": [
+            100,
+            200,
+            300
+          ],
+          "exact": true
+        },
+        {
+          "task_id": "synthetic-validation-01",
+          "reference_token_ids": [
+            101,
+            200,
+            301
+          ],
+          "predicted_token_ids": [
+            101,
+            200,
+            301
+          ],
+          "exact": true
+        },
+        {
+          "task_id": "synthetic-validation-02",
+          "reference_token_ids": [
+            102,
+            200,
+            302
+          ],
+          "predicted_token_ids": [
+            102,
+            200,
+            302
+          ],
+          "exact": true
+        },
+        {
+          "task_id": "synthetic-validation-03",
+          "reference_token_ids": [
+            100,
+            200,
+            300
+          ],
+          "predicted_token_ids": [
+            100,
+            200,
+            300
+          ],
+          "exact": true
+        },
+        {
+          "task_id": "synthetic-validation-04",
+          "reference_token_ids": [
+            101,
+            200,
+            301
+          ],
+          "predicted_token_ids": [
+            101,
+            200,
+            301
+          ],
+          "exact": true
+        },
+        {
+          "task_id": "synthetic-validation-05",
+          "reference_token_ids": [
+            102,
+            200,
+            302
+          ],
+          "predicted_token_ids": [
+            102,
+            200,
+            302
+          ],
+          "exact": true
+        },
+        {
+          "task_id": "synthetic-validation-06",
+          "reference_token_ids": [
+            100,
+            200,
+            300
+          ],
+          "predicted_token_ids": [
+            100,
+            200,
+            300
+          ],
+          "exact": true
+        },
+        {
+          "task_id": "synthetic-validation-07",
+          "reference_token_ids": [
+            101,
+            200,
+            301
+          ],
+          "predicted_token_ids": [
+            101,
+            200,
+            301
+          ],
+          "exact": true
+        }
+      ]
+    },
+    "blind": {
+      "evaluated": false,
+      "sample_count": 6,
+      "reason": "blind_locked_until_candidate_frozen"
+    }
+  },
+  "prototype_gate": {
+    "validation_oov_token_rate_max": 0.02,
+    "validation_aligned_token_accuracy_min": 0.7,
+    "validation_exact_sequence_rate_min": 0.5,
+    "passed": true
+  },
+  "decision": "allow_real_sequence_island_runtime_design"
+}

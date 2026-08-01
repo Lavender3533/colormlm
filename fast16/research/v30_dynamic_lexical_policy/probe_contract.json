@@ -1,0 +1,50 @@
+{
+  "format": "colorlm-v30-dynamic-lexical-probe-contract-v1",
+  "date": "2026-08-01",
+  "status": "retrospective_development_probe_only",
+  "sources": {
+    "tasks": "fast16/research/v29_sequence_policy_head/policy_tasks_v1.jsonl",
+    "tasks_sha256": "e3bcee8a77ac696ad16661b4b492168ddd381bc75706f4601f3f2cd43c06625c",
+    "teacher": "fast16/research/v29_sequence_policy_head/policy-teacher.jsonl",
+    "teacher_sha256": "82757d28663f0d1ce7d892a59573f443606217306e20c48b08a73a19d2a0c563",
+    "capture": "fast16/research/v29_sequence_policy_head/policy-states.cnob",
+    "capture_sha256": "b2a2069bdfcd1e32b4a2205c579f94584b24214a80ca1752b20a424810ae0b75",
+    "model": "fast16/models/ColorLM-v6-Q3Router-Fused-A1.gguf",
+    "embedding_tensor": "token_embd.weight"
+  },
+  "candidate_pool": {
+    "maximum_tokens": 256,
+    "static_source_split": "train",
+    "static_minimum_distinct_tasks": 2,
+    "dynamic_source": "most_recent_unique_prefix_tokens",
+    "target_token_is_never_injected": true
+  },
+  "model": {
+    "family": "low_rank_bilinear_dynamic_token_residual",
+    "hidden_size": 2048,
+    "embedding_size": 2048,
+    "rank": 32,
+    "hidden_normalization": "per_sample_l2",
+    "embedding_normalization": "per_token_l2",
+    "correction_min": -2.0,
+    "correction_max": 8.0
+  },
+  "fit": {
+    "split": "train",
+    "seed": 3407,
+    "optimizer": "adam",
+    "learning_rate": 0.02,
+    "steps": 300,
+    "l2_delta": 0.0005,
+    "missing_target_zero_penalty": 0.05,
+    "parameter_scan_allowed": false
+  },
+  "pass_gate": {
+    "validation_mean_target_nll_delta_max": -0.02,
+    "test_mean_target_nll_delta_max": -0.02,
+    "validation_target_coverage_min": 0.75,
+    "test_target_coverage_min": 0.75,
+    "maximum_heldout_task_mean_nll_regression": 0.03
+  },
+  "claim_boundary": "通过只允许实现v30运行时原型；必须建立全新冻结任务后才能晋级。"
+}

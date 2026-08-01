@@ -1,0 +1,197 @@
+{
+  "format": "colorlm-capsule",
+  "schema_version": 1,
+  "capsule_id": "qwen3-coder-next-l44-dspark-core-bf16",
+  "capsule_type": "dspark",
+  "status": "dry_run",
+  "created_at": "2026-07-31T00:00:00+08:00",
+  "source": {
+    "model_id": "Qwen/Qwen3-Coder-Next",
+    "revision": "master-unpinned-requires-approval-fix",
+    "architecture": "Qwen3NextForCausalLM",
+    "container_format": "safetensors",
+    "artifact_path": "model-00037-of-00040.safetensors",
+    "artifact_bytes": null,
+    "artifact_sha256": null,
+    "artifact_verification": "pending",
+    "config_sha256": "a7b8098d3b05777f12bb5677a26bf1240a1bb09def1b06b29e6be86cae2e84f8",
+    "index_sha256": "4a23cf5b586da565eee0032cbad4aeb088dbbb7593b62ffeb1b8e0399f1d0d7e",
+    "license": null
+  },
+  "interface": {
+    "input_width": 2048,
+    "output_width": 2048,
+    "input_space": "qwen3-coder-next.hidden.2048",
+    "output_space": "qwen3-coder-next.hidden.2048",
+    "operator": "qwen3_next.gated_deltanet",
+    "activation": null,
+    "normalization": "input_rmsnorm_included",
+    "state": {
+      "kind": "recurrent",
+      "scope": "context_sequence",
+      "reset": "reset and release with llama_context sequence lifecycle",
+      "layout": "qwen3-next native recurrent matrix plus conv history; runtime ABI required",
+      "estimated_bytes_per_sequence": 1097728
+    }
+  },
+  "placement": {
+    "source_layers": [44],
+    "source_experts": [],
+    "target_sites": [],
+    "residual_contract": "h_out=h_native+alpha*T_out(dspark(T_in(h_native))-T_in(h_native))",
+    "hard_bypass": "alpha=0 must not load payload, allocate state, or create graph nodes"
+  },
+  "tensors": [
+    {
+      "logical_name": "input_norm",
+      "source_name": "model.layers.44.input_layernorm.weight",
+      "role": "input_norm",
+      "source_layer": 44,
+      "source_shape": [2048],
+      "storage_shape": [2048],
+      "source_dtype": "BF16",
+      "payload_dtype": "BF16",
+      "source_location": { "source_shard": "model-00037-of-00040.safetensors", "absolute_offset": null, "byte_length": 4096, "sha256": null, "verification": "pending" },
+      "payload_ref": null
+    },
+    {
+      "logical_name": "a_log",
+      "source_name": "model.layers.44.linear_attn.A_log",
+      "role": "recurrent_decay",
+      "source_layer": 44,
+      "source_shape": [32],
+      "storage_shape": [32],
+      "source_dtype": "BF16",
+      "payload_dtype": "BF16",
+      "source_location": { "source_shard": "model-00037-of-00040.safetensors", "absolute_offset": null, "byte_length": 64, "sha256": null, "verification": "pending" },
+      "payload_ref": null
+    },
+    {
+      "logical_name": "conv1d",
+      "source_name": "model.layers.44.linear_attn.conv1d.weight",
+      "role": "conv_history_kernel",
+      "source_layer": 44,
+      "source_shape": [8192, 1, 4],
+      "storage_shape": [8192, 1, 4],
+      "source_dtype": "BF16",
+      "payload_dtype": "BF16",
+      "source_location": { "source_shard": "model-00037-of-00040.safetensors", "absolute_offset": null, "byte_length": 65536, "sha256": null, "verification": "pending" },
+      "payload_ref": null
+    },
+    {
+      "logical_name": "dt_bias",
+      "source_name": "model.layers.44.linear_attn.dt_bias",
+      "role": "time_step_bias",
+      "source_layer": 44,
+      "source_shape": [32],
+      "storage_shape": [32],
+      "source_dtype": "BF16",
+      "payload_dtype": "BF16",
+      "source_location": { "source_shard": "model-00037-of-00040.safetensors", "absolute_offset": null, "byte_length": 64, "sha256": null, "verification": "pending" },
+      "payload_ref": null
+    },
+    {
+      "logical_name": "in_proj_ba",
+      "source_name": "model.layers.44.linear_attn.in_proj_ba.weight",
+      "role": "beta_alpha_projection",
+      "source_layer": 44,
+      "source_shape": [64, 2048],
+      "storage_shape": [64, 2048],
+      "source_dtype": "BF16",
+      "payload_dtype": "BF16",
+      "source_location": { "source_shard": "model-00037-of-00040.safetensors", "absolute_offset": null, "byte_length": 262144, "sha256": null, "verification": "pending" },
+      "payload_ref": null
+    },
+    {
+      "logical_name": "in_proj_qkvz",
+      "source_name": "model.layers.44.linear_attn.in_proj_qkvz.weight",
+      "role": "qkvz_projection",
+      "source_layer": 44,
+      "source_shape": [12288, 2048],
+      "storage_shape": [12288, 2048],
+      "source_dtype": "BF16",
+      "payload_dtype": "BF16",
+      "source_location": { "source_shard": "model-00037-of-00040.safetensors", "absolute_offset": null, "byte_length": 50331648, "sha256": null, "verification": "pending" },
+      "payload_ref": null
+    },
+    {
+      "logical_name": "linear_norm",
+      "source_name": "model.layers.44.linear_attn.norm.weight",
+      "role": "recurrent_output_norm",
+      "source_layer": 44,
+      "source_shape": [128],
+      "storage_shape": [128],
+      "source_dtype": "BF16",
+      "payload_dtype": "BF16",
+      "source_location": { "source_shard": "model-00037-of-00040.safetensors", "absolute_offset": null, "byte_length": 256, "sha256": null, "verification": "pending" },
+      "payload_ref": null
+    },
+    {
+      "logical_name": "out_proj",
+      "source_name": "model.layers.44.linear_attn.out_proj.weight",
+      "role": "output_projection",
+      "source_layer": 44,
+      "source_shape": [2048, 4096],
+      "storage_shape": [2048, 4096],
+      "source_dtype": "BF16",
+      "payload_dtype": "BF16",
+      "source_location": { "source_shard": "model-00037-of-00040.safetensors", "absolute_offset": null, "byte_length": 16777216, "sha256": null, "verification": "pending" },
+      "payload_ref": null
+    }
+  ],
+  "payloads": [],
+  "dependencies": [
+    {
+      "kind": "projection",
+      "id": "coder-next-to-colorlm-orthogonal-2048-f32",
+      "sha256": "7209781fa72220c337314e8456497c83cf1b51798d2b4321414200a98de04d12",
+      "required": true
+    },
+    {
+      "kind": "runtime_abi",
+      "id": "qwen3-next-gated-deltanet-state-v1",
+      "sha256": null,
+      "required": true
+    }
+  ],
+  "token_mapping": null,
+  "extraction": {
+    "mode": "range_stream",
+    "chunk_bytes": 8388608,
+    "peak_working_set_bytes": 33554432,
+    "atomic_commit": "part_then_rename_after_sha256",
+    "resume_identity": "commit revision + shard bytes + ETag/Last-Modified + cached header SHA-256"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "manifest_sidecar": "capsule.json.sha256",
+    "content_root_sha256": null,
+    "content_root_rule": "sha256(sorted_utf8(path + NUL + bytes + NUL + sha256 + LF)); excludes capsule.json"
+  },
+  "budget": {
+    "source_bytes": 67441024,
+    "expected_payload_bytes": 67441024,
+    "peak_extract_ram_bytes": 33554432,
+    "resident_bytes": 67441024,
+    "active_bytes_per_token": 67441024,
+    "estimated_flops_per_token": 68500000
+  },
+  "approval": {
+    "required": true,
+    "approved": false,
+    "approval_id": null,
+    "approved_scope": null
+  },
+  "acceptance_gates": [
+    { "name": "source revision pinned", "status": "pending", "evidence": null },
+    { "name": "source ranges validated", "status": "pending", "evidence": null },
+    { "name": "state ABI fixed", "status": "pending", "evidence": null },
+    { "name": "mainline extraction approval", "status": "pending", "evidence": null },
+    { "name": "alpha zero physical bypass", "status": "pending", "evidence": null }
+  ],
+  "notes": [
+    "Dry-run only; no payload exists.",
+    "DSpark is a ColorLM capsule family name; the upstream operator is Gated DeltaNet.",
+    "The current revision label is intentionally unpinned and blocks extraction."
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "format": "colorlm-v17.3-cache-route-report-v1",
+  "date": "2026-07-31",
+  "status": "serial-exact-route-promoted",
+  "runtime": {
+    "url": "http://127.0.0.1:8105/v1",
+    "alias": "ColorLM-v17-Coder-Neural-Island",
+    "backend": "Vulkan0 / AMD Radeon RX 5700 XT",
+    "server": "llama.cpp/build-v17-perf/bin/Release/llama-server.exe",
+    "context_tokens": 16384,
+    "expert_cache_slots_per_layer": 32,
+    "source_layers": [44, 45, 46, 47],
+    "target_site": 35,
+    "alpha": 0.02
+  },
+  "changes": {
+    "route_dependency": "The expert-upload callback remains on the consumed selected-ID path. The remap and MUL_MAT_ID graph therefore cannot execute before the synchronous miss upload and LUT update.",
+    "lru_epoch": "Each ensure_resident call assigns one use epoch to all selected experts, preventing rank order inside one token from biasing eviction.",
+    "cache_observability": "Per-layer steps, hits, misses, hit rate, upload bytes, upload batches, resident slots, and capacity are logged on the first step and every 32 decode steps.",
+    "launcher_fit": "The launcher now disables automatic fit when a Neural Island is enabled so side-loaded island weights and cache slots are included in the known placement contract."
+  },
+  "short_prompt": {
+    "text": "只输出一段可编译的 Rust 函数：输入整数切片，返回其中所有偶数的和。不要解释。",
+    "prompt_tokens": 37,
+    "completion_tokens": 39,
+    "temperature": 0.0,
+    "output": "fn sum_even_numbers(nums: &[i32]) -> i32 { nums.iter().filter(|&&x| x % 2 == 0).sum() }",
+    "output_check": "syntactically plausible compilable Rust function",
+    "selected_serial_route": {
+      "elapsed_seconds": 4.137,
+      "generation_tokens_per_second": 13.3578661391,
+      "prompt_tokens_per_second": 38.5584556609,
+      "finish_reason": "stop"
+    }
+  },
+  "cache_observation_at_step_32": {
+    "layers": {
+      "44": { "hits": 115, "misses": 205, "hit_rate_percent": 35.9, "upload_bytes": 362741760, "upload_batches": 32 },
+      "45": { "hits": 71, "misses": 249, "hit_rate_percent": 22.2, "upload_bytes": 440598528, "upload_batches": 32 },
+      "46": { "hits": 64, "misses": 256, "hit_rate_percent": 20.0, "upload_bytes": 452984832, "upload_batches": 32 },
+      "47": { "hits": 60, "misses": 260, "hit_rate_percent": 18.8, "upload_bytes": 460062720, "upload_batches": 32 }
+    },
+    "total_hits": 310,
+    "total_misses": 970,
+    "aggregate_hit_rate_percent": 24.21875,
+    "aggregate_upload_bytes": 1716387840
+  },
+  "ablation": {
+    "serial_callback_on_selected_id_path": {
+      "generation_tokens_per_second": 13.3578661391,
+      "decision": "keep"
+    },
+    "side_branch_after_weight_normalization": {
+      "generation_tokens_per_second": 3.8775443651,
+      "decision": "reject",
+      "reason": "The graph lost an explicit cross-backend dependency and was materially slower."
+    },
+    "side_branch_first_cold_run": {
+      "generation_tokens_per_second": 4.3538034660,
+      "decision": "reject"
+    },
+    "cache_64": {
+      "generation_tokens_per_second": 0.8881098217,
+      "aggregate_hit_rate_percent": 35.3125,
+      "gpu_dedicated_usage_mib_observed": 7362.9,
+      "decision": "reject",
+      "reason": "WDDM residency pressure outweighed the hit-rate gain."
+    },
+    "previous_v17_2_recorded_32_slot_run": {
+      "generation_tokens_per_second": 10.41,
+      "note": "One earlier short run, retained as historical context rather than a repeated benchmark."
+    }
+  },
+  "build": {
+    "llama_dll_sha256": "D1967A9310D45630C064C8A979B1A15284607CCCD823B87C0CF567947A611ECA",
+    "llama_server_sha256": "8D236034868A2FF0ACC8BCFF401892B594EBF2CC692115C54BC6039933D57B19",
+    "python_compile": "passed",
+    "launcher_validate_only": "passed"
+  },
+  "claims": {
+    "exact_upload_dependency_preserved": true,
+    "lru_epoch_fix_compiled": true,
+    "cache_observability_compiled": true,
+    "short_output_correctness_smoke": true,
+    "stable_broad_speedup_proven": false,
+    "coding_quality_improvement_proven": false,
+    "frontier_model_parity_proven": false
+  },
+  "next_gate": "Use the new per-layer cache log during one manually selected Claude Code request, then prioritize the real activation bridge for the Coder island; do not add another donor or increase cache slots on this GPU."
+}

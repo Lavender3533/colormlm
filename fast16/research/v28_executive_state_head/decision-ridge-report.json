@@ -1,0 +1,100 @@
+{
+  "format": "colorlm-v28-decision-ridge-report-v1",
+  "gate_contract": "fast16/research/v28_executive_state_head/ridge_gate_contract.json",
+  "gate_contract_sha256": "957620adfb0a19b782a4d67aaf55eb0cfd36607e846b49b5cf8ce11582225aaf",
+  "capture": "fast16/research/v28_executive_state_head/decision-states.cnob",
+  "capture_sha256": "8a9ac1ab21dbe6e4222a2f6bb811f423b7e766de61590214f45a6ab3a26de5bd",
+  "probe": {
+    "family": "centered dual ridge regression",
+    "ridge_lambda": 0.01,
+    "decision_threshold": 0.0,
+    "parameter_scan_allowed": false,
+    "fit_split": "train"
+  },
+  "metrics": {
+    "train_accuracy": 1.0,
+    "validation_accuracy": 1.0,
+    "test_accuracy": 1.0,
+    "minimum_absolute_heldout_margin": 0.08277444542330231,
+    "weight_l2": 2.2535457344242813,
+    "bias": 0.2523565278938191
+  },
+  "evaluated": [
+    {
+      "id": "state-read-success-finish",
+      "split": "train",
+      "label": "finish",
+      "score": -0.974156462408081,
+      "prediction": "finish",
+      "correct": true,
+      "absolute_margin": 0.974156462408081
+    },
+    {
+      "id": "state-read-missing-recover",
+      "split": "train",
+      "label": "continue_tool",
+      "score": 0.9940348465684217,
+      "prediction": "continue_tool",
+      "correct": true,
+      "absolute_margin": 0.9940348465684217
+    },
+    {
+      "id": "state-test-failure-inspect",
+      "split": "train",
+      "label": "continue_tool",
+      "score": 0.9892407947253018,
+      "prediction": "continue_tool",
+      "correct": true,
+      "absolute_margin": 0.9892407947253018
+    },
+    {
+      "id": "state-validation-activate",
+      "split": "train",
+      "label": "continue_tool",
+      "score": 0.9908808211143576,
+      "prediction": "continue_tool",
+      "correct": true,
+      "absolute_margin": 0.9908808211143576
+    },
+    {
+      "id": "state-activation-health",
+      "split": "validation",
+      "label": "continue_tool",
+      "score": 0.7591348052739795,
+      "prediction": "continue_tool",
+      "correct": true,
+      "absolute_margin": 0.7591348052739795
+    },
+    {
+      "id": "state-health-finish",
+      "split": "validation",
+      "label": "finish",
+      "score": -0.22803309747485673,
+      "prediction": "finish",
+      "correct": true,
+      "absolute_margin": 0.22803309747485673
+    },
+    {
+      "id": "state-missing-target-ask",
+      "split": "test",
+      "label": "continue_tool",
+      "score": 0.7114616850876274,
+      "prediction": "continue_tool",
+      "correct": true,
+      "absolute_margin": 0.7114616850876274
+    },
+    {
+      "id": "state-write-success-finish",
+      "split": "test",
+      "label": "finish",
+      "score": -0.08277444542330231,
+      "prediction": "finish",
+      "correct": true,
+      "absolute_margin": 0.08277444542330231
+    }
+  ],
+  "gate_passed": true,
+  "decision": "allow runtime executive-state-head prototype",
+  "weights": "fast16/research/v28_executive_state_head/decision-ridge-weights.npz",
+  "weights_sha256": "0bde88f9c7f4bdb6d9b54e176bb9dee0107a20be5017a9d36a728d91c8a8f5fd"
+}

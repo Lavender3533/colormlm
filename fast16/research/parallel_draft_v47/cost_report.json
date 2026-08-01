@@ -1,0 +1,96 @@
+{
+  "format": "colorlm-v47-parallel-draft-cost-v1",
+  "assumption_boundary": {
+    "candidate_count": 192,
+    "candidate_count_source": "冻结limit上界",
+    "runtime_weight_dtype_bytes": 2,
+    "base_step_flops": 6000000000,
+    "verification_cost_factor_upper": 1.35,
+    "not_included": [
+      "v38真实批验证内核效率",
+      "Python/运行时调度开销",
+      "缓存命中与设备间传输",
+      "端到端墙钟"
+    ]
+  },
+  "first_token": {
+    "source": "v38原生logits top-1",
+    "trainable_parameters": 0,
+    "extra_vocabulary_projection_flops": 0,
+    "full_vocabulary_projection": false
+  },
+  "cascaded_block_head": {
+    "trainable_parameters": 139456,
+    "runtime_weight_bytes": 278912,
+    "runtime_weight_mib": 0.2659912109375,
+    "flops_per_cycle": 370111,
+    "flops_to_base_step_ratio": 6.168516666666666e-05,
+    "special_ops_per_cycle": {
+      "sqrt": 1,
+      "tanh": 192
+    },
+    "token_key_hash_elements": 12288,
+    "integer_token_key_ops_not_counted_as_flops": {
+      "dimension_salt_multiplies": 64,
+      "initial_xor_and_splitmix64_ops": 159744,
+      "sign_shifts": 12288,
+      "sign_compares": 12288,
+      "conditional_selects": 12288,
+      "total": 196672
+    },
+    "token_key_float_scale_flops_included": 12288,
+    "proposal_dependent_scoring_stages": 1,
+    "latent_dependency_depth": 3,
+    "reference_schedule_bandwidth_bytes": {
+      "head_weight_read": 278912,
+      "hidden_read_f16": 4096,
+      "candidate_id_read": 768,
+      "score_write_f32": 2304,
+      "total_external_or_persistent_excluding_scratch": 286080
+    },
+    "reference_python_peak_scratch_bytes": 61184,
+    "streaming_key_peak_scratch_bytes": 12288
+  },
+  "serial_future_head": {
+    "definition": "第2位后每一位读取上一个已选token hash key，再用共享rank递归矩阵更新",
+    "trainable_parameters": 135360,
+    "runtime_weight_bytes": 270720,
+    "runtime_weight_mib": 0.2581787109375,
+    "flops_per_cycle": 370239,
+    "flops_to_base_step_ratio": 6.17065e-05,
+    "special_ops_per_cycle": {
+      "sqrt": 1,
+      "tanh": 192
+    },
+    "token_key_hash_elements": 12288,
+    "integer_token_key_ops_not_counted_as_flops": {
+      "dimension_salt_multiplies": 64,
+      "initial_xor_and_splitmix64_ops": 159744,
+      "sign_shifts": 12288,
+      "sign_compares": 12288,
+      "conditional_selects": 12288,
+      "total": 196672
+    },
+    "token_key_float_scale_flops_included": 12288,
+    "proposal_dependent_scoring_stages": 3,
+    "latent_dependency_depth": 3,
+    "reference_schedule_bandwidth_bytes": {
+      "physical_head_weights": 270720,
+      "head_weight_read_with_shared_recurrence_reread": 278912,
+      "hidden_read_f16": 4096,
+      "candidate_id_read": 2304,
+      "score_write_f32": 2304
+    },
+    "reference_python_peak_scratch_bytes": 59136
+  },
+  "comparison": {
+    "cascaded_minus_serial_parameters": 4096,
+    "cascaded_minus_serial_flops": -128,
+    "interpretation": "串行头因共享递归矩阵而略省参数，但有3个proposal-dependent阶段并受早期错误污染；cascaded block一次从anchor hidden产生三层latent，逐层监督且不把已选token喂回核心。"
+  },
+  "stop_gate": {
+    "status": "stop_evidence_missing",
+    "passed": false,
+    "reason": "缺少通过完整覆盖门的v38自由滚动接受报告，不能计算加速下界。"
+  }
+}

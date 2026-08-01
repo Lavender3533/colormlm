@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>湿地观测站参考夹具</title>
+  <style>
+    :root{--ink:#14212b;--paper:#f4f0e6;--accent:#006b5f;--warn:#9a3412;--line:#b8c7c2;--shadow:0 12px 40px #14212b22}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 80% 0,#c8e6dd,transparent 34%),var(--paper);color:var(--ink);font:16px/1.55 system-ui,sans-serif}
+    .skip{position:absolute;left:-999px}.skip:focus{left:1rem;top:1rem;background:white;padding:.75rem;z-index:5;outline:3px solid var(--accent)}
+    header,main,footer{width:min(1180px,calc(100% - 2rem));margin:auto}header{display:flex;align-items:end;justify-content:space-between;padding:2rem 0 1rem;border-bottom:1px solid var(--line)}
+    h1{font-size:clamp(2rem,5vw,4.8rem);line-height:.95;letter-spacing:-.05em;margin:.3rem 0}nav{display:flex;gap:.7rem;flex-wrap:wrap}
+    button,select{font:inherit;min-height:44px;border:1px solid var(--ink);border-radius:999px;background:transparent;padding:.5rem 1rem;cursor:pointer;transition:background-color .2s,color .2s}
+    button:hover,button:focus-visible,select:focus-visible{background:var(--ink);color:white;outline:3px solid #ffbf47;outline-offset:3px}
+    main{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(16rem,.7fr);gap:1rem;padding:1rem 0 3rem}.panel{background:#ffffffb8;backdrop-filter:blur(8px);border:1px solid white;border-radius:1.2rem;padding:1rem;box-shadow:var(--shadow)}
+    .plot{min-height:330px;display:grid;place-items:center;overflow:hidden}.plot svg{width:100%;height:auto}.trace{fill:none;stroke:var(--accent);stroke-width:5;stroke-dasharray:8 5;animation:flow 3s linear infinite}
+    @keyframes flow{to{stroke-dashoffset:-26}}.metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.7rem}.metric{border-left:4px solid var(--accent);padding:.7rem;background:white}.metric strong{display:block;font-size:1.6rem}
+    table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:.65rem;border-bottom:1px solid var(--line)}.alert{border:2px solid var(--warn);padding:.8rem;border-radius:.8rem}.status::before{content:"";display:inline-block;width:.7rem;height:.7rem;background:var(--warn);border-radius:50%;margin-right:.4rem}
+    footer{padding:1.5rem 0;border-top:1px solid var(--line)}
+    @media(max-width:760px){header{display:block}main{grid-template-columns:1fr}.plot{min-height:240px}table{font-size:.9rem}}
+    @media(min-width:1200px){.panel{padding:1.4rem}}
+    @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}.trace{animation:none}}
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main-content">跳到主要内容</a>
+  <header><div><small>北岸湿地 · 14:32 缓存</small><h1>潮间观测</h1></div><nav aria-label="视图"><button type="button" aria-pressed="true">实时</button><button type="button" aria-pressed="false">24 小时</button></nav></header>
+  <main id="main-content">
+    <section class="panel" aria-labelledby="trend-title"><h2 id="trend-title">盐度趋势</h2><div class="plot"><svg viewBox="0 0 640 260" role="img" aria-labelledby="chart-title chart-desc"><title id="chart-title">盐度随时间变化</title><desc id="chart-desc">十二点后缓慢上升，十四点达到峰值。</desc><path d="M20 220 C160 210 190 120 300 150 S470 40 620 70" class="trace"/></svg></div><div class="metric-grid"><div class="metric"><span>当前盐度</span><strong>18.4‰</strong></div><div class="metric"><span>水温</span><strong>16.8°C</strong></div><div class="metric"><span>电量</span><strong>72%</strong></div><div class="metric"><span>状态</span><strong class="status">需检查</strong></div></div></section>
+    <aside class="panel"><h2>控制</h2><label for="range">时间范围</label><select id="range"><option>最近 6 小时</option><option>今天</option></select><p class="alert" role="alert">S-04 设备离线，显示 14:32 的缓存数据。</p><button id="ack" type="button">确认告警</button><p id="feedback" aria-live="polite"></p></aside>
+    <section class="panel" aria-labelledby="data-title"><h2 id="data-title">图表数据</h2><table><caption>盐度观测数据</caption><thead><tr><th>时间</th><th>盐度</th><th>注释</th></tr></thead><tbody><tr><td>12:00</td><td>14.1‰</td><td>稳定</td></tr><tr><td>14:00</td><td>18.4‰</td><td>异常上升</td></tr></tbody></table></section>
+  </main>
+  <footer>数据仅供现场复核，不构成安全保证。</footer>
+  <script>const button=document.querySelector('#ack');button.addEventListener('click',()=>{button.disabled=true;document.querySelector('#feedback').textContent='告警已确认，可撤销。';});</script>
+</body>
+</html>

@@ -1,0 +1,114 @@
+{
+  "format": "colorlm-parallel-speed-v47-manifest-v1",
+  "name": "ColorLM-v47-parallel-speed-offline-feasibility",
+  "scope": "offline-only",
+  "encoding": "UTF-8-without-BOM",
+  "base": {
+    "runtime_candidate": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+    "backbone": "ColorLM-v36-Qwen36-Global-Shared-Backbone",
+    "hidden_size": 2048,
+    "vocab_size": 151936,
+    "layers": 40,
+    "active_parameters_per_token": 3000000000,
+    "baseline_decode_tokens_per_second": 28.78654804609806,
+    "claim": "v38本地短测值，仅作成本归一化，不是跨机器基准"
+  },
+  "evidence": [
+    {
+      "id": "v38-runtime",
+      "path": "fast16/research/v31_qwen36_expert_pair/v38_runtime_check.json",
+      "sha256": "09727573322051db5cef63c9e86f14dbee73a1ceefeacd50b2e0192ceca70bdb"
+    },
+    {
+      "id": "v36-v17-full16",
+      "path": "fast16/research/v31_qwen36_expert_pair/v36_vs_v17_full16_report.json",
+      "sha256": "62fc850f0dbef59dbce278fed62448f83113ab6829d055304ccf94cc6a336a7a"
+    },
+    {
+      "id": "v24-ngram-negative",
+      "path": "fast16/research/v24_speed_quality_bus/ngram-ab-report.json",
+      "sha256": "f8f4551992e679621e4ac29de82a6501e23f3fb992845e75b8ae8231c9d2518e"
+    },
+    {
+      "id": "v24-routes",
+      "path": "fast16/research/v24_speed_quality_bus/routes-none-20260801.bin",
+      "sha256": "695db1b0adadae1e02d27f8071b2da41056cc098f7c40a18fd652d39fa5f9556"
+    },
+    {
+      "id": "v24-route-analysis",
+      "path": "fast16/research/v24_speed_quality_bus/route-analysis.json",
+      "sha256": "329fb986d582b3713b6cf4b9ecd8e00b4c8a8b0e9fbdc780d244c981e77e2055"
+    },
+    {
+      "id": "v24-cache-lru",
+      "path": "fast16/research/v24_speed_quality_bus/cache-lru.json",
+      "sha256": "9a63385c51af76162dbfd338d6d5d71b95c9dc05e800ed06bf10a91bf1fe69b1"
+    },
+    {
+      "id": "v24-cache-lfu97",
+      "path": "fast16/research/v24_speed_quality_bus/cache-lfu97.json",
+      "sha256": "fc32024c163af19f9b84871430a4fbf4bb5381cad48a42b4a6a1b7810be2a200"
+    },
+    {
+      "id": "v17-island",
+      "path": "fast16/research/v17_coder_island/runtime-v3/island.json",
+      "sha256": "7ea2b40a2551ba30bf4dd664043c0bc33d9c486785a62ce2793e7c3ec8ff3cba"
+    }
+  ],
+  "draft_head": {
+    "style": "EAGLE-3-inspired-multilevel-direct-multitoken",
+    "tap_layers": [12, 24, 39],
+    "fusion_rank": 256,
+    "position_rank": 128,
+    "draft_tokens": 4,
+    "reuse_frozen_embedding_and_lm_head": true,
+    "weight_dtype_bytes": 2,
+    "uniform_acceptance_assumption": 0.65,
+    "target_verification_pass_factor": 1.35,
+    "minimum_runtime_acceptance_rate": 0.60,
+    "minimum_end_to_end_speedup": 1.10,
+    "requires_sequence_checkpoint_rollback": false,
+    "verification": "target backbone verifies all proposed tokens; rejection commits only the accepted prefix"
+  },
+  "latent_recursion": {
+    "style": "Penelope/Mixture-of-Recursions-inspired-local-shared-loop",
+    "station_after_layer": 24,
+    "bottleneck_rank": 512,
+    "router_hidden": 64,
+    "max_loops": 4,
+    "k_values": [0, 1, 2, 3, 4],
+    "k_distribution_assumption": [0.35, 0.25, 0.20, 0.12, 0.08],
+    "hard_bypass_k0": true,
+    "state_scope": "current-token-local-latent-only",
+    "forbidden_state": ["KV-write", "recurrent-state-write", "expert-cache-policy-write"],
+    "minimum_k0_fraction": 0.25,
+    "maximum_mean_k": 1.5,
+    "maximum_p95_k": 4
+  },
+  "paging": {
+    "style": "DALI-inspired-residual-prefetch-dynamic-placement",
+    "layers": [44, 45, 46, 47],
+    "experts_per_layer": 512,
+    "active_experts_per_token": 10,
+    "expert_page_bytes": 1769472,
+    "gpu_slots_per_layer": 32,
+    "cpu_warm_slots_per_layer": 128,
+    "prefetch_pages_per_step": 4,
+    "score_decay": 0.97,
+    "gpu_promotion_margin": 0.25,
+    "ssd_bandwidth_gib_per_second": 3.5,
+    "pcie_bandwidth_gib_per_second": 12.0,
+    "residual_overlap_fraction_assumption": 0.60,
+    "trace_train_fraction": 0.50,
+    "exact_miss_path": true,
+    "minimum_cold_miss_reduction_vs_hierarchical_lru": 0.05,
+    "minimum_useful_prefetch_precision": 0.10
+  },
+  "claim_limits": [
+    "不得宣称EAGLE-3、Penelope、Mixture-of-Recursions或DALI论文速度可直接复现",
+    "离线成本、路由回放和结构自检不等于真实端到端加速",
+    "未训练草稿头和循环块，A/B只能判定结构与预算可行性",
+    "v24路由仅来自v17四层岛的冻结128-token短样本，不能代表v38全工作负载",
+    "任何晋级均须温度0逐token等价或通过冻结质量门，并在同机真实运行复测"
+  ]
+}

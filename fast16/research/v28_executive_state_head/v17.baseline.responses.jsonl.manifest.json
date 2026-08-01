@@ -1,0 +1,8 @@
+{
+  "format": "colorlm-agent-state-gate-run-v1",
+  "contract": "D:\\project\\大模型ssd化\\fast16\\research\\v28_executive_state_head\\agent_state_gate_v1.json",
+  "contract_sha256": "17e62d828a110a24c1dd6c1fb38b88e7e013fe21b50e57082268f9dce041a35a",
+  "model": "ColorLM-v17-Coder-Neural-Island",
+  "seed": 3407,
+  "records": 8
+}

@@ -1,0 +1,225 @@
+{
+  "format": "colorlm-agent-state-gate-v1",
+  "date": "2026-08-01",
+  "purpose": "在候选产生前冻结，测量工具结果回合后的继续、恢复、询问和停止。",
+  "split_policy": {
+    "train": [
+      "state-read-success-finish",
+      "state-read-missing-recover",
+      "state-test-failure-inspect",
+      "state-validation-activate"
+    ],
+    "validation": [
+      "state-activation-health",
+      "state-health-finish"
+    ],
+    "test": [
+      "state-missing-target-ask",
+      "state-write-success-finish"
+    ]
+  },
+  "tool_catalog": {
+    "read_file": {
+      "type": "function",
+      "function": {
+        "name": "read_file",
+        "description": "读取文件",
+        "parameters": {
+          "type": "object",
+          "properties": {"path": {"type": "string"}},
+          "required": ["path"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "list_files": {
+      "type": "function",
+      "function": {
+        "name": "list_files",
+        "description": "列出匹配文件",
+        "parameters": {
+          "type": "object",
+          "properties": {"path": {"type": "string"}, "glob": {"type": "string"}},
+          "required": ["path", "glob"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "run_command": {
+      "type": "function",
+      "function": {
+        "name": "run_command",
+        "description": "运行命令",
+        "parameters": {
+          "type": "object",
+          "properties": {"command": {"type": "string"}, "cwd": {"type": "string"}},
+          "required": ["command", "cwd"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "validate_config": {
+      "type": "function",
+      "function": {
+        "name": "validate_config",
+        "description": "验证配置",
+        "parameters": {
+          "type": "object",
+          "properties": {"path": {"type": "string"}},
+          "required": ["path"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "activate_config": {
+      "type": "function",
+      "function": {
+        "name": "activate_config",
+        "description": "激活配置",
+        "parameters": {
+          "type": "object",
+          "properties": {"environment": {"type": "string"}},
+          "required": ["environment"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "health_check": {
+      "type": "function",
+      "function": {
+        "name": "health_check",
+        "description": "检查服务健康状态",
+        "parameters": {
+          "type": "object",
+          "properties": {"service": {"type": "string"}},
+          "required": ["service"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "ask_user_question": {
+      "type": "function",
+      "function": {
+        "name": "ask_user_question",
+        "description": "向用户询问缺失信息",
+        "parameters": {
+          "type": "object",
+          "properties": {"question": {"type": "string"}},
+          "required": ["question"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "write_file": {
+      "type": "function",
+      "function": {
+        "name": "write_file",
+        "description": "写入文件",
+        "parameters": {
+          "type": "object",
+          "properties": {"path": {"type": "string"}, "content": {"type": "string"}},
+          "required": ["path", "content"],
+          "additionalProperties": false
+        }
+      }
+    }
+  },
+  "items": [
+    {
+      "id": "state-read-success-finish",
+      "split": "train",
+      "max_output_tokens": 48,
+      "available_tools": ["read_file"],
+      "messages": [
+        {"role": "user", "content": "读取 config/server.json，然后只用JSON告诉我端口。"},
+        {"role": "assistant", "content": null, "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "read_file", "arguments": "{\"path\":\"config/server.json\"}"}}]},
+        {"role": "tool", "tool_call_id": "call_1", "content": "{\"host\":\"127.0.0.1\",\"port\":8080}"}
+      ],
+      "validator": {"type": "exact_json", "expected": {"port": 8080}}
+    },
+    {
+      "id": "state-read-missing-recover",
+      "split": "train",
+      "max_output_tokens": 80,
+      "available_tools": ["read_file", "list_files"],
+      "messages": [
+        {"role": "user", "content": "找到 config 目录中的YAML配置并读取它；如果默认文件不存在就先列出候选。"},
+        {"role": "assistant", "content": null, "tool_calls": [{"id": "call_2", "type": "function", "function": {"name": "read_file", "arguments": "{\"path\":\"config/app.yaml\"}"}}]},
+        {"role": "tool", "tool_call_id": "call_2", "content": "ERROR: file not found"}
+      ],
+      "validator": {"type": "tool_call", "expected_name": "list_files", "expected_arguments": {"path": "config", "glob": "*.yaml"}, "expected_finish_reason": "tool_calls"}
+    },
+    {
+      "id": "state-test-failure-inspect",
+      "split": "train",
+      "max_output_tokens": 64,
+      "available_tools": ["run_command", "read_file"],
+      "messages": [
+        {"role": "user", "content": "运行测试；如果失败，读取报错指向的源文件。"},
+        {"role": "assistant", "content": null, "tool_calls": [{"id": "call_3", "type": "function", "function": {"name": "run_command", "arguments": "{\"command\":\"pytest -q\",\"cwd\":\"backend\"}"}}]},
+        {"role": "tool", "tool_call_id": "call_3", "content": "FAILED tests/test_api.py:42 - AssertionError"}
+      ],
+      "validator": {"type": "tool_call", "expected_name": "read_file", "expected_arguments": {"path": "tests/test_api.py"}, "expected_finish_reason": "tool_calls"}
+    },
+    {
+      "id": "state-validation-activate",
+      "split": "train",
+      "max_output_tokens": 64,
+      "available_tools": ["validate_config", "activate_config", "health_check"],
+      "messages": [
+        {"role": "user", "content": "验证 deploy.yaml，验证成功后激活 staging，激活后检查 api 健康状态。"},
+        {"role": "assistant", "content": null, "tool_calls": [{"id": "call_4", "type": "function", "function": {"name": "validate_config", "arguments": "{\"path\":\"deploy.yaml\"}"}}]},
+        {"role": "tool", "tool_call_id": "call_4", "content": "{\"valid\":true}"}
+      ],
+      "validator": {"type": "tool_call", "expected_name": "activate_config", "expected_arguments": {"environment": "staging"}, "expected_finish_reason": "tool_calls"}
+    },
+    {
+      "id": "state-activation-health",
+      "split": "validation",
+      "max_output_tokens": 64,
+      "available_tools": ["activate_config", "health_check"],
+      "messages": [
+        {"role": "user", "content": "激活 staging 后检查 api；只有健康检查完成才可汇报。"},
+        {"role": "assistant", "content": null, "tool_calls": [{"id": "call_5", "type": "function", "function": {"name": "activate_config", "arguments": "{\"environment\":\"staging\"}"}}]},
+        {"role": "tool", "tool_call_id": "call_5", "content": "{\"activated\":true}"}
+      ],
+      "validator": {"type": "tool_call", "expected_name": "health_check", "expected_arguments": {"service": "api"}, "expected_finish_reason": "tool_calls"}
+    },
+    {
+      "id": "state-health-finish",
+      "split": "validation",
+      "max_output_tokens": 48,
+      "available_tools": ["health_check"],
+      "messages": [
+        {"role": "user", "content": "检查 api；健康时只输出 {\"status\":\"deployed\"}。"},
+        {"role": "assistant", "content": null, "tool_calls": [{"id": "call_6", "type": "function", "function": {"name": "health_check", "arguments": "{\"service\":\"api\"}"}}]},
+        {"role": "tool", "tool_call_id": "call_6", "content": "{\"healthy\":true}"}
+      ],
+      "validator": {"type": "exact_json", "expected": {"status": "deployed"}}
+    },
+    {
+      "id": "state-missing-target-ask",
+      "split": "test",
+      "max_output_tokens": 80,
+      "available_tools": ["read_file", "ask_user_question"],
+      "messages": [
+        {"role": "user", "content": "读取部署请求；如果没有目标环境，先询问我，不要自行猜测。"},
+        {"role": "assistant", "content": null, "tool_calls": [{"id": "call_7", "type": "function", "function": {"name": "read_file", "arguments": "{\"path\":\"deploy-request.json\"}"}}]},
+        {"role": "tool", "tool_call_id": "call_7", "content": "{\"version\":\"1.2.0\"}"}
+      ],
+      "validator": {"type": "tool_call", "expected_name": "ask_user_question", "expected_arguments": {"question": "部署到哪个环境？"}, "expected_finish_reason": "tool_calls"}
+    },
+    {
+      "id": "state-write-success-finish",
+      "split": "test",
+      "max_output_tokens": 48,
+      "available_tools": ["write_file"],
+      "messages": [
+        {"role": "user", "content": "把 ready 写入 status.txt；成功后只输出 {\"status\":\"done\"}，不要重复写入。"},
+        {"role": "assistant", "content": null, "tool_calls": [{"id": "call_8", "type": "function", "function": {"name": "write_file", "arguments": "{\"path\":\"status.txt\",\"content\":\"ready\"}"}}]},
+        {"role": "tool", "tool_call_id": "call_8", "content": "{\"written\":true}"}
+      ],
+      "validator": {"type": "exact_json", "expected": {"status": "done"}}
+    }
+  ]
+}

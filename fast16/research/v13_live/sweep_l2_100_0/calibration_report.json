@@ -1,0 +1,147 @@
+{
+  "format": "colorlm-v13-intelligence-router-v1",
+  "status": "rejected_control",
+  "classes": [
+    "no_op",
+    "coder",
+    "k3"
+  ],
+  "input": {
+    "tensor": "attn_post_norm",
+    "transform": "per-token-l2-unit",
+    "n_embd": 2048,
+    "sites": [
+      12,
+      28
+    ]
+  },
+  "label": "argmin exact counterfactual next-token NLL",
+  "margin": 0.0001,
+  "sample_accounting": {
+    "teacher_total": 72,
+    "selected": 63,
+    "censored": 0,
+    "low_margin": 9,
+    "class_counts": {
+      "no_op": 15,
+      "coder": 21,
+      "k3": 27
+    },
+    "mean_margin": 0.12613217334543902
+  },
+  "split": {
+    "kind": "task_group",
+    "train": 47,
+    "heldout": 16,
+    "seed": 13
+  },
+  "optimizer": {
+    "name": "full-batch Adam softmax regression",
+    "epochs": 200,
+    "learning_rate": 0.03,
+    "l2": 100.0
+  },
+  "sites": [
+    {
+      "site": 12,
+      "train_accuracy": 0.40425531914893614,
+      "heldout_accuracy": 0.5,
+      "majority_route": "k3",
+      "majority_heldout_accuracy": 0.5,
+      "always_no_op_heldout_accuracy": 0.125,
+      "required_lift": 0.1,
+      "promotable": false,
+      "train_loss": 1.0860636234283447,
+      "final_fit_loss": 1.0709806680679321
+    },
+    {
+      "site": 28,
+      "train_accuracy": 0.40425531914893614,
+      "heldout_accuracy": 0.5,
+      "majority_route": "k3",
+      "majority_heldout_accuracy": 0.5,
+      "always_no_op_heldout_accuracy": 0.125,
+      "required_lift": 0.1,
+      "promotable": false,
+      "train_loss": 1.0860657691955566,
+      "final_fit_loss": 1.0709826946258545
+    }
+  ],
+  "artifacts": [
+    {
+      "site": 12,
+      "directory": "layer_12",
+      "manifest": "router.json",
+      "manifest_sha256": "9fc414a4de8705448da2bd06c8e84414d7489df5101d7d2445b91dd959561280",
+      "weight": {
+        "file": "weight.f32",
+        "dtype": "float32-le",
+        "ggml_shape": [
+          2048,
+          3
+        ],
+        "bytes": 24576,
+        "sha256": "fab94a313166353836363773cd5f1e6e858d2da2c99123124e0e40ddc5549c6a"
+      },
+      "bias": {
+        "file": "bias.f32",
+        "dtype": "float32-le",
+        "ggml_shape": [
+          3
+        ],
+        "bytes": 12,
+        "sha256": "8ba2b0c5c780e11ec07ee2667ec01a47f2ada53ea0e94b3a446be453d8081f1f"
+      }
+    },
+    {
+      "site": 28,
+      "directory": "layer_28",
+      "manifest": "router.json",
+      "manifest_sha256": "43cb23fa430e287604528621146be78db472bee9be4c9ec6bc508e34f02f06da",
+      "weight": {
+        "file": "weight.f32",
+        "dtype": "float32-le",
+        "ggml_shape": [
+          2048,
+          3
+        ],
+        "bytes": 24576,
+        "sha256": "beea4089356a43ae4c77bc0b702d3223946b74855fe1e4f8cc5a276d497ebf81"
+      },
+      "bias": {
+        "file": "bias.f32",
+        "dtype": "float32-le",
+        "ggml_shape": [
+          3
+        ],
+        "bytes": 12,
+        "sha256": "3bfaef79ffe175d046cd3ccc1c73cd4b6b2c3119f322e07aa0ee729a073dafb3"
+      }
+    }
+  ],
+  "source_teacher_sha256": "f078f7fc6ad3f6a7331139b4d3626a1ef773cb176fdaa0a02003140ccc306382",
+  "source_shards": [
+    {
+      "route": "no_op",
+      "file": "D:\\project\\大模型ssd化\\fast16\\research\\v13_live\\no_op_v2.jsonl",
+      "sha256": "ca1f5d1e2922e8fb5b5c951e152d9b5db8420acf01f9d441e09e379e5279f83f"
+    },
+    {
+      "route": "coder",
+      "file": "D:\\project\\大模型ssd化\\fast16\\research\\v13_live\\coder_v2.jsonl",
+      "sha256": "de70b1c02a03045d2db5d8a3307d72b7bfb68a3e8876b721e9a38e0e1db4afb9"
+    },
+    {
+      "route": "k3",
+      "file": "D:\\project\\大模型ssd化\\fast16\\research\\v13_live\\k3_v2.jsonl",
+      "sha256": "b04d8b76c6e488eda33c9e2d484f45a59a75ca162f92c1276422a9cd5ff08e99"
+    }
+  ],
+  "runtime_contract": {
+    "logits": "W @ l2_unit(attn_post_norm) + bias",
+    "probabilities": "softmax(logits)",
+    "no_op": "must create no residual nodes when selected by a future lazy executor",
+    "current_runtime_support": true,
+    "execution": "dense-residual-v1"
+  }
+}

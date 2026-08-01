@@ -1,0 +1,659 @@
+{
+  "format": "colorlm-v29-generation-gate-v1",
+  "model": "ColorLM-v30-Dynamic-Prototype",
+  "endpoint": "http://127.0.0.1:8123",
+  "seed": 3407,
+  "max_tokens": 96,
+  "passed": 12,
+  "total": 12,
+  "by_split": {
+    "independent": {
+      "passed": 12,
+      "total": 12
+    }
+  },
+  "by_family": {
+    "continue_tool": {
+      "passed": 8,
+      "total": 8
+    },
+    "finish_json": {
+      "passed": 4,
+      "total": 4
+    }
+  },
+  "rows": [
+    {
+      "id": "v30-grounded-missing-manifest-list",
+      "split": "independent",
+      "family": "continue_tool",
+      "passed": true,
+      "reason": "严格工具调用匹配",
+      "wall_ms": 3853.8626999979897,
+      "target": "<tool_call>\n{\"name\":\"list_files\",\"arguments\":{\"path\":\"deploy\",\"glob\":\"*.yaml\"}}\n</tool_call>",
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "tool_calls",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "type": "function",
+                  "function": {
+                    "name": "list_files",
+                    "arguments": "{\"path\":\"deploy\",\"glob\":\"*.yaml\"}"
+                  },
+                  "id": "FCWaomwfisj4QHhccbutAewSagv2MSyV"
+                }
+              ]
+            }
+          }
+        ],
+        "created": 1785539566,
+        "model": "ColorLM-v30-Dynamic-Prototype",
+        "system_fingerprint": "b1-b46812d",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 38,
+          "prompt_tokens": 422,
+          "total_tokens": 460,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-m7aZ8hcGdhWYnVwH6rnIlq14PjecduIZ",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 422,
+          "prompt_ms": 1991.777,
+          "prompt_per_token_ms": 4.719850710900474,
+          "prompt_per_second": 211.87110806079193,
+          "predicted_n": 38,
+          "predicted_ms": 1789.308,
+          "predicted_per_token_ms": 47.08705263157895,
+          "predicted_per_second": 21.237260438113506
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "v30-grounded-missing-profile-list",
+      "split": "independent",
+      "family": "continue_tool",
+      "passed": true,
+      "reason": "严格工具调用匹配",
+      "wall_ms": 3900.6671000024653,
+      "target": "<tool_call>\n{\"name\":\"list_files\",\"arguments\":{\"path\":\"profiles\",\"glob\":\"*.json\"}}\n</tool_call>",
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "tool_calls",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "type": "function",
+                  "function": {
+                    "name": "list_files",
+                    "arguments": "{\"path\":\"profiles\",\"glob\":\"*.json\"}"
+                  },
+                  "id": "MHNhfjiwxOH8Ip1K2cg8RxnR2SMzMKEK"
+                }
+              ]
+            }
+          }
+        ],
+        "created": 1785539570,
+        "model": "ColorLM-v30-Dynamic-Prototype",
+        "system_fingerprint": "b1-b46812d",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 38,
+          "prompt_tokens": 421,
+          "total_tokens": 459,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-A3R1cVYleXVkcfgJM0o4UQZHreYTh2BA",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 421,
+          "prompt_ms": 2008.507,
+          "prompt_per_token_ms": 4.770800475059382,
+          "prompt_per_second": 209.60843054069514,
+          "predicted_n": 38,
+          "predicted_ms": 1863.652,
+          "predicted_per_token_ms": 49.043473684210525,
+          "predicted_per_second": 20.390072824754835
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "v30-grounded-compiler-read-exact",
+      "split": "independent",
+      "family": "continue_tool",
+      "passed": true,
+      "reason": "严格工具调用匹配",
+      "wall_ms": 3428.7203999992926,
+      "target": "<tool_call>\n{\"name\":\"read_file\",\"arguments\":{\"path\":\"crates/api/src/routes.rs\"}}\n</tool_call>",
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "tool_calls",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "type": "function",
+                  "function": {
+                    "name": "read_file",
+                    "arguments": "{\"path\":\"crates/api/src/routes.rs\"}"
+                  },
+                  "id": "r3hn3CFX8srwrzsUX1WaI6f00Uzqj8kw"
+                }
+              ]
+            }
+          }
+        ],
+        "created": 1785539573,
+        "model": "ColorLM-v30-Dynamic-Prototype",
+        "system_fingerprint": "b1-b46812d",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 30,
+          "prompt_tokens": 412,
+          "total_tokens": 442,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-R6j0cMSilKfiosdSu8H0vJagMsITj5qj",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 412,
+          "prompt_ms": 1982.069,
+          "prompt_per_token_ms": 4.810847087378641,
+          "prompt_per_second": 207.86360111580376,
+          "predicted_n": 30,
+          "predicted_ms": 1416.092,
+          "predicted_per_token_ms": 47.20306666666667,
+          "predicted_per_second": 21.18506424723817
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "v30-grounded-test-read-exact",
+      "split": "independent",
+      "family": "continue_tool",
+      "passed": true,
+      "reason": "严格工具调用匹配",
+      "wall_ms": 3364.5124999966356,
+      "target": "<tool_call>\n{\"name\":\"read_file\",\"arguments\":{\"path\":\"tests/unit/test_cache.py\"}}\n</tool_call>",
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "tool_calls",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "type": "function",
+                  "function": {
+                    "name": "read_file",
+                    "arguments": "{\"path\":\"tests/unit/test_cache.py\"}"
+                  },
+                  "id": "L1DSdJeqK6NblaGmRjAEJQpG14omrh9k"
+                }
+              ]
+            }
+          }
+        ],
+        "created": 1785539576,
+        "model": "ColorLM-v30-Dynamic-Prototype",
+        "system_fingerprint": "b1-b46812d",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 29,
+          "prompt_tokens": 414,
+          "total_tokens": 443,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-OiNDQxth2Ma59RSkhkOpaiAnVGq1ykYk",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 414,
+          "prompt_ms": 1987.988,
+          "prompt_per_token_ms": 4.8019033816425125,
+          "prompt_per_second": 208.25075402869632,
+          "predicted_n": 29,
+          "predicted_ms": 1346.8,
+          "predicted_per_token_ms": 46.44137931034483,
+          "predicted_per_second": 21.532521532521532
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "v30-grounded-missing-region-ask",
+      "split": "independent",
+      "family": "continue_tool",
+      "passed": true,
+      "reason": "严格工具调用匹配",
+      "wall_ms": 3455.6770999988657,
+      "target": "<tool_call>\n{\"name\":\"ask_user_question\",\"arguments\":{\"question\":\"部署区域？\"}}\n</tool_call>",
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "tool_calls",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "type": "function",
+                  "function": {
+                    "name": "ask_user_question",
+                    "arguments": "{\"question\":\"部署区域？\"}"
+                  },
+                  "id": "NsLZQhvFv3lb2l81srh13itSHbdwY1a5"
+                }
+              ]
+            }
+          }
+        ],
+        "created": 1785539580,
+        "model": "ColorLM-v30-Dynamic-Prototype",
+        "system_fingerprint": "b1-b46812d",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 30,
+          "prompt_tokens": 415,
+          "total_tokens": 445,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-5TuQCbhLfx45J2V4p6ce8OK3PA6UAvAB",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 415,
+          "prompt_ms": 1976.983,
+          "prompt_per_token_ms": 4.763814457831325,
+          "prompt_per_second": 209.91581617039702,
+          "predicted_n": 30,
+          "predicted_ms": 1449.176,
+          "predicted_per_token_ms": 48.30586666666667,
+          "predicted_per_second": 20.701419289306475
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "v30-grounded-missing-namespace-ask",
+      "split": "independent",
+      "family": "continue_tool",
+      "passed": true,
+      "reason": "严格工具调用匹配",
+      "wall_ms": 3444.8565999991843,
+      "target": "<tool_call>\n{\"name\":\"ask_user_question\",\"arguments\":{\"question\":\"目标命名空间？\"}}\n</tool_call>",
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "tool_calls",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "type": "function",
+                  "function": {
+                    "name": "ask_user_question",
+                    "arguments": "{\"question\":\"目标命名空间？\"}"
+                  },
+                  "id": "7gcUEHMRlUFSGytcyH5at50MizCqHQD6"
+                }
+              ]
+            }
+          }
+        ],
+        "created": 1785539583,
+        "model": "ColorLM-v30-Dynamic-Prototype",
+        "system_fingerprint": "b1-b46812d",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 31,
+          "prompt_tokens": 407,
+          "total_tokens": 438,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-o6ai1IVQoYo0NT67s4dlnCkha6CK3SvD",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 407,
+          "prompt_ms": 1954.43,
+          "prompt_per_token_ms": 4.802039312039312,
+          "prompt_per_second": 208.24485911493375,
+          "predicted_n": 31,
+          "predicted_ms": 1462.873,
+          "predicted_per_token_ms": 47.18945161290323,
+          "predicted_per_second": 21.191176540957414
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "v30-grounded-validation-activate",
+      "split": "independent",
+      "family": "continue_tool",
+      "passed": true,
+      "reason": "严格工具调用匹配",
+      "wall_ms": 3230.1393000016105,
+      "target": "<tool_call>\n{\"name\":\"activate_config\",\"arguments\":{\"environment\":\"canary\"}}\n</tool_call>",
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "tool_calls",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "type": "function",
+                  "function": {
+                    "name": "activate_config",
+                    "arguments": "{\"environment\":\"canary\"}"
+                  },
+                  "id": "daDJCFUS5cEwDRZXquLmdnAzWJOeNWyy"
+                }
+              ]
+            }
+          }
+        ],
+        "created": 1785539587,
+        "model": "ColorLM-v30-Dynamic-Prototype",
+        "system_fingerprint": "b1-b46812d",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 28,
+          "prompt_tokens": 399,
+          "total_tokens": 427,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-w9R5uxE4vyYwbxC4a8wrSx2DYaGDJOw4",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 399,
+          "prompt_ms": 1900.838,
+          "prompt_per_token_ms": 4.764005012531328,
+          "prompt_per_second": 209.90741978011803,
+          "predicted_n": 28,
+          "predicted_ms": 1299.601,
+          "predicted_per_token_ms": 46.414321428571434,
+          "predicted_per_second": 21.545074218933348
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "v30-grounded-activation-health",
+      "split": "independent",
+      "family": "continue_tool",
+      "passed": true,
+      "reason": "严格工具调用匹配",
+      "wall_ms": 3201.3270999996166,
+      "target": "<tool_call>\n{\"name\":\"health_check\",\"arguments\":{\"service\":\"scheduler\"}}\n</tool_call>",
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "tool_calls",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "type": "function",
+                  "function": {
+                    "name": "health_check",
+                    "arguments": "{\"service\":\"scheduler\"}"
+                  },
+                  "id": "Bcn9WPbFjw2EHpAlOepnGcHf0KkaA1WM"
+                }
+              ]
+            }
+          }
+        ],
+        "created": 1785539590,
+        "model": "ColorLM-v30-Dynamic-Prototype",
+        "system_fingerprint": "b1-b46812d",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 27,
+          "prompt_tokens": 398,
+          "total_tokens": 425,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-3to6LhXqYfmW1rjOwCuwwjDZA110LKMD",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 398,
+          "prompt_ms": 1936.25,
+          "prompt_per_token_ms": 4.864949748743719,
+          "prompt_per_second": 205.551969012266,
+          "predicted_n": 27,
+          "predicted_ms": 1233.679,
+          "predicted_per_token_ms": 45.69181481481482,
+          "predicted_per_second": 21.885757964592084
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "v30-grounded-read-echo-json",
+      "split": "independent",
+      "family": "finish_json",
+      "passed": true,
+      "reason": "严格JSON匹配",
+      "wall_ms": 2245.7515000023704,
+      "target": "{\"port\":7410}",
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "{\"port\":7410}"
+            }
+          }
+        ],
+        "created": 1785539592,
+        "model": "ColorLM-v30-Dynamic-Prototype",
+        "system_fingerprint": "b1-b46812d",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 9,
+          "prompt_tokens": 345,
+          "total_tokens": 354,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-s3lqbeOtFIC0TTkZSmiajpnrnvxwcFDS",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 345,
+          "prompt_ms": 1832.644,
+          "prompt_per_token_ms": 5.3120115942028985,
+          "prompt_per_second": 188.2526011598543,
+          "predicted_n": 9,
+          "predicted_ms": 386.983,
+          "predicted_per_token_ms": 42.998111111111115,
+          "predicted_per_second": 23.256835571588418
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "v30-grounded-write-explicit-json",
+      "split": "independent",
+      "family": "finish_json",
+      "passed": true,
+      "reason": "严格JSON匹配",
+      "wall_ms": 2154.3420999987575,
+      "target": "{\"status\":\"done\"}",
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "{\"status\":\"done\"}"
+            }
+          }
+        ],
+        "created": 1785539594,
+        "model": "ColorLM-v30-Dynamic-Prototype",
+        "system_fingerprint": "b1-b46812d",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 6,
+          "prompt_tokens": 363,
+          "total_tokens": 369,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-o1iBAHujC179N0mAoqnIOa87pbh7nlnY",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 363,
+          "prompt_ms": 1876.278,
+          "prompt_per_token_ms": 5.168809917355372,
+          "prompt_per_second": 193.4681321211462,
+          "predicted_n": 6,
+          "predicted_ms": 245.584,
+          "predicted_per_token_ms": 40.93066666666667,
+          "predicted_per_second": 24.4315590592221
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "v30-grounded-search-empty-json",
+      "split": "independent",
+      "family": "finish_json",
+      "passed": true,
+      "reason": "严格JSON匹配",
+      "wall_ms": 2075.2880000000005,
+      "target": "{\"count\":0}",
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "{\"count\":0}"
+            }
+          }
+        ],
+        "created": 1785539596,
+        "model": "ColorLM-v30-Dynamic-Prototype",
+        "system_fingerprint": "b1-b46812d",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 6,
+          "prompt_tokens": 333,
+          "total_tokens": 339,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-8uEn1aExl0U0xY3WhKdUGYLtUhhIVcX6",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 333,
+          "prompt_ms": 1799.714,
+          "prompt_per_token_ms": 5.4045465465465465,
+          "prompt_per_second": 185.0293991156373,
+          "predicted_n": 6,
+          "predicted_ms": 246.6,
+          "predicted_per_token_ms": 41.1,
+          "predicted_per_second": 24.330900243309003
+        }
+      },
+      "error": null
+    },
+    {
+      "id": "v30-grounded-save-explicit-json",
+      "split": "independent",
+      "family": "finish_json",
+      "passed": true,
+      "reason": "严格JSON匹配",
+      "wall_ms": 2137.326399999438,
+      "target": "{\"result\":\"saved\"}",
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "{\"result\":\"saved\"}"
+            }
+          }
+        ],
+        "created": 1785539598,
+        "model": "ColorLM-v30-Dynamic-Prototype",
+        "system_fingerprint": "b1-b46812d",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 6,
+          "prompt_tokens": 362,
+          "total_tokens": 368,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-JdEVDtKIwV3419Fj7jjERUmNqzHXR8KT",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 362,
+          "prompt_ms": 1864.144,
+          "prompt_per_token_ms": 5.149569060773481,
+          "prompt_per_second": 194.1910067033448,
+          "predicted_n": 6,
+          "predicted_ms": 241.112,
+          "predicted_per_token_ms": 40.18533333333333,
+          "predicted_per_second": 24.884700885895352
+        }
+      },
+      "error": null
+    }
+  ]
+}

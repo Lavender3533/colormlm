@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "colorlm-parallel-speed-v47-offline-report-v1",
+  "type": "object",
+  "required": ["format", "generated_utc", "cpu_only", "evidence", "cost", "routing_replay", "decision", "claim_limit"],
+  "properties": {
+    "format": {"const": "colorlm-parallel-speed-v47-offline-report-v1"},
+    "cpu_only": {"const": true},
+    "evidence": {"type": "object", "required": ["all_hashes_match"]},
+    "cost": {"type": "object", "required": ["draft_head", "latent_recursion", "paging"]},
+    "routing_replay": {"type": "object", "required": ["split", "aggregate", "per_layer"]},
+    "decision": {"type": "object", "required": ["offline_feasible", "runtime_promotable", "gates"]},
+    "claim_limit": {"type": "string", "minLength": 1}
+  }
+}

@@ -1,0 +1,250 @@
+{
+  "format": "colorlm-v14-joint-site-router-audit-v1",
+  "date": "2026-07-30",
+  "status": "rejected_control",
+  "hypothesis": "A joint four-state router can model destructive L12/L28 interaction better than two independent site routers.",
+  "data": {
+    "samples": 72,
+    "tasks": 12,
+    "feature": "concatenated unit-L2 attn_post_norm from L12 and L28",
+    "feature_trajectory": "l12_k3",
+    "source_sha256": {
+      "no_op": "ca1f5d1e2922e8fb5b5c951e152d9b5db8420acf01f9d441e09e379e5279f83f",
+      "l12_k3": "f297c480eb5e09b908669bafa24796b1b758efbfb71ff7b1bcf47fdb5279a67b",
+      "l28_k3": "804d8dd3cbb08f846617ce464be8856ab3a7d211d6f06e90edcbf94a2aa88d83",
+      "both_k3": "b04d8b76c6e488eda33c9e2d484f45a59a75ca162f92c1276422a9cd5ff08e99",
+      "feature_hidden": "346dda958aafa6c21f35321595508af9d72d18413320e715b980e3d10d21338b"
+    }
+  },
+  "counterfactual_surface": {
+    "route_mean_nll": {
+      "no_op": 2.4872833700447083,
+      "l12_k3": 2.4388460118126343,
+      "l28_k3": 2.455791965589741,
+      "both_k3": 2.4920367982856795
+    },
+    "token_oracle_mean_nll": 2.342122131133996,
+    "token_oracle_relative_improvement_vs_l12": 0.039659691596006026,
+    "token_oracle_best_route_counts": {
+      "no_op": 14,
+      "l12_k3": 14,
+      "l28_k3": 16,
+      "both_k3": 28
+    },
+    "task_oracle_mean_nll": 2.391042975618014,
+    "task_oracle_routes": {
+      "code-binary-search": "l12_k3",
+      "code-close-elements": "l28_k3",
+      "code-java-add": "no_op",
+      "code-python-clamp": "l28_k3",
+      "code-rust-max": "l28_k3",
+      "code-truncate": "l12_k3",
+      "code-typescript-unique": "l12_k3",
+      "tool-glob-files": "l28_k3",
+      "tool-read-file": "both_k3",
+      "tool-run-command": "l12_k3",
+      "tool-search-text": "l12_k3",
+      "tool-write-file": "l12_k3"
+    },
+    "mean_additive_interaction_nll": 0.08468219092801199,
+    "both_isolated_good_but_joint_bad_tokens": 7
+  },
+  "nested_loto": {
+    "protocol": "outer leave-one-task-out; inner leave-one-task-out selects kernel/regularization/margin",
+    "objective": "actual routed next-token NLL, not route classification accuracy",
+    "routed_mean_nll": 2.4662549085917145,
+    "fixed_l12_mean_nll": 2.4388460118126343,
+    "relative_improvement_vs_l12": -0.011238469606659984,
+    "tasks_improved": 0,
+    "tasks_total": 12,
+    "task_mean_gain_nll": {
+      "code-binary-search": 0.0,
+      "code-close-elements": 0.0,
+      "code-java-add": 0.0,
+      "code-python-clamp": 0.0,
+      "code-rust-max": 0.0,
+      "code-truncate": 0.0,
+      "code-typescript-unique": 0.0,
+      "tool-glob-files": 0.0,
+      "tool-read-file": 0.0,
+      "tool-run-command": -0.0013628439046442509,
+      "tool-search-text": -0.1884613838265068,
+      "tool-write-file": -0.1390825336178144
+    },
+    "task_bootstrap_90pct_gain_ci": [
+      -0.05881912741683159,
+      -0.0001135703253870209
+    ],
+    "selected_route_counts": {
+      "no_op": 0,
+      "l12_k3": 64,
+      "l28_k3": 5,
+      "both_k3": 3
+    },
+    "folds": [
+      {
+        "heldout_task": "code-binary-search",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "rbf",
+          "scale": 0.5,
+          "alpha": 10.0,
+          "margin": 0.01
+        },
+        "inner_mean_nll": 2.625302795968093,
+        "heldout_routed_mean_nll": 0.511428429124256,
+        "heldout_l12_mean_nll": 0.511428429124256
+      },
+      {
+        "heldout_task": "code-close-elements",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "rbf",
+          "scale": 0.5,
+          "alpha": 10.0,
+          "margin": 0.01
+        },
+        "inner_mean_nll": 2.38136294833914,
+        "heldout_routed_mean_nll": 3.1947667530427375,
+        "heldout_l12_mean_nll": 3.1947667530427375
+      },
+      {
+        "heldout_task": "code-java-add",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "rbf",
+          "scale": 0.5,
+          "alpha": 10.0,
+          "margin": 0.01
+        },
+        "inner_mean_nll": 2.660547447648383,
+        "heldout_routed_mean_nll": 0.1237372606410645,
+        "heldout_l12_mean_nll": 0.1237372606410645
+      },
+      {
+        "heldout_task": "code-python-clamp",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "rbf",
+          "scale": 0.5,
+          "alpha": 10.0,
+          "margin": 0.01
+        },
+        "inner_mean_nll": 2.6577876520662422,
+        "heldout_routed_mean_nll": 0.1540950120446117,
+        "heldout_l12_mean_nll": 0.1540950120446117
+      },
+      {
+        "heldout_task": "code-rust-max",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "rbf",
+          "scale": 0.5,
+          "alpha": 10.0,
+          "margin": 0.01
+        },
+        "inner_mean_nll": 2.6302116640180273,
+        "heldout_routed_mean_nll": 0.45743088057497516,
+        "heldout_l12_mean_nll": 0.45743088057497516
+      },
+      {
+        "heldout_task": "code-truncate",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "rbf",
+          "scale": 0.5,
+          "alpha": 10.0,
+          "margin": 0.01
+        },
+        "inner_mean_nll": 2.651634265737485,
+        "heldout_routed_mean_nll": 0.22178226166094342,
+        "heldout_l12_mean_nll": 0.22178226166094342
+      },
+      {
+        "heldout_task": "code-typescript-unique",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "rbf",
+          "scale": 0.5,
+          "alpha": 10.0,
+          "margin": 0.01
+        },
+        "inner_mean_nll": 2.6403025314035498,
+        "heldout_routed_mean_nll": 0.34643133933423087,
+        "heldout_l12_mean_nll": 0.34643133933423087
+      },
+      {
+        "heldout_task": "tool-glob-files",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "rbf",
+          "scale": 0.5,
+          "alpha": 10.0,
+          "margin": 0.01
+        },
+        "inner_mean_nll": 2.1877335336422696,
+        "heldout_routed_mean_nll": 5.696758581053804,
+        "heldout_l12_mean_nll": 5.696758581053804
+      },
+      {
+        "heldout_task": "tool-read-file",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "rbf",
+          "scale": 0.5,
+          "alpha": 10.0,
+          "margin": 0.01
+        },
+        "inner_mean_nll": 2.2190271924103464,
+        "heldout_routed_mean_nll": 5.030183968027511,
+        "heldout_l12_mean_nll": 5.030183968027511
+      },
+      {
+        "heldout_task": "tool-run-command",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "rbf",
+          "scale": 0.5,
+          "alpha": 10.0,
+          "margin": 0.01
+        },
+        "inner_mean_nll": 2.3293344542795578,
+        "heldout_routed_mean_nll": 4.179457694835345,
+        "heldout_l12_mean_nll": 4.178094850930701
+      },
+      {
+        "heldout_task": "tool-search-text",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "linear",
+          "scale": 1.0,
+          "alpha": 1.0,
+          "margin": 0.0
+        },
+        "inner_mean_nll": 2.259049348137166,
+        "heldout_routed_mean_nll": 4.846512596358177,
+        "heldout_l12_mean_nll": 4.65805121253167
+      },
+      {
+        "heldout_task": "tool-write-file",
+        "tokens": 6,
+        "selected_config": {
+          "kernel": "rbf",
+          "scale": 2.0,
+          "alpha": 10.0,
+          "margin": 0.01
+        },
+        "inner_mean_nll": 2.233863130755325,
+        "heldout_routed_mean_nll": 4.832474126402919,
+        "heldout_l12_mean_nll": 4.693391592785105
+      }
+    ]
+  },
+  "promotion_gate": {
+    "relative_nll_improvement_at_least": 0.002,
+    "tasks_improved_at_least": 7,
+    "bootstrap_90pct_lower_bound_above_zero": true,
+    "passed": false
+  },
+  "decision": "Stop the joint kernel router; retain v13 fixed L12 as the formal graph."
+}

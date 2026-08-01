@@ -1,0 +1,35 @@
+{
+  "format": "colorlm-v28-control-bias-contract-v1",
+  "date": "2026-08-01",
+  "source_ridge_contract_sha256": "957620adfb0a19b782a4d67aaf55eb0cfd36607e846b49b5cf8ce11582225aaf",
+  "control_tokens": {
+    "continue_tool": {"text": "<tool_call>", "base_token_id": 248058},
+    "finish": {"text": "{\"", "base_token_id": 4754},
+    "diagnostic_markdown_fence": {"text": "```", "base_token_id": 71093}
+  },
+  "gate": {
+    "continue_weight": "sigmoid(10 * ridge_score)",
+    "finish_weight": "1 - continue_weight",
+    "sharpness": 10.0
+  },
+  "calibration": {
+    "split": "train",
+    "formula": "beta=max_i((native_top1-desired_logit+0.5)/desired_gate_weight)",
+    "target_margin": 0.5,
+    "maximum_beta": 20.0,
+    "parameter_scan_allowed": false
+  },
+  "application": {
+    "continue_tool_delta": "beta * continue_weight",
+    "finish_delta": "beta * finish_weight",
+    "all_other_tokens_delta": 0.0
+  },
+  "pass_gate": {
+    "train_control_top1_accuracy": 1.0,
+    "validation_control_top1_accuracy": 1.0,
+    "test_control_top1_accuracy": 1.0,
+    "minimum_corrected_heldout_margin": 0.25,
+    "maximum_beta": 20.0
+  },
+  "failure_action": "stop two-token executive control head; do not scan beta, sharpness, token ids, or thresholds on the frozen holdout"
+}

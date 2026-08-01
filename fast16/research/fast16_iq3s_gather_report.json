@@ -1,0 +1,34 @@
+{
+  "format": "fast16-iq3s-gather-ab-v1",
+  "date": "2026-07-29",
+  "model": "ColorLM-v6-Q3Router-Fused-A1.gguf",
+  "hardware": {
+    "cpu": "Intel Core i5-12400F (Alder Lake)",
+    "gpu": "AMD Radeon RX 5700 XT 8 GiB"
+  },
+  "change": "Replace 16 scalar iq3s_grid table loads with two AVX2 i32 gathers in ggml_vec_dot_iq3_s_q8_K.",
+  "settings": {
+    "decode_tokens": 128,
+    "repetitions": 2,
+    "threads": 8,
+    "n_cpu_moe": 29,
+    "batch_cpu_read": true,
+    "slot_pool": false
+  },
+  "correctness": {
+    "greedy_model_tokens": 24,
+    "scalar_and_gather_output_identical": true
+  },
+  "abba_runs_tokens_per_second": [
+    {"kernel": "scalar", "mean": 23.93, "stddev": 0.41},
+    {"kernel": "gather", "mean": 25.49, "stddev": 0.54},
+    {"kernel": "scalar", "mean": 20.95, "stddev": 0.96},
+    {"kernel": "gather", "mean": 26.26, "stddev": 0.22}
+  ],
+  "adjacent_runtime_points": [
+    {"n_cpu_moe": 30, "threads": 8, "mean": 24.46, "stddev": 1.91},
+    {"n_cpu_moe": 29, "threads": 10, "mean": 24.03, "stddev": 1.80}
+  ],
+  "production_runtime_point": {"n_cpu_moe": 29, "threads": 8},
+  "decision": "Keep the gather implementation for the target Alder Lake AVX2 build; do not generalize the result to other CPU microarchitectures without A/B testing."
+}

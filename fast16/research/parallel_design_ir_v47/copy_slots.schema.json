@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://colorlm.local/schemas/design-copy-slots-v1.json",
+  "title": "Design Genome 用户文案 copy slots",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "task_id", "prompt_sha256", "slots"],
+  "properties": {
+    "schema_version": {"const": "design-copy-slots-v1"},
+    "task_id": {"type": "string", "minLength": 1},
+    "prompt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "slots": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "text"],
+        "properties": {
+          "id": {"type": "integer", "minimum": 0, "maximum": 63},
+          "kind": {"enum": ["title", "lede", "label", "value"]},
+          "text": {"type": "string", "minLength": 1, "maxLength": 160}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "format": "colorlm-v30-dynamic-lexical-runtime-gate-report-v1",
+  "date": "2026-08-01",
+  "status": "mechanism_validated_not_promoted",
+  "architecture": {
+    "name": "dynamic-low-rank-bilinear sequence policy",
+    "equation": "delta(t)=clip((L*h_norm) dot (R*E_t_norm), -2, 8)",
+    "rank": 32,
+    "dynamic_candidate_capacity": 256,
+    "static_protocol_tokens": 16,
+    "runtime_weight_bytes": 524416,
+    "activation": "explicit-tools-only",
+    "no_tools_physical_graph_bypass": true,
+    "parallel_slots": 1
+  },
+  "retrospective_probe": {
+    "validation_mean_target_nll_delta": -1.2034639133555336,
+    "test_mean_target_nll_delta": -1.687281046784935,
+    "maximum_heldout_task_mean_nll_regression": 0.4973327527907202,
+    "passed": false,
+    "reason": "旧门含不可由输入唯一推出的目标JSON，仍按旧契约记为失败，不用于晋级。"
+  },
+  "grounded_independent_nll_gate": {
+    "tasks": 12,
+    "samples": 178,
+    "target_coverage": 0.9325842696629213,
+    "mean_target_nll_delta": -0.6728404362327723,
+    "task_wins": 12,
+    "task_regressions": 0,
+    "maximum_task_mean_nll_regression": -0.000897105129558895,
+    "passed_for_runtime_prototype": true
+  },
+  "runtime_generation_ab": {
+    "v17": "12/12",
+    "v30": "12/12",
+    "normalized_outputs_equal": "12/12",
+    "v17_mean_decode_tokens_per_second": 22.629,
+    "v30_mean_decode_tokens_per_second": 22.214,
+    "speed_delta_percent": -1.83,
+    "ability_gain_demonstrated": false,
+    "passed_for_promotion": false
+  },
+  "decision": {
+    "runtime_mechanism_valid": true,
+    "replace_v29": false,
+    "formal_entry_remains": "ColorLM-v29-Sequence-Policy",
+    "next_gate": "建立更难、目标仍可客观推出且v17不能全过的新任务族；不得复用本12题刷分。"
+  },
+  "artifacts": {
+    "llama_server_sha256": "114df0e691c0aee3c0ddac9e159a2a38b885dc9db38d130ea035a84daaf2d829",
+    "llama_dll_sha256": "1a4e6b41f338cb96c00fdeb70764ab414ed100d882ddb743733b569265a39d86",
+    "runtime_manifest_sha256": "5052b5b0341831f22a5234212be963415a192082447a3998c3880958fd6fd768",
+    "runtime_weights_sha256": "a92b815640ce56bfd70bca1067df95b06762cf17ed0e82a46d031435c0792ec8",
+    "grounded_nll_report_sha256": "3a1bb8acc39421a00ca8c02b2efa0725c0763148e13a7e19861052d37dad1908",
+    "v30_generation_sha256": "dfd30fcdfb6d9924ff0035a398c938839456735b9055984209bbb9103de48b46",
+    "v17_generation_sha256": "39e06e85f40d5226bb0de47efe3e0be0c9b07259c00dea7f8e605159dc349410"
+  },
+  "claim_boundary": {
+    "general_intelligence_improved": false,
+    "tool_ability_improved_over_v17": false,
+    "claude_or_gpt_level": false,
+    "research_result": "动态候选低秩词汇残差可在单图真实运行并泛化降低NLL，但本轮未产生可观察生成收益。"
+  }
+}

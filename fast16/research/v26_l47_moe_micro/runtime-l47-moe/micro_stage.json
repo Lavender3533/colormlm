@@ -1,0 +1,51 @@
+{
+  "format": "colorlm-neural-micro-stage-runtime-v1",
+  "candidate": true,
+  "runtime_layout": "single-aligned-tensor-blob-v1",
+  "alignment": 64,
+  "source_layer": 47,
+  "hidden_size": 2048,
+  "rank": 64,
+  "equation": "delta=output.weight*(input.weight*h)+output.bias",
+  "tensor_count": 3,
+  "tensors": [
+    {
+      "name": "input.weight",
+      "dtype": "F16",
+      "ggml_shape": [
+        2048,
+        64
+      ],
+      "offset": 0,
+      "bytes": 262144,
+      "sha256": "a77cdcca43ba365fc00f734a7bf626b2f9028c9ec4a007640d9040b902658b24"
+    },
+    {
+      "name": "output.weight",
+      "dtype": "F16",
+      "ggml_shape": [
+        64,
+        2048
+      ],
+      "offset": 262144,
+      "bytes": 262144,
+      "sha256": "23565a3a50d1a7dcdeedfa9ed310545a06287e30f33daf1772a0ed854d4acd93"
+    },
+    {
+      "name": "output.bias",
+      "dtype": "F32",
+      "ggml_shape": [
+        2048
+      ],
+      "offset": 524288,
+      "bytes": 8192,
+      "sha256": "3b4d6381ffe934046820aead344400f94a3e5a3638697fb0e29efbef26481b83"
+    }
+  ],
+  "weights": {
+    "file": "weights.bin",
+    "bytes": 532480,
+    "sha256": "6cdc57e101498fd8634b09105d7f1f0e26915261a98d19c8abdcc0fb9d888de0"
+  },
+  "source_artifact": "fast16/research/v26_l47_moe_micro/l47-moe-selected.npz"
+}

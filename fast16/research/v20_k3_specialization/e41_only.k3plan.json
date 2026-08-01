@@ -1,0 +1,18 @@
+{
+  "format": "colorlm-k3-site-plan-v1",
+  "name": "ColorLM-v20-K3-L12-E41-only",
+  "temperature": 0.2,
+  "no_op_bias": -0.05,
+  "sites": [
+    {
+      "site": 12,
+      "alpha": 0.04,
+      "target_ratio": 0.04,
+      "sharpness": 4.0,
+      "min_gate": 0.01,
+      "capsule": "../neural_bus_capsules/kimi_k3_l28_e41_real/runtime_v2",
+      "manifest_sha256": "7b798cb41476a4ddb0c2e74f8621df3a88f827efe29da1188df1754801553ae4",
+      "transport_gain": 1.0
+    }
+  ]
+}

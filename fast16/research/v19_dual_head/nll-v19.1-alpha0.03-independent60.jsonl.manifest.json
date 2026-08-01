@@ -1,0 +1,25 @@
+{
+  "format": "colorlm-v13-counterfactual-route-shard-manifest-v1",
+  "route": "v19.1-alpha0.03-independent60",
+  "route_attestation": "process-level --force-path plus expected API alias",
+  "teacher": "D:\\project\\大模型ssd化\\fast16\\research\\v19_dual_head\\teacher_v19_independent_60.jsonl",
+  "teacher_sha256": "6b43aac70cae2d92912254fbba25ddc50183704ad8e5320ce40b271916778e1a",
+  "shard": "nll-v19.1-alpha0.03-independent60.jsonl",
+  "shard_sha256": "e1f8223e6a68413fbb852f666752bdb814389dc5d5c4a2737b78ea632a11f2c2",
+  "sample_count": 60,
+  "exact_count": 60,
+  "exact_coverage": 1.0,
+  "n_probs": 1,
+  "elapsed_seconds": 135.012323,
+  "server": {
+    "endpoint": "http://127.0.0.1:8105",
+    "models": [
+      "ColorLM-v19.1-DualHead-a003-Independent60"
+    ],
+    "model_path": "fast16/models/ColorLM-v6-Q3Router-Fused-A1.gguf",
+    "context": 16384
+  },
+  "expected_model": "ColorLM-v19.1-DualHead-a003-Independent60",
+  "hidden": null,
+  "k3_features": null
+}

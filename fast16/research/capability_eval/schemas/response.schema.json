@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.colormlm/capability-eval/response.schema.json",
+  "title": "ColorLM capability short-gate response record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "model_id",
+    "task_id",
+    "output",
+    "tool_calls",
+    "finish_reason",
+    "usage",
+    "latency_ms",
+    "generation"
+  ],
+  "properties": {
+    "schema_version": {"const": "capability-response-v1"},
+    "run_id": {"type": "string", "minLength": 1},
+    "model_id": {"type": "string", "minLength": 1},
+    "task_id": {"type": "string", "minLength": 1},
+    "output": {"type": ["string", "null"]},
+    "tool_calls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "arguments"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "arguments": {"type": "object"}
+        }
+      }
+    },
+    "finish_reason": {"enum": ["stop", "tool_calls", "length", "error"]},
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prompt_tokens", "completion_tokens"],
+      "properties": {
+        "prompt_tokens": {"type": "integer", "minimum": 0},
+        "completion_tokens": {"type": "integer", "minimum": 0}
+      }
+    },
+    "latency_ms": {"type": "number", "minimum": 0},
+    "generation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["temperature", "seed", "template_id"],
+      "properties": {
+        "temperature": {"const": 0},
+        "seed": {"type": "integer"},
+        "template_id": {"type": "string", "minLength": 1},
+        "binary_id": {"type": ["string", "null"]},
+        "runtime_id": {"type": ["string", "null"]}
+      }
+    },
+    "critical_token_observations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "token_text", "token_id", "nll"],
+        "properties": {
+          "id": {"type": "string"},
+          "token_text": {"type": "string"},
+          "token_id": {"type": "integer", "minimum": 0},
+          "nll": {"type": "number", "minimum": 0}
+        }
+      }
+    },
+    "error": {"type": ["string", "null"]}
+  }
+}

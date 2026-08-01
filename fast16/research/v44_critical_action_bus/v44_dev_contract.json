@@ -1,0 +1,55 @@
+{
+  "format": "colorlm-v44-critical-action-dev-contract-v1",
+  "date": "2026-08-01",
+  "role": "preregistered-before-critical-capture-completed",
+  "claim_scope": "development qualification only; never a blind promotion result",
+  "base_model": "fast16/models/ColorLM-v36-Qwen36-Global-Shared-Backbone.gguf",
+  "source_tasks": "fast16/research/v43_policy_dataset/trajectory_tasks_v1.jsonl",
+  "source_tasks_sha256": "a4ee853502a1326800b89d7cacd27fdf7b48266ad664d5b23cb14f8f6c2b2fcb",
+  "source_oracle": "fast16/research/v43_policy_dataset/trajectory_oracle_v1.jsonl",
+  "source_oracle_sha256": "bd1d18c03e2dd8643079b741230678aa9d2fa92271e4585b777e96054b3bbf02",
+  "critical_teacher": "fast16/research/v44_critical_action_bus/critical-teacher-dev-v1.jsonl",
+  "critical_teacher_sha256": "eb53164aa60c47881fc2ef11985ddf0f040c197fbcdaff9f83f932313d84b6aa",
+  "data": {
+    "allowed_splits": [
+      "train",
+      "validation"
+    ],
+    "forbidden_splits": [
+      "test"
+    ],
+    "task_count": 96,
+    "sample_count": 408,
+    "sample_selection": "first token overlapping each semantic tool-name, argument-key, argument-value, finish-key or finish-value span",
+    "test_leakage_count": 0
+  },
+  "fit": {
+    "hidden_normalization": "per-sample-l2",
+    "pca_rank": 16,
+    "ridge_lambda": 0.1,
+    "correction_strength": 12.0,
+    "minimum_distinct_train_groups_per_candidate": 3,
+    "candidate_source": "critical target token IDs from train only",
+    "class_zero": "exact no-op",
+    "rescue_label": "target candidate differs from native top-1 among frozen candidate IDs",
+    "no_op_label": "target is not a candidate or already native top-1 among frozen candidate IDs",
+    "parameter_scan_after_capture": false
+  },
+  "development_gate": {
+    "minimum_validation_candidate_accuracy_gain": 0.08,
+    "minimum_validation_rescues": 8,
+    "maximum_validation_regressions": 1,
+    "maximum_validation_mean_target_nll_delta": -0.02,
+    "minimum_validation_task_net_wins": 4,
+    "minimum_validation_exact_no_op_rate": 0.1,
+    "maximum_validation_exact_no_op_rate": 0.9
+  },
+  "runtime_eligibility": {
+    "requires_development_gate": true,
+    "requires_new_cross_template_blind_before_promotion": true,
+    "maximum_runtime_weight_bytes": 262144,
+    "maximum_speed_regression": 0.03,
+    "no_tools_physical_bypass": true
+  },
+  "failure_action": "stop this v44 head without scanning captured validation; retain the critical-span dataset and move to a small sequence decoder or capability island"
+}

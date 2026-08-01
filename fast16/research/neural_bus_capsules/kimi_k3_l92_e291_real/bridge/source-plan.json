@@ -1,0 +1,91 @@
+{
+  "format": "colorlm-kimi-k3-latent-bridge-range-plan-v1",
+  "repo": "moonshotai/Kimi-K3",
+  "revision": "master",
+  "layer": 92,
+  "expert": null,
+  "source_shard": "model-00093-of-000096.safetensors",
+  "header_cache": "D:\\project\\大模型ssd化\\fast16\\research\\biopsy_cache\\moonshotai_Kimi-K3\\master\\headers\\model-00093-of-000096.safetensors.json",
+  "header_bytes": 823008,
+  "header_tensors_sha256": "eb6fb897d049743afec3986ff01e6d2d3b7ffd5400685bbdb9a8c87cfa7b71b3",
+  "http_range": {
+    "start": 13671656,
+    "end_inclusive": 116439271,
+    "bytes": 102767616
+  },
+  "download_bytes": 102767616,
+  "download_mib": 98.0068359375,
+  "source_shapes": {
+    "latent_down": [
+      3584,
+      7168
+    ],
+    "latent_norm": [
+      3584
+    ],
+    "latent_up": [
+      7168,
+      3584
+    ]
+  },
+  "folded_shapes": {
+    "colorlm_to_latent": [
+      3584,
+      2048
+    ],
+    "latent_to_colorlm": [
+      2048,
+      3584
+    ],
+    "latent_norm": [
+      3584
+    ]
+  },
+  "transport_equations": {
+    "colorlm_to_latent": "routed_expert_down_proj @ transport",
+    "latent_to_colorlm": "transport.T @ routed_expert_up_proj"
+  },
+  "tensors": [
+    {
+      "name": "language_model.model.layers.92.block_sparse_moe.routed_expert_down_proj.weight",
+      "role": "latent_down",
+      "dtype": "BF16",
+      "shape": [
+        3584,
+        7168
+      ],
+      "bytes": 51380224,
+      "absolute_start": 13671656,
+      "absolute_end": 65051880,
+      "capsule_offset_start": 0,
+      "capsule_offset_end": 51380224
+    },
+    {
+      "name": "language_model.model.layers.92.block_sparse_moe.routed_expert_norm.weight",
+      "role": "latent_norm",
+      "dtype": "BF16",
+      "shape": [
+        3584
+      ],
+      "bytes": 7168,
+      "absolute_start": 65051880,
+      "absolute_end": 65059048,
+      "capsule_offset_start": 51380224,
+      "capsule_offset_end": 51387392
+    },
+    {
+      "name": "language_model.model.layers.92.block_sparse_moe.routed_expert_up_proj.weight",
+      "role": "latent_up",
+      "dtype": "BF16",
+      "shape": [
+        7168,
+        3584
+      ],
+      "bytes": 51380224,
+      "absolute_start": 65059048,
+      "absolute_end": 116439272,
+      "capsule_offset_start": 51387392,
+      "capsule_offset_end": 102767616
+    }
+  ]
+}

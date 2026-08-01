@@ -1,0 +1,48 @@
+{
+  "format": "fast16-batch-cpu-read-ab-v1",
+  "date": "2026-07-29",
+  "model": "ColorLM-v6-Q3Router-Fused-A1.gguf",
+  "hardware": {
+    "gpu": "AMD Radeon RX 5700 XT 8 GiB",
+    "cpu": "Intel Core i5-12400F"
+  },
+  "settings": {
+    "decode_tokens": 128,
+    "repetitions": 2,
+    "threads": 8,
+    "n_gpu_layers": 99,
+    "n_cpu_moe": 29,
+    "flash_attention": true,
+    "mmap": false,
+    "merge_cpu_sync": true,
+    "skip_cpu_final_sync": true,
+    "slot_pool": false
+  },
+  "correctness": {
+    "prompt_encoding": "ASCII",
+    "greedy_tokens": 24,
+    "baseline_and_batch_output_identical": true
+  },
+  "performance": {
+    "baseline_tokens_per_second": 20.44,
+    "baseline_stddev": 0.73,
+    "batch_cpu_read_tokens_per_second": 22.88,
+    "batch_cpu_read_stddev": 1.05,
+    "speedup_percent": 11.94
+  },
+  "profile": {
+    "cpu_moe_splits_per_token": 29,
+    "baseline_blocking_copies_per_token": 58,
+    "batch_blocking_copies_per_token": 0,
+    "note": "CPU expert time drifted between later profiling processes, so the production decision uses the adjacent normal A/B plus path-level profiling rather than cross-process absolute throughput alone."
+  },
+  "safety_scope": [
+    "all inputs in the split must qualify",
+    "single Vulkan source backend",
+    "source uses the Vulkan default device buffer",
+    "destination uses pinned host memory owned by the same device",
+    "contiguous tensors with identical layout",
+    "no user inputs, weights, destination events, or native destination async copy"
+  ],
+  "decision": "Enable GGML_SCHED_BATCH_CPU_READ in Fast16 Runtime v1 with --no-batch-cpu-read as the rollback flag."
+}

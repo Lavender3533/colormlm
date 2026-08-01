@@ -1,0 +1,77 @@
+{
+  "format": "colorlm-v29-runtime-gate-report-v1",
+  "date": "2026-08-01",
+  "status": "promoted_as_explicit_tools_only_increment",
+  "scope": "tool-result sequence policy only",
+  "offline_nll_gate": {
+    "passed": true,
+    "train_mean_nll_delta": -1.1428,
+    "validation_mean_nll_delta": -0.8812,
+    "test_mean_nll_delta": -1.1522,
+    "tasks_improved": 20,
+    "tasks_total": 20
+  },
+  "runtime_generation_gate": {
+    "baseline": {
+      "model": "ColorLM-v17-Coder-Neural-Island",
+      "passed": 7,
+      "total": 20
+    },
+    "candidate": {
+      "model": "ColorLM-v29-Sequence-Policy",
+      "passed": 9,
+      "total": 20
+    },
+    "fixed": [
+      "policy-config-missing-list",
+      "policy-read-version-finish"
+    ],
+    "regressions": [],
+    "test_split": {
+      "baseline": "2/5",
+      "candidate": "2/5"
+    },
+    "passed": true
+  },
+  "frozen_multicap_16": {
+    "baseline": "10/16",
+    "candidate": "10/16",
+    "wins": [],
+    "regressions": [],
+    "passed": true
+  },
+  "runtime_truth": {
+    "weights_loaded": true,
+    "candidate_tokens": 16,
+    "reported_weight_mib": 0.125,
+    "explicit_tools_output_equal_to_pre_optimization": true,
+    "no_tools_output_equal_to_v17": true,
+    "activation": "explicit-tools-only",
+    "no_tools_physical_graph_bypass": true,
+    "parallel_slots_required": 1
+  },
+  "performance_128_tokens": {
+    "baseline_v17_tokens_per_second": 20.207228283425952,
+    "initial_v29_tokens_per_second": 16.275826430517988,
+    "initial_delta_percent": -19.455423563124263,
+    "optimized_v29_tokens_per_second": 20.49239051900341,
+    "optimized_delta_percent": 1.4111892614750765,
+    "initial_compute_buffer_mib": 1980.39,
+    "optimized_compute_buffer_mib": 1036.30,
+    "passed": true
+  },
+  "artifacts": {
+    "llama_server_sha256": "1b32822465814ef7590f24d719bc4d687b5dea6facd006c77de6a16ca10d7750",
+    "llama_dll_sha256": "a9108a8417105b16549d3092691fbd006b09efdc0f3ceb58f295e17fc16f41c7",
+    "runtime_manifest_sha256": "c647b614aaf9d28e2fb451df0c3e70b79cd3ae387c9407316307f9f88bbc914f",
+    "runtime_weights_sha256": "5e649b4fbbaed446906f790c2074a9cedb953f72e6cb739b78a26806521654cc",
+    "v17_generation_report_sha256": "004a85cb46c5b0c5332985b927e7a5e95706054c0f327394169837d3872fb93e",
+    "v29_generation_report_sha256": "48695ae0c22edd8dc592831550dcec9a99c398519aad08e38bb5f4922a64e291",
+    "v29_full16_responses_sha256": "139c35209c6521249616c4df9709730d63f746c94bb19a236d4c7914759299e1"
+  },
+  "claim_boundary": {
+    "general_intelligence_improved": false,
+    "claude_or_gpt_level": false,
+    "reason": "The frozen 16-task general gate stayed 10/16 and the strict tool-state gate is only 9/20."
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "format": "colorlm-v13-causal-sparse-report-v1",
+  "model": "ColorLM-v13-Causal-Sparse-L12",
+  "status": "manual-evaluation-candidate",
+  "date": "2026-07-30",
+  "architecture": "ColorLM v6 core plus two Kimi K3 macro capsules at ColorLM layer 12; no Coder capsule and no layer-28 K3 branch",
+  "selection": {
+    "method": "single-site exact counterfactual next-token NLL ablation",
+    "teacher_tokens": 72,
+    "task_groups": 12,
+    "source_teacher_sha256": "f078f7fc6ad3f6a7331139b4d3626a1ef773cb176fdaa0a02003140ccc306382",
+    "no_op_shard_sha256": "ca1f5d1e2922e8fb5b5c951e152d9b5db8420acf01f9d441e09e379e5279f83f",
+    "l12_k3_shard_sha256": "f297c480eb5e09b908669bafa24796b1b758efbfb71ff7b1bcf47fdb5279a67b",
+    "l28_k3_shard_sha256": "804d8dd3cbb08f846617ce464be8856ab3a7d211d6f06e90edcbf94a2aa88d83",
+    "both_sites_k3_shard_sha256": "b04d8b76c6e488eda33c9e2d484f45a59a75ca162f92c1276422a9cd5ff08e99",
+    "mean_nll": {
+      "no_op": 2.4872833700447083,
+      "k3_l12_only": 2.4388460118126343,
+      "k3_l28_only": 2.455791965589741,
+      "k3_both_sites": 2.4920367982856795
+    },
+    "relative_nll_improvement_vs_no_op": 0.019474000757381905,
+    "tasks_improved": 8,
+    "tasks_total": 12,
+    "tool_tasks_improved": 5,
+    "tool_tasks_total": 5,
+    "finding": "K3 is beneficial at either site in isolation, while forcing both sites causes destructive cross-layer interference; L12-only is the best measured fixed graph."
+  },
+  "rejected_research": {
+    "global_linear_router": "rejected: strict leave-one-task-out underperformed the fixed-route control",
+    "l12_local_linear_router": "rejected: 25.0% heldout accuracy versus 43.75% control",
+    "l28_local_linear_router": "rejected after stability audit: the seed-13 split passed, but only 4 of 12 random task splits passed and strict leave-one-task-out was 32.73% versus 40.0% control",
+    "runtime_guard": "rejected_control plans are not emitted by the calibrator and are rejected by both the Python and C++ loaders"
+  },
+  "weights": {
+    "core_bytes": 13731822496,
+    "k3_weight_bytes": 190871552,
+    "effective_bytes": 13922694048,
+    "effective_gib": 12.967,
+    "k3_plan_sha256": "7b08e8ee2da88cf025d28eb726b66f44a33540c6eb7b64d2c69825b2e3ee177b"
+  },
+  "runtime": {
+    "url": "http://127.0.0.1:8102/v1",
+    "alias": "ColorLM-v13-Causal-Sparse-L12",
+    "context": 32768,
+    "device": "Vulkan0 / AMD Radeon RX 5700 XT",
+    "mode": "optimized+batch-read+k3[L12<-K3L28E41/K3L28E780]",
+    "llama_dll_sha256": "5869647f579b9f3c395cfc7fb349787d637c1170084e068d6038b0ef452d8659",
+    "llama_server_sha256": "680a19f2c22ac7168ef5d1a7143311262a88d086006bf5aad01ea69aa303e4bd",
+    "launcher_sha256": "6831624044eadd8b94967ce921961bbff5e3ac8bafe1aa6291bbf378d5f9bfb1"
+  },
+  "smoke": {
+    "code": {
+      "task": "return a TypeScript number-array deduplication function",
+      "result": "passed",
+      "completion_tokens": 26
+    },
+    "tool": {
+      "task": "call read_file for src/main.rs",
+      "result": "passed",
+      "function": "read_file",
+      "arguments": {"path": "src/main.rs"},
+      "finish_reason": "tool_calls"
+    },
+    "speed": {
+      "protocol": "adjacent warm 64-token decode, ignore_eos=true",
+      "v12_tokens_per_second": 13.880225796573145,
+      "v13_tokens_per_second": 13.841189650250438,
+      "relative_change": -0.002812347566356273,
+      "result": "neutral"
+    }
+  },
+  "instrumentation_regression": {
+    "probe": "K3 residual feature dump is disabled by default and creates no production graph nodes",
+    "formal_l12_tokens": 72,
+    "formal_l12_max_abs_nll_diff_vs_pre_probe_binary": 0.0,
+    "result": "exact"
+  },
+  "scope": "This report proves a smaller causally selected K3 graph and a local NLL improvement on the selection set. It does not prove broad coding superiority or frontier-model parity; manual coding and Claude Code evaluation remains required."
+}
