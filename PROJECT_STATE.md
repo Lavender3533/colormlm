@@ -1,6 +1,6 @@
 # 北极星（Polaris）项目现状
 
-更新日期：2026-08-01
+更新日期：2026-08-02
 
 跨对话/跨工程接手续读：`fast16/HANDOFF_2026-07-31.md`。
 
@@ -1214,3 +1214,24 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
 - 43层CPU/GPU BF16逐位门当前在fresh survey为39/43 exact；L5/L7/L9/L41各剩1个
   BF16边界元素，仍在用确定性accumulator/E4M3FN语义收敛。未放宽容差，在43/43通过前
   不启用无CPU verify的正式提交路径。
+
+### 2026-08-02 FullDepth43 连续生成与 GPU payload cache 否决
+
+- `FullDepth43/native-top6` 已完成首次零下载、连续两 token 正式闭环：输出 token ID 为
+  `[5, 223]`，两个 position 均完整执行 43/43 层，CPU fallback 为 0、`error=null`。
+  无 GPU payload cache 的同口径运行耗时 `146.5560s`，有效速度约 `0.01365 token/s`；
+  这证明新架构能保持连续状态并真实提交 token，但仍不是可交互速度。
+- 持久 GPU 最终词表头已接入正式 token 路径：约 `1.06GB` BF16 权重只上传一次，GPU 直接
+  argmax，生产路径不返回完整 logits；GPU head 失败禁止 CPU fallback。
+- 6GiB GPU payload LRU 在第二 token 第12层触发 Vulkan device-memory OOM。失败前 payload
+  已驻留约 `5.00GiB`，另有约 `0.99GiB` 常驻词表头和计算/桌面缓冲，因此 6GiB 配置不安全。
+- 4GiB 稳定性门可完整生成相同 `[5, 223]`，但发生 `317` 次 eviction、跨两 token 命中为
+  `0/602`；端到端耗时 `160.2900s`，比无该缓存基线慢约 `9.37%`。因此朴素 GPU payload
+  LRU 不晋级，不能作为默认加速；后续只有在抗顺序扫描驻留或按层生命周期策略通过真实 A/B
+  后才可重开。
+- 连续剖析 runner 已支持 `1..16` token、持久 GPU 词表头和逐 token 精确 wall time，并对
+  position、43层覆盖、committed ledger 与 profiler 次数 fail-closed；FullDepth43 测试为
+  `41 passed, 2 subtests passed`。
+- 当前主要瓶颈仍是 CPU attention/router/compressor、FP8 materialization、Range验证以及逐层
+  Python→文件→Rust 边界。GPU kernel 两 token 合计仅约 `0.264s`；下一主线是把这些阶段并入
+  持久 GPU 图并删除逐层文件中转，而不是继续扩大 VRAM LRU。
