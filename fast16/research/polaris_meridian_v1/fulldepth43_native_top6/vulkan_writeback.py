@@ -142,13 +142,27 @@ class PersistentVulkanWriteback:
     def _fail(self, message: str) -> None:
         self.poisoned = True
         process = self.process
+        self.process = None
         if process is not None and process.poll() is None:
             process.kill()
             try:
                 process.wait(timeout=2)
             except subprocess.TimeoutExpired:
                 pass
+        if process is not None:
+            self._close_streams(process)
         raise VulkanWritebackError(message)
+
+    def _close_streams(self, process: subprocess.Popen[str]) -> None:
+        for thread in self._threads:
+            thread.join(timeout=1)
+        self._threads.clear()
+        for stream in (process.stdin, process.stdout, process.stderr):
+            if stream is not None and not stream.closed:
+                try:
+                    stream.close()
+                except OSError:
+                    pass
 
     def execute(self, manifest_path: Path) -> tuple[torch.Tensor, dict[str, Any]]:
         if self.poisoned or self.process is None or self.process.poll() is not None:
@@ -238,6 +252,7 @@ class PersistentVulkanWriteback:
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=3)
+        self._close_streams(process)
 
     def __enter__(self) -> "PersistentVulkanWriteback":
         return self
