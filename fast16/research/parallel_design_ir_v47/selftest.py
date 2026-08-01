@@ -11,6 +11,10 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parent
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 PROJECT_ROOT = ROOT.parents[2]
 FRONTEND_ROOT = ROOT.parent / "parallel_frontend_v47"
 sys.path.insert(0, str(ROOT))
@@ -70,7 +74,7 @@ def main() -> int:
     record(checks, "llamacpp_schema_no_boolean_subschema_or_prefixitems", not compat_errors, compat_errors)
 
     converter = PROJECT_ROOT / "llama.cpp" / "examples" / "json_schema_to_grammar.py"
-    converted = subprocess.run([sys.executable, str(converter), str(ROOT / "design_ir.llamacpp.schema.json")], capture_output=True, timeout=20)
+    converted = subprocess.run([sys.executable, "-X", "utf8", str(converter), str(ROOT / "design_ir.llamacpp.schema.json")], capture_output=True, timeout=20)
     converted_stdout = converted.stdout.decode("utf-8", errors="replace")
     converted_stderr = converted.stderr.decode("utf-8", errors="replace")
     record(checks, "llamacpp_schema_converts_to_grammar", converted.returncode == 0 and "root ::=" in converted_stdout, {"returncode": converted.returncode, "stderr": converted_stderr[-1000:], "grammar_bytes": len(converted.stdout)})

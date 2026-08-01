@@ -4,7 +4,7 @@
   "title": "terminal hidden 到完整 Design IR 序列岛记录",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "task_id", "group_id", "template_cluster_id", "split", "capability", "target_mode", "prompt_utf8", "copy_slots", "target_text", "target_utf8_bytes", "target_token_ids", "capture", "prefix_sha256"],
+  "required": ["schema_version", "task_id", "group_id", "template_cluster_id", "split", "capability", "target_mode", "prompt_utf8", "copy_slots", "slot_targets", "target_text", "target_utf8_bytes", "capture", "prefix_sha256"],
   "properties": {
     "schema_version": {"const": "design-ir-sequence-record-v1"},
     "task_id": {"type": "string", "minLength": 1},
@@ -30,13 +30,56 @@
         }
       }
     },
+    "slot_targets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["copy", "visual", "layout", "components", "actions", "responsive"],
+      "properties": {
+        "copy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["title", "lede"],
+          "properties": {"title": {"type": "integer", "minimum": 0, "maximum": 63}, "lede": {"type": "integer", "minimum": 0, "maximum": 63}}
+        },
+        "visual": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "palette", "density", "shape"],
+          "properties": {"mode": {"type": "string"}, "palette": {"type": "string"}, "density": {"type": "string"}, "shape": {"type": "string"}}
+        },
+        "layout": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["grammar", "mobile", "breakpoint_profile"],
+          "properties": {"grammar": {"type": "string"}, "mobile": {"type": "string"}, "breakpoint_profile": {"type": "integer"}}
+        },
+        "components": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["primary", "controls", "content", "detail", "support"],
+          "properties": {"primary": {"type": "array"}, "controls": {"type": "array"}, "content": {"type": "array"}, "detail": {"type": "array"}, "support": {"type": "array"}}
+        },
+        "actions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["data", "view", "commit", "state"],
+          "properties": {"data": {"type": "string"}, "view": {"type": "string"}, "commit": {"type": "string"}, "state": {"type": "string"}}
+        },
+        "responsive": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["main", "overlay"],
+          "properties": {"main": {"type": "string"}, "overlay": {"type": "string"}}
+        }
+      }
+    },
     "target_text": {"type": "string", "minLength": 1},
     "target_utf8_bytes": {"type": "integer", "minimum": 150, "maximum": 1200},
-    "target_token_ids": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 0}},
+    "fallback_target_token_ids": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 0}},
     "capture": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["model", "layer", "hidden_dtype", "hidden_shape", "hidden_file", "hidden_sha256", "request_sha256"],
+      "required": ["model", "layer", "hidden_dtype", "hidden_shape", "hidden_file", "hidden_sha256", "request_sha256", "initial_only", "answer_prefix_tokens"],
       "properties": {
         "model": {"type": "string", "minLength": 1},
         "layer": {"type": "string", "minLength": 1},
@@ -44,7 +87,9 @@
         "hidden_shape": {"type": "array", "prefixItems": [{"const": 2048}], "items": false},
         "hidden_file": {"type": "string", "minLength": 1},
         "hidden_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "request_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        "request_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "initial_only": {"const": true},
+        "answer_prefix_tokens": {"const": 0}
       }
     },
     "prefix_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}

@@ -1,6 +1,6 @@
 {
   "schema_version": "parallel-design-genome-selftest-v1",
-  "ok": false,
+  "ok": true,
   "cpu_static_only": true,
   "splits_read": [
     "train"
@@ -23,11 +23,11 @@
     },
     {
       "name": "llamacpp_schema_converts_to_grammar",
-      "passed": false,
+      "passed": true,
       "evidence": {
-        "returncode": 1,
-        "stderr": "Traceback (most recent call last):\r\n  File \"D:\\project\\��ģ��ssd��\\llama.cpp\\examples\\json_schema_to_grammar.py\", line 839, in <module>\r\n    main()\r\n  File \"D:\\project\\��ģ��ssd��\\llama.cpp\\examples\\json_schema_to_grammar.py\", line 827, in main\r\n    schema = json.load(f)\r\n             ^^^^^^^^^^^^\r\n  File \"C:\\Users\\Kangnaixi\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\json\\__init__.py\", line 293, in load\r\n    return loads(fp.read(),\r\n                 ^^^^^^^^^\r\nUnicodeDecodeError: 'gbk' codec can't decode byte 0xae in position 111: illegal multibyte sequence\r\n",
-        "grammar_bytes": 0
+        "returncode": 0,
+        "stderr": "",
+        "grammar_bytes": 4378
       }
     },
     {
@@ -600,7 +600,7 @@
       "name": "all_text_utf8_without_bom",
       "passed": true,
       "evidence": {
-        "checked": 43,
+        "checked": 49,
         "errors": []
       }
     }

@@ -1,6 +1,6 @@
 {
   "format": "colorlm-v47-static-selfcheck-v1",
-  "utf8_files_checked": 33,
+  "utf8_files_checked": 37,
   "utf8_bom_count": 0,
   "static_contracts_passed": true,
   "synthetic_fixture_checked": true,
