@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import http.client
 import json
+import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -14,6 +16,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from gateway import TARGET_MODEL, create_server  # noqa: E402
+
+
+FAST16_DIR = Path(__file__).resolve().parents[2]
+LAUNCHER_SCRIPT = FAST16_DIR / "run-polaris-v0.1-preview.ps1"
+LAUNCHER_BATCH = FAST16_DIR / "run-polaris-v0.1-preview.bat"
 
 
 class FakeUpstreamHandler(BaseHTTPRequestHandler):
@@ -185,6 +192,72 @@ class GatewayTest(unittest.TestCase):
         self.assertIn("草稿", first_line)
         self.assertIn("完成", remaining)
         self.assertIn("[DONE]", remaining)
+
+
+@unittest.skipUnless(sys.platform == "win32", "PowerShell launcher tests require Windows")
+class LauncherCompatibilityTest(unittest.TestCase):
+    def run_launcher(self, executable: str, *arguments: str) -> bytes:
+        result = subprocess.run(
+            [executable, *arguments],
+            cwd=FAST16_DIR.parent,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=15,
+            check=False,
+        )
+        self.assertEqual(
+            result.returncode,
+            0,
+            result.stdout.decode("ascii", errors="replace"),
+        )
+        self.assertIn(b"POLARIS_SELF_TEST_OK", result.stdout)
+        return result.stdout
+
+    def test_launcher_script_is_ascii_safe_utf8_without_bom(self) -> None:
+        raw = LAUNCHER_SCRIPT.read_bytes()
+        self.assertFalse(raw.startswith(b"\xef\xbb\xbf"))
+        self.assertTrue(raw.isascii(), "PS1 must remain ASCII-safe for Windows PowerShell 5")
+        raw.decode("utf-8", errors="strict")
+
+    def test_windows_powershell_5_startup_self_test(self) -> None:
+        executable = shutil.which("powershell.exe")
+        if executable is None:
+            self.skipTest("powershell.exe is unavailable")
+        output = self.run_launcher(
+            executable,
+            "-NoLogo",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(LAUNCHER_SCRIPT),
+            "-SelfTest",
+        )
+        self.assertIn(b"edition=Desktop", output)
+
+    def test_powershell_7_startup_self_test(self) -> None:
+        executable = shutil.which("pwsh.exe")
+        if executable is None:
+            self.skipTest("pwsh.exe is unavailable")
+        output = self.run_launcher(
+            executable,
+            "-NoLogo",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(LAUNCHER_SCRIPT),
+            "-SelfTest",
+        )
+        self.assertIn(b"edition=Core", output)
+
+    def test_batch_prefers_powershell_7(self) -> None:
+        cmd = shutil.which("cmd.exe")
+        if cmd is None:
+            self.skipTest("cmd.exe is unavailable")
+        output = self.run_launcher(cmd, "/d", "/c", str(LAUNCHER_BATCH), "-SelfTest")
+        expected_edition = b"edition=Core" if shutil.which("pwsh.exe") else b"edition=Desktop"
+        self.assertIn(expected_edition, output)
 
 
 if __name__ == "__main__":

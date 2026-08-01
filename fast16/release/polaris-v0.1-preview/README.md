@@ -21,6 +21,14 @@
 fast16\run-polaris-v0.1-preview.bat
 ```
 
+BAT 入口会优先使用 PowerShell 7（`pwsh.exe`），不存在时回退到 Windows PowerShell 5。
+PS1 文件本身保持 UTF-8 无 BOM 且源码仅含 ASCII，因此两种宿主均可安全解析。可在不访问端口、
+不启停任何服务的情况下验证入口：
+
+```powershell
+.\fast16\run-polaris-v0.1-preview.ps1 -SelfTest
+```
+
 脚本默认执行以下动作：
 
 1. 检查 `http://127.0.0.1:8138/health`；
