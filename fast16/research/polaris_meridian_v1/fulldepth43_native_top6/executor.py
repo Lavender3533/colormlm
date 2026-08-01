@@ -245,6 +245,7 @@ class FullDepthNativeLayerReference(s14.NativeLayerReference):
         attention_worker: PersistentFullDepthPackedFp8Attention | None = None,
         attention_position: int | None = None,
         attention_verify_cpu: bool = False,
+        attention_shared_batch: bool = False,
     ) -> None:
         profile.validate()
         if attention_worker is not None and (
@@ -256,7 +257,9 @@ class FullDepthNativeLayerReference(s14.NativeLayerReference):
         self.attention_worker = attention_worker
         self.attention_position = attention_position
         self.attention_verify_cpu = attention_verify_cpu
+        self.attention_shared_batch = attention_shared_batch
         self.attention_vulkan_evidence: list[dict[str, Any]] = []
+        self._attention_batch_cache: dict[str, Any] = {}
         super().__init__(
             layer,
             store,
@@ -332,6 +335,86 @@ class FullDepthNativeLayerReference(s14.NativeLayerReference):
                 )
         return output.numpy()
 
+    def _vulkan_attention_shared_batch(
+        self,
+        array: Any,
+        suffixes: tuple[str, str],
+    ) -> dict[str, Any]:
+        worker = self.attention_worker
+        position = self.attention_position
+        if worker is None or position is None:
+            raise FullDepthError("Vulkan attention shared batch 未绑定 worker/position")
+        layer_prefix = f"layers.{self.layer}.attn."
+        activation_array = self._activation_quant(array)
+        activation = torch.from_numpy(activation_array).to(
+            dtype=torch.float32
+        ).contiguous()
+        assets = {
+            suffix: (
+                self._packed_asset(f"{layer_prefix}{suffix}.weight"),
+                self._packed_asset(f"{layer_prefix}{suffix}.scale"),
+            )
+            for suffix in suffixes
+        }
+        started = time.perf_counter()
+        try:
+            outputs, batch_evidence = worker.execute_shared_batch(
+                layer=self.layer,
+                position=position,
+                suffixes=suffixes,
+                activation=activation,
+                assets=assets,
+            )
+        except FullDepthPackedFp8Error as error:
+            raise FullDepthError(
+                f"L{self.layer} {suffixes} Vulkan attention shared batch 失败: {error}"
+            ) from error
+        elapsed = time.perf_counter() - started
+        response_outputs = batch_evidence["outputs"]
+        if tuple(outputs) != suffixes or len(response_outputs) != len(suffixes):
+            raise FullDepthError("Vulkan attention shared batch 输出顺序/数量漂移")
+        result: dict[str, Any] = {}
+        for suffix, item in zip(suffixes, response_outputs, strict=True):
+            output = outputs[suffix]
+            projection_evidence = {
+                **item,
+                "protocol": batch_evidence["protocol"],
+                "request_id": batch_evidence["request_id"],
+                "layer": self.layer,
+                "position": position,
+                "arena_epoch": batch_evidence["arena_epoch"],
+                "input": batch_evidence["input"],
+                "input_sha256": batch_evidence["input_sha256"],
+                "catalog_sha256": batch_evidence["catalog_sha256"],
+                "gpu_slot_cache_entries": batch_evidence[
+                    "gpu_slot_cache_entries"
+                ],
+                "activation_uploaded_bytes": batch_evidence[
+                    "activation_uploaded_bytes"
+                ]
+                // len(suffixes),
+                "batch_projection_count": len(suffixes),
+                "batch_elapsed_seconds": elapsed,
+                "elapsed_seconds": elapsed / len(suffixes),
+            }
+            if self.attention_verify_cpu:
+                prefix = f"{layer_prefix}{suffix}"
+                cpu_output = super()._linear_fp8(array, prefix)
+                cpu_tensor = torch.from_numpy(cpu_output).to(torch.float32)
+                exact = bool(torch.equal(output, cpu_tensor))
+                projection_evidence["cpu_exact_bf16"] = exact
+                projection_evidence["cpu_output_sha256"] = _sha256_bytes(
+                    cpu_tensor.contiguous().numpy().astype("<f4", copy=False).tobytes()
+                )
+                if not exact:
+                    max_abs = float((output - cpu_tensor).abs().max().item())
+                    raise FullDepthError(
+                        f"L{self.layer} {prefix} Vulkan/CPU BF16 不等价，max_abs={max_abs}"
+                    )
+            self.attention_vulkan_evidence.append(projection_evidence)
+            result[suffix] = output.numpy()
+        return result
+
     def _linear_fp8(self, array: Any, prefix: str) -> Any:
         approved = {
             "wq_a",
@@ -344,6 +427,22 @@ class FullDepthNativeLayerReference(s14.NativeLayerReference):
         suffix = prefix[len(layer_prefix) :] if prefix.startswith(layer_prefix) else ""
         if self.attention_worker is None or suffix not in approved:
             return super()._linear_fp8(array, prefix)
+        if self.attention_shared_batch and suffix in self._attention_batch_cache:
+            return self._attention_batch_cache.pop(suffix)
+        batch_suffixes: tuple[str, str] | None = None
+        if self.attention_shared_batch and suffix == "wq_a":
+            batch_suffixes = ("wq_a", "wkv")
+        elif (
+            self.attention_shared_batch
+            and suffix == "wq_b"
+            and self.compress_ratios[self.layer] == 4
+        ):
+            batch_suffixes = ("wq_b", "indexer.wq_b")
+        if batch_suffixes is not None:
+            batch_outputs = self._vulkan_attention_shared_batch(array, batch_suffixes)
+            requested = batch_outputs.pop(suffix)
+            self._attention_batch_cache.update(batch_outputs)
+            return requested
         return self._vulkan_attention_projection(
             array,
             prefix,
@@ -394,6 +493,7 @@ class ExecutionConfig:
     vulkan_attention_timeout_seconds: float = 60.0
     vulkan_attention_scratch: Path | None = None
     vulkan_attention_verify_cpu: bool = False
+    vulkan_attention_shared_batch: bool = False
 
     def validate(self) -> None:
         if not self.endpoint.startswith("https://"):
@@ -906,6 +1006,7 @@ class FullDepthTokenWorker:
                 attention_worker=self._attention,
                 attention_position=position if self._attention is not None else None,
                 attention_verify_cpu=self.config.vulkan_attention_verify_cpu,
+                attention_shared_batch=self.config.vulkan_attention_shared_batch,
             )
 
             self.stage = f"position_{position}_layer_{layer}_native_route"
@@ -1064,9 +1165,16 @@ class FullDepthTokenWorker:
             session.finish_layer(layer, input_token_id)
             attention_vulkan = list(kernel.attention_vulkan_evidence)
             if attention_vulkan:
-                expected_suffixes = ["wq_a", "wq_b", "wkv", "wo_a", "wo_b"]
-                if self.profile.ratio_for(layer) == 4:
-                    expected_suffixes.insert(3, "indexer.wq_b")
+                if self.config.vulkan_attention_shared_batch:
+                    # Batch A executes wq_a+wkv at the first logical wq_a call;
+                    # telemetry follows the real GPU execution order.
+                    expected_suffixes = ["wq_a", "wkv", "wq_b", "wo_a", "wo_b"]
+                    if self.profile.ratio_for(layer) == 4:
+                        expected_suffixes.insert(3, "indexer.wq_b")
+                else:
+                    expected_suffixes = ["wq_a", "wq_b", "wkv", "wo_a", "wo_b"]
+                    if self.profile.ratio_for(layer) == 4:
+                        expected_suffixes.insert(3, "indexer.wq_b")
                 observed_suffixes = [
                     row["projection"]["name"].removeprefix(
                         f"layers.{layer}.attn."
@@ -1290,6 +1398,7 @@ def execute(
                 "cpu_fallback": False,
                 "activation_quantization": "cpu_e4m3fn_quant_dequant",
                 "cpu_verification": config.vulkan_attention_verify_cpu,
+                "shared_input_batch": config.vulkan_attention_shared_batch,
             }
         for _ in range(config.token_count):
             position = decoder.position
@@ -1477,6 +1586,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--vulkan-attention-timeout-seconds", type=float, default=60.0)
     parser.add_argument("--vulkan-attention-scratch", type=Path)
     parser.add_argument("--vulkan-attention-verify-cpu", action="store_true")
+    parser.add_argument("--vulkan-attention-shared-batch", action="store_true")
     parser.add_argument(
         "--vulkan-final-head-validate-cpu-once",
         action="store_true",
@@ -1528,6 +1638,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             vulkan_attention_timeout_seconds=args.vulkan_attention_timeout_seconds,
             vulkan_attention_scratch=args.vulkan_attention_scratch,
             vulkan_attention_verify_cpu=args.vulkan_attention_verify_cpu,
+            vulkan_attention_shared_batch=args.vulkan_attention_shared_batch,
             checkpoint_path=args.checkpoint,
             resume_checkpoint_path=args.resume_checkpoint,
         )

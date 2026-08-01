@@ -191,9 +191,12 @@ def test_profiled_candidate_runs_continuous_tokens_and_keeps_single_token_compat
     token_walls: list[float],
 ) -> None:
     worker = tmp_path / "writeback.exe"
+    attention_worker = tmp_path / "attention.exe"
     final_head_worker = tmp_path / "head.exe"
     worker.write_bytes(b"worker")
+    attention_worker.write_bytes(b"attention")
     final_head_worker.write_bytes(b"head")
+    attention_scratch = tmp_path / "attention-scratch"
     scratch = tmp_path / "head-scratch"
     observed_configs = []
 
@@ -247,6 +250,9 @@ def test_profiled_candidate_runs_continuous_tokens_and_keeps_single_token_compat
         worker=worker,
         output_root=output_root,
         token_count=token_count,
+        vulkan_attention_worker=attention_worker,
+        vulkan_attention_scratch=attention_scratch,
+        vulkan_attention_shared_batch=True,
         vulkan_final_head_worker=final_head_worker,
         vulkan_final_head_scratch=scratch,
     )
@@ -254,6 +260,9 @@ def test_profiled_candidate_runs_continuous_tokens_and_keeps_single_token_compat
     assert len(observed_configs) == 1
     config = observed_configs[0]
     assert config.token_count == token_count
+    assert config.vulkan_attention_worker == attention_worker.resolve()
+    assert config.vulkan_attention_scratch == attention_scratch.resolve()
+    assert config.vulkan_attention_shared_batch is True
     assert config.vulkan_final_head_worker == final_head_worker.resolve()
     assert config.vulkan_final_head_scratch == scratch.resolve()
     assert summary["committed_token_count"] == token_count
@@ -278,6 +287,43 @@ def test_profiled_candidate_rejects_token_count_outside_contract(tmp_path: Path)
             )
 
 
+def test_profiled_candidate_surfaces_model_error_before_timing_count(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    worker = tmp_path / "worker.exe"
+    worker.write_bytes(b"worker")
+
+    class FakeProfiler:
+        def __init__(self) -> None:
+            self._observations = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args) -> None:
+            return None
+
+        def snapshot(self):
+            return {"gc_status": {"gc_removed": True}, "vulkan_boundary": {}}
+
+    monkeypatch.setattr(candidate_runner, "CandidateProfiler", FakeProfiler)
+    monkeypatch.setattr(
+        candidate_runner,
+        "execute",
+        lambda _config: {
+            "status": "blocked",
+            "error": {"stage": "attention", "message": "frozen failure"},
+        },
+    )
+    with pytest.raises(candidate_runner.FullDepthError, match="frozen failure"):
+        candidate_runner.run_profiled_candidate(
+            worker=worker,
+            output_root=tmp_path / "blocked-run",
+            token_count=2,
+        )
+
+
 def test_profiled_candidate_cli_forwards_continuous_head_options(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -292,6 +338,8 @@ def test_profiled_candidate_cli_forwards_continuous_head_options(
     worker = tmp_path / "worker.exe"
     output_root = tmp_path / "output"
     final_worker = tmp_path / "head.exe"
+    attention_worker = tmp_path / "attention.exe"
+    attention_scratch = tmp_path / "attention-scratch"
     scratch = tmp_path / "scratch"
     assert candidate_runner.main(
         [
@@ -301,6 +349,11 @@ def test_profiled_candidate_cli_forwards_continuous_head_options(
             str(output_root),
             "--token-count",
             "4",
+            "--vulkan-attention-worker",
+            str(attention_worker),
+            "--vulkan-attention-scratch",
+            str(attention_scratch),
+            "--vulkan-attention-shared-batch",
             "--vulkan-final-head-worker",
             str(final_worker),
             "--vulkan-final-head-scratch",
@@ -308,5 +361,8 @@ def test_profiled_candidate_cli_forwards_continuous_head_options(
         ]
     ) == 0
     assert captured["token_count"] == 4
+    assert captured["vulkan_attention_worker"] == attention_worker
+    assert captured["vulkan_attention_scratch"] == attention_scratch
+    assert captured["vulkan_attention_shared_batch"] is True
     assert captured["vulkan_final_head_worker"] == final_worker
     assert captured["vulkan_final_head_scratch"] == scratch

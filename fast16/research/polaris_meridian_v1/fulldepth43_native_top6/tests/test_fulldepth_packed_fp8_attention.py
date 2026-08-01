@@ -63,6 +63,63 @@ for line in sys.stdin:
         raise SystemExit(3)
     if request["arena_epoch"] != expected_epoch:
         raise SystemExit(4)
+    if request["op"] == "execute_fp8_attention_shared_batch":
+        outputs = []
+        for item in request["projections"]:
+            output = bytes(item["output"]["bytes"])
+            arena = Path(item["output"]["path"])
+            with arena.open("r+b") as stream:
+                stream.seek(item["output"]["offset"])
+                stream.write(output)
+                stream.flush()
+            output_sha = hashlib.sha256(output).hexdigest()
+            outputs.append({
+                "projection": item["projection"],
+                "output_written": item["output"],
+                "output_sha256": output_sha,
+                "weight_sha256": item["weight"]["sha256"],
+                "scale_sha256": item["scale"]["sha256"],
+                "payload_hash_verified": True,
+                "gpu_slot_cache_hit": expected_epoch > 0,
+                "gpu_slot_resident_bytes": (
+                    item["weight"]["bytes"] + item["scale"]["bytes"]
+                ),
+                "payload_uploaded_bytes": (
+                    0 if expected_epoch > 0
+                    else item["weight"]["bytes"] + item["scale"]["bytes"]
+                ),
+                "numeric_mode": "packed_fp8_e4m3_ue8m0_bf16_output",
+                "output_rounding": "bf16_rne_then_f32_le",
+            })
+        if mode == "batch_bad_order":
+            outputs.reverse()
+        elif mode == "batch_missing_output":
+            outputs.pop()
+        elif mode == "batch_bad_output_sha":
+            outputs[-1]["output_sha256"] = "f" * 64
+        response = {
+            "protocol": protocol,
+            "request_id": request["request_id"],
+            "ok": True,
+            "revision": revision,
+            "profile": profile,
+            "layer": request["layer"],
+            "position": request["position"],
+            "arena_epoch": request["arena_epoch"],
+            "input": request["input"],
+            "input_sha256": request["input_sha256"],
+            "outputs": outputs,
+            "catalog_sha256": catalog_sha,
+            "gpu_slot_cache_entries": len(outputs),
+            "activation_uploaded_bytes": request["input"]["bytes"],
+        }
+        print(json.dumps(response), flush=True)
+        expected_epoch += 1
+        if mode in {
+            "batch_bad_order", "batch_missing_output", "batch_bad_output_sha"
+        }:
+            raise SystemExit(6)
+        continue
     output = bytes(request["output"]["bytes"])
     arena = Path(request["output"]["path"])
     with arena.open("r+b") as stream:
@@ -220,6 +277,40 @@ class FullDepthPackedFp8AttentionTests(unittest.TestCase):
         )
         return worker, arena, weight, scale
 
+    def _batch_assets(
+        self,
+        cache: Path,
+        layer: int,
+        suffixes: tuple[str, str],
+    ) -> dict[
+        str,
+        tuple[attention.PackedFp8Asset, attention.PackedFp8Asset],
+    ]:
+        assets = {}
+        for index, suffix in enumerate(suffixes, start=1):
+            spec = attention.projection_spec(layer, suffix)
+            n, k = int(spec["n"]), int(spec["k"])
+            weight = self._asset(
+                cache,
+                f"{spec['name']}.weight",
+                f"batch-{index}-weight.bin",
+                n * k,
+                f"{index + 2:x}" * 64,
+                "F8_E4M3",
+                (n, k),
+            )
+            scale = self._asset(
+                cache,
+                f"{spec['name']}.scale",
+                f"batch-{index}-scale.bin",
+                (n // 128) * (k // 128),
+                f"{index + 4:x}" * 64,
+                "F8_E8M0",
+                (n // 128, k // 128),
+            )
+            assets[suffix] = (weight, scale)
+        return assets
+
     @staticmethod
     def _command(worker: Path, mode: str, payload_root: Path) -> tuple[str, ...]:
         return (
@@ -347,6 +438,125 @@ class FullDepthPackedFp8AttentionTests(unittest.TestCase):
                 )
             self.assertTrue(worker.poisoned)
             self.assertIsNone(worker.process)
+
+    def test_shared_batch_is_one_epoch_and_preserves_output_order_and_sha(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script, arena, _, _ = self._fixture(root)
+            suffixes = ("wq_a", "wkv")
+            assets = self._batch_assets(root / "range_cache", 42, suffixes)
+            activation = torch.zeros((1, 1, 4096), dtype=torch.float32)
+            with CleanPersistentClient(
+                self._command(script, "success", root / "range_cache"),
+                arena,
+                timeout_seconds=5,
+            ) as worker:
+                outputs, evidence = worker.execute_shared_batch(
+                    layer=42,
+                    position=0,
+                    suffixes=suffixes,
+                    activation=activation,
+                    assets=assets,
+                )
+                self.assertEqual(worker.epoch, 1)
+                self.assertEqual(evidence["arena_epoch"], 0)
+                self.assertEqual(tuple(outputs), suffixes)
+                self.assertEqual(tuple(item["projection"]["name"] for item in evidence["outputs"]), (
+                    "layers.42.attn.wq_a",
+                    "layers.42.attn.wkv",
+                ))
+                for suffix, output, item in zip(suffixes, outputs.values(), evidence["outputs"]):
+                    spec = attention.projection_spec(42, suffix)
+                    expected_sha = hashlib.sha256(bytes(int(spec["n"]) * 4)).hexdigest()
+                    self.assertEqual(item["output_sha256"], expected_sha)
+                    self.assertEqual(tuple(output.shape), (1, 1, int(spec["n"])))
+                    self.assertTrue(torch.equal(output, torch.zeros_like(output)))
+
+    def test_shared_batch_output_arena_ranges_do_not_overlap(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script, arena, _, _ = self._fixture(root)
+            suffixes = ("wq_b", "indexer.wq_b")
+            assets = self._batch_assets(root / "range_cache", 42, suffixes)
+            with CleanPersistentClient(
+                self._command(script, "success", root / "range_cache"),
+                arena,
+                timeout_seconds=5,
+            ) as worker:
+                _, evidence = worker.execute_shared_batch(
+                    layer=42,
+                    position=0,
+                    suffixes=suffixes,
+                    activation=torch.zeros((1, 1, 1024), dtype=torch.float32),
+                    assets=assets,
+                )
+            views = [evidence["input"]] + [
+                item["output_written"] for item in evidence["outputs"]
+            ]
+            ranges = sorted(
+                (int(view["offset"]), int(view["offset"]) + int(view["bytes"]))
+                for view in views
+            )
+            self.assertTrue(all(left[1] <= right[0] for left, right in zip(ranges, ranges[1:])))
+
+    def test_shared_batch_rejects_unapproved_and_duplicate_suffixes(self) -> None:
+        cases = (
+            (("wq_a", "wq_b"), "未批准|组合"),
+            (("wq_a", "wq_a"), "重复|suffix"),
+        )
+        for suffixes, message in cases:
+            with self.subTest(suffixes=suffixes), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                script, arena, _, _ = self._fixture(root)
+                assets = self._batch_assets(root / "range_cache", 42, suffixes)
+                worker = CleanPersistentClient(
+                    self._command(script, "success", root / "range_cache"),
+                    arena,
+                    timeout_seconds=5,
+                )
+                try:
+                    with self.assertRaisesRegex(attention.FullDepthPackedFp8Error, message):
+                        worker.execute_shared_batch(
+                            layer=42,
+                            position=0,
+                            suffixes=suffixes,
+                            activation=torch.zeros((1, 1, 4096), dtype=torch.float32),
+                            assets=assets,
+                        )
+                    self.assertTrue(worker.poisoned)
+                finally:
+                    worker.close()
+
+    def test_shared_batch_response_drift_poisons_client(self) -> None:
+        cases = (
+            ("batch_bad_order", "顺序|身份|合同"),
+            ("batch_missing_output", "缺项|数量|合同"),
+            ("batch_bad_output_sha", "output 字节/SHA 漂移"),
+        )
+        for mode, message in cases:
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                script, arena, _, _ = self._fixture(root)
+                suffixes = ("wq_a", "wkv")
+                assets = self._batch_assets(root / "range_cache", 42, suffixes)
+                worker = CleanPersistentClient(
+                    self._command(script, mode, root / "range_cache"),
+                    arena,
+                    timeout_seconds=5,
+                )
+                try:
+                    with self.assertRaisesRegex(attention.FullDepthPackedFp8Error, message):
+                        worker.execute_shared_batch(
+                            layer=42,
+                            position=0,
+                            suffixes=suffixes,
+                            activation=torch.zeros((1, 1, 4096), dtype=torch.float32),
+                            assets=assets,
+                        )
+                    self.assertTrue(worker.poisoned)
+                    self.assertEqual(worker.epoch, 0)
+                finally:
+                    worker.close()
 
     def test_arena_rejects_shape_and_non_bf16_grouped_input(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

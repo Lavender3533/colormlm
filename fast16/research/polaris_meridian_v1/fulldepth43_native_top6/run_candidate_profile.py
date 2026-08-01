@@ -52,6 +52,9 @@ def run_profiled_candidate(
     fp8_cache_bytes: int = 0,
     download_budget_bytes: int = 0,
     token_count: int = 1,
+    vulkan_attention_worker: Path | None = None,
+    vulkan_attention_scratch: Path | None = None,
+    vulkan_attention_shared_batch: bool = False,
     vulkan_final_head_worker: Path | None = None,
     vulkan_final_head_scratch: Path | None = None,
 ) -> dict[str, Any]:
@@ -62,6 +65,10 @@ def run_profiled_candidate(
     ):
         raise ValueError("token_count 必须是 1..16 的整数")
     worker = worker.resolve(strict=True)
+    if vulkan_attention_worker is not None:
+        vulkan_attention_worker = vulkan_attention_worker.resolve(strict=True)
+    if vulkan_attention_scratch is not None:
+        vulkan_attention_scratch = vulkan_attention_scratch.resolve()
     if vulkan_final_head_worker is not None:
         vulkan_final_head_worker = vulkan_final_head_worker.resolve(strict=True)
     if vulkan_final_head_scratch is not None:
@@ -97,11 +104,17 @@ def run_profiled_candidate(
                     vulkan_writeback_verify_cpu=False,
                     vulkan_writeback_cpu_fallback=False,
                     vulkan_writeback_fast_production=True,
+                    vulkan_attention_worker=vulkan_attention_worker,
+                    vulkan_attention_scratch=vulkan_attention_scratch,
+                    vulkan_attention_shared_batch=vulkan_attention_shared_batch,
                     vulkan_final_head_worker=vulkan_final_head_worker,
                     vulkan_final_head_scratch=vulkan_final_head_scratch,
                 )
             )
     runtime_profile = profiler.snapshot()
+    if model_report.get("status") != "complete":
+        error = model_report.get("error")
+        raise FullDepthError(f"profiled candidate 未完成: {error}")
     per_token_wall_seconds = _per_token_wall_seconds(
         profiler,
         expected_count=token_count,
@@ -110,8 +123,6 @@ def run_profiled_candidate(
     runtime_profile["materialized_fp8_cache"] = None if cache is None else cache.stats()
     write_json(output_root / "runtime_profile.json", runtime_profile)
 
-    if model_report.get("status") != "complete":
-        raise FullDepthError(f"profiled candidate 未完成: {model_report.get('error')}")
     tokens = model_report.get("tokens")
     if not isinstance(tokens, list) or len(tokens) != token_count:
         raise FullDepthError("profiled candidate token 数量漂移")
@@ -181,6 +192,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG)
     parser.add_argument("--timeout-seconds", type=float, default=30.0)
     parser.add_argument("--token-count", type=int, choices=range(1, 17), default=1)
+    parser.add_argument("--vulkan-attention-worker", type=Path)
+    parser.add_argument("--vulkan-attention-scratch", type=Path)
+    parser.add_argument("--vulkan-attention-shared-batch", action="store_true")
     parser.add_argument("--vulkan-final-head-worker", type=Path)
     parser.add_argument("--vulkan-final-head-scratch", type=Path)
     parser.add_argument("--fp8-cache-gib", type=float, default=0.0)
@@ -199,6 +213,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         fp8_cache_bytes=int(args.fp8_cache_gib * 1024**3),
         download_budget_bytes=int(args.download_budget_gib * 1024**3),
         token_count=args.token_count,
+        vulkan_attention_worker=args.vulkan_attention_worker,
+        vulkan_attention_scratch=args.vulkan_attention_scratch,
+        vulkan_attention_shared_batch=args.vulkan_attention_shared_batch,
         vulkan_final_head_worker=args.vulkan_final_head_worker,
         vulkan_final_head_scratch=args.vulkan_final_head_scratch,
     )

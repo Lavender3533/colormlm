@@ -205,6 +205,7 @@ python -X utf8 -m `
   fast16.research.polaris_meridian_v1.fulldepth43_native_top6.run_candidate_profile `
   --worker scheduler/target/release/examples/s14_vulkan_numeric.exe `
   --vulkan-attention-worker scheduler/target/release/examples/s14_vulkan_numeric.exe `
+  --vulkan-attention-shared-batch `
   --vulkan-final-head-worker scheduler/target/release/examples/s14_bf16_head.exe `
   --vulkan-final-head-scratch <scratch-dir> `
   --output-root <fresh-output-dir> `

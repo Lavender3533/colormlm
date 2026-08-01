@@ -208,7 +208,25 @@ class FullDepthPackedFp8Arena:
     def prepare(
         self, activation: torch.Tensor, spec: Mapping[str, Any]
     ) -> tuple[dict[str, Any], dict[str, Any], str]:
-        input_shape, output_shape = self._shape(spec)
+        input_view, output_views, input_sha256 = self.prepare_shared(
+            activation, (spec,)
+        )
+        return input_view, output_views[0], input_sha256
+
+    def prepare_shared(
+        self,
+        activation: torch.Tensor,
+        specs: Sequence[Mapping[str, Any]],
+    ) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
+        if not specs:
+            raise FullDepthPackedFp8Error("shared attention batch 不得为空")
+        shapes = [self._shape(spec) for spec in specs]
+        input_shape = shapes[0][0]
+        if any(shape != input_shape for shape, _ in shapes):
+            raise FullDepthPackedFp8Error("shared attention batch 输入 shape 不一致")
+        grouped = any(spec["kernel"] == "grouped_wo_a" for spec in specs)
+        if grouped and len(specs) != 1:
+            raise FullDepthPackedFp8Error("grouped wo_a 不允许进入 shared-input batch")
         if (
             activation.device.type != "cpu"
             or activation.dtype != torch.float32
@@ -219,44 +237,46 @@ class FullDepthPackedFp8Arena:
         activation_array = (
             activation.detach().contiguous().numpy().astype("<f4", copy=False)
         )
-        activation_bits = activation_array.view("<u4")
-        if spec["kernel"] == "grouped_wo_a" and bool(
-            np.any(activation_bits & np.uint32(0xFFFF))
+        if grouped and bool(
+            np.any(activation_array.view("<u4") & np.uint32(0xFFFF))
         ):
             raise FullDepthPackedFp8Error("grouped wo_a activation 必须是 BF16-carrying F32")
         payload = activation_array.tobytes(order="C")
-        output_bytes = math.prod(output_shape) * 4
-        output_offset = len(payload)
-        if output_offset + output_bytes > self.path.stat().st_size:
+        output_views: list[dict[str, Any]] = []
+        next_offset = len(payload)
+        for _, output_shape in shapes:
+            output_bytes = math.prod(output_shape) * 4
+            output_views.append(
+                {
+                    "path": str(self.path),
+                    "offset": next_offset,
+                    "bytes": output_bytes,
+                    "dtype": "f32_le_bf16_rounded",
+                    "shape": list(output_shape),
+                }
+            )
+            next_offset += output_bytes
+        if next_offset > self.path.stat().st_size:
             raise FullDepthPackedFp8Error("arena 容量不足")
-        poison = bytes([_OUTPUT_POISON]) * output_bytes
+        poison = bytes([_OUTPUT_POISON]) * (next_offset - len(payload))
         try:
             with self.path.open("r+b", buffering=0) as stream:
                 stream.seek(0)
                 stream.write(payload)
-                stream.seek(output_offset)
+                stream.seek(len(payload))
                 stream.write(poison)
                 stream.flush()
                 os.fsync(stream.fileno())
         except OSError as exc:
             raise FullDepthPackedFp8Error(f"写入 arena 失败: {exc}") from exc
-        return (
-            {
-                "path": str(self.path),
-                "offset": 0,
-                "bytes": len(payload),
-                "dtype": "f32_le",
-                "shape": list(input_shape),
-            },
-            {
-                "path": str(self.path),
-                "offset": output_offset,
-                "bytes": output_bytes,
-                "dtype": "f32_le_bf16_rounded",
-                "shape": list(output_shape),
-            },
-            _sha256(payload),
-        )
+        input_view = {
+            "path": str(self.path),
+            "offset": 0,
+            "bytes": len(payload),
+            "dtype": "f32_le",
+            "shape": list(input_shape),
+        }
+        return input_view, output_views, _sha256(payload)
 
     def read_output(self, view: Mapping[str, Any], expected_sha256: str) -> torch.Tensor:
         try:
@@ -289,6 +309,17 @@ class PersistentFullDepthPackedFp8Attention:
         "payload_hash_verified", "gpu_slot_cache_hit", "gpu_slot_cache_entries",
         "gpu_slot_resident_bytes", "payload_uploaded_bytes",
         "activation_uploaded_bytes", "numeric_mode", "output_rounding",
+    }
+    _BATCH_RESPONSE_KEYS = {
+        "protocol", "request_id", "ok", "revision", "profile", "layer",
+        "position", "arena_epoch", "input", "input_sha256", "outputs",
+        "catalog_sha256", "gpu_slot_cache_entries", "activation_uploaded_bytes",
+    }
+    _BATCH_OUTPUT_KEYS = {
+        "projection", "output_written", "output_sha256", "weight_sha256",
+        "scale_sha256", "payload_hash_verified", "gpu_slot_cache_hit",
+        "gpu_slot_resident_bytes", "payload_uploaded_bytes", "numeric_mode",
+        "output_rounding",
     }
 
     def __init__(
@@ -424,6 +455,169 @@ class PersistentFullDepthPackedFp8Attention:
             raise
         except Exception as error:
             self._fail(f"FullDepth43 worker 客户端异常: {type(error).__name__}: {error}")
+
+    def execute_shared_batch(
+        self,
+        *,
+        layer: int,
+        position: int,
+        suffixes: Sequence[str],
+        activation: torch.Tensor,
+        assets: Mapping[str, tuple[PackedFp8Asset, PackedFp8Asset]],
+    ) -> tuple[dict[str, torch.Tensor], dict[str, Any]]:
+        try:
+            return self._execute_shared_batch(
+                layer=layer,
+                position=position,
+                suffixes=suffixes,
+                activation=activation,
+                assets=assets,
+            )
+        except FullDepthPackedFp8Error as error:
+            if not self.poisoned:
+                self._fail(str(error))
+            raise
+        except Exception as error:
+            self._fail(
+                f"FullDepth43 shared batch 客户端异常: {type(error).__name__}: {error}"
+            )
+
+    def _execute_shared_batch(
+        self,
+        *,
+        layer: int,
+        position: int,
+        suffixes: Sequence[str],
+        activation: torch.Tensor,
+        assets: Mapping[str, tuple[PackedFp8Asset, PackedFp8Asset]],
+    ) -> tuple[dict[str, torch.Tensor], dict[str, Any]]:
+        if self.poisoned or self.process is None or self.process.poll() is not None:
+            raise FullDepthPackedFp8Error("FullDepth43 worker 已 poisoned/退出")
+        if not isinstance(position, int) or isinstance(position, bool) or not 0 <= position <= POSITION_MAX:
+            self._fail("position 超出合同")
+        ordered_suffixes = tuple(suffixes)
+        approved_batches = {
+            ("wq_a", "wkv"),
+            ("wq_b", "indexer.wq_b"),
+        }
+        if len(set(ordered_suffixes)) != len(ordered_suffixes):
+            self._fail("shared batch 含重复 suffix")
+        if ordered_suffixes not in approved_batches:
+            self._fail(f"shared batch 组合未批准: {ordered_suffixes}")
+        if set(assets) != set(ordered_suffixes):
+            self._fail("shared batch assets 与 suffixes 身份不一致")
+
+        specs = [projection_spec(layer, suffix) for suffix in ordered_suffixes]
+        input_view, output_views, input_sha256 = self.arena.prepare_shared(
+            activation, specs
+        )
+        projection_requests: list[dict[str, Any]] = []
+        ordered_assets: list[tuple[PackedFp8Asset, PackedFp8Asset]] = []
+        for suffix, spec, output_view in zip(
+            ordered_suffixes, specs, output_views, strict=True
+        ):
+            weight, scale = assets[suffix]
+            if weight.tensor != f"{spec['name']}.weight" or scale.tensor != f"{spec['name']}.scale":
+                self._fail("shared batch weight/scale tensor 身份与 projection 不一致")
+            ordered_assets.append((weight, scale))
+            projection_requests.append(
+                {
+                    "projection": spec,
+                    "weight": weight.to_request(),
+                    "scale": scale.to_request(),
+                    "output": output_view,
+                }
+            )
+
+        self.counter += 1
+        request_id = f"py-{os.getpid()}-{self.counter}"
+        request = {
+            "protocol": PROTOCOL,
+            "op": "execute_fp8_attention_shared_batch",
+            "request_id": request_id,
+            "revision": REVISION,
+            "profile": PROFILE,
+            "layer": layer,
+            "position": position,
+            "arena_epoch": self.epoch,
+            "input_sha256": input_sha256,
+            "input": input_view,
+            "projections": projection_requests,
+        }
+        assert self.process.stdin is not None
+        try:
+            line = json.dumps(request, ensure_ascii=False, separators=(",", ":")) + "\n"
+            if len(line.encode("utf-8")) > _MAX_JSON_BYTES:
+                self._fail("FullDepth43 shared batch request 超过 64 KiB")
+            self.process.stdin.write(line)
+            self.process.stdin.flush()
+        except (BrokenPipeError, OSError) as exc:
+            self._fail(f"写入 shared batch worker 失败: {exc}")
+
+        response = _strict_json(self._readline())
+        if response.get("ok") is not True:
+            self._fail(f"worker 拒绝 shared batch: {response.get('error')}")
+        _require_keys(response, self._BATCH_RESPONSE_KEYS, "FullDepth43 batch response")
+        response_outputs = response.get("outputs")
+        if (
+            response.get("protocol") != PROTOCOL
+            or response.get("request_id") != request_id
+            or response.get("revision") != REVISION
+            or response.get("profile") != PROFILE
+            or response.get("layer") != layer
+            or response.get("position") != position
+            or response.get("arena_epoch") != self.epoch
+            or response.get("input") != input_view
+            or response.get("input_sha256") != input_sha256
+            or response.get("catalog_sha256") != CATALOG_SHA256
+            or not isinstance(response.get("gpu_slot_cache_entries"), int)
+            or response.get("gpu_slot_cache_entries", -1) < len(ordered_suffixes)
+            or response.get("activation_uploaded_bytes") != input_view["bytes"]
+            or not isinstance(response_outputs, list)
+            or len(response_outputs) != len(ordered_suffixes)
+        ):
+            self._fail("FullDepth43 batch response 顶层身份/数量合同漂移")
+
+        outputs: dict[str, torch.Tensor] = {}
+        assert isinstance(response_outputs, list)
+        for suffix, spec, output_view, asset_pair, item in zip(
+            ordered_suffixes,
+            specs,
+            output_views,
+            ordered_assets,
+            response_outputs,
+            strict=True,
+        ):
+            if not isinstance(item, dict):
+                self._fail("FullDepth43 batch output 缺项/类型漂移")
+            _require_keys(item, self._BATCH_OUTPUT_KEYS, "FullDepth43 batch output")
+            weight, scale = asset_pair
+            if (
+                item.get("projection") != spec
+                or item.get("output_written") != output_view
+                or item.get("weight_sha256") != weight.sha256
+                or item.get("scale_sha256") != scale.sha256
+                or item.get("payload_hash_verified") is not True
+                or not isinstance(item.get("gpu_slot_cache_hit"), bool)
+                or not isinstance(item.get("gpu_slot_resident_bytes"), int)
+                or item.get("gpu_slot_resident_bytes", -1) < 0
+                or item.get("payload_uploaded_bytes")
+                != (
+                    0
+                    if item.get("gpu_slot_cache_hit")
+                    else weight.bytes + scale.bytes
+                )
+                or item.get("numeric_mode")
+                != "packed_fp8_e4m3_ue8m0_bf16_output"
+                or item.get("output_rounding") != OUTPUT_ROUNDING
+                or not _is_sha256(item.get("output_sha256"))
+            ):
+                self._fail("FullDepth43 batch output 顺序/身份/SHA 合同漂移")
+            outputs[suffix] = self.arena.read_output(
+                output_view, item["output_sha256"]
+            )
+        self.epoch += 1
+        return outputs, dict(response)
 
     def _execute(
         self,

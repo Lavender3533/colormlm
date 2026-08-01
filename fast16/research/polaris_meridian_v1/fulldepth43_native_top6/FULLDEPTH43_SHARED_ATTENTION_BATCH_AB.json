@@ -1,0 +1,67 @@
+{
+  "format": "polaris-fulldepth43-shared-attention-batch-ab-v1",
+  "date": "2026-08-02",
+  "status": "complete",
+  "profile": "FullDepth43/native-top6",
+  "device": "AMD Radeon RX 5700 XT",
+  "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+  "changed_variable": "vulkan_attention_shared_batch",
+  "baseline": {
+    "enabled": false,
+    "execution_seconds": 65.71290510000108,
+    "per_token_wall_seconds": [41.54039940000075, 22.292625300004147],
+    "output_token_ids": [5, 223],
+    "attention_requests_per_token": [236, 236],
+    "attention_projection_count_per_token": [236, 236],
+    "attention_seconds_per_token": [12.6158796999516, 2.45547699998133],
+    "report_sha256": "dbe13e8088e270c9e99d28bd7618d2e5719a25c17319ef106178d6e8d8f6a7f4"
+  },
+  "candidate": {
+    "enabled": true,
+    "execution_seconds": 64.47919420000107,
+    "per_token_wall_seconds": [40.57377390000329, 22.017747099998815],
+    "output_token_ids": [5, 223],
+    "attention_requests_per_token": [172, 172],
+    "attention_projection_count_per_token": [236, 236],
+    "shared_batch_projection_members_per_token": [128, 128],
+    "attention_seconds_per_token": [12.2388132999549, 2.24350439997943],
+    "completed_layers_per_token": [43, 43],
+    "vulkan_moe_writebacks": 86,
+    "cpu_fallbacks": 0,
+    "error": null,
+    "report_sha256": "c156752343222bf15ad1c8e1e29f78bb14be33b4250621a41ed573fa5fde285d"
+  },
+  "delta": {
+    "seconds_saved": 1.23371090000001,
+    "wall_reduction_fraction": 0.0187742559566125,
+    "throughput_increase_fraction": 0.0191334726698553,
+    "attention_request_reduction_fraction": 0.271186440677966,
+    "attention_seconds_saved": 0.5890389999986,
+    "attention_reduction_fraction": 0.0390833427757185,
+    "position_0_wall_reduction_fraction": 0.0232695283136215,
+    "position_1_wall_reduction_fraction": 0.0123304544128897
+  },
+  "slot_cache": {
+    "position_0_entries": 236,
+    "position_0_hits": 0,
+    "position_0_payload_uploaded_bytes": 4775506560,
+    "position_1_hits": 236,
+    "position_1_payload_uploaded_bytes": 0
+  },
+  "l42_real_batch_gate": {
+    "batch_count": 4,
+    "projection_execution_count": 8,
+    "arena_epochs": [0, 1, 2, 3],
+    "replay_cache_hits": 4,
+    "replay_payload_uploaded_bytes": 0,
+    "report_sha256": "0e912b86ad8e629e9b28593c6cb0e0683aa2b690cbc9e6b5a6f445690e9c2351"
+  },
+  "tests": {
+    "python_full_pytest": "66 passed, 7 subtests passed",
+    "python_unittest": "51/51",
+    "candidate_profile_pytest": "9/9",
+    "rust_release_example": "29/29",
+    "git_diff_check": "pass"
+  },
+  "claim_limit": "同路径相邻A/B证明共享输入双投影减少27.12% attention进程请求并带来1.88%两-token端到端墙钟下降；不证明稳定交互吞吐、质量提升或20-50 token/s。"
+}

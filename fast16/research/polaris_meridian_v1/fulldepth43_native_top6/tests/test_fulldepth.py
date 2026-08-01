@@ -163,6 +163,39 @@ class FullDepthContractTests(unittest.TestCase):
                     "projection": {"name": f"layers.{layer}.attn.{suffix}"},
                 }
 
+            def execute_shared_batch(
+                self, **request: object
+            ) -> tuple[dict[str, torch.Tensor], dict[str, object]]:
+                self.requests.append(request)
+                layer = int(request["layer"])
+                position = int(request["position"])
+                suffixes = tuple(request["suffixes"])
+                sizes = {"wq_a": 1024, "wkv": 8192}
+                outputs = {
+                    suffix: torch.zeros((1, 1, sizes[suffix]), dtype=torch.float32)
+                    for suffix in suffixes
+                }
+                return outputs, {
+                    "protocol": "fixture",
+                    "request_id": "fixture-batch",
+                    "layer": layer,
+                    "position": position,
+                    "arena_epoch": 0,
+                    "input": {"bytes": 16_384},
+                    "input_sha256": "0" * 64,
+                    "catalog_sha256": "1" * 64,
+                    "gpu_slot_cache_entries": 2,
+                    "activation_uploaded_bytes": 16_384,
+                    "outputs": [
+                        {
+                            "projection": {
+                                "name": f"layers.{layer}.attn.{suffix}"
+                            }
+                        }
+                        for suffix in suffixes
+                    ],
+                }
+
         class TestLayer(FullDepthNativeLayerReference):
             def _packed_asset(self, tensor: str) -> object:
                 return tensor
@@ -174,16 +207,23 @@ class FullDepthContractTests(unittest.TestCase):
                 TensorStore(Path(directory)),
                 attention_worker=worker,
                 attention_position=3,
+                attention_shared_batch=True,
             )
             output = kernel._linear_fp8(
                 np.zeros((1, 1, 4096), dtype=np.float32),
                 "layers.7.attn.wq_a",
             )
+            cached = kernel._linear_fp8(
+                np.zeros((1, 1, 4096), dtype=np.float32),
+                "layers.7.attn.wkv",
+            )
         self.assertEqual(output.shape, (1, 1, 1024))
+        self.assertEqual(cached.shape, (1, 1, 8192))
         self.assertEqual(worker.requests[0]["layer"], 7)
         self.assertEqual(worker.requests[0]["position"], 3)
-        self.assertEqual(worker.requests[0]["suffix"], "wq_a")
-        self.assertEqual(len(kernel.attention_vulkan_evidence), 1)
+        self.assertEqual(worker.requests[0]["suffixes"], ("wq_a", "wkv"))
+        self.assertEqual(len(worker.requests), 1)
+        self.assertEqual(len(kernel.attention_vulkan_evidence), 2)
 
     def test_first_preview_forced_prefill_runs_five_inputs_before_argmax(self) -> None:
         queue = s14._load_forced_prefill(PREVIEW_FORCED_PREFILL)

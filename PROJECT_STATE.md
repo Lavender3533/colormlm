@@ -1326,3 +1326,23 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
   与同目录`FULLDEPTH43_VULKAN_ATTENTION_AB.json`。下一性能主线是把每层5--6次
   Python→arena→JSONL投影边界合并成一次持久Rust/Vulkan整层请求，再迁移CPU router、compressor
   与HC；质量主线同时固定GPU数值规范并运行极短多能力生成门。
+
+### 2026-08-02 FullDepth43 共享输入双投影 batch
+
+- 第一阶段边界合并已真实接通：所有43层把`wq_a+wkv`作为共享输入Batch A；21个
+  `compress_ratio=4`层再把`wq_b+indexer.wq_b`作为Batch B。投影计算没有裁剪，每token仍执行
+  236个attention projection，但Python→arena→JSONL请求从236降到172，减少`27.12%`。
+- 真实L42门连续运行A/B两组并各重放一次，8个输出全部命中冻结SHA，epoch严格为`0,1,2,3`；
+  重放四个slot全部命中且静态payload上传为`0 B`。Python全目录pytest
+  `66 passed, 7 subtests passed`、入口pytest `9/9`、
+  Rust release example `29/29`通过。
+- 同代码路径相邻A/B仅切换`vulkan_attention_shared_batch`：关闭为`65.7129s`，开启为
+  `64.4792s`，两-token墙钟下降`1.2337s / 1.8774%`，两个token分别下降`2.3270%/1.2330%`；
+  输出仍为`[5,223]`，86/86层、472个attention projection、86次MoE全部完成，零fallback、
+  `error=null`。position 1继续236/236 slot hit且上传`0 B`。
+- 这证明第一阶段边界合并是真实但较小的端到端提速，不改变当前仍约20--30秒/token的事实，
+  更不构成质量或Claude/GPT追赶完成证据。完整报告见
+  `fast16/research/polaris_meridian_v1/fulldepth43_native_top6/FULLDEPTH43_SHARED_ATTENTION_BATCH.md`
+  与`FULLDEPTH43_SHARED_ATTENTION_BATCH_AB.json`。
+- 下一速度硬门改为worker内链式`wo_a→中间SwiGLU/重排→wo_b`；之后才扩成完整attention层请求。
+  质量主线仍需极短多能力生成门，不能因为速度路径通过就宣称模型更聪明。
