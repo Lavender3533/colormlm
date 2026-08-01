@@ -45,7 +45,24 @@ def main() -> int:
     tid = store.source("layers.0.ffn.gate.tid2eid")
     assert tid.entry["dtype"] == "I64" and tid.entry["shape"] == [129280, 6]
 
-    for path in HERE.iterdir():
+    two_token = _read_json(HERE / "TWO_TOKEN_REAL_REPORT.json")
+    assert two_token["status"] == "complete"
+    assert two_token["committed_tokens"] == [
+        {"position": 0, "input_token_id": 0, "output_token_id": 108967},
+        {"position": 1, "input_token_id": 108967, "output_token_id": 53},
+    ]
+    assert two_token["position1"]["logits_f32_le_sha256"] == (
+        "46b95489427932a0d5acfacd5ee6bc9ceac495df3daed5a6a58681a0d95a141d"
+    )
+    assert two_token["position1"]["runtime_state_contract"] == {
+        "active_window_rows": 2,
+        "ratio4_main_written_row": 5,
+        "ratio4_indexer_written_row": 5,
+        "ratio128_main_written_row": 1,
+        "compressed_blocks_emitted": 0,
+    }
+
+    for path in HERE.rglob("*"):
         if path.is_file() and path.suffix in {".py", ".md", ".json"}:
             payload = path.read_bytes()
             assert not payload.startswith(b"\xef\xbb\xbf"), path
@@ -58,6 +75,8 @@ def main() -> int:
                 "embedding_sha256": embedding.proof["observed_sha256"],
                 "l0_base_router_files": len(store.sources),
                 "tid2eid_physical_dtype": tid.entry["dtype"],
+                "position1_token_id": two_token["position1"]["output_token_id"],
+                "position1_logits_sha256": two_token["position1"]["logits_f32_le_sha256"],
             },
             ensure_ascii=False,
         )

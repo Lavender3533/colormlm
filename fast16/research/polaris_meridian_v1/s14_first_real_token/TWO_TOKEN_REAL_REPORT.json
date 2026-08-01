@@ -1,0 +1,95 @@
+{
+  "format": "polaris-s14-contiguous-two-token-frozen-summary-v1",
+  "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+  "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+  "status": "complete",
+  "completed_layers_per_token": [0, 1, 2, 6, 7, 14, 15, 22, 23, 30, 31, 40, 41, 42],
+  "observed_elapsed_s_not_a_benchmark": 1005.1442793999995,
+  "downloaded_bytes_this_process": 1016078336,
+  "download_budget_bytes": 1395864371,
+  "range_retry_count": 10,
+  "full_report": {
+    "path_at_capture": "D:/models/Polaris-S14/s14_two_real_tokens_report.json",
+    "bytes": 251656,
+    "sha256": "5ce3d5bcf1f1ad788659487cd070005078787736d104cba39fcb71108a25abe8"
+  },
+  "committed_tokens": [
+    {"position": 0, "input_token_id": 0, "output_token_id": 108967},
+    {"position": 1, "input_token_id": 108967, "output_token_id": 53}
+  ],
+  "runtime_after_commit": {
+    "next_position": 2,
+    "next_input_token_id": 53,
+    "committed_layer_states": [0, 1, 2, 6, 7, 14, 15, 22, 23, 30, 31, 40, 41, 42]
+  },
+  "position0_replay": {
+    "input_token_id": 0,
+    "output_token_id": 108967,
+    "text": " Compression",
+    "observed_elapsed_s_not_a_benchmark": 53.537451500000316,
+    "downloaded_bytes_new": 0,
+    "logits_f32_le_sha256": "f414aef5894fe66d609d2650bf9b64510b3fa30ad76514180eff007c5853c3c4",
+    "matches_frozen_first_token": true,
+    "head_mmap_reused": false
+  },
+  "position1": {
+    "input_token_id": 108967,
+    "embedding_row_bytes": 8192,
+    "output_token_id": 53,
+    "text": "S",
+    "observed_elapsed_s_not_a_benchmark": 951.2253583999991,
+    "downloaded_bytes_new": 1016078336,
+    "normalized_f32_le_sha256": "243451bf535ee60e67e0ff89031abb3008266f0f116b084f6f9ed88322f71465",
+    "logits_f32_le_sha256": "46b95489427932a0d5acfacd5ee6bc9ceac495df3daed5a6a58681a0d95a141d",
+    "head_mmap_reused": true,
+    "top10": [
+      {"token_id": 53, "logit": 14.149282455444336},
+      {"token_id": 1777, "logit": 13.92654037475586},
+      {"token_id": 9761, "logit": 13.88337516784668},
+      {"token_id": 372, "logit": 13.401103973388672},
+      {"token_id": 76602, "logit": 13.373948097229004},
+      {"token_id": 5, "logit": 13.324018478393555},
+      {"token_id": 6522, "logit": 13.183099746704102},
+      {"token_id": 50686, "logit": 12.937078475952148},
+      {"token_id": 817, "logit": 12.895281791687012},
+      {"token_id": 1547, "logit": 12.69930648803711}
+    ],
+    "layer_chain": [
+      {"layer": 0, "expert_ids": [27, 19, 183, 214, 36, 47], "route_source": "current_token_tid2eid_physical_i64", "output_f32_le_sha256": "3f68736a6210f912a6cacdcbb9316a20521711430890cdae57307aecf9f66ac4"},
+      {"layer": 1, "expert_ids": [90, 179, 236, 5, 51, 46], "route_source": "current_token_tid2eid_physical_i64", "output_f32_le_sha256": "787670550888759704e409b9a990ce28f8cfd1a5eafaca30fdb5a2df2a4ac3b0"},
+      {"layer": 2, "expert_ids": [179, 28, 63, 92, 108, 0], "route_source": "current_token_tid2eid_physical_i64", "output_f32_le_sha256": "8bc0e426f759fff989d757b323942e2eee071a8d5b77c52d86ef2e9d925363e2"},
+      {"layer": 6, "expert_ids": [77, 45, 195, 134, 121, 96], "route_source": "sqrtsoftplus_plus_bias_top6", "output_f32_le_sha256": "a33097c84fd85658212d5d47f14a856f47d8fa7c3ed748024dbb71bad47844b4"},
+      {"layer": 7, "expert_ids": [121, 138, 233, 145, 170, 205], "route_source": "sqrtsoftplus_plus_bias_top6", "output_f32_le_sha256": "687915be51ac62e682be611f20db38aa6bed4c7075176dede30ce47f930da337"},
+      {"layer": 14, "expert_ids": [224, 170, 200, 147, 57, 38], "route_source": "sqrtsoftplus_plus_bias_top6", "output_f32_le_sha256": "c9aca6c84cd3e86911a26990e7af928d00ccff62a7aaa9574ce68fc8b635d98a"},
+      {"layer": 15, "expert_ids": [88, 60, 95, 38, 100, 174], "route_source": "sqrtsoftplus_plus_bias_top6", "output_f32_le_sha256": "af60c7188782718ef8e3aa9845e6d3a07603f1c413572d1bd671e0d9adda017e"},
+      {"layer": 22, "expert_ids": [205, 2, 164, 181, 16, 255], "route_source": "sqrtsoftplus_plus_bias_top6", "output_f32_le_sha256": "31703df2fc6731e61855d88e724896a2c9452c767892d3b4d62f8f9588ad9ebe"},
+      {"layer": 23, "expert_ids": [253, 60, 23, 156, 194, 33], "route_source": "sqrtsoftplus_plus_bias_top6", "output_f32_le_sha256": "baf6423009d910c8022af3b1c72df1d0d9f8df5681e24d11077945c59284898c"},
+      {"layer": 30, "expert_ids": [61, 78, 65, 236, 130, 40], "route_source": "sqrtsoftplus_plus_bias_top6", "output_f32_le_sha256": "046d11d1a29a1332431d82e3ef2657e65a7dd9723e7e8320bc2b0bba33f5d23a"},
+      {"layer": 31, "expert_ids": [94, 99, 214, 218, 215, 171], "route_source": "sqrtsoftplus_plus_bias_top6", "output_f32_le_sha256": "4f6c460426c58cbab0a8c6e866649f9be4d02486f6bf947d5344f5648e7c9294"},
+      {"layer": 40, "expert_ids": [121, 126, 47, 82, 226, 184], "route_source": "sqrtsoftplus_plus_bias_top6", "output_f32_le_sha256": "b72a3f9f04827d89eafc706bf1a1f2fbaa4f21e446afc9c515bb3aaa66ab523f"},
+      {"layer": 41, "expert_ids": [97, 0, 225, 181, 80, 23], "route_source": "sqrtsoftplus_plus_bias_top6", "output_f32_le_sha256": "3bca1272946e27c868507367f097e0a5a1cdcd2b413d162d82382d5b7c7132af"},
+      {"layer": 42, "expert_ids": [179, 24, 26, 112, 206, 85], "route_source": "sqrtsoftplus_plus_bias_top6", "output_f32_le_sha256": "00571ece35c871b3d13bf120b5ed4d85fbcc749210b1872a843ce040e54674fd"}
+    ],
+    "layer_input_matches_previous_output": true,
+    "runtime_state_contract": {
+      "active_window_rows": 2,
+      "ratio4_main_written_row": 5,
+      "ratio4_indexer_written_row": 5,
+      "ratio128_main_written_row": 1,
+      "compressed_blocks_emitted": 0
+    }
+  },
+  "transaction_contract": {
+    "range_cache_reused_across_tokens": true,
+    "route_first_session_created_per_token": true,
+    "next_layer_states_committed_only_after_final_argmax": true,
+    "input_token_id_committed_only_from_previous_final_argmax": true,
+    "new_token_uses_own_four_stream_embedding": true
+  },
+  "integrity": {
+    "base_router_shared_and_boundary": "RangeCache rehashed each payload against its fixed-revision proof",
+    "routed_experts": "only submitted native top-6 exact ranges; every published page required HTTPS 206, exact Content-Range and SHA closure",
+    "hash_authority": "tofu"
+  },
+  "claim_limit": "真实 S14 选择层连续两 token CPU correctness 证据；不是完整 43 层 DeepSeek-V4，不代表质量或速度"
+}
