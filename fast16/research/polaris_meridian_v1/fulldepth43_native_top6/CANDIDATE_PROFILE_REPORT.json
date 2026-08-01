@@ -1,0 +1,343 @@
+{
+  "format": "polaris-fulldepth43-candidate-profile-v1",
+  "source": "existing_candidate_report",
+  "gc_status": {
+    "current_code": {
+      "gc_removed": true,
+      "explicit_gc_collect_calls_in_linear_source": 0,
+      "contract": "线性层依赖 CPython/NumPy 引用计数释放临时权重，不在热路径强制全代 GC"
+    },
+    "measurement_code_gc_removed": false,
+    "measurement_note": "旧 candidate 若在热路径仍含 gc.collect，必须显式标 false；不能把当前源码状态倒填到旧墙钟。"
+  },
+  "end_to_end": {
+    "token_wall_seconds": 96.19532539999636,
+    "tokens_per_second": 0.010395515539261721,
+    "layer_wall_seconds": 94.34885869998834,
+    "outside_layer_loop_seconds": 1.8464667000080226
+  },
+  "vulkan_boundary": {
+    "worker_reported_seconds": 9.209150999999999,
+    "gpu_kernel_seconds": 0.7341326399999999,
+    "worker_non_kernel_seconds": 8.475018359999998,
+    "end_to_end_outside_worker_seconds": 86.98617439999637
+  },
+  "layers": [
+    {
+      "layer": 0,
+      "layer_wall_seconds": 2.054216799995629,
+      "worker_reported_seconds": 0.2121392,
+      "gpu_kernel_seconds": 0.015868840000000002,
+      "layer_outside_worker_seconds": 1.8420775999956291
+    },
+    {
+      "layer": 1,
+      "layer_wall_seconds": 1.9467007999992347,
+      "worker_reported_seconds": 0.2038706,
+      "gpu_kernel_seconds": 0.01705036,
+      "layer_outside_worker_seconds": 1.7428301999992346
+    },
+    {
+      "layer": 2,
+      "layer_wall_seconds": 2.34520579999662,
+      "worker_reported_seconds": 0.23168110000000003,
+      "gpu_kernel_seconds": 0.01745524,
+      "layer_outside_worker_seconds": 2.11352469999662
+    },
+    {
+      "layer": 3,
+      "layer_wall_seconds": 2.031189400004223,
+      "worker_reported_seconds": 0.2065926,
+      "gpu_kernel_seconds": 0.01717448,
+      "layer_outside_worker_seconds": 1.824596800004223
+    },
+    {
+      "layer": 4,
+      "layer_wall_seconds": 2.387055800005328,
+      "worker_reported_seconds": 0.2108849,
+      "gpu_kernel_seconds": 0.01721104,
+      "layer_outside_worker_seconds": 2.176170900005328
+    },
+    {
+      "layer": 5,
+      "layer_wall_seconds": 2.109664600000542,
+      "worker_reported_seconds": 0.21236,
+      "gpu_kernel_seconds": 0.017155439999999997,
+      "layer_outside_worker_seconds": 1.8973046000005422
+    },
+    {
+      "layer": 6,
+      "layer_wall_seconds": 2.2268939000059618,
+      "worker_reported_seconds": 0.2129688,
+      "gpu_kernel_seconds": 0.01687888,
+      "layer_outside_worker_seconds": 2.0139251000059617
+    },
+    {
+      "layer": 7,
+      "layer_wall_seconds": 2.204508299997542,
+      "worker_reported_seconds": 0.2137297,
+      "gpu_kernel_seconds": 0.017653079999999998,
+      "layer_outside_worker_seconds": 1.990778599997542
+    },
+    {
+      "layer": 8,
+      "layer_wall_seconds": 2.28456219999498,
+      "worker_reported_seconds": 0.2150072,
+      "gpu_kernel_seconds": 0.01710516,
+      "layer_outside_worker_seconds": 2.06955499999498
+    },
+    {
+      "layer": 9,
+      "layer_wall_seconds": 2.11660679999477,
+      "worker_reported_seconds": 0.2148887,
+      "gpu_kernel_seconds": 0.01759368,
+      "layer_outside_worker_seconds": 1.90171809999477
+    },
+    {
+      "layer": 10,
+      "layer_wall_seconds": 2.2289616000052774,
+      "worker_reported_seconds": 0.2088876,
+      "gpu_kernel_seconds": 0.01707428,
+      "layer_outside_worker_seconds": 2.0200740000052773
+    },
+    {
+      "layer": 11,
+      "layer_wall_seconds": 2.042982699997083,
+      "worker_reported_seconds": 0.2251116,
+      "gpu_kernel_seconds": 0.01752372,
+      "layer_outside_worker_seconds": 1.8178710999970829
+    },
+    {
+      "layer": 12,
+      "layer_wall_seconds": 2.266088899996248,
+      "worker_reported_seconds": 0.2083565,
+      "gpu_kernel_seconds": 0.01711292,
+      "layer_outside_worker_seconds": 2.0577323999962482
+    },
+    {
+      "layer": 13,
+      "layer_wall_seconds": 2.1140306999950553,
+      "worker_reported_seconds": 0.2169725,
+      "gpu_kernel_seconds": 0.017519120000000003,
+      "layer_outside_worker_seconds": 1.8970581999950553
+    },
+    {
+      "layer": 14,
+      "layer_wall_seconds": 2.3799505999995745,
+      "worker_reported_seconds": 0.2112849,
+      "gpu_kernel_seconds": 0.01735972,
+      "layer_outside_worker_seconds": 2.1686656999995746
+    },
+    {
+      "layer": 15,
+      "layer_wall_seconds": 2.163735699999961,
+      "worker_reported_seconds": 0.2131405,
+      "gpu_kernel_seconds": 0.017009879999999998,
+      "layer_outside_worker_seconds": 1.9505951999999611
+    },
+    {
+      "layer": 16,
+      "layer_wall_seconds": 2.3426800000015646,
+      "worker_reported_seconds": 0.210052,
+      "gpu_kernel_seconds": 0.017244199999999998,
+      "layer_outside_worker_seconds": 2.1326280000015645
+    },
+    {
+      "layer": 17,
+      "layer_wall_seconds": 2.0381867999967653,
+      "worker_reported_seconds": 0.2132884,
+      "gpu_kernel_seconds": 0.017550760000000002,
+      "layer_outside_worker_seconds": 1.8248983999967654
+    },
+    {
+      "layer": 18,
+      "layer_wall_seconds": 2.322301200001675,
+      "worker_reported_seconds": 0.2148025,
+      "gpu_kernel_seconds": 0.017204280000000002,
+      "layer_outside_worker_seconds": 2.107498700001675
+    },
+    {
+      "layer": 19,
+      "layer_wall_seconds": 2.0314240000006976,
+      "worker_reported_seconds": 0.2071249,
+      "gpu_kernel_seconds": 0.01693936,
+      "layer_outside_worker_seconds": 1.8242991000006976
+    },
+    {
+      "layer": 20,
+      "layer_wall_seconds": 2.2954017000010936,
+      "worker_reported_seconds": 0.2171432,
+      "gpu_kernel_seconds": 0.01753996,
+      "layer_outside_worker_seconds": 2.0782585000010934
+    },
+    {
+      "layer": 21,
+      "layer_wall_seconds": 2.028672100001131,
+      "worker_reported_seconds": 0.2040861,
+      "gpu_kernel_seconds": 0.017526720000000003,
+      "layer_outside_worker_seconds": 1.8245860000011311
+    },
+    {
+      "layer": 22,
+      "layer_wall_seconds": 2.359192800002347,
+      "worker_reported_seconds": 0.2268666,
+      "gpu_kernel_seconds": 0.017738479999999997,
+      "layer_outside_worker_seconds": 2.132326200002347
+    },
+    {
+      "layer": 23,
+      "layer_wall_seconds": 2.112664300002507,
+      "worker_reported_seconds": 0.2010499,
+      "gpu_kernel_seconds": 0.017370999999999998,
+      "layer_outside_worker_seconds": 1.9116144000025068
+    },
+    {
+      "layer": 24,
+      "layer_wall_seconds": 2.284795400002622,
+      "worker_reported_seconds": 0.2153729,
+      "gpu_kernel_seconds": 0.01727092,
+      "layer_outside_worker_seconds": 2.069422500002622
+    },
+    {
+      "layer": 25,
+      "layer_wall_seconds": 2.083682600001339,
+      "worker_reported_seconds": 0.2062948,
+      "gpu_kernel_seconds": 0.01729376,
+      "layer_outside_worker_seconds": 1.8773878000013389
+    },
+    {
+      "layer": 26,
+      "layer_wall_seconds": 2.313190399996529,
+      "worker_reported_seconds": 0.21622289999999997,
+      "gpu_kernel_seconds": 0.0170224,
+      "layer_outside_worker_seconds": 2.096967499996529
+    },
+    {
+      "layer": 27,
+      "layer_wall_seconds": 2.09494330000598,
+      "worker_reported_seconds": 0.2181912,
+      "gpu_kernel_seconds": 0.017320799999999997,
+      "layer_outside_worker_seconds": 1.87675210000598
+    },
+    {
+      "layer": 28,
+      "layer_wall_seconds": 2.297544499997457,
+      "worker_reported_seconds": 0.2171313,
+      "gpu_kernel_seconds": 0.01743256,
+      "layer_outside_worker_seconds": 2.080413199997457
+    },
+    {
+      "layer": 29,
+      "layer_wall_seconds": 2.1051459000009345,
+      "worker_reported_seconds": 0.2294313,
+      "gpu_kernel_seconds": 0.017389520000000002,
+      "layer_outside_worker_seconds": 1.8757146000009346
+    },
+    {
+      "layer": 30,
+      "layer_wall_seconds": 2.3967334999979357,
+      "worker_reported_seconds": 0.2365019,
+      "gpu_kernel_seconds": 0.017466919999999997,
+      "layer_outside_worker_seconds": 2.160231599997936
+    },
+    {
+      "layer": 31,
+      "layer_wall_seconds": 2.1298844999982975,
+      "worker_reported_seconds": 0.2130759,
+      "gpu_kernel_seconds": 0.008808080000000001,
+      "layer_outside_worker_seconds": 1.9168085999982976
+    },
+    {
+      "layer": 32,
+      "layer_wall_seconds": 2.3634736000021803,
+      "worker_reported_seconds": 0.2100487,
+      "gpu_kernel_seconds": 0.01741392,
+      "layer_outside_worker_seconds": 2.15342490000218
+    },
+    {
+      "layer": 33,
+      "layer_wall_seconds": 2.02593280000292,
+      "worker_reported_seconds": 0.2136279,
+      "gpu_kernel_seconds": 0.017439879999999998,
+      "layer_outside_worker_seconds": 1.8123049000029199
+    },
+    {
+      "layer": 34,
+      "layer_wall_seconds": 2.3041584999955376,
+      "worker_reported_seconds": 0.2142759,
+      "gpu_kernel_seconds": 0.01721876,
+      "layer_outside_worker_seconds": 2.0898825999955375
+    },
+    {
+      "layer": 35,
+      "layer_wall_seconds": 2.124801699996169,
+      "worker_reported_seconds": 0.2118413,
+      "gpu_kernel_seconds": 0.01729616,
+      "layer_outside_worker_seconds": 1.912960399996169
+    },
+    {
+      "layer": 36,
+      "layer_wall_seconds": 2.3007501999964006,
+      "worker_reported_seconds": 0.2190983,
+      "gpu_kernel_seconds": 0.01749336,
+      "layer_outside_worker_seconds": 2.0816518999964004
+    },
+    {
+      "layer": 37,
+      "layer_wall_seconds": 2.06028740000329,
+      "worker_reported_seconds": 0.2159555,
+      "gpu_kernel_seconds": 0.0169326,
+      "layer_outside_worker_seconds": 1.8443319000032898
+    },
+    {
+      "layer": 38,
+      "layer_wall_seconds": 2.272807899993495,
+      "worker_reported_seconds": 0.2128821,
+      "gpu_kernel_seconds": 0.01739552,
+      "layer_outside_worker_seconds": 2.0599257999934952
+    },
+    {
+      "layer": 39,
+      "layer_wall_seconds": 2.0870079999949667,
+      "worker_reported_seconds": 0.211844,
+      "gpu_kernel_seconds": 0.017339479999999997,
+      "layer_outside_worker_seconds": 1.8751639999949667
+    },
+    {
+      "layer": 40,
+      "layer_wall_seconds": 2.3124106000032043,
+      "worker_reported_seconds": 0.22521750000000001,
+      "gpu_kernel_seconds": 0.01716036,
+      "layer_outside_worker_seconds": 2.0871931000032045
+    },
+    {
+      "layer": 41,
+      "layer_wall_seconds": 2.1133791000029305,
+      "worker_reported_seconds": 0.2058125,
+      "gpu_kernel_seconds": 0.01736124,
+      "layer_outside_worker_seconds": 1.9075666000029305
+    },
+    {
+      "layer": 42,
+      "layer_wall_seconds": 2.245051300000341,
+      "worker_reported_seconds": 0.2040351,
+      "gpu_kernel_seconds": 0.0172158,
+      "layer_outside_worker_seconds": 2.041016200000341
+    }
+  ],
+  "unattributed_residual": {
+    "seconds": 86.98617439999637,
+    "may_include": [
+      "attention",
+      "HC",
+      "router",
+      "compressor/indexer",
+      "Range/file I/O",
+      "capture I/O",
+      "Python/Rust validation",
+      "final head",
+      "orchestration"
+    ],
+    "claim_limit": "旧报告没有子阶段计时，禁止继续硬分摊"
+  }
+}
