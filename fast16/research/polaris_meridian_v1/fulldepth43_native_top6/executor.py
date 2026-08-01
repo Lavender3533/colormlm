@@ -33,12 +33,24 @@ from .vulkan_writeback import (
     VulkanWritebackError,
     verify_exact_bf16_writeback,
 )
+from .vulkan_final_head import (
+    FullDepthVulkanFinalHead,
+    VulkanFinalHeadError,
+)
 
 
 REPORT_FORMAT = "polaris-fulldepth43-native-top6-reference-v1"
 VULKAN_BRIDGE_FORMAT = "polaris-fulldepth43-vulkan-bridge-capture-v1"
 DEFAULT_REPORT = Path(__file__).resolve().parent / "last_run_report.json"
 DEFAULT_FORCED_PREFILL = Path(__file__).resolve().parent / "first_preview_forced_prefill.json"
+DEFAULT_VULKAN_FINAL_HEAD_WORKER = (
+    Path(__file__).resolve().parents[4]
+    / "scheduler"
+    / "target"
+    / "release"
+    / "examples"
+    / "s14_bf16_head.exe"
+)
 
 
 class FullDepthError(RuntimeError):
@@ -255,6 +267,10 @@ class ExecutionConfig:
     vulkan_writeback_verify_cpu: bool = True
     vulkan_writeback_cpu_fallback: bool = True
     vulkan_writeback_fast_production: bool = False
+    vulkan_final_head_worker: Path | None = None
+    vulkan_final_head_timeout_seconds: float = 60.0
+    vulkan_final_head_scratch: Path | None = None
+    vulkan_final_head_validate_cpu_once: bool = False
 
     def validate(self) -> None:
         if not self.endpoint.startswith("https://"):
@@ -294,6 +310,29 @@ class ExecutionConfig:
             raise FullDepthError("全层 Vulkan writeback 必须指定 worker")
         if self.vulkan_writeback_fast_production and self.vulkan_writeback_verify_cpu:
             raise FullDepthError("fast production 累加顺序不适用逐 BF16 CPU 审计")
+        if (
+            self.vulkan_final_head_worker is not None
+            and not self.vulkan_final_head_worker.resolve().is_file()
+        ):
+            raise FullDepthError("Vulkan final-head worker 不存在")
+        if self.vulkan_final_head_timeout_seconds <= 0:
+            raise FullDepthError("Vulkan final-head timeout 必须为正数")
+
+    def resolved_vulkan_final_head_worker(self) -> Path:
+        worker = self.vulkan_final_head_worker or DEFAULT_VULKAN_FINAL_HEAD_WORKER
+        resolved = worker.resolve()
+        if not resolved.is_file():
+            raise FullDepthError(
+                "生产路径要求已编译的 Vulkan final-head worker；"
+                f"缺少 {resolved}"
+            )
+        return resolved
+
+    def resolved_vulkan_final_head_scratch(self) -> Path:
+        scratch = self.vulkan_final_head_scratch
+        if scratch is None:
+            scratch = self.asset_root / "runtime" / "vulkan_final_head"
+        return scratch.resolve()
 
 
 def _sha256_bytes(payload: bytes) -> str:
@@ -563,7 +602,7 @@ class FullDepthTokenWorker:
         self.last_token_report: dict[str, Any] | None = None
         self.writeback_layers: list[int] = []
         self.writeback_fallbacks: list[dict[str, Any]] = []
-        self._final_head: s14.FinalHeadReference | None = None
+        self._final_head: FullDepthVulkanFinalHead | None = None
         self._writeback: PersistentVulkanWriteback | None = None
         self._started = False
         self._closed = False
@@ -571,6 +610,10 @@ class FullDepthTokenWorker:
     @property
     def writeback_hello(self) -> Mapping[str, Any] | None:
         return None if self._writeback is None else self._writeback.hello
+
+    @property
+    def final_head_hello(self) -> Mapping[str, Any] | None:
+        return None if self._final_head is None else self._final_head.hello
 
     def start(self) -> None:
         if self._closed:
@@ -610,6 +653,8 @@ class FullDepthTokenWorker:
         self._closed = True
         if self._writeback is not None:
             self._writeback.close()
+        if self._final_head is not None:
+            self._final_head.close()
 
     def _notify(self, token_report: dict[str, Any]) -> None:
         self.last_token_report = token_report
@@ -860,14 +905,24 @@ class FullDepthTokenWorker:
         self.stage = f"position_{position}_final_head"
         final_ranges = session.prepare_final()
         if self._final_head is None:
-            self._final_head = s14.FinalHeadReference(
+            worker_path = self.config.resolved_vulkan_final_head_worker()
+            self._final_head = FullDepthVulkanFinalHead(
                 final_ranges,
                 self.config.asset_root.resolve() / "range_cache",
+                (str(worker_path),),
+                self.config.resolved_vulkan_final_head_scratch(),
+                timeout_seconds=self.config.vulkan_final_head_timeout_seconds,
+                validate_cpu_once=self.config.vulkan_final_head_validate_cpu_once,
                 head_chunk_size=self.config.head_chunk_size,
             )
         else:
             self._final_head.validate_ranges(final_ranges)
-        final = self._final_head.forward(state)
+        try:
+            final = self._final_head.forward(state, position=position)
+        except VulkanFinalHeadError as error:
+            raise FullDepthError(
+                f"position {position} Vulkan final-head 失败；禁止 CPU head fallback: {error}"
+            ) from error
         output_token_id = int(final["token_id"])
         if not 0 <= output_token_id < s14.VOCAB_SIZE:
             raise FullDepthError("FullDepth final head token ID 越界")
@@ -1031,6 +1086,17 @@ def execute(
             previous = decoder.previous_for(profile)
             computation = worker(position, input_token_id, previous)
             token_report = computation.value["token_report"]
+            final_head_hello = getattr(worker, "final_head_hello", None)
+            if final_head_hello is not None:
+                report["vulkan_final_head_worker"] = {
+                    "path": str(config.resolved_vulkan_final_head_worker()),
+                    "hello": final_head_hello,
+                    "mode": "persistent_gpu_head_device_argmax",
+                    "cpu_scope": "hc_reduce_and_rmsnorm_only",
+                    "cpu_validation_once": config.vulkan_final_head_validate_cpu_once,
+                    "cpu_fallback": False,
+                    "production_full_logits_returned": False,
+                }
             if config.checkpoint_path is None:
                 decoder.commit(
                     output_token_id=computation.predicted_token_id,
@@ -1084,17 +1150,20 @@ def execute(
         if set(worker.writeback_layers) == set(profile.layers):
             report["claim_limit"] = (
                 "FullDepth43/native-top6 with all 43 MoE branches written back from Vulkan; "
-                "attention/HC/router/head remain CPU, so this is not a full-GPU token, "
+                "final BF16 head+argmax is persistent Vulkan while attention/HC/router remain CPU, "
+                "so this is not a full-GPU token, "
                 "20/50 token/s, or quality claim"
             )
         elif worker.writeback_layers:
             report["claim_limit"] = (
                 "FullDepth43/native-top6 correctness path with a subset of exact-BF16 Vulkan "
-                "MoE writeback layers; not a full-layer/full-token GPU, speed, or quality claim"
+                "MoE writeback layers and persistent Vulkan final head; not a full-layer/full-token "
+                "GPU, speed, or quality claim"
             )
         else:
             report["claim_limit"] = (
-                "CPU/PyTorch FullDepth43/native-top6 correctness path; not a speed or quality claim"
+                "CPU/PyTorch FullDepth43/native-top6 layer path plus persistent Vulkan final "
+                "head+device argmax; not a full-model speed or quality claim"
             )
     except Exception as error:
         report["status"] = "blocked"
@@ -1127,7 +1196,7 @@ def execute(
         try:
             worker.close()
         except Exception as close_error:
-            report["vulkan_writeback_close_error"] = {
+            report["worker_close_error"] = {
                 "type": type(close_error).__name__,
                 "message": str(close_error),
             }
@@ -1169,6 +1238,14 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--vulkan-writeback-no-cpu-verify", action="store_true")
     parser.add_argument("--vulkan-writeback-no-cpu-fallback", action="store_true")
     parser.add_argument("--vulkan-writeback-fast-production", action="store_true")
+    parser.add_argument("--vulkan-final-head-worker", type=Path)
+    parser.add_argument("--vulkan-final-head-timeout-seconds", type=float, default=60.0)
+    parser.add_argument("--vulkan-final-head-scratch", type=Path)
+    parser.add_argument(
+        "--vulkan-final-head-validate-cpu-once",
+        action="store_true",
+        help="仅首个真实 normalized hidden 做一次 CPU token/top10 对照；生产默认关闭",
+    )
     parser.add_argument(
         "--checkpoint",
         type=Path,
@@ -1205,6 +1282,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             vulkan_writeback_verify_cpu=not args.vulkan_writeback_no_cpu_verify,
             vulkan_writeback_cpu_fallback=not args.vulkan_writeback_no_cpu_fallback,
             vulkan_writeback_fast_production=args.vulkan_writeback_fast_production,
+            vulkan_final_head_worker=args.vulkan_final_head_worker,
+            vulkan_final_head_timeout_seconds=args.vulkan_final_head_timeout_seconds,
+            vulkan_final_head_scratch=args.vulkan_final_head_scratch,
+            vulkan_final_head_validate_cpu_once=(
+                args.vulkan_final_head_validate_cpu_once
+            ),
             checkpoint_path=args.checkpoint,
             resume_checkpoint_path=args.resume_checkpoint,
         )
