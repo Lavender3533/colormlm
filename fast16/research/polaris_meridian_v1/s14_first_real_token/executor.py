@@ -859,7 +859,9 @@ class NativeLayerReference(_InlineForward):
         )
         topk_indices = _window_topk_indices(position)
         attention_kv = kv if position == 0 else window_kv
-        ratio = COMPRESS_RATIOS[self.layer]
+        # FullDepth43 injects a complete per-layer compression map.  Reading the
+        # legacy sparse global map here silently breaks on layers such as L3.
+        ratio = self.compress_ratios[self.layer]
         if ratio:
             if compressor_state is None:
                 raise ContractError(f"L{self.layer} ratio{ratio} 缺少 compressor state")

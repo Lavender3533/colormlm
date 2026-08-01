@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import tempfile
 import unittest
 from dataclasses import replace
@@ -49,6 +50,11 @@ def full_states(position: int) -> dict[int, s14.LayerRuntimeState]:
 
 
 class FullDepthContractTests(unittest.TestCase):
+    def test_attention_reads_injected_full_depth_compression_map(self) -> None:
+        source = inspect.getsource(s14.NativeLayerReference._attention)
+        self.assertIn("ratio = self.compress_ratios[self.layer]", source)
+        self.assertNotIn("ratio = COMPRESS_RATIOS[self.layer]", source)
+
     def test_profile_is_exact_43_layer_native_top6(self) -> None:
         profile = FULLDEPTH43_NATIVE_TOP6
         profile.validate()
