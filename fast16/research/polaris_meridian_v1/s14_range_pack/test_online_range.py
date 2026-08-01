@@ -24,6 +24,7 @@ class FakeResponse:
         content_range: str,
         final_url: str,
         interrupt_after: int | None = None,
+        eof_after: int | None = None,
     ) -> None:
         self.data = data
         self.status = status
@@ -33,9 +34,12 @@ class FakeResponse:
         }
         self.final_url = final_url
         self.interrupt_after = interrupt_after
+        self.eof_after = eof_after
         self.cursor = 0
 
     def read(self, size: int = -1) -> bytes:
+        if self.eof_after is not None and self.cursor >= self.eof_after:
+            return b""
         if self.interrupt_after is not None and self.cursor >= self.interrupt_after:
             raise ConnectionError("fixture interrupted")
         if self.cursor >= len(self.data):
@@ -65,6 +69,7 @@ class FakeHttpsTransport:
         self.requests: list[tuple[str, int, int]] = []
         self.lock = threading.Lock()
         self.interrupt_once: dict[tuple[str, int, int], int] = {}
+        self.eof_once: dict[tuple[str, int, int], int] = {}
         self.status = 206
         self.bad_content_range = False
         self.final_scheme = "https"
@@ -80,6 +85,7 @@ class FakeHttpsTransport:
         with self.lock:
             self.requests.append(key)
             interrupt_after = self.interrupt_once.pop(key, None)
+            eof_after = self.eof_once.pop(key, None)
         content_range = f"bytes {start}-{end}/{self.totals[filename]}"
         if self.bad_content_range:
             content_range = f"bytes {start}-{end}/{self.totals[filename] + 1}"
@@ -90,6 +96,7 @@ class FakeHttpsTransport:
             content_range=content_range,
             final_url=final_url,
             interrupt_after=interrupt_after,
+            eof_after=eof_after,
         )
 
 
@@ -282,6 +289,21 @@ class OnlineRangeTests(unittest.TestCase):
         self.assertEqual(self.transport.requests[-1], (entry["file"], entry["start"] + 2, entry["end"]))
         self.assertFalse(result.proof["authoritative"])
         self.assertEqual(result.proof["hash_authority"], "tofu")
+        self.assertFalse(parts[0].exists())
+
+    def test_early_eof_is_recoverable_and_resumes_from_exact_offset(self) -> None:
+        cache = self.cache("early-eof")
+        entry = self.catalog["layers"]["0"]["router"][0]
+        first_key = (entry["file"], entry["start"], entry["end"])
+        self.transport.eof_once[first_key] = 2
+        with self.assertRaisesRegex(online.RangePayloadTruncatedError, "提前结束"):
+            cache.fetch(entry)
+        parts = list((Path(self.tmp.name) / "early-eof").glob("*.bin.part"))
+        self.assertEqual(len(parts), 1)
+        self.assertEqual(parts[0].stat().st_size, 2)
+        result = cache.fetch(entry)
+        self.assertEqual(self.transport.requests[-1], (entry["file"], entry["start"] + 2, entry["end"]))
+        self.assertFalse(result.proof["authoritative"])
         self.assertFalse(parts[0].exists())
 
     def test_budget_rejected_before_request_or_part(self) -> None:

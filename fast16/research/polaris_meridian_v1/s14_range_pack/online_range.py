@@ -39,6 +39,10 @@ CONTENT_RANGE_RE = re.compile(r"bytes ([0-9]+)-([0-9]+)/([0-9]+)")
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 
 
+class RangePayloadTruncatedError(ConnectionError):
+    """远端在精确 Range 传输完成前 EOF；允许从已落盘前缀续传。"""
+
+
 def _canonical_bytes(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
@@ -941,7 +945,7 @@ class RangeCache:
                                 while left:
                                     chunk = response.read(min(self.chunk_bytes, left))
                                     if not chunk:
-                                        raise rp.ContractError("Range payload 提前结束")
+                                        raise RangePayloadTruncatedError("Range payload 提前结束")
                                     if len(chunk) > left:
                                         raise rp.ContractError("Range response 单次 read 超过请求边界")
                                     sink.write(chunk)
