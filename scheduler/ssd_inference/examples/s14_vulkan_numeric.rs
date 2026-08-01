@@ -41,6 +41,7 @@ const ITERATIONS: u32 = 100;
 const MOE_BATCH_ITERATIONS: u32 = 1;
 const FULLDEPTH_BRIDGE_ITERATIONS: u32 = 20;
 const WRITEBACK_WORKER_ARG: &str = "--fulldepth43-writeback-worker";
+const PRODUCTION_WORKER_ARG: &str = "--fulldepth43-production-worker";
 const WRITEBACK_PROTOCOL: &str = "polaris-fulldepth43-vulkan-writeback-v1";
 const WRITEBACK_OUTPUT_FILE: &str = "vulkan_moe_branch.bf16le.bin";
 const PAYLOAD_CACHE_GIB_ENV: &str = "POLARIS_VERIFIED_PAYLOAD_CACHE_GIB";
@@ -834,7 +835,10 @@ struct S14Manifest {
 
 fn main() -> Result<()> {
     if std::env::args().any(|value| value == WRITEBACK_WORKER_ARG) {
-        return run_fulldepth_writeback_worker();
+        return run_fulldepth_writeback_worker(true);
+    }
+    if std::env::args().any(|value| value == PRODUCTION_WORKER_ARG) {
+        return run_fulldepth_writeback_worker(false);
     }
     if let Some(path) = std::env::var_os(FULLDEPTH_BRIDGE_DIR_ENV) {
         return run_fulldepth_bridge(PathBuf::from(path));
@@ -907,7 +911,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn run_fulldepth_writeback_worker() -> Result<()> {
+fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
     let ctx = VulkanContext::init()?;
     let properties = unsafe { ctx.instance.get_physical_device_properties(ctx.physical) };
     if properties.vendor_id != AMD_VENDOR_ID || properties.device_id != NAVI10_DEVICE_ID {
@@ -927,7 +931,16 @@ fn run_fulldepth_writeback_worker() -> Result<()> {
         bail!("FullDepth43 writeback worker requires timestamp queries");
     }
     let timestamp_period_ns = properties.limits.timestamp_period as f64;
-    let pipelines = S14NumericPipelines::new_exact_audit(&ctx)?;
+    let pipelines = if exact_audit {
+        S14NumericPipelines::new_exact_audit(&ctx)?
+    } else {
+        S14NumericPipelines::new(&ctx)?
+    };
+    let numeric_mode = if exact_audit {
+        "exact_audit_12_lane_mxfp4_8_lane_fp8"
+    } else {
+        "fast_production_128_lane"
+    };
     let payload_cache_capacity = payload_cache_capacity_bytes()?;
     let mut payload_cache = VerifiedPayloadCache::new(payload_cache_capacity)?;
     let mut stdout = std::io::stdout().lock();
@@ -944,7 +957,7 @@ fn run_fulldepth_writeback_worker() -> Result<()> {
             "official_boundary_graph": true,
             "verified_payload_cache": true,
             "payload_cache_capacity_bytes": payload_cache_capacity,
-            "numeric_mode": "exact_audit_12_lane_mxfp4_8_lane_fp8",
+            "numeric_mode": numeric_mode,
             "production_default_shader_unchanged": true,
         }),
     )?;
