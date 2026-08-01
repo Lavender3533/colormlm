@@ -1,0 +1,65 @@
+{
+  "format": "polaris-s14-first-real-token-frozen-summary-v1",
+  "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+  "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+  "status": "complete",
+  "input_token_id": 0,
+  "completed_layers": [0, 1, 2, 6, 7, 14, 15, 22, 23, 30, 31, 40, 41, 42],
+  "observed_elapsed_s_not_a_benchmark": 714.769081100003,
+  "downloaded_bytes_this_run": 962592768,
+  "preexisting_l0_l1_routed_bytes": 160432128,
+  "total_routed_payload_bytes_consumed": 1123024896,
+  "range_retry_count": 7,
+  "full_report": {
+    "path_at_capture": "D:/models/Polaris-S14/s14_first_real_token_report.json",
+    "bytes": 72601,
+    "sha256": "1d2c52cac67deb881864727f77c28eba75fd947fee585407b6132fcec106e3f3"
+  },
+  "layer_chain": [
+    {"layer": 0, "expert_ids": [254, 222, 245, 200, 53, 35], "output_f32_le_sha256": "c0a7cee3618377be41d9470cb481375b1674f4a3c125a920d76858ca4cf76ba2"},
+    {"layer": 1, "expert_ids": [163, 137, 158, 97, 184, 8], "output_f32_le_sha256": "07cf526de3ce1ec46787c5f52b6bad905b893a882188208b99623d2eeae6dce5"},
+    {"layer": 2, "expert_ids": [108, 115, 43, 53, 132, 143], "output_f32_le_sha256": "b2e72b11681cec9b34e0ed31983bc4bd0ff81d0140162ef8e7f6802023b771c0"},
+    {"layer": 6, "expert_ids": [56, 78, 93, 244, 66, 112], "output_f32_le_sha256": "1946cb7c4d1d4d1aafe82ed8ebf52d1774afae3a45893be56d5c68d52f3bb2bb"},
+    {"layer": 7, "expert_ids": [8, 188, 56, 26, 31, 142], "output_f32_le_sha256": "d5bb894c546dafa36dd3c143f140670f81ceb04c09133a57377573ed78baf33c"},
+    {"layer": 14, "expert_ids": [164, 33, 60, 225, 102, 149], "output_f32_le_sha256": "5f1402788a09c6c4d95a45b2db065343b040f94503ee346ce2c542587e9be15e"},
+    {"layer": 15, "expert_ids": [129, 90, 158, 88, 110, 4], "output_f32_le_sha256": "59c8df496aae5d79cf1e929f8db530f9cd370a55b184de1353ca2f4a72332385"},
+    {"layer": 22, "expert_ids": [205, 193, 156, 51, 14, 251], "output_f32_le_sha256": "f388ebc39d9d0499ea57a746e88bba30921fcbbc3cda5441ee820bda8907a3dd"},
+    {"layer": 23, "expert_ids": [179, 25, 93, 108, 61, 68], "output_f32_le_sha256": "b364904dbcef610099638bf543a14067d080fc69bd65d2592c8fdac981e4075b"},
+    {"layer": 30, "expert_ids": [121, 176, 104, 48, 236, 240], "output_f32_le_sha256": "6da9344f10256df0b51198b4d567755ed32968e5d6d69d3bc5e862353216db2d"},
+    {"layer": 31, "expert_ids": [182, 166, 76, 137, 180, 206], "output_f32_le_sha256": "4c3c30b541866043c8cde07437c23fc3259ab27f998cce45b4445a3bc0c80df7"},
+    {"layer": 40, "expert_ids": [29, 176, 73, 151, 161, 89], "output_f32_le_sha256": "6495fe37e9e73c1c1932a22a7c8cf5426191a59202792db3fdd8c7c4da1fea9f"},
+    {"layer": 41, "expert_ids": [154, 225, 81, 165, 0, 170], "output_f32_le_sha256": "5e8028b7aa3b12e32d4f1fb4cb67fd6b2e09a61c2b0fc58e832dd4aa3904e305"},
+    {"layer": 42, "expert_ids": [26, 138, 104, 232, 112, 101], "output_f32_le_sha256": "c20cfdbf01cae654b49d1e1ae70f7894c75665d18dd984e68717257dad8f262d"}
+  ],
+  "layer_input_matches_previous_output": true,
+  "runtime_state_contract": {
+    "all_window_kv_shapes": [1, 128, 512],
+    "ratio4_main_state_shape": [1, 8, 1024],
+    "ratio4_indexer_state_shape": [1, 8, 256],
+    "ratio128_main_state_shape": [1, 128, 512]
+  },
+  "final": {
+    "token_id": 108967,
+    "text": " Compression",
+    "normalized_f32_le_sha256": "647621bf4d80b6bba5ab2d81b3b3e5e70154c472ee13d91edf3a64fadfe1e1b7",
+    "logits_f32_le_sha256": "f414aef5894fe66d609d2650bf9b64510b3fa30ad76514180eff007c5853c3c4",
+    "top10": [
+      {"token_id": 108967, "logit": 14.937393188476562},
+      {"token_id": 24901, "logit": 14.88538932800293},
+      {"token_id": 5158, "logit": 14.425874710083008},
+      {"token_id": 97690, "logit": 14.033212661743164},
+      {"token_id": 22900, "logit": 13.980239868164062},
+      {"token_id": 3535, "logit": 13.941567420959473},
+      {"token_id": 11791, "logit": 13.76789665222168},
+      {"token_id": 33851, "logit": 13.698549270629883},
+      {"token_id": 23954, "logit": 13.616153717041016},
+      {"token_id": 127912, "logit": 13.462207794189453}
+    ]
+  },
+  "integrity": {
+    "base_router_shared_and_boundary": "RangeCache rehashed each payload against its fixed-revision TOFU proof",
+    "routed_experts": "only native top-6 exact ranges; each page required HTTPS 206, exact Content-Range and SHA closure",
+    "hash_authority": "tofu"
+  },
+  "claim_limit": "真实 S14 选择层首 token CPU correctness 证据；不是完整 43 层 DeepSeek-V4，不代表质量或速度"
+}
