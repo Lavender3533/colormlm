@@ -1,0 +1,59 @@
+{
+  "chat_encoding": {
+    "implementation": "official-deepseek-v4",
+    "reasoning_effort": "low",
+    "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+    "thinking_mode": "thinking"
+  },
+  "decoder_consumption": {
+    "mode": "sequential_forced_prefill",
+    "polaris_s14_compatible": true,
+    "position_base": 0,
+    "position_count": 5,
+    "position_rule": "token_ids[position]"
+  },
+  "execution": {
+    "generated_token_count": 0,
+    "model_executed": false
+  },
+  "format": "polaris-s14-forced-prefill-v1",
+  "input": {
+    "message_count": 1,
+    "roles": [
+      "user"
+    ],
+    "sha256": "fc3a3aa97bcd892dc4f483a52f237d5133599a23464cce08ac0a36f7d668d335",
+    "tool_count": 0
+  },
+  "prompt": {
+    "terminal_boundary": "<｜Assistant｜><think>",
+    "utf8_bytes": 71,
+    "utf8_sha256": "5081d1f13730de5364bdcd23071f160aeb4792baf043f2848c05c13ac50abfcc"
+  },
+  "token_count": 5,
+  "token_ids": [
+    0,
+    128803,
+    30594,
+    128804,
+    128821
+  ],
+  "token_ids_sha256": "1ff49c11e6b5daca07372d20ee7ad5b9bc158fee96638eebc199820d4a18cacf",
+  "tokenizer": {
+    "bos_token": "<｜begin▁of▁sentence｜>",
+    "bos_token_id": 0,
+    "profile": "s14",
+    "protocol_token_ids": {
+      "</think>": 128822,
+      "<think>": 128821,
+      "<｜Assistant｜>": 128804,
+      "<｜User｜>": 128803,
+      "<｜begin▁of▁sentence｜>": 0,
+      "<｜end▁of▁sentence｜>": 1,
+      "<｜latest_reminder｜>": 128828,
+      "｜DSML｜": 128825
+    },
+    "sha256": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
+    "vocab_size": 129280
+  }
+}
