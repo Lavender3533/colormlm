@@ -100,7 +100,8 @@ pub struct NativeState {
     pub compressors: Vec<CompressorState>,
     pub indexers: Vec<IndexerState>,
     pub arena_bytes: u64,
-    /// Any operator failure poisons the recursive state; it cannot yield a token.
+    /// Non-transactional single-token failures poison this state. Exact Cascade
+    /// keeps the committed copy unchanged and rolls its staged checkpoint back.
     pub poisoned: bool,
 }
 
@@ -213,11 +214,46 @@ impl NativeState {
         {
             return Err(StateLayoutError::InvalidHcLayout);
         }
-        let layers: Vec<u8> = self.kv.iter().map(|item| item.layer).collect();
-        if layers.as_slice() != profile.layers() {
+        let kv_layout: Vec<(u8, u16)> = self
+            .kv
+            .iter()
+            .map(|item| (item.layer, item.compress_ratio))
+            .collect();
+        let expected_kv: Vec<(u8, u16)> = profile
+            .layers()
+            .iter()
+            .map(|&layer| (layer, COMPRESS_RATIOS[layer as usize]))
+            .collect();
+        if kv_layout != expected_kv {
             return Err(StateLayoutError::LayerDrift);
         }
-        if self.position >= self.max_seq_len {
+        let compressor_layers: Vec<(u8, u16)> = self
+            .compressors
+            .iter()
+            .map(|item| (item.layer, item.compress_ratio))
+            .collect();
+        let expected_compressors: Vec<(u8, u16)> = profile
+            .layers()
+            .iter()
+            .filter_map(|&layer| {
+                let ratio = COMPRESS_RATIOS[layer as usize];
+                (ratio != 0).then_some((layer, ratio))
+            })
+            .collect();
+        if compressor_layers != expected_compressors {
+            return Err(StateLayoutError::CompressorDrift);
+        }
+        let indexer_layers: Vec<u8> = self.indexers.iter().map(|item| item.layer).collect();
+        let expected_indexers: Vec<u8> = profile
+            .layers()
+            .iter()
+            .copied()
+            .filter(|&layer| COMPRESS_RATIOS[layer as usize] == 4)
+            .collect();
+        if indexer_layers != expected_indexers {
+            return Err(StateLayoutError::IndexerDrift);
+        }
+        if self.position > self.max_seq_len {
             return Err(StateLayoutError::PositionOutOfRange);
         }
         Ok(())
@@ -238,6 +274,8 @@ pub enum StateLayoutError {
     InvalidMaxSeq(u32),
     InvalidHcLayout,
     LayerDrift,
+    CompressorDrift,
+    IndexerDrift,
     ProfileDrift,
     PositionOutOfRange,
 }
@@ -267,11 +305,25 @@ mod tests {
 
     #[test]
     fn full_depth_profile_has_all_recursive_state_containers() {
-        let state = NativeState::decode_layout_for(GraphProfile::FullDepthTop1, 4096).unwrap();
-        state.validate_for(GraphProfile::FullDepthTop1).unwrap();
+        let state =
+            NativeState::decode_layout_for(GraphProfile::FullDepth43NativeTop6, 4096).unwrap();
+        state
+            .validate_for(GraphProfile::FullDepth43NativeTop6)
+            .unwrap();
         assert_eq!(state.kv.len(), 43);
         assert_eq!(state.compressors.len(), 41);
         assert_eq!(state.indexers.len(), 21);
         assert_eq!(state.arena_bytes, 46_055_424);
+    }
+
+    #[test]
+    fn full_depth_validation_rejects_missing_official_recursive_container() {
+        let mut state =
+            NativeState::decode_layout_for(GraphProfile::FullDepth43NativeTop6, 4096).unwrap();
+        state.indexers.pop();
+        assert_eq!(
+            state.validate().unwrap_err(),
+            StateLayoutError::IndexerDrift
+        );
     }
 }

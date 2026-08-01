@@ -1,0 +1,69 @@
+{
+  "format": "polaris-exact-cascade-contract-v1",
+  "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+  "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+  "draft_profile": "S14/top6",
+  "verifier_profile": "FullDepth43/native-top6",
+  "causal": true,
+  "depth": 43,
+  "experts_per_token_per_layer": 6,
+  "allowed_block_sizes": [1, 4, 8],
+  "request": {
+    "required": [
+      "request_id",
+      "repo",
+      "revision",
+      "profile",
+      "causal",
+      "depth",
+      "top_k",
+      "block_size",
+      "base_position",
+      "base_checkpoint_id",
+      "context_token_ids",
+      "draft_token_ids"
+    ],
+    "draft_length": "exactly_block_size"
+  },
+  "response": {
+    "positions": "exactly_block_size_in_token_offset_order",
+    "layers_per_position": "exactly_0_through_42_in_order",
+    "route_per_layer": "exactly_6_distinct_official_experts_plus_shared_expert",
+    "required_execution": [
+      "attention",
+      "native_top6_routed_moe",
+      "shared_expert",
+      "mhc_state",
+      "kv_state",
+      "official_ratio4_or_ratio128_compressor_state_when_applicable",
+      "official_ratio4_indexer_state_when_applicable"
+    ],
+    "state_checkpoint": "one_replay_safe_atomic_checkpoint_per_predicted_position"
+  },
+  "acceptance": {
+    "rule": "longest_equal_draft_native_prefix",
+    "mismatch": "commit_equal_prefix_plus_native_prediction_at_first_mismatch",
+    "rejected_suffix": "discard_all_later_draft_and_native_predictions",
+    "full_match": "commit_exactly_K_without_unverified_bonus_token"
+  },
+  "atomicity": {
+    "before_validation": "context_state_and_committed_checkpoint_unchanged",
+    "success": "commit_tokens_state_position_and_checkpoint_together",
+    "failure": "rollback_context_recursive_state_and_checkpoint_to_round_base"
+  },
+  "forbidden": [
+    "top1_reduction",
+    "skipped_layer",
+    "partial_layer_response",
+    "synthetic_response_through_production_entry"
+  ],
+  "production": {
+    "required_capabilities": [
+      "full_depth43_native_top6_operator_weight_parity",
+      "causal_block_k1_k4_k8",
+      "atomic_recursive_state_checkpoint_commit"
+    ],
+    "current_native_forward_ready": false,
+    "token_on_gate_failure": "forbidden"
+  }
+}

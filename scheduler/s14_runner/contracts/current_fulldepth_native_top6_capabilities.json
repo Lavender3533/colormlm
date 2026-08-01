@@ -1,0 +1,33 @@
+{
+  "format": "polaris-local-s14-capabilities-v1",
+  "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+  "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+  "profile": "full_depth43_native_top6",
+  "selected_layers": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42],
+  "experts_per_token": 6,
+  "backend": "vulkan",
+  "evidence_kind": "static_audit",
+  "native_forward_ready": false,
+  "capabilities": {
+    "fixed_revision_official_graph": {"status": "missing", "evidence": "official graph identity is frozen; complete native graph is absent"},
+    "loading_ready_fence_publication": {"status": "passed", "evidence": "ssd_inference Loading/Ready fence publication"},
+    "verified_route_first_range_provider": {"status": "missing", "evidence": "no authoritative FullDepth43 weight provider is connected"},
+    "native_tokenizer": {"status": "missing", "evidence": "not integrated into this runner"},
+    "native_bf16_embedding_row_lookup": {"status": "missing", "evidence": "contract only"},
+    "mhc_four_stream_sinkhorn": {"status": "missing", "evidence": "complete 43-layer operator graph absent"},
+    "fp8_sparse_attention": {"status": "missing", "evidence": "complete 43-layer operator graph absent"},
+    "compressor_ratio4_overlap_state": {"status": "missing", "evidence": "state layout exists; production operator/checkpoint parity absent"},
+    "compressor_ratio128_state": {"status": "missing", "evidence": "state layout exists; production operator/checkpoint parity absent"},
+    "indexer_fp4_hadamard_top512": {"status": "missing", "evidence": "state layout exists; production operator/checkpoint parity absent"},
+    "hash_router_layers_0_to_2": {"status": "missing", "evidence": "official native top6 hash routing is not connected"},
+    "score_router_sqrtsoftplus_bias_scale_1_5": {"status": "missing", "evidence": "official native top6 score routing is not connected"},
+    "mxfp4_ue8m0_routed_expert": {"status": "missing", "evidence": "isolated kernel evidence is not a FullDepth43 graph"},
+    "shared_expert_swiglu_limit_10": {"status": "missing", "evidence": "official shared expert is not connected for all 43 layers"},
+    "native_hc_head_rmsnorm_bf16_lm_head": {"status": "missing", "evidence": "complete native final path absent"},
+    "greedy_full_vocab_argmax": {"status": "passed", "evidence": "runner full-vocab contract test"},
+    "vulkan_official_numerical_parity": {"status": "missing", "evidence": "no end-to-end official-reference parity artifact"},
+    "full_depth43_native_top6_operator_weight_parity": {"status": "missing", "evidence": "no complete 43-layer native top6+shared weights/operators execution"},
+    "causal_block_k1_k4_k8": {"status": "missing", "evidence": "request/response contract tests only; no native causal-block backend"},
+    "atomic_recursive_state_checkpoint_commit": {"status": "missing", "evidence": "logical state-machine tests only; no device checkpoint/rollback implementation"}
+  }
+}

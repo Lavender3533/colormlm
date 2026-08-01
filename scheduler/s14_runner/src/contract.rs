@@ -29,42 +29,48 @@ pub enum RouterKind {
     Score,
 }
 
-/// The runner intentionally exposes exactly two pre-registered graphs. There
-/// is no arbitrary layer/top-k constructor and therefore no post-result sweep.
+/// The runner intentionally exposes exactly two production graphs. There is
+/// no arbitrary layer/top-k constructor and therefore no post-result sweep or
+/// quality-unsafe top-1 reduction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GraphProfile {
     S14Top6,
-    FullDepthTop1,
+    FullDepth43NativeTop6,
 }
 
 impl GraphProfile {
     pub fn layers(self) -> &'static [u8] {
         match self {
             Self::S14Top6 => &SELECTED_LAYERS,
-            Self::FullDepthTop1 => &FULL_DEPTH_LAYERS,
+            Self::FullDepth43NativeTop6 => &FULL_DEPTH_LAYERS,
         }
     }
 
     pub fn experts_per_token(self) -> usize {
-        match self {
-            Self::S14Top6 => 6,
-            Self::FullDepthTop1 => 1,
-        }
+        EXPERTS_PER_TOKEN
     }
 
-    pub fn profile_capability(self) -> &'static str {
+    pub fn profile_capabilities(self) -> &'static [&'static str] {
         match self {
-            Self::S14Top6 => "s14_identity_skip_state_parity",
-            Self::FullDepthTop1 => "fulldepth_top1_route_reduction_parity",
+            Self::S14Top6 => &["s14_identity_skip_state_parity"],
+            Self::FullDepth43NativeTop6 => &[
+                "full_depth43_native_top6_operator_weight_parity",
+                "causal_block_k1_k4_k8",
+                "atomic_recursive_state_checkpoint_commit",
+            ],
         }
     }
 
     pub fn priority(self) -> &'static str {
         match self {
             Self::S14Top6 => "primary_first_test",
-            Self::FullDepthTop1 => "quality_failure_fallback_only",
+            Self::FullDepth43NativeTop6 => "flagship_quality_verifier",
         }
+    }
+
+    pub fn permits_identity_layers(self) -> bool {
+        matches!(self, Self::S14Top6)
     }
 }
 
@@ -146,5 +152,14 @@ mod tests {
         wire.validate().unwrap();
         assert_eq!(COMPRESS_RATIOS.len(), 43);
         assert_eq!(COMPRESS_RATIOS[42], 4);
+    }
+
+    #[test]
+    fn production_profiles_cannot_express_top1_or_full_depth_skips() {
+        let profile = GraphProfile::FullDepth43NativeTop6;
+        assert_eq!(profile.layers(), FULL_DEPTH_LAYERS);
+        assert_eq!(profile.experts_per_token(), 6);
+        assert!(!profile.permits_identity_layers());
+        assert!(serde_json::from_str::<GraphProfile>("\"full_depth_top1\"").is_err());
     }
 }

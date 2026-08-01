@@ -29,7 +29,10 @@ def main() -> int:
 
     for filename, profile in (
         ("current_vulkan_capabilities.json", "s14_top6"),
-        ("current_fulldepth_top1_capabilities.json", "full_depth_top1"),
+        (
+            "current_fulldepth_native_top6_capabilities.json",
+            "full_depth43_native_top6",
+        ),
     ):
         manifest = read_json(CONTRACTS / filename)
         missing = validate_capability_manifest(manifest)
@@ -41,6 +44,30 @@ def main() -> int:
                 and manifest["experts_per_token"] == PROFILES[profile]["topk"],
             }
         )
+
+    negative = read_json(CONTRACTS / "current_fulldepth_top1_capabilities.json")
+    checks.append(
+        {
+            "id": "deprecated_top1_has_no_production_entry",
+            "pass": negative.get("deprecated") is True
+            and negative.get("hard_reject") is True
+            and negative.get("production_entry") is False
+            and negative.get("format") != "polaris-local-s14-capabilities-v1",
+        }
+    )
+
+    cascade = read_json(CONTRACTS / "exact_cascade_contract.json")
+    checks.append(
+        {
+            "id": "exact_cascade_k1_k4_k8_native_top6",
+            "pass": cascade.get("verifier_profile") == "FullDepth43/native-top6"
+            and cascade.get("allowed_block_sizes") == [1, 4, 8]
+            and cascade.get("depth") == 43
+            and cascade.get("experts_per_token_per_layer") == 6
+            and cascade.get("production", {}).get("token_on_gate_failure")
+            == "forbidden",
+        }
+    )
 
     abi_path = Path("D:/models/Polaris-S14/abi_samples/l42_e0/manifest.json")
     if abi_path.exists():

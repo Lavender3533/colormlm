@@ -5,6 +5,7 @@
 
 mod abi;
 mod capability;
+mod cascade;
 mod contract;
 mod executor_bridge;
 mod memory;
@@ -21,6 +22,12 @@ pub use capability::{
     CapabilityEntry, CapabilityManifest, CapabilityStatus, EvidenceKind, GateError,
     REQUIRED_CAPABILITIES,
 };
+pub use cascade::{
+    CausalPositionResponse, ExactCascadeCommit, ExactCascadeError, ExactCascadePhase,
+    ExactCascadeRequest, ExactCascadeResponse, ExactCascadeSession, NativeLayerRecord,
+    NativeStateCheckpoint, StateMutationStatus, EXACT_CASCADE_BLOCK_SIZES,
+    EXACT_CASCADE_PROFILE_ID,
+};
 pub use contract::{
     is_selected_layer, router_kind_for_layer, ContractError, GraphProfile, RouterKind, S14Contract,
     COMPRESS_RATIOS, EXPERTS_PER_TOKEN, FULL_DEPTH_LAYERS, HC_STREAMS, HIDDEN_SIZE, MODEL_REPO,
@@ -29,7 +36,10 @@ pub use contract::{
 pub use executor_bridge::{
     BinaryTensorView, ExecutorBridgeConfig, SubprocessNativeExecutor, EXECUTOR_JSONL_PROTOCOL,
 };
-pub use memory::{BudgetKind, MemoryLedger, MemoryLine, EXPERT_PAGE_BYTES};
+pub use memory::{
+    BudgetKind, MemoryLedger, MemoryLine, EXPERT_PAGE_BYTES, FULL_DEPTH_NATIVE_STATE_4096_BYTES,
+    FULL_DEPTH_NATIVE_TOP6_ACTIVE_BYTES_LOWER_BOUND,
+};
 pub use metrics::{CounterReport, RuntimeCounters, TransferObservation};
 pub use range_bridge::{RangeBridgeConfig, SubprocessRangeProvider, RANGE_JSONL_PROTOCOL};
 pub use runner::{
@@ -49,6 +59,15 @@ pub const INTEROP_CONTRACT_JSON: &str = include_str!("../contracts/s14_contract.
 pub const CURRENT_VULKAN_CAPABILITIES_JSON: &str =
     include_str!("../contracts/current_vulkan_capabilities.json");
 
-/// Pre-registered FullDepth/top-1 fallback audit; also hard-refused.
+/// FullDepth43/native-top6 causal-block audit; it is intentionally hard-refused.
 pub const CURRENT_FULL_DEPTH_CAPABILITIES_JSON: &str =
+    include_str!("../contracts/current_fulldepth_native_top6_capabilities.json");
+
+/// Exact Cascade K=1/4/8 request/response and atomic commit wire contract.
+pub const EXACT_CASCADE_CONTRACT_JSON: &str =
+    include_str!("../contracts/exact_cascade_contract.json");
+
+/// Historical FullDepth/top-1 is documentation-only and cannot deserialize as
+/// a production `CapabilityManifest` or `GraphProfile`.
+pub const DEPRECATED_FULL_DEPTH_TOP1_NEGATIVE_CONTRACT_JSON: &str =
     include_str!("../contracts/current_fulldepth_top1_capabilities.json");

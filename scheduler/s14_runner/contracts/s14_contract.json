@@ -41,12 +41,22 @@
       "skipped_layers": "identity_no_state_mutation"
     },
     {
-      "id": "full_depth_top1",
-      "priority": "quality_failure_fallback_only",
+      "id": "full_depth43_native_top6",
+      "display_name": "FullDepth43/native-top6",
+      "priority": "flagship_quality_verifier",
       "layers": "0..42",
-      "experts_per_token": 1,
-      "selection": "official_route_then_pre_registered_top1_reduction",
+      "experts_per_token": 6,
+      "selection": "official_native_top6_plus_shared_every_layer",
+      "skipped_layers": "forbidden",
+      "causal_block_sizes": [1, 4, 8],
       "runtime_ready": false
+    }
+  ],
+  "deprecated_negative_contracts": [
+    {
+      "id": "full_depth_top1",
+      "production_entry": false,
+      "reason": "top1 reduction is not an exact flagship quality verifier"
     }
   ],
   "expert_abi": {

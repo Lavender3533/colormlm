@@ -97,15 +97,16 @@ impl CapabilityManifest {
                 _ => Some((*name).to_string()),
             })
             .collect();
-        let profile_capability = self.profile.profile_capability();
-        match self.capabilities.get(profile_capability) {
-            Some(entry)
-                if entry.status == CapabilityStatus::Passed
-                    && !entry.evidence.trim().is_empty() => {}
-            Some(entry) if entry.status == CapabilityStatus::Passed => {
-                missing.push(format!("{profile_capability}:passed_without_evidence"));
+        for &profile_capability in self.profile.profile_capabilities() {
+            match self.capabilities.get(profile_capability) {
+                Some(entry)
+                    if entry.status == CapabilityStatus::Passed
+                        && !entry.evidence.trim().is_empty() => {}
+                Some(entry) if entry.status == CapabilityStatus::Passed => {
+                    missing.push(format!("{profile_capability}:passed_without_evidence"));
+                }
+                _ => missing.push(profile_capability.into()),
             }
-            _ => missing.push(profile_capability.into()),
         }
         missing
     }
@@ -145,13 +146,15 @@ impl CapabilityManifest {
                 )
             })
             .collect();
-        capabilities.insert(
-            profile.profile_capability().into(),
-            CapabilityEntry {
-                status: CapabilityStatus::Passed,
-                evidence: "synthetic_identity_graph_test_only".into(),
-            },
-        );
+        for &profile_capability in profile.profile_capabilities() {
+            capabilities.insert(
+                profile_capability.into(),
+                CapabilityEntry {
+                    status: CapabilityStatus::Passed,
+                    evidence: "synthetic_identity_graph_test_only".into(),
+                },
+            );
+        }
         Self {
             format: "polaris-local-s14-capabilities-v1".into(),
             repo: MODEL_REPO.into(),
@@ -217,15 +220,27 @@ mod tests {
     }
 
     #[test]
-    fn fulldepth_profile_is_exact_and_current_matrix_refuses() {
+    fn fulldepth_native_top6_profile_is_exact_and_current_matrix_refuses() {
         let manifest: CapabilityManifest =
             serde_json::from_str(crate::CURRENT_FULL_DEPTH_CAPABILITIES_JSON).unwrap();
         manifest.validate_identity().unwrap();
-        assert_eq!(manifest.profile, GraphProfile::FullDepthTop1);
+        assert_eq!(manifest.profile, GraphProfile::FullDepth43NativeTop6);
         assert!(manifest
             .missing_capabilities()
             .iter()
-            .any(|name| name == "fulldepth_top1_route_reduction_parity"));
+            .any(|name| name == "full_depth43_native_top6_operator_weight_parity"));
+        assert!(manifest
+            .missing_capabilities()
+            .iter()
+            .any(|name| name == "atomic_recursive_state_checkpoint_commit"));
         assert!(manifest.gate_production().is_err());
+    }
+
+    #[test]
+    fn deprecated_top1_manifest_cannot_enter_production_gate() {
+        assert!(serde_json::from_str::<CapabilityManifest>(
+            crate::DEPRECATED_FULL_DEPTH_TOP1_NEGATIVE_CONTRACT_JSON
+        )
+        .is_err());
     }
 }

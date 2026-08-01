@@ -627,10 +627,10 @@ mod tests {
             route: &RouteDecision,
         ) -> Result<RoutedLoadTicket, ProviderError> {
             assert_eq!(self.live, Some(base.layer));
-            let profile = if route.expert_ids.len() == 1 {
-                GraphProfile::FullDepthTop1
-            } else {
+            let profile = if SELECTED_LAYERS.binary_search(&route.layer).is_ok() {
                 GraphProfile::S14Top6
+            } else {
+                GraphProfile::FullDepth43NativeTop6
             };
             route.validate_for(profile).unwrap();
             self.route_seen.insert(base.layer);
@@ -706,16 +706,11 @@ mod tests {
             if self.fail_layer == Some(layer) {
                 return Err("injected attention failure".into());
             }
-            let (expert_ids, weights) = if _state.profile == GraphProfile::FullDepthTop1 {
-                (vec![0], vec![1.5])
-            } else {
-                (vec![0, 1, 2, 3, 4, 5], vec![0.25; 6])
-            };
             Ok(RouteDecision {
                 layer,
                 kind: router_kind_for_layer(layer).unwrap(),
-                expert_ids,
-                weights,
+                expert_ids: vec![0, 1, 2, 3, 4, 5],
+                weights: vec![0.25; 6],
             })
         }
 
@@ -764,7 +759,7 @@ mod tests {
     }
 
     fn synthetic_full_depth_runner() -> LocalS14Runner<MockProvider, MockExecutor> {
-        let profile = GraphProfile::FullDepthTop1;
+        let profile = GraphProfile::FullDepth43NativeTop6;
         LocalS14Runner::new(
             &CapabilityManifest::synthetic_test_pass_for(profile),
             RunnerMode::SyntheticTest,
@@ -832,7 +827,7 @@ mod tests {
     }
 
     #[test]
-    fn fulldepth_top1_is_the_only_second_preregistered_graph() {
+    fn fulldepth_native_top6_executes_every_official_block_without_identity() {
         let mut runner = synthetic_full_depth_runner();
         let token = runner.step(1).unwrap();
         assert_eq!(token.origin, RunnerMode::SyntheticTest);
@@ -847,5 +842,6 @@ mod tests {
         let (provider, executor, _) = runner.into_parts();
         assert_eq!(provider.releases, 43);
         assert_eq!(executor.executed.len(), 43);
+        assert_eq!(provider.route_seen.len(), 43);
     }
 }

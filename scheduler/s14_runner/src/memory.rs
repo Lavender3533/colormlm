@@ -8,6 +8,13 @@ pub const BF16_HEAD_BYTES: u64 = 1_059_061_760;
 pub const BF16_EMBEDDING_ROW_BYTES: u64 = 8_192;
 pub const FINAL_NORM_BYTES: u64 = 8_192;
 pub const NATIVE_STATE_4096_BYTES: u64 = 14_401_536;
+pub const FULL_DEPTH_NATIVE_STATE_4096_BYTES: u64 = 46_055_424;
+pub const FULL_DEPTH_NATIVE_TOP6_ACTIVE_BYTES_LOWER_BOUND: u64 = FULL_DEPTH_NON_ROUTED_BYTES
+    + BF16_HEAD_BYTES
+    + BF16_EMBEDDING_ROW_BYTES
+    + FINAL_NORM_BYTES
+    + 2 * FULL_DEPTH_NATIVE_STATE_4096_BYTES
+    + 6 * EXPERT_PAGE_BYTES;
 
 const GIB: u64 = 1024 * 1024 * 1024;
 const MIB: u64 = 1024 * 1024;
@@ -20,7 +27,7 @@ pub enum BudgetKind {
     CorrectnessColdStreamBf16Head,
     SteadyStateBf16Head,
     SteadyStateFp8HeadCandidate,
-    FullDepthTop1Capacity,
+    FullDepth43NativeTop6CausalBlock,
     HostRam,
 }
 
@@ -42,6 +49,8 @@ pub struct MemoryLedger {
     pub slack_bytes: u64,
     pub expert_page_slots: Option<u32>,
     pub expert_slots_per_layer_floor: Option<u32>,
+    pub active_bytes_lower_bound: Option<u64>,
+    pub active_bytes_lower_bound_basis: Option<String>,
     pub measurement_status: String,
     pub runnable_status: String,
 }
@@ -151,17 +160,20 @@ impl MemoryLedger {
             slack_bytes: RAM_LIMIT - assigned_bytes,
             expert_page_slots: Some(1024),
             expert_slots_per_layer_floor: Some(1024 / 14),
+            active_bytes_lower_bound: None,
+            active_bytes_lower_bound_basis: None,
             measurement_status: "configured_capacity_not_runtime_measurement".into(),
             runnable_status: "provider_capacity_plan".into(),
         }
     }
 
-    /// Pre-registered quality-failure fallback. All 43 non-routed layers and
-    /// BF16 head are pinned; only six expert pages fit while retaining 512 MiB
-    /// failure reserve. This is a capacity proof, not a 20 tok/s claim: the
-    /// real-header static scan is 8,361,509,064 B/token at top-1.
-    pub fn full_depth_top1_capacity() -> Self {
-        let mut lines = vec![
+    /// FullDepth43/native-top6 causal-block capacity contract. The active-byte
+    /// floor includes all fixed full-depth weights, one current layer's exact
+    /// top-6 pages, and committed+staged recursive arenas required by the
+    /// rollback contract. It excludes allocator/driver overhead and is not a
+    /// runtime measurement or throughput claim.
+    pub fn full_depth43_native_top6_causal_block() -> Self {
+        let lines = vec![
             line(
                 "lm_head",
                 BF16_HEAD_BYTES,
@@ -187,10 +199,16 @@ impl MemoryLedger {
                 "D:/models/Polaris-S14/fulldepth_kadaptive_budget.json",
             ),
             line(
-                "native_full_depth_state_4096",
-                46_055_424,
+                "committed_native_full_depth_state_4096",
+                FULL_DEPTH_NATIVE_STATE_4096_BYTES,
                 "vram_mutable",
                 "43 KV + 41 compressor + 21 indexer containers",
+            ),
+            line(
+                "staged_native_full_depth_state_4096",
+                FULL_DEPTH_NATIVE_STATE_4096_BYTES,
+                "vram_mutable_uncommitted",
+                "atomic causal-block commit/rollback double-buffer lower-bound strategy",
             ),
             line(
                 "compute_route_logits_and_transfer_scratch",
@@ -200,29 +218,37 @@ impl MemoryLedger {
             ),
             line(
                 "vram_failure_safety_tight",
-                512 * MIB,
+                384 * MIB,
                 "vram_reserved",
-                "tight fallback reserve",
+                "configured capacity after committed+staged state arenas",
             ),
             line(
                 "current_layer_expert_pages",
                 6 * EXPERT_PAGE_BYTES,
                 "vram_loading_then_fence_published_ready",
-                "top1 uses one; capacity also covers one official top6 set",
+                "one current layer's exact official native top6 set; shared expert is non-routed",
             ),
         ];
         let assigned_bytes = lines.iter().map(|item| item.bytes).sum();
         Self {
             format: "polaris-s14-memory-ledger-v1".into(),
-            kind: BudgetKind::FullDepthTop1Capacity,
+            kind: BudgetKind::FullDepth43NativeTop6CausalBlock,
             limit_bytes: VRAM_LIMIT,
-            lines: std::mem::take(&mut lines),
+            lines,
             assigned_bytes,
             slack_bytes: VRAM_LIMIT - assigned_bytes,
             expert_page_slots: Some(6),
             expert_slots_per_layer_floor: Some(0),
-            measurement_status: "real_header_capacity_not_runtime_speed_measurement".into(),
-            runnable_status: "hard_reject_until_fulldepth_top1_route_and_operator_parity".into(),
+            active_bytes_lower_bound: Some(FULL_DEPTH_NATIVE_TOP6_ACTIVE_BYTES_LOWER_BOUND),
+            active_bytes_lower_bound_basis: Some(
+                "static headers + Rust state layout + one layer top6 + committed/staged rollback arenas; excludes activation, allocator, driver and kernel workspace; not measured"
+                    .into(),
+            ),
+            measurement_status:
+                "static_active_byte_lower_bound_not_runtime_memory_or_speed_measurement".into(),
+            runnable_status:
+                "hard_reject_until_fulldepth43_native_top6_weights_operators_and_atomic_checkpoint_parity"
+                    .into(),
         }
     }
 
@@ -230,6 +256,11 @@ impl MemoryLedger {
         self.lines.iter().map(|line| line.bytes).sum::<u64>() == self.assigned_bytes
             && self.assigned_bytes + self.slack_bytes == self.limit_bytes
             && self.assigned_bytes <= self.limit_bytes
+            && self
+                .active_bytes_lower_bound
+                .is_none_or(|lower_bound| lower_bound <= self.assigned_bytes)
+            && (self.active_bytes_lower_bound.is_some()
+                == self.active_bytes_lower_bound_basis.is_some())
     }
 }
 
@@ -283,6 +314,8 @@ fn finish_vram(kind: BudgetKind, mut lines: Vec<MemoryLine>, runnable: &str) -> 
         slack_bytes: VRAM_LIMIT - assigned_bytes,
         expert_page_slots: Some(expert_page_slots),
         expert_slots_per_layer_floor: Some(expert_page_slots / 14),
+        active_bytes_lower_bound: None,
+        active_bytes_lower_bound_basis: None,
         measurement_status: "configured_capacity_not_runtime_measurement".into(),
         runnable_status: runnable.into(),
     }
@@ -307,7 +340,7 @@ mod tests {
         let steady = MemoryLedger::steady_state_bf16_head();
         let quant = MemoryLedger::steady_state_fp8_head_candidate();
         let ram = MemoryLedger::host_ram();
-        let full = MemoryLedger::full_depth_top1_capacity();
+        let full = MemoryLedger::full_depth43_native_top6_causal_block();
         for ledger in [&cold, &steady, &quant, &ram, &full] {
             assert!(ledger.validate());
             assert!(ledger.measurement_status.contains("not_runtime"));
@@ -319,13 +352,30 @@ mod tests {
         assert_eq!(ram.assigned_bytes, 30_185_357_312);
         assert_eq!(ram.slack_bytes, 4_174_381_056);
         assert_eq!(full.expert_page_slots, Some(6));
-        assert_eq!(full.assigned_bytes, 8_584_003_784);
-        assert_eq!(full.slack_bytes, 5_930_808);
+        assert_eq!(full.assigned_bytes, 8_495_841_480);
+        assert_eq!(full.slack_bytes, 94_093_112);
+        assert_eq!(
+            full.active_bytes_lower_bound,
+            Some(FULL_DEPTH_NATIVE_TOP6_ACTIVE_BYTES_LOWER_BOUND)
+        );
+        assert_eq!(
+            FULL_DEPTH_NATIVE_TOP6_ACTIVE_BYTES_LOWER_BOUND,
+            7_958_970_568
+        );
+        assert!(full
+            .active_bytes_lower_bound_basis
+            .as_deref()
+            .unwrap()
+            .contains("not measured"));
     }
 
     #[test]
     fn state_ledger_matches_state_container() {
         let state = crate::NativeState::decode_layout(4096).unwrap();
         assert_eq!(state.arena_bytes, NATIVE_STATE_4096_BYTES);
+        let full_state =
+            crate::NativeState::decode_layout_for(crate::GraphProfile::FullDepth43NativeTop6, 4096)
+                .unwrap();
+        assert_eq!(full_state.arena_bytes, FULL_DEPTH_NATIVE_STATE_4096_BYTES);
     }
 }

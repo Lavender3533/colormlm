@@ -11,16 +11,39 @@ HERE = Path(__file__).resolve().parent
 CONTRACTS = HERE.parent / "contracts"
 REPO = "deepseek-ai/DeepSeek-V4-Flash-0731"
 REVISION = "7872f01b1d1fe23eabc4c98b48bffcef5a386062"
+REQUIRED_CAPABILITIES = (
+    "fixed_revision_official_graph",
+    "loading_ready_fence_publication",
+    "verified_route_first_range_provider",
+    "native_tokenizer",
+    "native_bf16_embedding_row_lookup",
+    "mhc_four_stream_sinkhorn",
+    "fp8_sparse_attention",
+    "compressor_ratio4_overlap_state",
+    "compressor_ratio128_state",
+    "indexer_fp4_hadamard_top512",
+    "hash_router_layers_0_to_2",
+    "score_router_sqrtsoftplus_bias_scale_1_5",
+    "mxfp4_ue8m0_routed_expert",
+    "shared_expert_swiglu_limit_10",
+    "native_hc_head_rmsnorm_bf16_lm_head",
+    "greedy_full_vocab_argmax",
+    "vulkan_official_numerical_parity",
+)
 PROFILES = {
     "s14_top6": {
         "layers": [0, 1, 2, 6, 7, 14, 15, 22, 23, 30, 31, 40, 41, 42],
         "topk": 6,
-        "capability": "s14_identity_skip_state_parity",
+        "capabilities": ["s14_identity_skip_state_parity"],
     },
-    "full_depth_top1": {
+    "full_depth43_native_top6": {
         "layers": list(range(43)),
-        "topk": 1,
-        "capability": "fulldepth_top1_route_reduction_parity",
+        "topk": 6,
+        "capabilities": [
+            "full_depth43_native_top6_operator_weight_parity",
+            "causal_block_k1_k4_k8",
+            "atomic_recursive_state_checkpoint_commit",
+        ],
     },
 }
 
@@ -66,17 +89,16 @@ def validate_capability_manifest(manifest: Mapping[str, Any]) -> list[str]:
     capabilities = manifest.get("capabilities")
     if not isinstance(capabilities, dict):
         raise ContractError("capabilities 必须是 object")
-    missing = [
-        name
-        for name, value in capabilities.items()
-        if not isinstance(value, dict)
-        or value.get("status") != "passed"
-        or not str(value.get("evidence", "")).strip()
-    ]
-    profile_capability = str(profile["capability"])
-    if capabilities.get(profile_capability, {}).get("status") != "passed":
-        if profile_capability not in missing:
-            missing.append(profile_capability)
+    required = (*REQUIRED_CAPABILITIES, *profile["capabilities"])
+    missing = []
+    for name in required:
+        value = capabilities.get(name)
+        if (
+            not isinstance(value, dict)
+            or value.get("status") != "passed"
+            or not str(value.get("evidence", "")).strip()
+        ):
+            missing.append(name)
     if manifest.get("evidence_kind") != "measured_runtime":
         missing.append("evidence_kind:measured_runtime")
     if manifest.get("native_forward_ready") is not True:
