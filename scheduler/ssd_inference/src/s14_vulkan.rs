@@ -20,6 +20,11 @@ pub const S14_MXFP4_MATVEC_SPV: &[u8] =
 pub const S14_FP8_MATVEC_SPV: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/s14_fp8_matvec.spv"));
 
+pub const S14_SWIGLU_LIMIT_SPV: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/s14_swiglu_limit.spv"));
+
+pub const S14_ROUTE_MIX_SPV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/s14_route_mix.spv"));
+
 const FP4_GROUP_SIZE: u32 = 32;
 const FP8_TILE: u32 = 128;
 
@@ -152,11 +157,24 @@ pub struct S14Fp8Dispatch {
     pub shape: S14MatvecShape,
 }
 
+pub struct S14SwigluLimitDispatch {
+    pub binder: DescriptorBinder,
+    pub n: u32,
+}
+
+pub struct S14RouteMixDispatch {
+    pub binder: DescriptorBinder,
+    pub n: u32,
+    pub route_weight: f32,
+}
+
 /// Pipelines used by the native S14 graph. They are independent from the GGUF
 /// Q4_K pipelines because the Polaris checkpoint has a different byte ABI.
 pub struct S14NumericPipelines {
     mxfp4_matvec: ComputePipeline,
     fp8_matvec: ComputePipeline,
+    swiglu_limit: ComputePipeline,
+    route_mix: ComputePipeline,
 }
 
 impl S14NumericPipelines {
@@ -164,6 +182,8 @@ impl S14NumericPipelines {
         Ok(Self {
             mxfp4_matvec: ComputePipeline::new(ctx, S14_MXFP4_MATVEC_SPV, 4, 8)?,
             fp8_matvec: ComputePipeline::new(ctx, S14_FP8_MATVEC_SPV, 4, 8)?,
+            swiglu_limit: ComputePipeline::new(ctx, S14_SWIGLU_LIMIT_SPV, 3, 4)?,
+            route_mix: ComputePipeline::new(ctx, S14_ROUTE_MIX_SPV, 2, 8)?,
         })
     }
 
@@ -229,6 +249,52 @@ impl S14NumericPipelines {
         Ok(S14Fp8Dispatch { binder, shape })
     }
 
+    pub fn bind_swiglu_limit(
+        &self,
+        ctx: &VulkanContext,
+        n: u32,
+        gate: &GpuBuffer,
+        up: &GpuBuffer,
+        y: &GpuBuffer,
+    ) -> Result<S14SwigluLimitDispatch> {
+        if n == 0 {
+            bail!("S14 SwiGLU requires non-zero length");
+        }
+        let bytes = checked_bytes(n as u64, 4, "S14 SwiGLU")?;
+        require_capacity(gate, bytes, "S14 SwiGLU gate")?;
+        require_capacity(up, bytes, "S14 SwiGLU up")?;
+        require_capacity(y, bytes, "S14 SwiGLU output")?;
+        let binder = DescriptorBinder::new(
+            ctx,
+            &self.swiglu_limit,
+            &[(gate, bytes), (up, bytes), (y, bytes)],
+        )?;
+        Ok(S14SwigluLimitDispatch { binder, n })
+    }
+
+    pub fn bind_route_mix(
+        &self,
+        ctx: &VulkanContext,
+        n: u32,
+        route_weight: f32,
+        expert: &GpuBuffer,
+        routed: &GpuBuffer,
+    ) -> Result<S14RouteMixDispatch> {
+        if n == 0 || !route_weight.is_finite() || route_weight < 0.0 {
+            bail!("S14 route mix requires non-zero length and finite non-negative weight");
+        }
+        let bytes = checked_bytes(n as u64, 4, "S14 route mix")?;
+        require_capacity(expert, bytes, "S14 route mix expert")?;
+        require_capacity(routed, bytes, "S14 route mix output")?;
+        let binder =
+            DescriptorBinder::new(ctx, &self.route_mix, &[(expert, bytes), (routed, bytes)])?;
+        Ok(S14RouteMixDispatch {
+            binder,
+            n,
+            route_weight,
+        })
+    }
+
     /// Record only the kernel dispatch. Upload, barriers, readback and fence
     /// ownership stay with the surrounding native forward command graph.
     pub unsafe fn cmd_mxfp4_matvec(
@@ -263,10 +329,84 @@ impl S14NumericPipelines {
         );
     }
 
+    pub unsafe fn cmd_swiglu_limit(
+        &self,
+        ctx: &VulkanContext,
+        command_buffer: vk::CommandBuffer,
+        dispatch: &S14SwigluLimitDispatch,
+    ) {
+        record_elementwise(
+            ctx,
+            command_buffer,
+            &self.swiglu_limit,
+            dispatch.binder.set,
+            dispatch.n,
+            None,
+        );
+    }
+
+    pub unsafe fn cmd_route_mix(
+        &self,
+        ctx: &VulkanContext,
+        command_buffer: vk::CommandBuffer,
+        dispatch: &S14RouteMixDispatch,
+    ) {
+        record_elementwise(
+            ctx,
+            command_buffer,
+            &self.route_mix,
+            dispatch.binder.set,
+            dispatch.n,
+            Some(dispatch.route_weight),
+        );
+    }
+
     pub fn destroy(&self, ctx: &VulkanContext) {
+        self.route_mix.destroy(ctx);
+        self.swiglu_limit.destroy(ctx);
         self.fp8_matvec.destroy(ctx);
         self.mxfp4_matvec.destroy(ctx);
     }
+}
+
+unsafe fn record_elementwise(
+    ctx: &VulkanContext,
+    command_buffer: vk::CommandBuffer,
+    pipeline: &ComputePipeline,
+    set: vk::DescriptorSet,
+    n: u32,
+    scalar: Option<f32>,
+) {
+    ctx.device.cmd_bind_pipeline(
+        command_buffer,
+        vk::PipelineBindPoint::COMPUTE,
+        pipeline.pipeline,
+    );
+    ctx.device.cmd_bind_descriptor_sets(
+        command_buffer,
+        vk::PipelineBindPoint::COMPUTE,
+        pipeline.layout,
+        0,
+        &[set],
+        &[],
+    );
+    let mut push = [0u8; 8];
+    push[..4].copy_from_slice(&n.to_le_bytes());
+    let push_bytes = if let Some(value) = scalar {
+        push[4..].copy_from_slice(&value.to_le_bytes());
+        &push[..]
+    } else {
+        &push[..4]
+    };
+    ctx.device.cmd_push_constants(
+        command_buffer,
+        pipeline.layout,
+        vk::ShaderStageFlags::COMPUTE,
+        0,
+        push_bytes,
+    );
+    ctx.device
+        .cmd_dispatch(command_buffer, n.div_ceil(256), 1, 1);
 }
 
 unsafe fn record_matvec(

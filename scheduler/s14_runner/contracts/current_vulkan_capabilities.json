@@ -6,7 +6,7 @@
   "selected_layers": [0, 1, 2, 6, 7, 14, 15, 22, 23, 30, 31, 40, 41, 42],
   "experts_per_token": 6,
   "backend": "vulkan",
-  "evidence_kind": "static_audit",
+  "evidence_kind": "measured_runtime",
   "native_forward_ready": false,
   "capabilities": {
     "fixed_revision_official_graph": {
@@ -59,7 +59,7 @@
     },
     "mxfp4_ue8m0_routed_expert": {
       "status": "passed",
-      "evidence": "RX 5700 XT measured runtime: 18 real L42 top6 W1/W3/W2 packed MXFP4 matvecs; scheduler/ssd_inference/evidence/s14_vulkan_numeric_rx5700xt.json"
+      "evidence": "RX 5700 XT measured runtime: hash-verified real L42 E126 packed MXFP4 w1/w3 -> clamp-SwiGLU -> w2 -> route mix minimal GPU-resident chain; scheduler/ssd_inference/evidence/s14_vulkan_numeric_rx5700xt.json"
     },
     "shared_expert_swiglu_limit_10": {
       "status": "missing",

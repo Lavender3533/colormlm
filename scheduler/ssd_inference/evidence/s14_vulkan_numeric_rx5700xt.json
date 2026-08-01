@@ -1,9 +1,12 @@
 {
-  "format": "polaris-s14-vulkan-numeric-evidence-v1",
+  "format": "polaris-s14-vulkan-numeric-evidence-v2",
   "recorded_date": "2026-08-01",
-  "code_base": "936ad78f1fd25495d8aa73ca70e98150cfee80e4",
+  "master_base": "5c8756fa7e3daf5a57f0ab58987993c5b0c84b60",
   "model_revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
-  "command": "cargo run --release --offline -p ssd_inference --example s14_vulkan_numeric",
+  "commands": [
+    "python -X utf8 fast16/research/polaris_meridian_v1/l42_real_reference/l42_reference.py --capture-dir <fresh-dir>",
+    "$env:POLARIS_S14_L42_CAPTURE_DIR='<fresh-dir>'; cargo run --release --offline -p ssd_inference --example s14_vulkan_numeric"
+  ],
   "device": {
     "name": "AMD Radeon RX 5700 XT",
     "vendor_id": "0x1002",
@@ -14,55 +17,71 @@
     "timestamp_valid_bits": 64,
     "timestamp_period_ns": 10
   },
-  "measurement": {
-    "weights": "device-local VRAM",
+  "real_capture": {
+    "hashes_checked": 76,
+    "payload_bytes": 247515224,
+    "payload_files": 76,
+    "base_manifest_sha256": "5e86fa2145c1e3b5f4f8efdcd4fdcca5b966d7cb43ca0ea592294a542ac086ed",
+    "route_manifest_sha256": "feccc1b5dde256c9ad750985b4ab5446732a1f4deec796976198e95798c64b86",
+    "s14_manifest_sha256": "f6ea01a0df591f272d4e5addb96e16e8eae79b6e9326a84ef6cbaab818c6a2b5",
+    "frozen_ffn_input_sha256": "7e2d3167e3782eca8d762c3cc92d53bb9d64a65c7b18d37d16797ff39f611ad4",
+    "expert_126_w1_w3_input_sha256": "1a2006c1b79b31bc3db3540ef730b08547c6148e224074b0ba712e2c3b9d7c9f",
+    "expert_126_official_w2_input_sha256": "7795b1df61092c44883579a0107d02e693303fd16e926fcbd1baa154b49a9a31",
+    "wq_a_input_sha256": "47156935b19ca5483f0e92d2284eaa6a9417686978dc4b41ca893ee162f37577"
+  },
+  "mxfp4_expert_126_chain": {
+    "route_expert_ids": [126, 12, 205, 149, 227, 174],
+    "expert_id": 126,
+    "route_weight": 0.2747795581817627,
+    "physical_format": "I8 byte container, low-nibble even-K/high-nibble odd-K E2M1, UE8M0 group 32",
+    "payload_sha256": {
+      "w1_weight": "2d3fc95f551b1dbe5e4741e7993c94047a7dd983b92907f0335219fa97285faa",
+      "w1_scale": "5d9d748f07717a2dc63c40cd089afa5828961ec1e50c0f72e86c5d5f601d215f",
+      "w3_weight": "a7cf5a4ed97271eb2186695c788c7800cf712587edac4c9d22246830f68fc3ad",
+      "w3_scale": "542f18ba4787273f19288564fa5a3391c22e8beac6f0636934e94b07fae3a800",
+      "w2_weight": "dfaad18582d5cac02a97fc4fda88325deb389376603e80cac180a112b50e766d",
+      "w2_scale": "5930c0a06cd1618b388545b3d5557faba309422224d66d297ed13dbed3fc3335"
+    },
+    "gpu_residency": "input, all six packed weight/scale payloads, w1/w3 outputs, SwiGLU hidden, w2 output and routed output remain device-local across the chain",
+    "dispatch_sequence": ["w1_mxfp4", "w3_mxfp4", "clamp_swiglu_limit_10", "w2_mxfp4", "route_weight_mix"],
     "timestamp_iterations": 100,
-    "timestamp_scope": "dispatches plus Vulkan-valid inter-dispatch WAW barriers; upload and readback excluded",
-    "input": "sin(arange(4096)*0.013) F32",
-    "accumulation": "F32"
+    "gpu_chain_dispatch_plus_barriers_ms_mean": 0.157038,
+    "cpu_reference_ms": 18.6974,
+    "max_abs_error": 0.000001072883606,
+    "mean_abs_error": 0.00000010267585,
+    "rmse": 0.0000001483723944,
+    "max_rel_error_for_abs_reference_gt_1e_5": 0.0006838133559,
+    "reference_semantics": "F32 CPU decode/accumulate for the same minimal chain; the captured w1/w3 input is the real L42 post-activation-quant input. Inter-matvec BF16 rounding and activation requantization are not part of this minimal chain."
   },
-  "real_inputs": {
-    "base_cache_manifest": "D:/models/Polaris-S14/l42_base_cache_manifest.json (34 ranges, 142131800 B)",
-    "route_manifest": "D:/models/Polaris-S14/l42_synthetic_route_manifest.json (36 ranges, 80216064 B)",
-    "moe_reference": "D:/models/Polaris-S14/l42_real_moe_reference.json",
-    "expert_ids": [48, 153, 144, 83, 221, 127],
-    "route_weight_sum": 1.5,
-    "network_accessed": false,
-    "weights_downloaded": false
-  },
-  "mxfp4_routed": {
-    "physical_format": "I8 container, low-nibble even-K and high-nibble odd-K E2M1, UE8M0 group 32",
-    "real_matrix_dispatches": 18,
-    "kernel_plus_barrier_ms_mean_min": 0.0503336,
-    "kernel_plus_barrier_ms_mean_max": 0.0550796,
-    "single_matrix_max_abs_error_max": 0.00001239776611,
-    "single_matrix_rmse_max": 0.000001393978776,
-    "expert_end_to_end_max_abs_error_max": 0.00001239776611,
-    "expert_end_to_end_rmse_max": 0.000002880027212,
-    "routed_weighted_max_abs_error": 0.000005602836609,
-    "routed_weighted_rmse": 0.000001565295457,
-    "frozen_cpu_sha256": "e9cebfe1925ed7eca0c31c8645e0c367dfd7c81cb0a4bf03e8da621c1078e931"
-  },
-  "fp8_shared": {
-    "physical_format": "F8_E4M3FN weight, F8_E8M0 scale tiles 128x128",
-    "real_matrix_dispatches": 3,
-    "kernel_plus_barrier_ms_mean": [0.1427492, 0.1434556, 0.1384444],
-    "single_matrix_max_abs_error_max": 0.000009059906006,
-    "single_matrix_rmse_max": 0.000001119231081,
-    "end_to_end_max_abs_error": 0.000007629394531,
-    "end_to_end_rmse": 0.000001073220410,
-    "frozen_cpu_sha256": "b01cd37d10623dc880029e940e77aaa8d7f0c6d0444c6ae4d9547f13e386f4e9"
-  },
-  "fp8_wq_a": {
+  "fp8_wq_a_linear": {
+    "tensor": "layers.42.attn.wq_a",
     "shape": [1024, 4096],
-    "kernel_plus_barrier_ms_mean": 0.0838424,
-    "max_abs_error": 0.000007152557373,
-    "rmse": 0.000001293316682
+    "physical_format": "F8_E4M3FN weight plus F8_E8M0 scale tiles 128x128",
+    "payload_sha256": {
+      "weight": "1efcea39938dfadc143c41813bc32327a9bb5369b2b612feac76d9dfb8001ce7",
+      "scale": "dfb4085717aa527f8affa5a1640c5f806867c5ba6e0301d170f387be8b6660cf"
+    },
+    "timestamp_iterations": 100,
+    "gpu_kernel_plus_serial_barrier_ms_mean": 0.0838004,
+    "cpu_reference_ms": 12.1235,
+    "max_abs_error": 0.00000005960464478,
+    "mean_abs_error": 0.000000004298271961,
+    "rmse": 0.000000007205182117,
+    "max_rel_error_for_abs_reference_gt_1e_5": 0.00002221235081
   },
-  "l42_moe_sum": {
-    "max_abs_error": 0.00001239776611,
-    "rmse": 0.000001919891077,
-    "frozen_cpu_sha256": "78ce3fdd0ae45b858e35c0c4be9b366afca1d347a64e23269b098416db3fb2e6"
-  },
-  "claim_limit": "Real L42 matvec numerical parity only. Activation and expert mixing in this evidence runner are CPU reference steps; this is not a full native layer, token, or token/s claim."
+  "hard_refusal": [
+    "missing POLARIS_S14_L42_CAPTURE_DIR",
+    "capture format/revision/layer/expert/frozen source SHA drift",
+    "capture or manifest SHA drift",
+    "payload path outside D:/models/Polaris-S14/range_cache",
+    "payload size or SHA drift",
+    "UE8M0/E4M3FN NaN code",
+    "device PCI id other than 0x1002:0x731f",
+    "missing Vulkan timestamps",
+    "numerical tolerance exceeded"
+  ],
+  "network_accessed": false,
+  "weights_downloaded": false,
+  "model_service_changed": false,
+  "claim_limit": "Real L42 packed-kernel parity and one minimal GPU-resident E126 chain only. This is not the full official expert semantics, a full L42 layer, a full S14 token, or a token/s claim."
 }

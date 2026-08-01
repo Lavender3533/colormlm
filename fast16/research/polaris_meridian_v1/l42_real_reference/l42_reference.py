@@ -330,8 +330,10 @@ def validate_assets(
 
 
 class _InlineForward:
-    def __init__(self, bundle: AssetBundle):
+    def __init__(self, bundle: AssetBundle, capture_dir: Path | None = None):
         self.bundle = bundle
+        self.capture_dir = capture_dir
+        self.captures: list[dict[str, Any]] = []
 
     def _entry(self, name: str) -> dict[str, Any]:
         try:
@@ -443,7 +445,60 @@ class _InlineForward:
             "f32_le_sha256": hashlib.sha256(array.tobytes()).hexdigest(),
         }
 
+    def _capture_kernel_input(self, name: str, array: np.ndarray) -> None:
+        if self.capture_dir is None:
+            return
+        payload = np.ascontiguousarray(array, dtype="<f4")
+        path = self.capture_dir / f"{name}.f32le.bin"
+        encoded = payload.tobytes()
+        path.write_bytes(encoded)
+        self.captures.append(
+            {
+                "name": name,
+                "file": path.name,
+                "shape": list(payload.shape),
+                "bytes": len(encoded),
+                "f32_le_sha256": hashlib.sha256(encoded).hexdigest(),
+            }
+        )
+
+    def _write_capture_manifest(self, ffn_input: torch.Tensor) -> None:
+        if self.capture_dir is None:
+            return
+        source_ffn = ffn_input.float().contiguous().numpy().astype("<f4", copy=False)
+        document = {
+            "format": "polaris-l42-real-vulkan-input-capture-v1",
+            "repo": REPO,
+            "revision": REVISION,
+            "layer": LAYER,
+            "expert_id": ROUTE_IDS[0],
+            "source_f32_le_sha256": {
+                "ffn_input": hashlib.sha256(source_ffn.tobytes()).hexdigest(),
+            },
+            "asset_integrity": {
+                "hashes_checked": self.bundle.hashes_checked,
+                "payload_bytes": self.bundle.payload_bytes,
+                "payload_files": len(self.bundle.entries),
+                "manifest_sha256": {
+                    key: _sha256(path) for key, path in sorted(self.bundle.manifest_paths.items())
+                },
+            },
+            "inputs": self.captures,
+            "semantics": (
+                "Inputs captured from the hash-verified real L42 inline reference after the "
+                "official UE8M0/E4M3FN activation quantization step."
+            ),
+        }
+        if document["source_f32_le_sha256"]["ffn_input"] != FROZEN_OUTPUT_SHA256["ffn_input"]:
+            raise AssertionError("capture 的真实 L42 ffn_input 指纹漂移")
+        (self.capture_dir / "capture_manifest.json").write_text(
+            json.dumps(document, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
     def run(self) -> dict[str, Any]:
+        if self.capture_dir is not None:
+            self.capture_dir.mkdir(parents=True, exist_ok=False)
         base = torch.sin(torch.arange(4096, dtype=torch.float32) * 0.013).to(torch.bfloat16)
         state = base.view(1, 1, 1, 4096).repeat(1, 1, 4, 1)
 
@@ -455,6 +510,7 @@ class _InlineForward:
         )
         branch = self._rms_norm(branch, self._load_tensor("layers.42.attn_norm.weight"))
         branch_np = branch.float().numpy()
+        self._capture_kernel_input("wq_a", self._activation_quant(branch_np))
         q_low = torch.from_numpy(self._linear_fp8(branch_np, "layers.42.attn.wq_a")).to(torch.bfloat16)
         q_low = self._rms_norm(q_low, self._load_tensor("layers.42.attn.q_norm.weight"))
         q = torch.from_numpy(self._linear_fp8(q_low.float().numpy(), "layers.42.attn.wq_b"))
@@ -506,12 +562,15 @@ class _InlineForward:
             raise AssertionError(f"原生 L42 route 权重漂移: expected={ROUTE_WEIGHTS}, actual={actual_weights}")
 
         ffn_np = ffn_input.float().numpy()
+        self._capture_kernel_input("expert_126_w1_w3", self._activation_quant(ffn_np))
         moe = np.zeros((1, 1, 4096), dtype=np.float32)
         for expert_id, route_weight in zip(actual_ids, actual_weights, strict=True):
             prefix = f"layers.42.ffn.experts.{expert_id}"
             gate = self._linear_fp4(ffn_np, prefix + ".w1").astype(np.float32)
             up = self._linear_fp4(ffn_np, prefix + ".w3").astype(np.float32)
             hidden = self._silu(np.minimum(gate, 10)) * np.clip(up, -10, 10)
+            if expert_id == ROUTE_IDS[0]:
+                self._capture_kernel_input("expert_126_w2", self._activation_quant(hidden))
             expert_output = self._linear_fp4(hidden, prefix + ".w2")
             moe += np.float32(route_weight) * expert_output
 
@@ -522,6 +581,7 @@ class _InlineForward:
         moe += self._linear_fp8(shared_hidden, shared_prefix + ".w2")
         moe_branch = torch.from_numpy(self._bf16_numpy(moe)).to(torch.bfloat16)
         layer_output = hc_post(moe_branch, post_attention_state, post_ffn, comb_ffn)
+        self._write_capture_manifest(ffn_input)
 
         report = {
             "format": "polaris-l42-real-single-token-inline-reference-v1",
@@ -556,18 +616,25 @@ def run_reference(
     asset_root: str | Path = DEFAULT_ASSET_ROOT,
     *,
     verify_hashes: bool = True,
+    capture_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """校验真实资产后执行完整 L42 单层单 token 参考前向。"""
 
     bundle = validate_assets(asset_root, verify_hashes=verify_hashes)
-    return _InlineForward(bundle).run()
+    selected_capture_dir = Path(capture_dir).resolve() if capture_dir is not None else None
+    return _InlineForward(bundle, selected_capture_dir).run()
 
 
 def _main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--asset-root", type=Path, default=DEFAULT_ASSET_ROOT)
+    parser.add_argument(
+        "--capture-dir",
+        type=Path,
+        help="可选：导出真实 L42 Vulkan kernel 输入；目标目录必须尚不存在",
+    )
     args = parser.parse_args()
-    report = run_reference(args.asset_root, verify_hashes=True)
+    report = run_reference(args.asset_root, verify_hashes=True, capture_dir=args.capture_dir)
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0
 

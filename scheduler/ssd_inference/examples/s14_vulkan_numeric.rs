@@ -1,27 +1,35 @@
-//! Real-byte numerical and timing evidence for the Polaris S14 Vulkan matvecs.
+//! Real L42 numerical and timing evidence for the Polaris S14 Vulkan matvecs.
 //!
-//! No weights are downloaded. The program only reads the frozen local ABI
-//! samples under `D:/models/Polaris-S14/abi_samples`.
+//! No weights are downloaded. The program requires inputs captured by the
+//! hash-verifying L42 CPU reference and rejects synthetic fallback data.
 //!
 //! Run:
+//!   python -X utf8 fast16/research/polaris_meridian_v1/l42_real_reference/l42_reference.py \
+//!     --capture-dir <fresh-dir>
+//!   $env:POLARIS_S14_L42_CAPTURE_DIR = "<fresh-dir>"
 //!   cargo run --release --offline -p ssd_inference --example s14_vulkan_numeric
 
 use anyhow::{bail, Context, Result};
 use ash::vk;
 use rayon::prelude::*;
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use ssd_inference::buffer::GpuBuffer;
 use ssd_inference::device::VulkanContext;
 use ssd_inference::s14_vulkan::{
-    validate_e4m3fn_codes, validate_ue8m0_codes, S14MatvecShape, S14NumericPipelines,
+    validate_e4m3fn_codes, validate_ue8m0_codes, S14MatvecShape, S14Mxfp4Dispatch,
+    S14NumericPipelines, S14RouteMixDispatch, S14SwigluLimitDispatch,
 };
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 const MODEL_DIR: &str = "D:/models/Polaris-S14";
-const ROUTE_MANIFEST: &str = "D:/models/Polaris-S14/l42_synthetic_route_manifest.json";
-const MOE_REFERENCE: &str = "D:/models/Polaris-S14/l42_real_moe_reference.json";
-const RANGE_CACHE: &str = "D:/models/Polaris-S14/range_cache";
+const ROUTE_MANIFEST: &str = "D:/models/Polaris-S14/l42_real_layer_route_manifest.json";
+const CAPTURE_DIR_ENV: &str = "POLARIS_S14_L42_CAPTURE_DIR";
+const REVISION: &str = "7872f01b1d1fe23eabc4c98b48bffcef5a386062";
+const REAL_EXPERT_ID: u32 = 126;
+const AMD_VENDOR_ID: u32 = 0x1002;
+const NAVI10_DEVICE_ID: u32 = 0x731f;
 const ITERATIONS: u32 = 100;
 
 struct DeviceBuffers {
@@ -145,6 +153,165 @@ impl DeviceBuffers {
     }
 }
 
+struct UploadedBuffer {
+    staging: GpuBuffer,
+    device: GpuBuffer,
+    bytes: u64,
+}
+
+impl UploadedBuffer {
+    fn new(ctx: &VulkanContext, bytes: &[u8]) -> Result<Self> {
+        let byte_count = bytes.len() as u64;
+        let staging = GpuBuffer::new_staging(ctx, byte_count)?;
+        unsafe { staging.write_at(0, bytes) };
+        let device = GpuBuffer::new_vram(
+            ctx,
+            byte_count,
+            vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+        )?;
+        Ok(Self {
+            staging,
+            device,
+            bytes: byte_count,
+        })
+    }
+
+    unsafe fn cmd_upload(&self, ctx: &VulkanContext, cb: vk::CommandBuffer) {
+        copy(ctx, cb, &self.staging, &self.device, self.bytes);
+    }
+
+    fn destroy(&self, ctx: &VulkanContext) {
+        self.device.destroy(ctx);
+        self.staging.destroy(ctx);
+    }
+}
+
+struct ExpertChainBuffers {
+    x: UploadedBuffer,
+    w1: UploadedBuffer,
+    s1: UploadedBuffer,
+    w3: UploadedBuffer,
+    s3: UploadedBuffer,
+    w2: UploadedBuffer,
+    s2: UploadedBuffer,
+    gate: GpuBuffer,
+    up: GpuBuffer,
+    hidden: GpuBuffer,
+    down: GpuBuffer,
+    routed: GpuBuffer,
+    readback: GpuBuffer,
+}
+
+impl ExpertChainBuffers {
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        ctx: &VulkanContext,
+        x: &[f32],
+        w1: &[u8],
+        s1: &[u8],
+        w3: &[u8],
+        s3: &[u8],
+        w2: &[u8],
+        s2: &[u8],
+    ) -> Result<Self> {
+        let x = UploadedBuffer::new(ctx, bytemuck::cast_slice(x))?;
+        let w1 = UploadedBuffer::new(ctx, w1)?;
+        let s1 = UploadedBuffer::new(ctx, s1)?;
+        let w3 = UploadedBuffer::new(ctx, w3)?;
+        let s3 = UploadedBuffer::new(ctx, s3)?;
+        let w2 = UploadedBuffer::new(ctx, w2)?;
+        let s2 = UploadedBuffer::new(ctx, s2)?;
+        let intermediate_bytes = 2048 * std::mem::size_of::<f32>() as u64;
+        let output_bytes = 4096 * std::mem::size_of::<f32>() as u64;
+        let storage = vk::BufferUsageFlags::STORAGE_BUFFER;
+        let gate = GpuBuffer::new_vram(ctx, intermediate_bytes, storage)?;
+        let up = GpuBuffer::new_vram(ctx, intermediate_bytes, storage)?;
+        let hidden = GpuBuffer::new_vram(ctx, intermediate_bytes, storage)?;
+        let down = GpuBuffer::new_vram(ctx, output_bytes, storage)?;
+        let routed = GpuBuffer::new_vram(
+            ctx,
+            output_bytes,
+            storage | vk::BufferUsageFlags::TRANSFER_SRC,
+        )?;
+        let readback = GpuBuffer::new(
+            ctx,
+            output_bytes,
+            vk::BufferUsageFlags::TRANSFER_DST,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            true,
+        )?;
+        Ok(Self {
+            x,
+            w1,
+            s1,
+            w3,
+            s3,
+            w2,
+            s2,
+            gate,
+            up,
+            hidden,
+            down,
+            routed,
+            readback,
+        })
+    }
+
+    fn upload(&self, ctx: &VulkanContext) -> Result<()> {
+        unsafe {
+            let pool = make_command_pool(ctx)?;
+            let cb = allocate_command_buffer(ctx, pool)?;
+            ctx.device.begin_command_buffer(
+                cb,
+                &vk::CommandBufferBeginInfo::default()
+                    .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+            )?;
+            for buffer in [
+                &self.x, &self.w1, &self.s1, &self.w3, &self.s3, &self.w2, &self.s2,
+            ] {
+                buffer.cmd_upload(ctx, cb);
+            }
+            let barrier = vk::MemoryBarrier::default()
+                .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[barrier],
+                &[],
+                &[],
+            );
+            ctx.device.end_command_buffer(cb)?;
+            submit_and_wait(ctx, cb)?;
+            ctx.device.destroy_command_pool(pool, None);
+        }
+        Ok(())
+    }
+
+    fn output(&self) -> Vec<f32> {
+        unsafe { std::slice::from_raw_parts(self.readback.mapped() as *const f32, 4096).to_vec() }
+    }
+
+    fn destroy(&self, ctx: &VulkanContext) {
+        self.readback.destroy(ctx);
+        self.routed.destroy(ctx);
+        self.down.destroy(ctx);
+        self.hidden.destroy(ctx);
+        self.up.destroy(ctx);
+        self.gate.destroy(ctx);
+        self.s2.destroy(ctx);
+        self.w2.destroy(ctx);
+        self.s3.destroy(ctx);
+        self.w3.destroy(ctx);
+        self.s1.destroy(ctx);
+        self.w1.destroy(ctx);
+        self.x.destroy(ctx);
+    }
+}
+
 struct Timing {
     iterations: u32,
     gpu_kernel_ms_mean: f64,
@@ -158,19 +325,16 @@ struct ErrorStats {
     max_rel_for_abs_ref_gt_1e_5: f32,
 }
 
-struct MatrixRun {
-    actual: Vec<f32>,
-    expected: Vec<f32>,
-}
-
 #[derive(Deserialize)]
 struct RouteManifest {
     format: String,
+    revision: String,
     layer: u32,
-    input: String,
+    route_source: String,
     expert_ids: Vec<u32>,
     route_weights: Vec<f32>,
-    weight_sum: f32,
+    entry_count: usize,
+    bytes: u64,
     entries: Vec<RouteEntry>,
 }
 
@@ -180,41 +344,53 @@ struct RouteEntry {
     expert_id: u32,
     bytes: u64,
     path: PathBuf,
+    sha256: String,
 }
 
 #[derive(Deserialize)]
-struct MoeReference {
+struct CaptureManifest {
     format: String,
+    revision: String,
     layer: u32,
-    input: String,
-    expert_ids: Vec<u32>,
-    route_weights: Vec<f32>,
-    expert_stats: Vec<ExpertReference>,
-    routed_weighted: FrozenStats,
-    shared: FrozenStats,
-    moe_sum: FrozenStats,
-}
-
-#[derive(Deserialize)]
-struct ExpertReference {
     expert_id: u32,
-    route_weight: f32,
-    l2: f64,
-    mean: f64,
-    maxabs: f32,
+    source_f32_le_sha256: CaptureSourceHashes,
+    asset_integrity: CaptureAssetIntegrity,
+    inputs: Vec<CaptureInput>,
 }
 
 #[derive(Deserialize)]
-struct FrozenStats {
-    l2: f64,
-    mean: f64,
-    maxabs: f32,
+struct CaptureSourceHashes {
+    ffn_input: String,
+}
+
+#[derive(Deserialize)]
+struct CaptureAssetIntegrity {
+    hashes_checked: usize,
+    payload_bytes: u64,
+    payload_files: usize,
+    manifest_sha256: CaptureManifestHashes,
+}
+
+#[derive(Deserialize)]
+struct CaptureManifestHashes {
+    base: String,
+    route: String,
+    s14: String,
+}
+
+#[derive(Deserialize)]
+struct CaptureInput {
+    name: String,
+    file: PathBuf,
+    shape: Vec<usize>,
+    bytes: usize,
     f32_le_sha256: String,
 }
 
 #[derive(Deserialize)]
 struct BaseManifest {
     format: String,
+    revision: String,
     layer: u32,
     entry_count: usize,
     bytes: u64,
@@ -226,88 +402,27 @@ struct BaseEntry {
     tensor: String,
     bytes: u64,
     path: PathBuf,
+    sha256: String,
 }
-
-struct BasicStats {
-    l2: f64,
-    mean: f64,
-    maxabs: f32,
-}
-
-#[derive(Deserialize)]
-struct CacheSidecar {
-    identity: CacheIdentity,
-    bytes: u64,
-}
-
-#[derive(Deserialize)]
-struct CacheIdentity {
-    source_file: String,
-    start: u64,
-    end: u64,
-}
-
-#[derive(Clone, Copy)]
-struct SharedRange {
-    component: &'static str,
-    kind: &'static str,
-    start: u64,
-    end: u64,
-    bytes: u64,
-}
-
-const SHARED_RANGES: [SharedRange; 6] = [
-    SharedRange {
-        component: "w1",
-        kind: "scale",
-        start: 228_290_160,
-        end: 228_290_671,
-        bytes: 512,
-    },
-    SharedRange {
-        component: "w2",
-        kind: "scale",
-        start: 228_290_672,
-        end: 228_291_183,
-        bytes: 512,
-    },
-    SharedRange {
-        component: "w3",
-        kind: "scale",
-        start: 228_291_184,
-        end: 228_291_695,
-        bytes: 512,
-    },
-    SharedRange {
-        component: "w1",
-        kind: "weight",
-        start: 343_635_056,
-        end: 352_023_663,
-        bytes: 8_388_608,
-    },
-    SharedRange {
-        component: "w2",
-        kind: "weight",
-        start: 352_023_664,
-        end: 360_412_271,
-        bytes: 8_388_608,
-    },
-    SharedRange {
-        component: "w3",
-        kind: "weight",
-        start: 360_412_272,
-        end: 368_800_879,
-        bytes: 8_388_608,
-    },
-];
 
 fn main() -> Result<()> {
-    println!("Polaris S14 Vulkan numerical kernels (real local ABI slices)");
+    println!("Polaris S14 Vulkan numerical kernels (hash-verified real L42 payloads)");
+    let capture_dir = std::env::var_os(CAPTURE_DIR_ENV)
+        .map(PathBuf::from)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "{CAPTURE_DIR_ENV} is required; synthetic activation fallback is forbidden"
+            )
+        })?;
+    let capture = load_capture_manifest(&capture_dir)?;
+    let expert_w1_w3_input =
+        load_capture_input(&capture, &capture_dir, "expert_126_w1_w3", &[1, 1, 4096])?;
+    let _expert_w2_input =
+        load_capture_input(&capture, &capture_dir, "expert_126_w2", &[1, 1, 2048])?;
+    let wq_a_input = load_capture_input(&capture, &capture_dir, "wq_a", &[1, 1, 4096])?;
+
     let ctx = VulkanContext::init()?;
     println!("GPU: {}", ctx.gpu_name);
-    if !ctx.gpu_name.contains("RX 5700 XT") {
-        bail!("evidence run requires RX 5700 XT, found {}", ctx.gpu_name);
-    }
     let queue_props = unsafe {
         ctx.instance
             .get_physical_device_queue_family_properties(ctx.physical)
@@ -317,6 +432,16 @@ fn main() -> Result<()> {
         bail!("graphics/compute queue does not expose timestamp queries");
     }
     let physical_properties = unsafe { ctx.instance.get_physical_device_properties(ctx.physical) };
+    if physical_properties.vendor_id != AMD_VENDOR_ID
+        || physical_properties.device_id != NAVI10_DEVICE_ID
+    {
+        bail!(
+            "evidence run requires RX 5700 XT PCI id 0x{AMD_VENDOR_ID:04x}:0x{NAVI10_DEVICE_ID:04x}; found 0x{:04x}:0x{:04x} ({})",
+            physical_properties.vendor_id,
+            physical_properties.device_id,
+            ctx.gpu_name
+        );
+    }
     let timestamp_period_ns = physical_properties.limits.timestamp_period as f64;
     println!(
         "Vulkan device: vendor=0x{:04x}, device=0x{:04x}, driver_version=0x{:08x}, \
@@ -328,152 +453,69 @@ fn main() -> Result<()> {
     );
 
     let pipelines = S14NumericPipelines::new(&ctx)?;
-    run_route_first_moe(&ctx, &pipelines, timestamp_bits, timestamp_period_ns)?;
-    run_real_fp8_wq_a(&ctx, &pipelines, timestamp_bits, timestamp_period_ns)?;
+    run_real_expert(
+        &ctx,
+        &pipelines,
+        timestamp_bits,
+        timestamp_period_ns,
+        &expert_w1_w3_input,
+    )?;
+    run_real_fp8_wq_a(
+        &ctx,
+        &pipelines,
+        timestamp_bits,
+        timestamp_period_ns,
+        &wq_a_input,
+    )?;
     pipelines.destroy(&ctx);
-    println!("claim: real GPU matvec parity only; no token/s and no full S14 forward claim");
+    println!(
+        "claim: real L42 packed-matvec and minimal GPU-resident E126 chain parity only; no full official expert/layer, token/s, or full S14 forward claim"
+    );
     Ok(())
 }
 
-fn run_route_first_moe(
+fn run_real_expert(
     ctx: &VulkanContext,
     pipelines: &S14NumericPipelines,
     timestamp_bits: u32,
     timestamp_period_ns: f64,
+    w1_w3_input: &[f32],
 ) -> Result<()> {
     let manifest: RouteManifest =
         serde_json::from_slice(&std::fs::read(ROUTE_MANIFEST).context("read L42 route manifest")?)
             .context("parse L42 route manifest")?;
-    let reference: MoeReference =
-        serde_json::from_slice(&std::fs::read(MOE_REFERENCE).context("read L42 MoE reference")?)
-            .context("parse L42 MoE reference")?;
-    validate_route_contract(&manifest, &reference)?;
+    validate_route_contract(&manifest)?;
     println!(
-        "route-first L42 top6={:?}, weight_sum={:.9}, cached_ranges={}",
+        "real L42 route top6={:?}, weight_sum={:.9}, cached_ranges={}",
         manifest.expert_ids,
-        manifest.weight_sum,
+        manifest.route_weights.iter().sum::<f32>(),
         manifest.entries.len()
     );
 
-    let x: Vec<f32> = (0..4096).map(|i| ((i as f32) * 0.013).sin()).collect();
-    let mut routed_actual = vec![0.0f32; 4096];
-    let mut routed_expected = vec![0.0f32; 4096];
-
-    for (&expert_id, &route_weight) in manifest.expert_ids.iter().zip(&manifest.route_weights) {
-        let (w1, s1) = load_route_pair(&manifest, expert_id, "w1")?;
-        let gate = run_mxfp4_matrix(
-            ctx,
-            pipelines,
-            timestamp_bits,
-            timestamp_period_ns,
-            &format!("MXFP4 L42/E{expert_id} w1"),
-            &x,
-            &w1,
-            &s1,
-            S14MatvecShape::new(2048, 4096)?,
-        )?;
-        let (w3, s3) = load_route_pair(&manifest, expert_id, "w3")?;
-        let up = run_mxfp4_matrix(
-            ctx,
-            pipelines,
-            timestamp_bits,
-            timestamp_period_ns,
-            &format!("MXFP4 L42/E{expert_id} w3"),
-            &x,
-            &w3,
-            &s3,
-            S14MatvecShape::new(2048, 4096)?,
-        )?;
-        let hidden_actual = swiglu_limit(&gate.actual, &up.actual)?;
-        let hidden_expected = swiglu_limit(&gate.expected, &up.expected)?;
-
-        let (w2, s2) = load_route_pair(&manifest, expert_id, "w2")?;
-        let down = run_mxfp4_matrix(
-            ctx,
-            pipelines,
-            timestamp_bits,
-            timestamp_period_ns,
-            &format!("MXFP4 L42/E{expert_id} w2"),
-            &hidden_actual,
-            &w2,
-            &s2,
-            S14MatvecShape::new(4096, 2048)?,
-        )?;
-        let expert_expected = cpu_mxfp4_matvec(
-            &hidden_expected,
-            &w2,
-            &s2,
-            S14MatvecShape::new(4096, 2048)?.validate_mxfp4()?,
-        );
-        let expert_error = error_stats(&down.actual, &expert_expected)?;
-        enforce_error(&expert_error, 1.5e-4, 2.0e-5)?;
-        let expert_reference = reference
-            .expert_stats
-            .iter()
-            .find(|item| item.expert_id == expert_id)
-            .ok_or_else(|| anyhow::anyhow!("missing E{expert_id} frozen reference"))?;
-        if (expert_reference.route_weight - route_weight).abs() > f32::EPSILON {
-            bail!("E{expert_id} route weight drift");
-        }
-        compare_frozen(
-            &format!("routed E{expert_id}"),
-            &down.actual,
-            &FrozenStats {
-                l2: expert_reference.l2,
-                mean: expert_reference.mean,
-                maxabs: expert_reference.maxabs,
-                f32_le_sha256: "per-expert hash not recorded".into(),
-            },
-        )?;
-        println!(
-            "routed E{expert_id} end_to_end_error: max_abs={:.9e}, rmse={:.9e}",
-            expert_error.max_abs, expert_error.rmse
-        );
-        for i in 0..4096 {
-            routed_actual[i] += route_weight * down.actual[i];
-            routed_expected[i] += route_weight * expert_expected[i];
-        }
-    }
-
-    let routed_error = error_stats(&routed_actual, &routed_expected)?;
-    enforce_error(&routed_error, 2.0e-4, 2.5e-5)?;
-    compare_frozen(
-        "routed weighted top6",
-        &routed_actual,
-        &reference.routed_weighted,
-    )?;
-    println!(
-        "routed weighted error: max_abs={:.9e}, rmse={:.9e}, frozen_cpu_sha={}",
-        routed_error.max_abs, routed_error.rmse, reference.routed_weighted.f32_le_sha256
-    );
-
-    let (shared_actual, shared_expected) =
-        run_shared_fp8(ctx, pipelines, timestamp_bits, timestamp_period_ns, &x)?;
-    let shared_error = error_stats(&shared_actual, &shared_expected)?;
-    enforce_error(&shared_error, 2.0e-4, 2.5e-5)?;
-    compare_frozen("shared FP8", &shared_actual, &reference.shared)?;
-    println!(
-        "shared FP8 error: max_abs={:.9e}, rmse={:.9e}, frozen_cpu_sha={}",
-        shared_error.max_abs, shared_error.rmse, reference.shared.f32_le_sha256
-    );
-
-    let moe_actual: Vec<f32> = routed_actual
+    let route_index = manifest
+        .expert_ids
         .iter()
-        .zip(&shared_actual)
-        .map(|(&routed, &shared)| routed + shared)
-        .collect();
-    let moe_expected: Vec<f32> = routed_expected
-        .iter()
-        .zip(&shared_expected)
-        .map(|(&routed, &shared)| routed + shared)
-        .collect();
-    let moe_error = error_stats(&moe_actual, &moe_expected)?;
-    enforce_error(&moe_error, 3.0e-4, 4.0e-5)?;
-    compare_frozen("L42 MoE sum", &moe_actual, &reference.moe_sum)?;
-    println!(
-        "L42 MoE sum error: max_abs={:.9e}, rmse={:.9e}, frozen_cpu_sha={}",
-        moe_error.max_abs, moe_error.rmse, reference.moe_sum.f32_le_sha256
-    );
+        .position(|&expert_id| expert_id == REAL_EXPERT_ID)
+        .ok_or_else(|| anyhow::anyhow!("real L42 route does not contain E{REAL_EXPERT_ID}"))?;
+    let route_weight = manifest.route_weights[route_index];
+    let (w1, s1) = load_route_pair(&manifest, REAL_EXPERT_ID, "w1")?;
+    let (w3, s3) = load_route_pair(&manifest, REAL_EXPERT_ID, "w3")?;
+    let (w2, s2) = load_route_pair(&manifest, REAL_EXPERT_ID, "w2")?;
+    run_mxfp4_expert_chain(
+        ctx,
+        pipelines,
+        timestamp_bits,
+        timestamp_period_ns,
+        route_weight,
+        w1_w3_input,
+        &w1,
+        &s1,
+        &w3,
+        &s3,
+        &w2,
+        &s2,
+    )
+    .context("real L42/E126 GPU-resident expert chain")?;
     Ok(())
 }
 
@@ -482,10 +524,12 @@ fn run_real_fp8_wq_a(
     pipelines: &S14NumericPipelines,
     timestamp_bits: u32,
     timestamp_period_ns: f64,
+    input: &[f32],
 ) -> Result<()> {
     let path = Path::new(MODEL_DIR).join("l42_base_cache_manifest.json");
     let manifest: BaseManifest = serde_json::from_slice(&std::fs::read(&path)?)?;
     if manifest.format != "polaris-l42-base-cache-snapshot-v1"
+        || manifest.revision != REVISION
         || manifest.layer != 42
         || manifest.entry_count != 34
         || manifest.entries.len() != 34
@@ -495,17 +539,26 @@ fn run_real_fp8_wq_a(
     }
     let weight_entry = base_entry(&manifest, "layers.42.attn.wq_a.weight")?;
     let scale_entry = base_entry(&manifest, "layers.42.attn.wq_a.scale")?;
-    let weight = read_exact(&weight_entry.path, weight_entry.bytes as usize)?;
-    let scale = read_exact(&scale_entry.path, scale_entry.bytes as usize)?;
+    let weight = read_verified_payload(
+        &weight_entry.path,
+        weight_entry.bytes as usize,
+        &weight_entry.sha256,
+        &weight_entry.tensor,
+    )?;
+    let scale = read_verified_payload(
+        &scale_entry.path,
+        scale_entry.bytes as usize,
+        &scale_entry.sha256,
+        &scale_entry.tensor,
+    )?;
     let shape = S14MatvecShape::new(1024, 4096)?.validate_fp8()?;
-    let x: Vec<f32> = (0..shape.k).map(|i| ((i as f32) * 0.013).sin()).collect();
     run_fp8_matrix(
         ctx,
         pipelines,
         timestamp_bits,
         timestamp_period_ns,
-        "FP8 L42 base-cache wq_a",
-        &x,
+        "FP8 real L42 base-cache wq_a",
+        input,
         &weight,
         &scale,
         shape,
@@ -513,21 +566,27 @@ fn run_real_fp8_wq_a(
     Ok(())
 }
 
-fn validate_route_contract(manifest: &RouteManifest, reference: &MoeReference) -> Result<()> {
-    let expected_ids = [48, 153, 144, 83, 221, 127];
-    if manifest.format != "polaris-l42-synthetic-route-cache-v1"
-        || reference.format != "polaris-l42-real-routed-moe-reference-v1"
+fn validate_route_contract(manifest: &RouteManifest) -> Result<()> {
+    let expected_ids = [126, 12, 205, 149, 227, 174];
+    let expected_weights = [
+        0.2747795581817627,
+        0.2491425722837448,
+        0.24045628309249878,
+        0.24615329504013062,
+        0.25386279821395874,
+        0.23560553789138794,
+    ];
+    if manifest.format != "polaris-l42-real-layer-route-cache-v1"
+        || manifest.revision != REVISION
         || manifest.layer != 42
-        || reference.layer != 42
-        || manifest.input != "sin(arange(4096)*0.013)"
-        || reference.input != manifest.input
+        || manifest.route_source != "l42_real_attention_route.json"
         || manifest.expert_ids != expected_ids
-        || reference.expert_ids != manifest.expert_ids
-        || reference.route_weights != manifest.route_weights
+        || manifest.route_weights != expected_weights
+        || manifest.entry_count != 36
         || manifest.entries.len() != 36
-        || manifest.weight_sum.to_bits() != 1.5f32.to_bits()
+        || manifest.bytes != 80_216_064
     {
-        bail!("L42 route/reference contract drift");
+        bail!("real L42 route manifest contract drift");
     }
     let sum: f32 = manifest.route_weights.iter().sum();
     if (sum - 1.5).abs() > 2.0e-7 {
@@ -548,8 +607,18 @@ fn load_route_pair(
         bail!("E{expert_id}/{component} byte contract drift");
     }
     Ok((
-        read_exact(&weight.path, weight.bytes as usize)?,
-        read_exact(&scale.path, scale.bytes as usize)?,
+        read_verified_payload(
+            &weight.path,
+            weight.bytes as usize,
+            &weight.sha256,
+            &weight.tensor,
+        )?,
+        read_verified_payload(
+            &scale.path,
+            scale.bytes as usize,
+            &scale.sha256,
+            &scale.tensor,
+        )?,
     ))
 }
 
@@ -573,46 +642,233 @@ fn base_entry<'a>(manifest: &'a BaseManifest, tensor: &str) -> Result<&'a BaseEn
         .ok_or_else(|| anyhow::anyhow!("base manifest missing {tensor}"))
 }
 
-fn run_mxfp4_matrix(
+#[allow(clippy::too_many_arguments)]
+fn run_mxfp4_expert_chain(
     ctx: &VulkanContext,
     pipelines: &S14NumericPipelines,
     timestamp_bits: u32,
     timestamp_period_ns: f64,
-    label: &str,
+    route_weight: f32,
     x: &[f32],
-    weight: &[u8],
-    scale: &[u8],
-    shape: S14MatvecShape,
-) -> Result<MatrixRun> {
-    let shape = shape.validate_mxfp4()?;
-    validate_ue8m0_codes(scale)?;
+    w1: &[u8],
+    s1: &[u8],
+    w3: &[u8],
+    s3: &[u8],
+    w2: &[u8],
+    s2: &[u8],
+) -> Result<()> {
+    let up_shape = S14MatvecShape::new(2048, 4096)?.validate_mxfp4()?;
+    let down_shape = S14MatvecShape::new(4096, 2048)?.validate_mxfp4()?;
+    if x.len() != up_shape.k as usize {
+        bail!("real E126 chain input shape drift");
+    }
+    for scale in [s1, s3, s2] {
+        validate_ue8m0_codes(scale)?;
+    }
+
     let cpu_start = Instant::now();
-    let expected = cpu_mxfp4_matvec(x, weight, scale, shape);
+    let gate = cpu_mxfp4_matvec(x, w1, s1, up_shape);
+    let up = cpu_mxfp4_matvec(x, w3, s3, up_shape);
+    let hidden = swiglu_limit(&gate, &up)?;
+    let down = cpu_mxfp4_matvec(&hidden, w2, s2, down_shape);
+    let expected: Vec<f32> = down.iter().map(|value| route_weight * value).collect();
     let cpu_ms = cpu_start.elapsed().as_secs_f64() * 1000.0;
-    let buffers = DeviceBuffers::new(ctx, x, weight, scale, shape.n as usize)?;
+
+    let buffers = ExpertChainBuffers::new(ctx, x, w1, s1, w3, s3, w2, s2)?;
     buffers.upload(ctx)?;
-    let dispatch = pipelines.bind_mxfp4(
+    let w1_dispatch = pipelines.bind_mxfp4(
         ctx,
-        shape,
-        &buffers.x,
-        &buffers.weight,
-        &buffers.scale,
-        &buffers.y,
+        up_shape,
+        &buffers.x.device,
+        &buffers.w1.device,
+        &buffers.s1.device,
+        &buffers.gate,
     )?;
-    let timing = benchmark(
+    let w3_dispatch = pipelines.bind_mxfp4(
         ctx,
+        up_shape,
+        &buffers.x.device,
+        &buffers.w3.device,
+        &buffers.s3.device,
+        &buffers.up,
+    )?;
+    let swiglu_dispatch =
+        pipelines.bind_swiglu_limit(ctx, 2048, &buffers.gate, &buffers.up, &buffers.hidden)?;
+    let w2_dispatch = pipelines.bind_mxfp4(
+        ctx,
+        down_shape,
+        &buffers.hidden,
+        &buffers.w2.device,
+        &buffers.s2.device,
+        &buffers.down,
+    )?;
+    let route_dispatch =
+        pipelines.bind_route_mix(ctx, 4096, route_weight, &buffers.down, &buffers.routed)?;
+    let timing = benchmark_expert_chain(
+        ctx,
+        pipelines,
         &buffers,
         timestamp_bits,
         timestamp_period_ns,
-        |cb| unsafe { pipelines.cmd_mxfp4_matvec(ctx, cb, &dispatch) },
+        &w1_dispatch,
+        &w3_dispatch,
+        &swiglu_dispatch,
+        &w2_dispatch,
+        &route_dispatch,
     )?;
-    let actual = buffers.output(shape.n as usize);
+    let actual = buffers.output();
     let error = error_stats(&actual, &expected)?;
-    print_evidence(label, shape, cpu_ms, &timing, &error);
-    enforce_error(&error, 2.5e-5, 3.5e-6)?;
-    dispatch.binder.destroy(ctx);
+    enforce_error(&error, 2.0e-4, 2.5e-5)?;
+    println!(
+        "GPU-resident real L42/E126 chain [w1,w3,clamp-SwiGLU,w2,route_mix]: route_weight={route_weight:.9}, cpu_ref_ms={cpu_ms:.6}, iterations={}, gpu_chain_dispatch_plus_barriers_ms_mean={:.7}, submit_readback_sync_ms={:.6}, max_abs={:.9e}, mean_abs={:.9e}, rmse={:.9e}, max_rel_abs_ref_gt_1e-5={:.9e}",
+        timing.iterations,
+        timing.gpu_kernel_ms_mean,
+        timing.submit_readback_sync_ms,
+        error.max_abs,
+        error.mean_abs,
+        error.rmse,
+        error.max_rel_for_abs_ref_gt_1e_5,
+    );
+
+    route_dispatch.binder.destroy(ctx);
+    w2_dispatch.binder.destroy(ctx);
+    swiglu_dispatch.binder.destroy(ctx);
+    w3_dispatch.binder.destroy(ctx);
+    w1_dispatch.binder.destroy(ctx);
     buffers.destroy(ctx);
-    Ok(MatrixRun { actual, expected })
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn benchmark_expert_chain(
+    ctx: &VulkanContext,
+    pipelines: &S14NumericPipelines,
+    buffers: &ExpertChainBuffers,
+    timestamp_bits: u32,
+    timestamp_period_ns: f64,
+    w1: &S14Mxfp4Dispatch,
+    w3: &S14Mxfp4Dispatch,
+    swiglu: &S14SwigluLimitDispatch,
+    w2: &S14Mxfp4Dispatch,
+    route: &S14RouteMixDispatch,
+) -> Result<Timing> {
+    unsafe {
+        let pool = make_command_pool(ctx)?;
+        let cb = allocate_command_buffer(ctx, pool)?;
+        let queries = ctx.device.create_query_pool(
+            &vk::QueryPoolCreateInfo::default()
+                .query_type(vk::QueryType::TIMESTAMP)
+                .query_count(2),
+            None,
+        )?;
+        ctx.device.begin_command_buffer(
+            cb,
+            &vk::CommandBufferBeginInfo::default()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+        )?;
+        ctx.device.cmd_reset_query_pool(cb, queries, 0, 2);
+        ctx.device
+            .cmd_write_timestamp(cb, vk::PipelineStageFlags::TOP_OF_PIPE, queries, 0);
+        let read_after_write = vk::MemoryBarrier::default()
+            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ);
+        let next_iteration = vk::MemoryBarrier::default()
+            .src_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::SHADER_WRITE)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::SHADER_WRITE);
+        for iteration in 0..ITERATIONS {
+            pipelines.cmd_mxfp4_matvec(ctx, cb, w1);
+            pipelines.cmd_mxfp4_matvec(ctx, cb, w3);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[read_after_write],
+                &[],
+                &[],
+            );
+            pipelines.cmd_swiglu_limit(ctx, cb, swiglu);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[read_after_write],
+                &[],
+                &[],
+            );
+            pipelines.cmd_mxfp4_matvec(ctx, cb, w2);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[read_after_write],
+                &[],
+                &[],
+            );
+            pipelines.cmd_route_mix(ctx, cb, route);
+            if iteration + 1 < ITERATIONS {
+                ctx.device.cmd_pipeline_barrier(
+                    cb,
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
+                    vk::DependencyFlags::empty(),
+                    &[next_iteration],
+                    &[],
+                    &[],
+                );
+            }
+        }
+        ctx.device
+            .cmd_write_timestamp(cb, vk::PipelineStageFlags::BOTTOM_OF_PIPE, queries, 1);
+        let readback_barrier = vk::MemoryBarrier::default()
+            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .dst_access_mask(vk::AccessFlags::TRANSFER_READ);
+        ctx.device.cmd_pipeline_barrier(
+            cb,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::PipelineStageFlags::TRANSFER,
+            vk::DependencyFlags::empty(),
+            &[readback_barrier],
+            &[],
+            &[],
+        );
+        copy(
+            ctx,
+            cb,
+            &buffers.routed,
+            &buffers.readback,
+            4096 * std::mem::size_of::<f32>() as u64,
+        );
+        ctx.device.end_command_buffer(cb)?;
+
+        let cpu_start = Instant::now();
+        submit_and_wait(ctx, cb)?;
+        let submit_readback_sync_ms = cpu_start.elapsed().as_secs_f64() * 1000.0;
+        let mut ticks = [0u64; 2];
+        ctx.device.get_query_pool_results(
+            queries,
+            0,
+            &mut ticks,
+            vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT,
+        )?;
+        let mask = if timestamp_bits >= 64 {
+            u64::MAX
+        } else {
+            (1u64 << timestamp_bits) - 1
+        };
+        let elapsed_ticks = ticks[1].wrapping_sub(ticks[0]) & mask;
+        let gpu_kernel_ms_mean =
+            elapsed_ticks as f64 * timestamp_period_ns / 1_000_000.0 / ITERATIONS as f64;
+        ctx.device.destroy_query_pool(queries, None);
+        ctx.device.destroy_command_pool(pool, None);
+        Ok(Timing {
+            iterations: ITERATIONS,
+            gpu_kernel_ms_mean,
+            submit_readback_sync_ms,
+        })
+    }
 }
 
 fn run_fp8_matrix(
@@ -625,7 +881,7 @@ fn run_fp8_matrix(
     weight: &[u8],
     scale: &[u8],
     shape: S14MatvecShape,
-) -> Result<MatrixRun> {
+) -> Result<()> {
     let shape = shape.validate_fp8()?;
     validate_e4m3fn_codes(weight)?;
     validate_ue8m0_codes(scale)?;
@@ -655,110 +911,7 @@ fn run_fp8_matrix(
     enforce_error(&error, 2.5e-5, 3.5e-6)?;
     dispatch.binder.destroy(ctx);
     buffers.destroy(ctx);
-    Ok(MatrixRun { actual, expected })
-}
-
-fn run_shared_fp8(
-    ctx: &VulkanContext,
-    pipelines: &S14NumericPipelines,
-    timestamp_bits: u32,
-    timestamp_period_ns: f64,
-    x: &[f32],
-) -> Result<(Vec<f32>, Vec<f32>)> {
-    let (w1, s1) = load_shared_pair("w1")?;
-    let gate = run_fp8_matrix(
-        ctx,
-        pipelines,
-        timestamp_bits,
-        timestamp_period_ns,
-        "FP8 L42 shared w1",
-        x,
-        &w1,
-        &s1,
-        S14MatvecShape::new(2048, 4096)?,
-    )?;
-    let (w3, s3) = load_shared_pair("w3")?;
-    let up = run_fp8_matrix(
-        ctx,
-        pipelines,
-        timestamp_bits,
-        timestamp_period_ns,
-        "FP8 L42 shared w3",
-        x,
-        &w3,
-        &s3,
-        S14MatvecShape::new(2048, 4096)?,
-    )?;
-    let hidden_actual = swiglu_limit(&gate.actual, &up.actual)?;
-    let hidden_expected = swiglu_limit(&gate.expected, &up.expected)?;
-    let (w2, s2) = load_shared_pair("w2")?;
-    let down = run_fp8_matrix(
-        ctx,
-        pipelines,
-        timestamp_bits,
-        timestamp_period_ns,
-        "FP8 L42 shared w2",
-        &hidden_actual,
-        &w2,
-        &s2,
-        S14MatvecShape::new(4096, 2048)?,
-    )?;
-    let expected = cpu_fp8_matvec(
-        &hidden_expected,
-        &w2,
-        &s2,
-        S14MatvecShape::new(4096, 2048)?.validate_fp8()?,
-    );
-    Ok((down.actual, expected))
-}
-
-fn load_shared_pair(component: &str) -> Result<(Vec<u8>, Vec<u8>)> {
-    let weight = SHARED_RANGES
-        .iter()
-        .find(|range| range.component == component && range.kind == "weight")
-        .ok_or_else(|| anyhow::anyhow!("missing shared {component} weight range"))?;
-    let scale = SHARED_RANGES
-        .iter()
-        .find(|range| range.component == component && range.kind == "scale")
-        .ok_or_else(|| anyhow::anyhow!("missing shared {component} scale range"))?;
-    let weight_path = find_cached_range(*weight)?;
-    let scale_path = find_cached_range(*scale)?;
-    Ok((
-        read_exact(&weight_path, weight.bytes as usize)?,
-        read_exact(&scale_path, scale.bytes as usize)?,
-    ))
-}
-
-fn find_cached_range(range: SharedRange) -> Result<PathBuf> {
-    for item in std::fs::read_dir(RANGE_CACHE).context("read Polaris range cache")? {
-        let path = item?.path();
-        if path.extension().and_then(|value| value.to_str()) != Some("json") {
-            continue;
-        }
-        let Ok(encoded) = std::fs::read(&path) else {
-            continue;
-        };
-        let Ok(sidecar) = serde_json::from_slice::<CacheSidecar>(&encoded) else {
-            continue;
-        };
-        if sidecar.identity.source_file == "model-00044-of-00048.safetensors"
-            && sidecar.identity.start == range.start
-            && sidecar.identity.end == range.end
-            && sidecar.bytes == range.bytes
-        {
-            let payload = path.with_extension("bin");
-            if payload.is_file() {
-                return Ok(payload);
-            }
-        }
-    }
-    bail!(
-        "local cache is missing shared {} {} range {}-{}; downloads are forbidden",
-        range.component,
-        range.kind,
-        range.start,
-        range.end
-    )
+    Ok(())
 }
 
 fn swiglu_limit(gate: &[f32], up: &[f32]) -> Result<Vec<f32>> {
@@ -774,42 +927,6 @@ fn swiglu_limit(gate: &[f32], up: &[f32]) -> Result<Vec<f32>> {
             (gate / (1.0 + (-gate).exp())) * up
         })
         .collect())
-}
-
-fn basic_stats(values: &[f32]) -> Result<BasicStats> {
-    if values.is_empty() || values.iter().any(|value| !value.is_finite()) {
-        bail!("stats require non-empty finite values");
-    }
-    let square_sum: f64 = values
-        .iter()
-        .map(|&value| (value as f64) * (value as f64))
-        .sum();
-    let sum: f64 = values.iter().map(|&value| value as f64).sum();
-    let maxabs = values
-        .iter()
-        .map(|value| value.abs())
-        .fold(0.0f32, f32::max);
-    Ok(BasicStats {
-        l2: square_sum.sqrt(),
-        mean: sum / values.len() as f64,
-        maxabs,
-    })
-}
-
-fn compare_frozen(label: &str, actual: &[f32], frozen: &FrozenStats) -> Result<()> {
-    let stats = basic_stats(actual)?;
-    let l2_delta = (stats.l2 - frozen.l2).abs();
-    let mean_delta = (stats.mean - frozen.mean).abs();
-    let maxabs_delta = (stats.maxabs - frozen.maxabs).abs();
-    println!(
-        "{label} frozen stats: l2={:.9} (delta={l2_delta:.3e}), mean={:.9e} \
-         (delta={mean_delta:.3e}), maxabs={:.9} (delta={maxabs_delta:.3e})",
-        stats.l2, stats.mean, stats.maxabs
-    );
-    if l2_delta > 2.0e-3 || mean_delta > 2.0e-5 || maxabs_delta > 5.0e-4 {
-        bail!("{label} drifted from frozen real-page reference");
-    }
-    Ok(())
 }
 
 fn benchmark(
@@ -1040,17 +1157,149 @@ fn enforce_error(error: &ErrorStats, max_abs: f32, rmse: f64) -> Result<()> {
     Ok(())
 }
 
-fn read_exact(path: &Path, expected_bytes: usize) -> Result<Vec<u8>> {
-    let bytes = std::fs::read(path).with_context(|| format!("read {}", path.display()))?;
-    if bytes.len() != expected_bytes {
-        bail!(
-            "{} is {} B, expected {} B",
-            path.display(),
-            bytes.len(),
-            expected_bytes
-        );
+fn load_capture_manifest(capture_dir: &Path) -> Result<CaptureManifest> {
+    let capture_root = capture_dir
+        .canonicalize()
+        .with_context(|| format!("resolve capture directory {}", capture_dir.display()))?;
+    let path = capture_root.join("capture_manifest.json");
+    let manifest: CaptureManifest = serde_json::from_slice(
+        &std::fs::read(&path).with_context(|| format!("read {}", path.display()))?,
+    )
+    .context("parse real L42 capture manifest")?;
+    if manifest.format != "polaris-l42-real-vulkan-input-capture-v1"
+        || manifest.revision != REVISION
+        || manifest.layer != 42
+        || manifest.expert_id != REAL_EXPERT_ID
+        || manifest.source_f32_le_sha256.ffn_input
+            != "7e2d3167e3782eca8d762c3cc92d53bb9d64a65c7b18d37d16797ff39f611ad4"
+        || manifest.asset_integrity.hashes_checked != 76
+        || manifest.asset_integrity.payload_files != 76
+        || manifest.asset_integrity.payload_bytes == 0
+        || manifest.inputs.len() != 3
+    {
+        bail!("real L42 capture contract drift; synthetic fallback is forbidden");
     }
+
+    let expected_manifests = [
+        (
+            Path::new(MODEL_DIR).join("l42_base_cache_manifest.json"),
+            &manifest.asset_integrity.manifest_sha256.base,
+            "base",
+        ),
+        (
+            PathBuf::from(ROUTE_MANIFEST),
+            &manifest.asset_integrity.manifest_sha256.route,
+            "route",
+        ),
+        (
+            Path::new(MODEL_DIR).join("s14_base_cache_manifest.json"),
+            &manifest.asset_integrity.manifest_sha256.s14,
+            "s14",
+        ),
+    ];
+    for (manifest_path, expected_sha, label) in expected_manifests {
+        let actual_sha = sha256_file(&manifest_path)?;
+        if actual_sha != *expected_sha {
+            bail!("captured {label} manifest SHA-256 drift");
+        }
+        println!("capture source {label}_manifest_sha256={actual_sha}");
+    }
+    println!(
+        "capture integrity: {} real payload files / {} bytes hash-verified by CPU reference",
+        manifest.asset_integrity.hashes_checked, manifest.asset_integrity.payload_bytes
+    );
+    Ok(manifest)
+}
+
+fn load_capture_input(
+    manifest: &CaptureManifest,
+    capture_dir: &Path,
+    name: &str,
+    expected_shape: &[usize],
+) -> Result<Vec<f32>> {
+    let matches: Vec<&CaptureInput> = manifest
+        .inputs
+        .iter()
+        .filter(|input| input.name == name)
+        .collect();
+    if matches.len() != 1 {
+        bail!("capture must contain exactly one {name} input");
+    }
+    let input = matches[0];
+    if input.shape != expected_shape {
+        bail!("capture {name} shape drift: {:?}", input.shape);
+    }
+    let expected_bytes = expected_shape.iter().try_fold(4usize, |bytes, &dim| {
+        bytes
+            .checked_mul(dim)
+            .ok_or_else(|| anyhow::anyhow!("capture {name} byte count overflow"))
+    })?;
+    if input.bytes != expected_bytes || input.file.components().count() != 1 {
+        bail!("capture {name} byte/path contract drift");
+    }
+    let capture_root = capture_dir.canonicalize()?;
+    let path = capture_root.join(&input.file).canonicalize()?;
+    if !path.starts_with(&capture_root) {
+        bail!("capture {name} escapes capture directory");
+    }
+    let bytes = std::fs::read(&path)?;
+    if bytes.len() != expected_bytes || sha256_bytes(&bytes) != input.f32_le_sha256 {
+        bail!("capture {name} bytes or SHA-256 drift");
+    }
+    let values: Vec<f32> = bytes
+        .chunks_exact(4)
+        .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+        .collect();
+    if values.iter().any(|value| !value.is_finite()) {
+        bail!("capture {name} contains non-finite activation");
+    }
+    println!(
+        "real activation {name}_f32_le_sha256={}",
+        input.f32_le_sha256
+    );
+    Ok(values)
+}
+
+fn read_verified_payload(
+    path: &Path,
+    expected_bytes: usize,
+    expected_sha256: &str,
+    tensor: &str,
+) -> Result<Vec<u8>> {
+    if expected_sha256.len() != 64
+        || !expected_sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        bail!("{tensor} has invalid manifest SHA-256");
+    }
+    let cache_root = Path::new(MODEL_DIR).join("range_cache").canonicalize()?;
+    let resolved = path
+        .canonicalize()
+        .with_context(|| format!("resolve real payload {}", path.display()))?;
+    if resolved.extension().and_then(|value| value.to_str()) != Some("bin")
+        || !resolved.starts_with(&cache_root)
+    {
+        bail!("{tensor} payload escapes frozen range_cache");
+    }
+    let bytes = std::fs::read(&resolved).with_context(|| format!("read {tensor}"))?;
+    let actual_sha256 = sha256_bytes(&bytes);
+    if bytes.len() != expected_bytes || actual_sha256 != expected_sha256 {
+        bail!("{tensor} payload size/SHA-256 drift");
+    }
+    println!("real payload {tensor} sha256={actual_sha256}");
     Ok(bytes)
+}
+
+fn sha256_file(path: &Path) -> Result<String> {
+    Ok(sha256_bytes(
+        &std::fs::read(path).with_context(|| format!("read {}", path.display()))?,
+    ))
+}
+
+fn sha256_bytes(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 unsafe fn make_command_pool(ctx: &VulkanContext) -> Result<vk::CommandPool> {

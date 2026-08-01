@@ -1,0 +1,20 @@
+#version 450
+
+// DeepSeek V4 routed-expert activation:
+// y = silu(min(gate, 10)) * clamp(up, -10, 10)
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0) readonly buffer Gate { float gate[]; };
+layout(set = 0, binding = 1) readonly buffer Up { float up[]; };
+layout(set = 0, binding = 2) writeonly buffer Y { float y[]; };
+
+layout(push_constant) uniform Push { uint n; } push;
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= push.n) return;
+    float limited_gate = min(gate[i], 10.0);
+    float limited_up = clamp(up[i], -10.0, 10.0);
+    y[i] = (limited_gate / (1.0 + exp(-limited_gate))) * limited_up;
+}

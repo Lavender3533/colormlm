@@ -34,6 +34,15 @@ python -X utf8 fast16/research/polaris_meridian_v1/l42_real_reference/selftest.p
 自检会更新同目录的 `SELFTEST_REPORT.json`。负向测试只在系统临时目录中制作
 manifest 副本，不会修改 `D:/models/Polaris-S14`。
 
+为 Vulkan 数值 runner 导出真实前向中的量化后 kernel 输入时，目标目录必须尚不存在：
+
+```powershell
+python -X utf8 fast16/research/polaris_meridian_v1/l42_real_reference/l42_reference.py --capture-dir "$env:TEMP/polaris-s14-l42-vulkan"
+```
+
+capture manifest 会记录输入 SHA、三个来源 manifest SHA，以及本次真实 payload 校验计数；
+缺失或漂移时 Vulkan runner 必须拒绝，不能回退到合成激活。
+
 ## 边界
 
 这里的证据只能称为“真实 DeepSeek-V4 L42 单层单 token 参考”。它不是
