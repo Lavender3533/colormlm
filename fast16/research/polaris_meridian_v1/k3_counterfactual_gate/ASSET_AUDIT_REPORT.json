@@ -1,0 +1,204 @@
+{
+  "format": "polaris-k3-counterfactual-asset-audit-v1",
+  "research_root": "D:\\project\\大模型ssd化\\fast16\\research",
+  "real_capsules": [
+    {
+      "manifest": "D:\\project\\大模型ssd化\\fast16\\research\\neural_bus_capsules\\kimi_k3_l28_e780_real\\runtime_v4_hybrid\\capsule.json",
+      "format": "colorlm-kimi-k3-latent-macro-capsule-v4",
+      "layer": 28,
+      "expert": 780,
+      "dimensions": {
+        "colorlm": 2048,
+        "latent": 3584,
+        "intermediate": 3072
+      },
+      "runtime_total_bytes": 112974848,
+      "verified_file_bytes": 112974848,
+      "files": [
+        {
+          "name": "b_in",
+          "file": "b_in.f16",
+          "bytes": 14680064,
+          "sha256": "a1368d9b5683a7ec29331e30342a9a2659ae1a8ed7223baaec08b1fc2f0a4d33",
+          "verified": true
+        },
+        {
+          "name": "b_out",
+          "file": "b_out.f16",
+          "bytes": 14680064,
+          "sha256": "ea256a8f562f0338e2fb1ccc696ac4c24fc879b7291b8272cf61c7e6a69c6f5b",
+          "verified": true
+        },
+        {
+          "name": "down",
+          "file": "down.f16",
+          "bytes": 22020096,
+          "sha256": "e3b75130dd0532782ad6c96da7cced4d3dbf7bff30a1511badce7c371aa83357",
+          "verified": true
+        },
+        {
+          "name": "down_decode",
+          "file": "down_decode.mxfp4",
+          "bytes": 5849088,
+          "sha256": "c680af3c01a8eed59ecb9debc0dfa77b94b6145bdfd76042d3f98282f2280f79",
+          "verified": true
+        },
+        {
+          "name": "gate",
+          "file": "gate.f16",
+          "bytes": 22020096,
+          "sha256": "63c8c6624283b85258222710d5f8d383c9359b762a35ae210398728a5240e94c",
+          "verified": true
+        },
+        {
+          "name": "gate_decode",
+          "file": "gate_decode.mxfp4",
+          "bytes": 5849088,
+          "sha256": "5acb91345871e4f88392227ecf2681fd150d53c9f0cc334d1ada68e99e01074b",
+          "verified": true
+        },
+        {
+          "name": "norm",
+          "file": "norm.f16",
+          "bytes": 7168,
+          "sha256": "9a1e2ddf3692d9648cdce889e8085b2352173449e0cb42f03f893600fbc7b310",
+          "verified": true
+        },
+        {
+          "name": "up",
+          "file": "up.f16",
+          "bytes": 22020096,
+          "sha256": "be40c949dd591c934d091a54d9d0e685ffa369fbbe07c53767678d4f9e9a9140",
+          "verified": true
+        },
+        {
+          "name": "up_decode",
+          "file": "up_decode.mxfp4",
+          "bytes": 5849088,
+          "sha256": "a660a5dc224073c72b239aa2cbf7adf5e016e9fcf4bba27b9e7dcce45f9b9af1",
+          "verified": true
+        }
+      ],
+      "f16_reference_complete": true,
+      "missing_f16_reference": [],
+      "bridge_source": "fast16\\research\\neural_bus_capsules\\kimi_k3_l28_e41_real\\bridge\\colorlm_to_latent.float16.npy"
+    },
+    {
+      "manifest": "D:\\project\\大模型ssd化\\fast16\\research\\neural_bus_capsules\\kimi_k3_l92_e291_real\\runtime\\capsule.json",
+      "format": "colorlm-kimi-k3-latent-macro-capsule-v1",
+      "layer": 92,
+      "expert": 291,
+      "dimensions": {
+        "colorlm": 2048,
+        "latent": 3584,
+        "intermediate": 3072
+      },
+      "runtime_total_bytes": 95427584,
+      "verified_file_bytes": 95427584,
+      "files": [
+        {
+          "name": "b_in",
+          "file": "b_in.f16",
+          "bytes": 14680064,
+          "sha256": "3b95630f6bd4a5b7b0016e261cb6af4cd100cce3151f00af0030e46135db071f",
+          "verified": true
+        },
+        {
+          "name": "b_out",
+          "file": "b_out.f16",
+          "bytes": 14680064,
+          "sha256": "c9957d0ed0131e25ab3904fb5d20bd84b001dd8c76614987813ff0d4cdd5378e",
+          "verified": true
+        },
+        {
+          "name": "down",
+          "file": "down.f16",
+          "bytes": 22020096,
+          "sha256": "324e90b852ebb27d0a98626eab96156e122bc64167335c21565c1dbec6326b90",
+          "verified": true
+        },
+        {
+          "name": "gate",
+          "file": "gate.f16",
+          "bytes": 22020096,
+          "sha256": "866e7dbe80085d120ed13a7dc3fd7c380991325c2f12795d3de5e70ddf15cc11",
+          "verified": true
+        },
+        {
+          "name": "norm",
+          "file": "norm.f16",
+          "bytes": 7168,
+          "sha256": "a5c588695dd2315c533874633f112c1716aa09f7150c3beb0ddfd20ca5727d7d",
+          "verified": true
+        },
+        {
+          "name": "up",
+          "file": "up.f16",
+          "bytes": 22020096,
+          "sha256": "96553d365b70e8ef87df16f3770edc897de6c40926507ff2038152ea80b6888f",
+          "verified": true
+        }
+      ],
+      "f16_reference_complete": true,
+      "missing_f16_reference": [],
+      "bridge_source": "fast16\\research\\neural_bus_capsules\\kimi_k3_l92_e291_real\\bridge\\colorlm_to_latent.float16.npy"
+    }
+  ],
+  "router_priors": [
+    {
+      "manifest": "D:\\project\\大模型ssd化\\fast16\\research\\neural_bus_capsules\\kimi_k3_l28_e780_real\\router\\router.json",
+      "layer": 28,
+      "expert": 780,
+      "mapped_shape": [
+        2048
+      ],
+      "mapped_sha256": "5bb2ad186c4e4182a11c642fc98a0978b7ee5be59f5f84234bb126e2e92ae6fd",
+      "capability_label": false,
+      "warning": "router prior is not a capability label; calibrate against forced-route NLL"
+    },
+    {
+      "manifest": "D:\\project\\大模型ssd化\\fast16\\research\\neural_bus_capsules\\kimi_k3_l92_e291_real\\router\\router.json",
+      "layer": 92,
+      "expert": 291,
+      "mapped_shape": [
+        2048
+      ],
+      "mapped_sha256": "69112817129f358d196efa34d43e6d846c668384fee73d2b491b1843428919ff",
+      "capability_label": false,
+      "warning": "router prior is not a capability label; calibrate against forced-route NLL"
+    }
+  ],
+  "coordinate_transport": {
+    "format": "colorlm-rectangular-coordinate-transport-v1",
+    "embedding_test_cosine_mean": 0.47558262944221497,
+    "router_cosine_after_mean": 0.03940312936902046,
+    "router_cosine_shuffled_mean": 0.037057459354400635,
+    "router_cosine_margin_over_shuffled": 0.0023456700146198273,
+    "capability_evidence": false
+  },
+  "v20_evidence": {
+    "status": "rejected_for_capability",
+    "all_current_loto_robust": false,
+    "decision": "Keep v17 formal; retain v20 ABI and negative controls; stop tuning E41/E780."
+  },
+  "parallel_frontend_v47": {
+    "manifest_format": "parallel-frontend-manifest-v1",
+    "selftest_ok": true,
+    "selftest_count": 13,
+    "role": "frozen offline HTML evaluator only",
+    "online_hidden_gate": false,
+    "donor_weights": false
+  },
+  "full_depth_portal": {
+    "present": false,
+    "approved": false,
+    "full_width": 4096,
+    "bus_width": 2048,
+    "reason": "no approved 4096<->2048 FullDepth portal manifest"
+  },
+  "all_real_assets_verified": true,
+  "gate_enabled": false,
+  "default_path": "no_op",
+  "status": "assets_verified_gate_disabled",
+  "claim_limit": "real weights verified; no FullDepth portal, K3 frontend capability, quality, or speed claim"
+}
