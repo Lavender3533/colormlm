@@ -1,0 +1,78 @@
+#version 450
+
+// Polaris S14 F8_E4M3FN weight-only matvec:
+//   y[n] = sum_k x[k] * E4M3FN(weight[n, k])
+//                       * UE8M0(scale[n / 128, k / 128])
+//
+// The real L42 wq_a sample uses weight [1024,4096] and scale [8,32].
+// Buffers use uint word extraction and need no Vulkan 8-bit storage feature.
+// Dispatch one 128-thread workgroup per output row.
+
+layout(local_size_x = 128) in;
+
+layout(set = 0, binding = 0) readonly buffer X { float x[]; };
+layout(set = 0, binding = 1) readonly buffer Weight { uint weight_words[]; };
+layout(set = 0, binding = 2) readonly buffer WeightScale { uint scale_words[]; };
+layout(set = 0, binding = 3) writeonly buffer Y { float y[]; };
+
+layout(push_constant) uniform Push {
+    uint N;
+    uint K;
+} push;
+
+shared float partial[128];
+
+uint weight_byte(uint byte_index) {
+    uint word = weight_words[byte_index >> 2u];
+    return (word >> ((byte_index & 3u) * 8u)) & 0xffu;
+}
+
+uint scale_byte(uint byte_index) {
+    uint word = scale_words[byte_index >> 2u];
+    return (word >> ((byte_index & 3u) * 8u)) & 0xffu;
+}
+
+float e4m3fn(uint code) {
+    uint exponent = (code >> 3u) & 0x0fu;
+    uint mantissa = code & 7u;
+    float magnitude;
+    if (exponent == 0u) {
+        magnitude = float(mantissa) * 0.001953125; // mantissa * 2^-9
+    } else if (exponent == 15u && mantissa == 7u) {
+        // 0x7f/0xff are rejected by the host. Preserve a loud failure if an
+        // unchecked payload reaches the shader.
+        return uintBitsToFloat(0x7fc00000u);
+    } else {
+        magnitude = ldexp(1.0 + float(mantissa) * 0.125, int(exponent) - 7);
+    }
+    return (code & 0x80u) == 0u ? magnitude : -magnitude;
+}
+
+float ue8m0(uint code) {
+    return ldexp(1.0, int(code) - 127);
+}
+
+void main() {
+    uint n = gl_WorkGroupID.x;
+    uint tid = gl_LocalInvocationID.x;
+    if (n >= push.N) return;
+
+    uint row_weight_base = n * push.K;
+    uint k_groups = (push.K + 127u) >> 7u;
+    uint scale_row_base = (n >> 7u) * k_groups;
+    float acc = 0.0;
+
+    for (uint k = tid; k < push.K; k += 128u) {
+        uint code = weight_byte(row_weight_base + k);
+        float scale = ue8m0(scale_byte(scale_row_base + (k >> 7u)));
+        acc += x[k] * e4m3fn(code) * scale;
+    }
+
+    partial[tid] = acc;
+    barrier();
+    for (uint stride = 64u; stride > 0u; stride >>= 1u) {
+        if (tid < stride) partial[tid] += partial[tid + stride];
+        barrier();
+    }
+    if (tid == 0u) y[n] = partial[0];
+}

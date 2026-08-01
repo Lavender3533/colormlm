@@ -1,0 +1,68 @@
+{
+  "format": "polaris-s14-vulkan-numeric-evidence-v1",
+  "recorded_date": "2026-08-01",
+  "code_base": "936ad78f1fd25495d8aa73ca70e98150cfee80e4",
+  "model_revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+  "command": "cargo run --release --offline -p ssd_inference --example s14_vulkan_numeric",
+  "device": {
+    "name": "AMD Radeon RX 5700 XT",
+    "vendor_id": "0x1002",
+    "device_id": "0x731f",
+    "driver_name": "AMD proprietary driver",
+    "driver_info": "26.7.1",
+    "driver_version_raw": "0x00800161",
+    "timestamp_valid_bits": 64,
+    "timestamp_period_ns": 10
+  },
+  "measurement": {
+    "weights": "device-local VRAM",
+    "timestamp_iterations": 100,
+    "timestamp_scope": "dispatches plus Vulkan-valid inter-dispatch WAW barriers; upload and readback excluded",
+    "input": "sin(arange(4096)*0.013) F32",
+    "accumulation": "F32"
+  },
+  "real_inputs": {
+    "base_cache_manifest": "D:/models/Polaris-S14/l42_base_cache_manifest.json (34 ranges, 142131800 B)",
+    "route_manifest": "D:/models/Polaris-S14/l42_synthetic_route_manifest.json (36 ranges, 80216064 B)",
+    "moe_reference": "D:/models/Polaris-S14/l42_real_moe_reference.json",
+    "expert_ids": [48, 153, 144, 83, 221, 127],
+    "route_weight_sum": 1.5,
+    "network_accessed": false,
+    "weights_downloaded": false
+  },
+  "mxfp4_routed": {
+    "physical_format": "I8 container, low-nibble even-K and high-nibble odd-K E2M1, UE8M0 group 32",
+    "real_matrix_dispatches": 18,
+    "kernel_plus_barrier_ms_mean_min": 0.0503336,
+    "kernel_plus_barrier_ms_mean_max": 0.0550796,
+    "single_matrix_max_abs_error_max": 0.00001239776611,
+    "single_matrix_rmse_max": 0.000001393978776,
+    "expert_end_to_end_max_abs_error_max": 0.00001239776611,
+    "expert_end_to_end_rmse_max": 0.000002880027212,
+    "routed_weighted_max_abs_error": 0.000005602836609,
+    "routed_weighted_rmse": 0.000001565295457,
+    "frozen_cpu_sha256": "e9cebfe1925ed7eca0c31c8645e0c367dfd7c81cb0a4bf03e8da621c1078e931"
+  },
+  "fp8_shared": {
+    "physical_format": "F8_E4M3FN weight, F8_E8M0 scale tiles 128x128",
+    "real_matrix_dispatches": 3,
+    "kernel_plus_barrier_ms_mean": [0.1427492, 0.1434556, 0.1384444],
+    "single_matrix_max_abs_error_max": 0.000009059906006,
+    "single_matrix_rmse_max": 0.000001119231081,
+    "end_to_end_max_abs_error": 0.000007629394531,
+    "end_to_end_rmse": 0.000001073220410,
+    "frozen_cpu_sha256": "b01cd37d10623dc880029e940e77aaa8d7f0c6d0444c6ae4d9547f13e386f4e9"
+  },
+  "fp8_wq_a": {
+    "shape": [1024, 4096],
+    "kernel_plus_barrier_ms_mean": 0.0838424,
+    "max_abs_error": 0.000007152557373,
+    "rmse": 0.000001293316682
+  },
+  "l42_moe_sum": {
+    "max_abs_error": 0.00001239776611,
+    "rmse": 0.000001919891077,
+    "frozen_cpu_sha256": "78ce3fdd0ae45b858e35c0c4be9b366afca1d347a64e23269b098416db3fb2e6"
+  },
+  "claim_limit": "Real L42 matvec numerical parity only. Activation and expert mixing in this evidence runner are CPU reference steps; this is not a full native layer, token, or token/s claim."
+}

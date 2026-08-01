@@ -58,8 +58,8 @@
       "evidence": "Qwen softmax/renormalize path has different selection and weights"
     },
     "mxfp4_ue8m0_routed_expert": {
-      "status": "missing",
-      "evidence": "L42/E0 ABI sample exists, but no Vulkan numerical parity kernel yet"
+      "status": "passed",
+      "evidence": "RX 5700 XT measured runtime: 18 real L42 top6 W1/W3/W2 packed MXFP4 matvecs; scheduler/ssd_inference/evidence/s14_vulkan_numeric_rx5700xt.json"
     },
     "shared_expert_swiglu_limit_10": {
       "status": "missing",

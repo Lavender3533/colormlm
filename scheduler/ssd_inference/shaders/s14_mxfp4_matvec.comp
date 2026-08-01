@@ -1,0 +1,84 @@
+#version 450
+
+// Polaris S14 packed MXFP4 matvec:
+//   y[n] = sum_k x[k] * E2M1(weight[n, k]) * UE8M0(scale[n, k / 32])
+//
+// The safetensors I8 payload is a byte container. Byte i stores the even-K
+// value in its low nibble and the odd-K value in its high nibble. Buffers are
+// exposed as uint words so this works without Vulkan 8-bit storage features.
+// Dispatch one 128-thread workgroup per output row.
+
+layout(local_size_x = 128) in;
+
+layout(set = 0, binding = 0) readonly buffer X { float x[]; };
+layout(set = 0, binding = 1) readonly buffer PackedWeight { uint weight_words[]; };
+layout(set = 0, binding = 2) readonly buffer WeightScale { uint scale_words[]; };
+layout(set = 0, binding = 3) writeonly buffer Y { float y[]; };
+
+layout(push_constant) uniform Push {
+    uint N;
+    uint K;
+} push;
+
+shared float partial[128];
+
+uint packed_byte(uint byte_index) {
+    uint word = weight_words[byte_index >> 2u];
+    return (word >> ((byte_index & 3u) * 8u)) & 0xffu;
+}
+
+uint scale_byte(uint byte_index) {
+    uint word = scale_words[byte_index >> 2u];
+    return (word >> ((byte_index & 3u) * 8u)) & 0xffu;
+}
+
+float e2m1(uint code) {
+    uint magnitude_code = code & 7u;
+    float magnitude;
+    if (magnitude_code <= 4u) {
+        magnitude = 0.5 * float(magnitude_code);
+    } else if (magnitude_code == 5u) {
+        magnitude = 3.0;
+    } else if (magnitude_code == 6u) {
+        magnitude = 4.0;
+    } else {
+        magnitude = 6.0;
+    }
+    return (code & 8u) == 0u ? magnitude : -magnitude;
+}
+
+float ue8m0(uint code) {
+    // 0xff is rejected by the host before upload/dispatch.
+    return ldexp(1.0, int(code) - 127);
+}
+
+void main() {
+    uint n = gl_WorkGroupID.x;
+    uint tid = gl_LocalInvocationID.x;
+    if (n >= push.N) return;
+
+    uint packed_k = push.K >> 1u;
+    uint row_weight_base = n * packed_k;
+    uint row_scale_base = n * (push.K >> 5u);
+    float acc = 0.0;
+
+    // Decode a complete packed pair per iteration. This halves weight and scale
+    // address work compared with decoding one logical K value at a time.
+    for (uint pair = tid; pair < packed_k; pair += 128u) {
+        uint code_pair = packed_byte(row_weight_base + pair);
+        uint k = pair << 1u;
+        float scale = ue8m0(scale_byte(row_scale_base + (k >> 5u)));
+        acc += scale * (
+            e2m1(code_pair & 0x0fu) * x[k]
+            + e2m1(code_pair >> 4u) * x[k + 1u]
+        );
+    }
+
+    partial[tid] = acc;
+    barrier();
+    for (uint stride = 64u; stride > 0u; stride >>= 1u) {
+        if (tid < stride) partial[tid] += partial[tid + stride];
+        barrier();
+    }
+    if (tid == 0u) y[n] = partial[0];
+}
