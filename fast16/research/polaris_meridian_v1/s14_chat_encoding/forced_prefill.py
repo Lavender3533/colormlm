@@ -32,6 +32,17 @@ OUTPUT_FORMAT = "polaris-s14-forced-prefill-v1"
 CHAT_ENCODING_REVISION = "7872f01b1d1fe23eabc4c98b48bffcef5a386062"
 S14_VOCAB_SIZE = 129_280
 S14_BOS_ID = 0
+S14_TOKENIZER_SHA256 = "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf"
+S14_PROTOCOL_TOKEN_IDS = {
+    bos_token: 0,
+    eos_token: 1,
+    USER_SP_TOKEN: 128_803,
+    ASSISTANT_SP_TOKEN: 128_804,
+    thinking_start_token: 128_821,
+    thinking_end_token: 128_822,
+    dsml_token: 128_825,
+    LATEST_REMINDER_SP_TOKEN: 128_828,
+}
 TOKENIZER_PROFILES = {"s14", "fixture"}
 VALID_ROLES = {"system", "user", "assistant", "tool", "latest_reminder", "developer"}
 VALID_REASONING_EFFORTS = {"low", "high", "max"}
@@ -100,6 +111,7 @@ class LocalTokenizer:
         except Exception as exc:
             raise ForcedPrefillError(f"无法加载 tokenizer.json: {exc}") from exc
 
+        fingerprint = _sha256_file(path)
         vocab_size = tokenizer.get_vocab_size(with_added_tokens=True)
         bos_id = tokenizer.token_to_id(bos_token)
         if not isinstance(bos_id, int) or isinstance(bos_id, bool):
@@ -109,15 +121,28 @@ class LocalTokenizer:
         bos_encoding = tokenizer.encode(bos_token, add_special_tokens=False).ids
         if bos_encoding != [bos_id]:
             raise ForcedPrefillError("官方 BOS 必须被编码为一个独立 token")
-        if profile == "s14" and (vocab_size != S14_VOCAB_SIZE or bos_id != S14_BOS_ID):
-            raise ForcedPrefillError(
-                f"S14 tokenizer 必须是 vocab={S14_VOCAB_SIZE}, BOS={S14_BOS_ID}；"
-                f"实际 vocab={vocab_size}, BOS={bos_id}"
-            )
+        if profile == "s14":
+            if (
+                vocab_size != S14_VOCAB_SIZE
+                or bos_id != S14_BOS_ID
+                or fingerprint != S14_TOKENIZER_SHA256
+            ):
+                raise ForcedPrefillError(
+                    f"S14 tokenizer 必须匹配固定 revision 的 vocab、BOS 与 SHA-256；"
+                    f"实际 vocab={vocab_size}, BOS={bos_id}, sha256={fingerprint}"
+                )
+            for token, expected_id in S14_PROTOCOL_TOKEN_IDS.items():
+                actual_id = tokenizer.token_to_id(token)
+                encoded = tokenizer.encode(token, add_special_tokens=False).ids
+                if actual_id != expected_id or encoded != [expected_id]:
+                    raise ForcedPrefillError(
+                        f"S14 tokenizer 协议 token 漂移: {token!r}；"
+                        f"期望 ID {expected_id}，实际 ID {actual_id}，编码 {encoded}"
+                    )
 
         self._tokenizer = tokenizer
         self.profile = profile
-        self.fingerprint = _sha256_file(path)
+        self.fingerprint = fingerprint
         self.vocab_size = vocab_size
         self.bos_token_id = bos_id
         self.decoder_runtime_compatible = profile == "s14"
@@ -537,6 +562,9 @@ def compile_forced_prefill(
             "vocab_size": tokenizer.vocab_size,
             "bos_token": bos_token,
             "bos_token_id": tokenizer.bos_token_id,
+            "protocol_token_ids": (
+                dict(S14_PROTOCOL_TOKEN_IDS) if tokenizer.profile == "s14" else None
+            ),
         },
         "token_ids": token_ids_list,
         "token_count": len(token_ids_list),

@@ -14,6 +14,8 @@ import unittest
 from .forced_prefill import (
     ForcedPrefillError,
     LocalTokenizer,
+    S14_PROTOCOL_TOKEN_IDS,
+    S14_TOKENIZER_SHA256,
     compile_forced_prefill,
     load_input_bytes,
 )
@@ -254,11 +256,22 @@ class ForcedPrefillTests(unittest.TestCase):
         tokenizer = LocalTokenizer(path, profile="s14")
         result = compile_forced_prefill(self.fixture_input, tokenizer)
         self.assertEqual(result.artifact["tokenizer"]["vocab_size"], 129280)
+        self.assertEqual(result.artifact["tokenizer"]["sha256"], S14_TOKENIZER_SHA256)
+        self.assertEqual(
+            result.artifact["tokenizer"]["protocol_token_ids"],
+            S14_PROTOCOL_TOKEN_IDS,
+        )
         self.assertEqual(result.artifact["token_ids"][0], 0)
         self.assertTrue(
             result.artifact["decoder_consumption"]["polaris_s14_compatible"]
         )
         self.assertEqual(result.artifact["execution"]["generated_token_count"], 0)
+
+        with tempfile.TemporaryDirectory() as directory:
+            drifted = Path(directory) / "tokenizer.json"
+            drifted.write_bytes(path.read_bytes() + b"\n")
+            with self.assertRaisesRegex(ForcedPrefillError, "SHA-256"):
+                LocalTokenizer(drifted, profile="s14")
 
 
 if __name__ == "__main__":

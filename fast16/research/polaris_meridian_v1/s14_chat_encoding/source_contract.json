@@ -5,7 +5,7 @@
   "upstream_directory": "encoding",
   "license": "MIT",
   "transport": "https://hf-mirror.com",
-  "local_normalization": "UTF-8 without BOM; LF line endings; exactly one trailing LF; upstream test harness removes that normalized fixture LF",
+  "local_normalization": "UTF-8 without BOM; source hashes are checked after CRLF-to-LF normalization so Windows autocrlf cannot create a false drift; exactly one trailing LF; upstream test harness removes that normalized fixture LF",
   "files": [
     {"path": "OFFICIAL_README.md", "upstream_path": "encoding/README.md", "upstream_blob_oid": "78d93a8a4dd24378356523992dea6517844657e1", "upstream_bytes": 9168, "local_sha256": "294ed6493ebfe5a487f172154d60c494899997fed8806fdd3352dd8e3c33f9de"},
     {"path": "encoding_dsv4.py", "upstream_path": "encoding/encoding_dsv4.py", "upstream_blob_oid": "66f2d30ece5a93e08fbab47aeb9f3541830930ef", "upstream_bytes": 29001, "local_sha256": "abc0d26120250dda0ae077dc64aa28836026e61e970854aaeb792445e6a0dde6"},

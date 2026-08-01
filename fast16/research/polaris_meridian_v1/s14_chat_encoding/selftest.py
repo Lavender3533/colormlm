@@ -14,12 +14,13 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_TOKENIZER = Path(r"D:\models\Polaris-S14\tokenizer.json")
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for block in iter(lambda: source.read(1 << 20), b""):
-            digest.update(block)
-    return digest.hexdigest()
+def _normalized_utf8_sha256(path: Path) -> str:
+    payload = path.read_bytes()
+    assert not payload.startswith(b"\xef\xbb\xbf"), path
+    text = payload.decode("utf-8", errors="strict")
+    assert "\r" not in text.replace("\r\n", ""), path
+    normalized = text.replace("\r\n", "\n").encode("utf-8", errors="strict")
+    return hashlib.sha256(normalized).hexdigest()
 
 
 def _load_json(path: Path):
@@ -34,7 +35,7 @@ def _validate_source_contract() -> int:
     for entry in contract["files"]:
         path = ROOT / entry["path"]
         assert path.is_file(), path
-        assert _sha256(path) == entry["local_sha256"], path
+        assert _normalized_utf8_sha256(path) == entry["local_sha256"], path
         checked += 1
     return checked
 
