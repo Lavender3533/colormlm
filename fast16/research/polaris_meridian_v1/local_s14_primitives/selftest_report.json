@@ -7,7 +7,8 @@
     "e4m3_known_bits": true,
     "hc_finite_column_normalized": true,
     "sparse_all_padding_stable_zero": true,
-    "invalid_index_rejected": true
+    "invalid_index_rejected": true,
+    "final_hc_norm_bf16_head_path": true
   },
   "network_accessed": false,
   "weights_downloaded": false,

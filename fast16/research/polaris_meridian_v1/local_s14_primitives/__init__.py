@@ -12,6 +12,12 @@ from .fp8 import (
     fp8_weight_linear,
 )
 from .hc import hc_post, hc_pre, hc_split_sinkhorn
+from .final_head import (
+    bf16_checkpoint_head_logits,
+    hc_head_reduce,
+    native_final_logits,
+    official_rms_norm,
+)
 from .mxfp4 import (
     FP4_E2M1_VALUES,
     FP4_GROUP_SIZE,
@@ -36,7 +42,11 @@ __all__ = [
     "fp8_weight_linear",
     "hc_post",
     "hc_pre",
+    "hc_head_reduce",
     "hc_split_sinkhorn",
+    "bf16_checkpoint_head_logits",
+    "native_final_logits",
+    "official_rms_norm",
     "sparse_attention",
     "unpack_mxfp4_e2m1",
 ]

@@ -17,6 +17,7 @@ from fast16.research.polaris_meridian_v1.local_s14_primitives import (
     decode_fp8_e4m3fn,
     decode_ue8m0,
     hc_split_sinkhorn,
+    native_final_logits,
     sparse_attention,
     unpack_mxfp4_e2m1,
 )
@@ -53,6 +54,23 @@ def run_selftest() -> dict:
         checks["invalid_index_rejected"] = True
     else:
         checks["invalid_index_rejected"] = False
+    logits, normalized, pre = native_final_logits(
+        torch.ones(1, 1, 4, 2, dtype=torch.bfloat16),
+        torch.zeros(4, 8),
+        torch.ones(1),
+        torch.zeros(4),
+        torch.ones(2),
+        torch.tensor([[1.0, 0.0], [0.0, 1.0], [-1.0, 1.0]], dtype=torch.bfloat16),
+        output_chunk_size=2,
+        enforce_official_shape=False,
+    )
+    checks["final_hc_norm_bf16_head_path"] = bool(
+        logits.dtype == torch.float32
+        and normalized.dtype == torch.bfloat16
+        and pre.dtype == torch.float32
+        and tuple(logits.shape) == (1, 3)
+        and torch.isfinite(logits).all()
+    )
     return {
         "format": "polaris-local-s14-primitives-selftest-v1",
         "ok": all(checks.values()),

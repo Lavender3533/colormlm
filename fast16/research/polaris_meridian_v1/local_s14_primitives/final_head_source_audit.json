@@ -1,0 +1,52 @@
+{
+  "format": "polaris-deepseek-v4-final-head-source-audit-v1",
+  "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+  "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+  "source_file": {
+    "path": "inference/model.py",
+    "bytes": 45118,
+    "sha256": "c0c19e6c9fa439bac7fbb1c5bc1868232dfd5aa2f439a548d0e33dcc2a9edd3f",
+    "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-0731/blob/7872f01b1d1fe23eabc4c98b48bffcef5a386062/inference/model.py"
+  },
+  "config_files": {
+    "config.json": {
+      "bytes": 1888,
+      "sha256": "6c8f3d2d3b48707541b88f32f22ef3f0f8a6b57d8523281e2b8d3cdb0ae9a023"
+    },
+    "inference/config.json": {
+      "bytes": 1162,
+      "sha256": "c90861f3d10a9e4ef5954f8f1a34c529d480da1c5799f84660028f4e38e14e71"
+    }
+  },
+  "source_lines": {
+    "rms_norm": "189-202",
+    "hc_head": "709-716",
+    "parallel_head": "719-740",
+    "main_final_path": "905-923"
+  },
+  "official_shapes": {
+    "hidden": "[B,S,4,4096]",
+    "hc_head_fn": "[4,16384]",
+    "hc_head_base": "[4]",
+    "hc_head_scale": "[1]",
+    "norm_weight": "[4096]",
+    "head_weight_single_rank": "[129280,4096]"
+  },
+  "official_path": {
+    "formula": "flat=x.flatten(2).float(); r=rsqrt(mean(flat^2)+norm_eps); pre=sigmoid(linear(flat,hc_head_fn)*r*hc_head_scale+hc_head_base)+hc_eps; h=sum(pre*x_streams,stream); n=(norm_weight*(h.float()*rsqrt(mean(h.float()^2)+norm_eps))).to(h.dtype); logits=linear(n.float(),head_weight.float())",
+    "norm_eps": 0.000001,
+    "hc_eps": 0.000001,
+    "checkpoint_head_dtype": "BF16",
+    "runtime_parameter_dtype": "FP32",
+    "logits_dtype": "FP32",
+    "default_projection": "last token only",
+    "full_logits_option": true
+  },
+  "boundary_header_status": {
+    "status": "not_refetched",
+    "reason": "model-00045 safetensors Range 请求超时；形状来自固定 revision 官方构造代码与配置，checkpoint BF16 来自官方源码注释",
+    "required_for_real_weight_test": "使用 s14_range_pack 已校验 header/Range 后再加载真实 boundary tensor"
+  },
+  "weights_downloaded": false,
+  "claim_limit": "只证明最终路径参考实现与官方 Python 数学一致；未加载真实 head 权重，未产生真实 logits。"
+}

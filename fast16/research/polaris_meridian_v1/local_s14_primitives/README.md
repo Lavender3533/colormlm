@@ -11,6 +11,8 @@
 - 四流 HC pre/split/Sinkhorn/post 的官方 FP32 顺序；
 - 共享 KV、index gather、attention sink 的稳定稀疏注意力；
 - 未来 Vulkan shader 的机器可读 ABI 草案。
+- 固定 revision 官方最终 `hc_head → RMSNorm → BF16-checkpoint head` 路径；head 按词表
+  行分块提升到 FP32 计算，输出 FP32 logits，与官方 `ParallelHead` 一致。
 
 `I8` expert weight 不会按有符号整数解释。固定样本的 header 用 I8 表示原始 byte，
 每 byte 仍是两个 E2M1 nibble。scale 的 `0xFF` 与 E4M3 的 `0x7F/0xFF` 默认硬拒绝。
@@ -29,3 +31,12 @@ python -X utf8 fast16/research/polaris_meridian_v1/local_s14_primitives/selftest
 
 这些实现是小规模 CPU/PyTorch 语义 oracle，不是优化 runtime。通过测试不表示 S14 已经
 forward、不表示首 token 已产生，也不证明速度或质量。
+
+## 最终头的 dtype 边界
+
+官方源码明确写明 checkpoint 的 `head.weight` 是 BF16，但推理类把参数保存为 FP32，且执行
+`F.linear(x.float(), self.weight)`，所以官方 logits 是 FP32。`final_head.py` 接收 BF16
+checkpoint 权重并按行分块转 FP32，不使用 BF16 matmul 改写数值语义。公式、源码行号与 SHA
+见 `final_head_source_audit.json`。不同词表分块可能触发不同 GEMM kernel，测试采用严格 FP32
+容差，不宣称跨 kernel 逐 bit 一致。生产入口默认硬校验 `[B,S,4,4096]` hidden 和
+`[129280,4096]` 单卡完整 head；小形状只能显式作为测试使用。
