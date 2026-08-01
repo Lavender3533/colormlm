@@ -23,6 +23,7 @@ from .cpu_causal_block import (
 from .fulldepth_runtime_bridge import (
     FullDepthDecoderStateBridge,
     FullDepthTokenComputation,
+    build_cpu_causal_block_reference_backend,
 )
 from .speed_gate import RoundTiming, evaluate_speed_gate
 from .verifier import (
@@ -56,6 +57,7 @@ __all__ = [
     "ReferenceBlockAudit",
     "FullDepthDecoderStateBridge",
     "FullDepthTokenComputation",
+    "build_cpu_causal_block_reference_backend",
     "SpeculativeRoundResult",
     "SpeculativeSession",
     "VerificationResult",

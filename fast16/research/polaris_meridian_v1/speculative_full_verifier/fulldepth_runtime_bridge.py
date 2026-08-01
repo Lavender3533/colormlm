@@ -1,8 +1,8 @@
-"""Existing FullDepth43 ``DecoderState`` -> causal-block snapshot bridge.
+"""FullDepth43 ``DecoderState`` -> causal-block snapshot bridge.
 
-真实 CPU executor 目前把单 token worker 写在 ``execute`` 循环内。本桥
-接收同等的可注入 worker，直接复用真实 ``DecoderState`` 和
-``LayerRuntimeState``，不转换 token ID，不简化 KV/compressor 状态。
+本桥可直接接入 ``executor.FullDepthTokenWorker``，复用真实
+``DecoderState`` 和 ``LayerRuntimeState``；不转换 token ID，不简化
+KV/compressor 状态。
 """
 
 from __future__ import annotations
@@ -18,14 +18,9 @@ from .runtime_controller import NativeTokenStep
 from .verifier import VERIFIER_PROFILE, VerifierContractError
 
 
-@dataclass(frozen=True)
-class FullDepthTokenComputation:
-    """单 token FullDepth worker 的最小可复用返回值。"""
-
-    predicted_token_id: int
-    next_layer_states: Mapping[int, s14.LayerRuntimeState]
-    top6_by_layer: Mapping[int, tuple[int, ...]]
-    value: Mapping[str, Any]
+# Backward-compatible public name; there is now one authoritative result type
+# shared by the CLI executor and the causal-block runtime.
+FullDepthTokenComputation = fd43.FullDepthTokenComputation
 
 
 @dataclass(frozen=True)
@@ -244,3 +239,30 @@ class FullDepthDecoderStateBridge:
         self._context_token_ids += (pending,)
         _validate_decoder_context(self.decoder, self._context_token_ids)
         return NativeTokenStep(prediction, dict(computation.top6_by_layer))
+
+
+def build_cpu_causal_block_reference_backend(
+    decoder: fd43.DecoderState,
+    worker: Callable[
+        [int, int, Mapping[int, s14.LayerRuntimeState]],
+        FullDepthTokenComputation,
+    ],
+    *,
+    context_token_ids: Sequence[int],
+    tokenizer_fingerprint: str,
+) -> Any:
+    """把真实 FullDepth worker 和 DecoderState 接入 CPU K=1/4/8 事务。
+
+    返回值仍是串行 CPU 正确性参考；``forward_calls=K``，不是
+    batched/GPU 加速路径。局部导入避免 package ``__init__`` 顺序循环。
+    """
+
+    from .cpu_causal_block import CpuCausalBlockReferenceBackend
+
+    bridge = FullDepthDecoderStateBridge(
+        decoder,
+        worker,
+        context_token_ids=context_token_ids,
+        tokenizer_fingerprint=tokenizer_fingerprint,
+    )
+    return CpuCausalBlockReferenceBackend(bridge)

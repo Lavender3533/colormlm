@@ -11,6 +11,7 @@ from ..cpu_causal_block import CpuCausalBlockReferenceBackend
 from ..fulldepth_runtime_bridge import (
     FullDepthDecoderStateBridge,
     FullDepthTokenComputation,
+    build_cpu_causal_block_reference_backend,
 )
 from ..runtime_controller import decide_acceptance
 from ..verifier import VerificationRequest
@@ -70,6 +71,17 @@ class TinyFullDepthWorker:
         )
 
 
+class FailingTinyFullDepthWorker(TinyFullDepthWorker):
+    def __init__(self, predictions: tuple[int, ...], fail_position: int) -> None:
+        super().__init__(predictions)
+        self.fail_position = fail_position
+
+    def __call__(self, position, input_token_id, previous):
+        if position == self.fail_position:
+            raise RuntimeError("injected FullDepth token failure")
+        return super().__call__(position, input_token_id, previous)
+
+
 def make_bridge(predictions: tuple[int, ...]) -> FullDepthDecoderStateBridge:
     return FullDepthDecoderStateBridge(
         fd43.DecoderState(input_token_id=90),
@@ -100,6 +112,29 @@ def assert_bridge_equal(test: unittest.TestCase, left, right) -> None:
 
 
 class FullDepthRuntimeBridgeTest(unittest.TestCase):
+    def test_real_decoder_state_k1_backend_matches_direct_worker_step(self):
+        draft = (7,)
+        block_bridge = make_bridge(draft)
+        direct_bridge = make_bridge(draft)
+        backend = build_cpu_causal_block_reference_backend(
+            block_bridge.decoder,
+            block_bridge.worker,
+            context_token_ids=block_bridge.context_token_ids,
+            tokenizer_fingerprint=FINGERPRINT,
+        )
+        transaction = backend.begin_causal_block(
+            VerificationRequest((90,), draft, FINGERPRINT)
+        )
+        direct_bridge.step(forced_next_token_id=draft[0])
+        decision = decide_acceptance(
+            draft, transaction.verification.predicted_token_ids
+        )
+        transaction.prepare_commit(decision)
+        transaction.commit()
+
+        self.assertEqual(transaction.metrics.forward_calls, 1)
+        assert_bridge_equal(self, backend.runtime, direct_bridge)
+
     def test_forged_earlier_context_is_rejected_before_any_worker_call(self):
         decoder = fd43.DecoderState(input_token_id=90)
         with self.assertRaisesRegex(VerifierContractError, "context 长度"):
@@ -153,7 +188,12 @@ class FullDepthRuntimeBridgeTest(unittest.TestCase):
         draft = (1, 2, 3, 4)
         block_bridge = make_bridge(draft)
         serial_bridge = make_bridge(draft)
-        backend = CpuCausalBlockReferenceBackend(block_bridge)
+        backend = build_cpu_causal_block_reference_backend(
+            block_bridge.decoder,
+            block_bridge.worker,
+            context_token_ids=block_bridge.context_token_ids,
+            tokenizer_fingerprint=FINGERPRINT,
+        )
         request = VerificationRequest((90,), draft, FINGERPRINT)
 
         transaction = backend.begin_causal_block(request)
@@ -165,7 +205,28 @@ class FullDepthRuntimeBridgeTest(unittest.TestCase):
         transaction.prepare_commit(decision)
         transaction.commit()
 
-        assert_bridge_equal(self, block_bridge, serial_bridge)
+        self.assertEqual(transaction.metrics.forward_calls, 4)
+        assert_bridge_equal(self, backend.runtime, serial_bridge)
+
+    def test_real_decoder_state_k4_worker_failure_restores_base(self):
+        decoder = fd43.DecoderState(input_token_id=90)
+        backend = build_cpu_causal_block_reference_backend(
+            decoder,
+            FailingTinyFullDepthWorker((1, 2, 3, 4), fail_position=2),
+            context_token_ids=(90,),
+            tokenizer_fingerprint=FINGERPRINT,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "injected FullDepth"):
+            backend.begin_causal_block(
+                VerificationRequest((90,), (1, 2, 3, 4), FINGERPRINT)
+            )
+
+        self.assertEqual(backend.context_token_ids, (90,))
+        self.assertEqual(decoder.position, 0)
+        self.assertEqual(decoder.input_token_id, 90)
+        self.assertEqual(decoder.committed_tokens, [])
+        self.assertEqual(decoder.layer_states, {})
 
     def test_real_decoder_state_mismatch_drops_future_layer_deltas(self):
         draft = (1, 2, 3, 4)

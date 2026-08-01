@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 import torch
 
@@ -477,6 +477,273 @@ def _load_or_build_catalog(config: ExecutionConfig) -> dict[str, Any]:
     return catalog
 
 
+@dataclass(frozen=True)
+class FullDepthTokenComputation:
+    """One uncommitted FullDepth43 token result.
+
+    The worker computes the complete 43-layer native-top6 path and final
+    argmax, but deliberately does not mutate ``DecoderState``.  Callers must
+    explicitly commit ``next_layer_states`` after validating the whole
+    result.  This is the shared boundary used by the report runner and the
+    causal-block snapshot bridge.
+    """
+
+    predicted_token_id: int
+    next_layer_states: Mapping[int, s14.LayerRuntimeState]
+    top6_by_layer: Mapping[int, tuple[int, ...]]
+    value: Mapping[str, Any]
+
+
+class FullDepthTokenWorker:
+    """Reusable, fail-before-commit FullDepth43 single-token worker.
+
+    This is still the CPU/PyTorch correctness implementation.  Calling it K
+    times through ``CpuCausalBlockReferenceBackend`` is *not* a batched model
+    forward and carries no speed claim.
+    """
+
+    def __init__(
+        self,
+        config: ExecutionConfig,
+        catalog: Mapping[str, Any],
+        cache: online_range.RangeCache,
+        *,
+        profile: ExecutionProfile = FULLDEPTH43_NATIVE_TOP6,
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
+    ) -> None:
+        config.validate()
+        profile.validate()
+        validate_catalog(catalog)
+        self.config = config
+        self.catalog = catalog
+        self.cache = cache
+        self.profile = profile
+        self.progress_callback = progress_callback
+        self.stage = "idle"
+        self.current_layer: int | None = None
+        self.last_token_report: dict[str, Any] | None = None
+        self.writeback_layers: list[int] = []
+        self._final_head: s14.FinalHeadReference | None = None
+        self._writeback: PersistentVulkanWriteback | None = None
+        self._started = False
+        self._closed = False
+
+    @property
+    def writeback_hello(self) -> Mapping[str, Any] | None:
+        return None if self._writeback is None else self._writeback.hello
+
+    def start(self) -> None:
+        if self._closed:
+            raise FullDepthError("FullDepth token worker 已关闭")
+        if self._started:
+            return
+        if self.config.vulkan_writeback_worker is not None:
+            self.stage = "vulkan_writeback_worker_start"
+            self._writeback = PersistentVulkanWriteback(
+                (
+                    str(self.config.vulkan_writeback_worker.resolve()),
+                    "--fulldepth43-writeback-worker",
+                ),
+                timeout_seconds=self.config.vulkan_writeback_timeout_seconds,
+            )
+        self._started = True
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        if self._writeback is not None:
+            self._writeback.close()
+
+    def _notify(self, token_report: dict[str, Any]) -> None:
+        self.last_token_report = token_report
+        if self.progress_callback is not None:
+            self.progress_callback(token_report)
+
+    def _validate_previous(
+        self,
+        position: int,
+        previous: Mapping[int, s14.LayerRuntimeState],
+    ) -> dict[int, s14.LayerRuntimeState]:
+        if isinstance(position, bool) or not isinstance(position, int) or position < 0:
+            raise FullDepthError("FullDepth worker position 非法")
+        if position == 0:
+            if previous:
+                raise FullDepthError("FullDepth worker position0 不得携带旧状态")
+        elif set(previous) != set(self.profile.layers):
+            raise FullDepthError("FullDepth worker 非零 position 缺少 43 层状态")
+        cloned: dict[int, s14.LayerRuntimeState] = {}
+        for layer, layer_state in previous.items():
+            if layer_state.layer != layer or layer_state.position != position - 1:
+                raise FullDepthError(f"FullDepth worker L{layer} 历史状态漂移")
+            cloned[layer] = s14._clone_layer_state(layer_state)
+        return cloned
+
+    def __call__(
+        self,
+        position: int,
+        input_token_id: int,
+        previous: Mapping[int, s14.LayerRuntimeState],
+    ) -> FullDepthTokenComputation:
+        self.start()
+        if (
+            isinstance(input_token_id, bool)
+            or not isinstance(input_token_id, int)
+            or not 0 <= input_token_id < s14.VOCAB_SIZE
+        ):
+            raise FullDepthError("FullDepth worker input token ID 越界")
+        private_previous = self._validate_previous(position, previous)
+        session = FullDepthRangeSession(
+            self.catalog,
+            self.cache,
+            profile=self.profile,
+            range_attempts=self.config.range_attempts,
+            range_workers=self.config.range_workers,
+        )
+        token_report: dict[str, Any] = {
+            "position": position,
+            "input_token_id": input_token_id,
+            "completed_layers": [],
+            "layers": [],
+            "final": None,
+            "state_committed": False,
+        }
+        self.current_layer = None
+        self._notify(token_report)
+
+        self.stage = f"position_{position}_embedding"
+        embedding = session.prepare_embedding_row(input_token_id)
+        state = s14._initial_state(embedding, input_token_id)
+        next_states: dict[int, s14.LayerRuntimeState] = {}
+        top6_by_layer: dict[int, tuple[int, ...]] = {}
+        for layer in self.profile.layers:
+            layer_started = time.perf_counter()
+            self.current_layer = layer
+            self.stage = f"position_{position}_layer_{layer}_base"
+            prerequisites = session.prepare_layer(layer, input_token_id)
+            store = s14.TensorStore(self.config.asset_root.resolve() / "range_cache")
+            store.add_ranges((*prerequisites.non_expert, *prerequisites.router))
+            kernel = FullDepthNativeLayerReference(layer, store, profile=self.profile)
+
+            self.stage = f"position_{position}_layer_{layer}_native_route"
+            pending = kernel.prepare_route(
+                state,
+                token_id=input_token_id,
+                position=position,
+                previous_runtime=private_previous.get(layer),
+            )
+            route = session.submit_top6(layer, input_token_id, pending.route_ids)
+            top6_by_layer[layer] = route
+
+            self.stage = f"position_{position}_layer_{layer}_top6_shared"
+            routed = session.fetch_routed(layer, input_token_id)
+            pages = list(routed.shared)
+            for expert_id in pending.route_ids:
+                pages.extend(routed.experts[expert_id])
+            kernel.add_routed(pages)
+            bridge_capture = None
+            if (
+                self.config.vulkan_bridge_capture is not None
+                and position == 0
+                and layer == self.config.vulkan_bridge_layer
+            ):
+                bridge_capture = _write_vulkan_bridge_capture(
+                    self.config.vulkan_bridge_capture,
+                    layer=layer,
+                    position=position,
+                    token_id=input_token_id,
+                    completed_layers=token_report["completed_layers"],
+                    pending=pending,
+                    routed=routed,
+                    kernel=kernel,
+                    profile=self.profile,
+                )
+            cpu_moe_branch, cpu_state = kernel.finish_layer(pending)
+            writeback_evidence = None
+            if self._writeback is not None and layer == self.config.vulkan_bridge_layer:
+                if bridge_capture is None:
+                    raise FullDepthError("Vulkan writeback 缺少同层 capture")
+                self.stage = f"position_{position}_layer_{layer}_vulkan_writeback"
+                vulkan_moe_branch, worker_evidence = self._writeback.execute(
+                    Path(bridge_capture["manifest"])
+                )
+                comparison = verify_exact_bf16_writeback(
+                    cpu_moe_branch,
+                    vulkan_moe_branch,
+                )
+                moe_branch = vulkan_moe_branch
+                state = s14.hc_post(
+                    moe_branch,
+                    pending.post_attention_state,
+                    pending.post_ffn,
+                    pending.comb_ffn,
+                )
+                self.writeback_layers.append(layer)
+                writeback_evidence = {
+                    **worker_evidence,
+                    "comparison": comparison,
+                    "state_source": "vulkan_moe_branch_then_cpu_hc_post",
+                    "cpu_layer_output_exact": bool(torch.equal(state, cpu_state)),
+                }
+                if not writeback_evidence["cpu_layer_output_exact"]:
+                    raise FullDepthError("Vulkan writeback 后 hc_post 与 CPU 层输出不等价")
+            else:
+                moe_branch, state = cpu_moe_branch, cpu_state
+            if (
+                tuple(state.shape) != (1, 1, s14.HC_MULT, s14.HIDDEN_SIZE)
+                or state.dtype != torch.bfloat16
+            ):
+                raise FullDepthError(
+                    f"L{layer} 破坏 BF16 [1,1,4,4096] mHC 状态"
+                )
+            session.finish_layer(layer, input_token_id)
+            next_states[layer] = pending.runtime_state
+            token_report["completed_layers"].append(layer)
+            token_report["layers"].append(
+                {
+                    "layer": layer,
+                    "compress_ratio": self.profile.ratio_for(layer),
+                    "route_source": pending.route_source,
+                    "expert_ids": pending.route_ids,
+                    "route_weights": pending.route_weights,
+                    "shared_and_expert_ranges": len(pages),
+                    "moe_branch": kernel._summary_tensor(moe_branch),
+                    "layer_output": kernel._summary_tensor(state),
+                    "elapsed_seconds": time.perf_counter() - layer_started,
+                    "vulkan_bridge_capture": bridge_capture,
+                    "vulkan_writeback": writeback_evidence,
+                }
+            )
+            self._notify(token_report)
+
+        if token_report["completed_layers"] != list(self.profile.layers):
+            raise FullDepthError("禁止跳层进入 final head")
+        self.current_layer = None
+        self.stage = f"position_{position}_final_head"
+        final_ranges = session.prepare_final()
+        if self._final_head is None:
+            self._final_head = s14.FinalHeadReference(
+                final_ranges,
+                self.config.asset_root.resolve() / "range_cache",
+                head_chunk_size=self.config.head_chunk_size,
+            )
+        else:
+            self._final_head.validate_ranges(final_ranges)
+        final = self._final_head.forward(state)
+        output_token_id = int(final["token_id"])
+        if not 0 <= output_token_id < s14.VOCAB_SIZE:
+            raise FullDepthError("FullDepth final head token ID 越界")
+        token_report["final"] = final
+        self.stage = f"position_{position}_ready_to_commit"
+        self._notify(token_report)
+        return FullDepthTokenComputation(
+            predicted_token_id=output_token_id,
+            next_layer_states=next_states,
+            top6_by_layer=top6_by_layer,
+            value={"token_report": token_report, "final": final},
+        )
+
+
 def execute(
     config: ExecutionConfig,
     *,
@@ -551,170 +818,46 @@ def execute(
             "token_count": len(forced_queue.token_ids),
             "cursor": forced_queue.cursor,
         }
-    final_head: s14.FinalHeadReference | None = None
-    writeback: PersistentVulkanWriteback | None = None
-    writeback_layers: list[int] = []
-    current_layer: int | None = None
-    stage = "bootstrap"
+    def persist_worker_progress(token_report: dict[str, Any]) -> None:
+        token_report.setdefault(
+            "input_source",
+            (
+                "forced_prefill"
+                if decoder.forced_queue is not None and decoder.forced_queue.active
+                else "model_argmax"
+            ),
+        )
+        if not any(row is token_report for row in report["tokens"]):
+            report["tokens"].append(token_report)
+        write_json(config.report_path, report)
+
+    worker = FullDepthTokenWorker(
+        config,
+        catalog,
+        cache,
+        profile=profile,
+        progress_callback=persist_worker_progress,
+    )
     execution_started = time.perf_counter()
     try:
-        if config.vulkan_writeback_worker is not None:
-            stage = "vulkan_writeback_worker_start"
-            writeback = PersistentVulkanWriteback(
-                (
-                    str(config.vulkan_writeback_worker.resolve()),
-                    "--fulldepth43-writeback-worker",
-                ),
-                timeout_seconds=config.vulkan_writeback_timeout_seconds,
-            )
+        worker.start()
+        if worker.writeback_hello is not None:
             report["vulkan_writeback_worker"] = {
                 "path": str(config.vulkan_writeback_worker.resolve()),
-                "hello": writeback.hello,
+                "hello": worker.writeback_hello,
                 "mode": "persistent_single_process",
             }
         for _ in range(config.token_count):
             position = decoder.position
             input_token_id = decoder.input_token_id
             previous = decoder.previous_for(profile)
-            session = FullDepthRangeSession(
-                catalog,
-                cache,
+            computation = worker(position, input_token_id, previous)
+            token_report = computation.value["token_report"]
+            decoder.commit(
+                output_token_id=computation.predicted_token_id,
+                next_states=computation.next_layer_states,
                 profile=profile,
-                range_attempts=config.range_attempts,
-                range_workers=config.range_workers,
             )
-            token_report: dict[str, Any] = {
-                "position": position,
-                "input_token_id": input_token_id,
-                "input_source": (
-                    "forced_prefill"
-                    if decoder.forced_queue is not None and decoder.forced_queue.active
-                    else "model_argmax"
-                ),
-                "completed_layers": [],
-                "layers": [],
-                "final": None,
-                "state_committed": False,
-            }
-            report["tokens"].append(token_report)
-            write_json(config.report_path, report)
-
-            stage = f"position_{position}_embedding"
-            embedding = session.prepare_embedding_row(input_token_id)
-            state = s14._initial_state(embedding, input_token_id)
-            next_states: dict[int, s14.LayerRuntimeState] = {}
-            for layer in profile.layers:
-                layer_started = time.perf_counter()
-                current_layer = layer
-                stage = f"position_{position}_layer_{layer}_base"
-                prerequisites = session.prepare_layer(layer, input_token_id)
-                store = s14.TensorStore(config.asset_root.resolve() / "range_cache")
-                store.add_ranges((*prerequisites.non_expert, *prerequisites.router))
-                kernel = FullDepthNativeLayerReference(layer, store, profile=profile)
-
-                stage = f"position_{position}_layer_{layer}_native_route"
-                pending = kernel.prepare_route(
-                    state,
-                    token_id=input_token_id,
-                    position=position,
-                    previous_runtime=previous.get(layer),
-                )
-                session.submit_top6(layer, input_token_id, pending.route_ids)
-
-                stage = f"position_{position}_layer_{layer}_top6_shared"
-                routed = session.fetch_routed(layer, input_token_id)
-                pages = list(routed.shared)
-                for expert_id in pending.route_ids:
-                    pages.extend(routed.experts[expert_id])
-                kernel.add_routed(pages)
-                bridge_capture = None
-                if (
-                    config.vulkan_bridge_capture is not None
-                    and position == 0
-                    and layer == config.vulkan_bridge_layer
-                ):
-                    bridge_capture = _write_vulkan_bridge_capture(
-                        config.vulkan_bridge_capture,
-                        layer=layer,
-                        position=position,
-                        token_id=input_token_id,
-                        completed_layers=token_report["completed_layers"],
-                        pending=pending,
-                        routed=routed,
-                        kernel=kernel,
-                        profile=profile,
-                    )
-                cpu_moe_branch, cpu_state = kernel.finish_layer(pending)
-                writeback_evidence = None
-                if writeback is not None and layer == config.vulkan_bridge_layer:
-                    if bridge_capture is None:
-                        raise FullDepthError("Vulkan writeback 缺少同层 capture")
-                    stage = f"position_{position}_layer_{layer}_vulkan_writeback"
-                    vulkan_moe_branch, worker_evidence = writeback.execute(
-                        Path(bridge_capture["manifest"])
-                    )
-                    comparison = verify_exact_bf16_writeback(
-                        cpu_moe_branch,
-                        vulkan_moe_branch,
-                    )
-                    # 逐 BF16 位验证后真正以 GPU branch 重建层状态。
-                    moe_branch = vulkan_moe_branch
-                    state = s14.hc_post(
-                        moe_branch,
-                        pending.post_attention_state,
-                        pending.post_ffn,
-                        pending.comb_ffn,
-                    )
-                    writeback_layers.append(layer)
-                    writeback_evidence = {
-                        **worker_evidence,
-                        "comparison": comparison,
-                        "state_source": "vulkan_moe_branch_then_cpu_hc_post",
-                        "cpu_layer_output_exact": bool(torch.equal(state, cpu_state)),
-                    }
-                    if not writeback_evidence["cpu_layer_output_exact"]:
-                        raise FullDepthError("Vulkan writeback 后 hc_post 与 CPU 层输出不等价")
-                else:
-                    moe_branch, state = cpu_moe_branch, cpu_state
-                if tuple(state.shape) != (1, 1, s14.HC_MULT, s14.HIDDEN_SIZE) or state.dtype != torch.bfloat16:
-                    raise FullDepthError(f"L{layer} 破坏 BF16 [1,1,4,4096] mHC 状态")
-                session.finish_layer(layer, input_token_id)
-                next_states[layer] = pending.runtime_state
-                token_report["completed_layers"].append(layer)
-                token_report["layers"].append(
-                    {
-                        "layer": layer,
-                        "compress_ratio": profile.ratio_for(layer),
-                        "route_source": pending.route_source,
-                        "expert_ids": pending.route_ids,
-                        "route_weights": pending.route_weights,
-                        "shared_and_expert_ranges": len(pages),
-                        "moe_branch": kernel._summary_tensor(moe_branch),
-                        "layer_output": kernel._summary_tensor(state),
-                        "elapsed_seconds": time.perf_counter() - layer_started,
-                        "vulkan_bridge_capture": bridge_capture,
-                        "vulkan_writeback": writeback_evidence,
-                    }
-                )
-                write_json(config.report_path, report)
-
-            if token_report["completed_layers"] != list(profile.layers):
-                raise FullDepthError("禁止跳层进入 final head")
-            current_layer = None
-            stage = f"position_{position}_final_head"
-            final_ranges = session.prepare_final()
-            if final_head is None:
-                final_head = s14.FinalHeadReference(
-                    final_ranges,
-                    config.asset_root.resolve() / "range_cache",
-                    head_chunk_size=config.head_chunk_size,
-                )
-            else:
-                final_head.validate_ranges(final_ranges)
-            final = final_head.forward(state)
-            output_token_id = int(final["token_id"])
-            decoder.commit(output_token_id=output_token_id, next_states=next_states, profile=profile)
-            token_report["final"] = final
             token_report["state_committed"] = True
             report["committed_tokens"] = decoder.committed_tokens
             report["runtime"] = {
@@ -735,7 +878,7 @@ def execute(
         report["claim_limit"] = (
             "FullDepth43/native-top6 correctness path with one exact-BF16 Vulkan MoE "
             "writeback layer; not a full-layer/full-token GPU, speed, or quality claim"
-            if writeback_layers
+            if worker.writeback_layers
             else "CPU/PyTorch FullDepth43/native-top6 correctness path; not a speed or quality claim"
         )
     except Exception as error:
@@ -754,8 +897,8 @@ def execute(
             ),
         }
         report["error"] = {
-            "stage": stage,
-            "layer": current_layer,
+            "stage": worker.stage,
+            "layer": worker.current_layer,
             "position": decoder.position,
             "input_token_id": decoder.input_token_id,
             "type": type(error).__name__,
@@ -764,20 +907,19 @@ def execute(
         }
         report["claim_limit"] = "failure before current token commit; no fake token emitted"
     finally:
-        report["vulkan_writeback_layers"] = writeback_layers
-        if writeback is not None:
-            try:
-                writeback.close()
-            except Exception as close_error:
-                report["vulkan_writeback_close_error"] = {
-                    "type": type(close_error).__name__,
-                    "message": str(close_error),
-                }
-                if report.get("status") != "blocked":
-                    report["status"] = "blocked"
-                    report["claim_limit"] = (
-                        "Vulkan worker cleanup failed; execution report retained but run is not promotable"
-                    )
+        report["vulkan_writeback_layers"] = worker.writeback_layers
+        try:
+            worker.close()
+        except Exception as close_error:
+            report["vulkan_writeback_close_error"] = {
+                "type": type(close_error).__name__,
+                "message": str(close_error),
+            }
+            if report.get("status") != "blocked":
+                report["status"] = "blocked"
+                report["claim_limit"] = (
+                    "Vulkan worker cleanup failed; execution report retained but run is not promotable"
+                )
     report["execution_seconds"] = time.perf_counter() - execution_started
     write_json(config.report_path, report)
     return report
