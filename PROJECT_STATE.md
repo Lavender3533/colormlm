@@ -1284,9 +1284,13 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
 - 同一持久worker连续20次完整协议往返全部命中冻结输出SHA，平均`3.0521ms`、中位
   `2.9935ms`；该数值包含Python/arena/JSONL/GPU/readback验证，只是单个`wq_a`原语实测，
   不外推为完整token速度。
-- 这只证明首条attention投影不再需要CPU展开完整F32权重；尚未接入完整token热路径，BF16 RNE
-  仍在CPU。下一步已推进到L42其余标准投影，再单独处理`wo_a` grouped BF16-weight语义。
-- L42其余标准packed-FP8投影的真实fixture已经冻结并可从76个SHA校验资产重复生成：`wkv`
-  输出SHA为`3cc7f8f4...dd541`，`wq_b`为`284391a5...fb43c04`，`indexer.wq_b`为
-  `d9adda76...331501`，`wo_b`为`84ce63ca...db10`；采集后完整L42输出仍为
-  `853b8b94...88895`。该步消除了多投影worker的输入/裁决歧义，但尚不算GPU投影已通过。
+- L42五条标准packed-FP8投影现已在RX 5700 XT真实逐元素闭合：`wq_a`、`wkv`、`wq_b`、
+  `indexer.wq_b`、`wo_b`共46,592个BF16元素全部等于冻结fixture，suite返回`status=complete`、
+  `projection_count=5`，各输出SHA分别为`76469fd1...b0b8`、`3cc7f8f4...dd541`、
+  `284391a5...fb43c04`、`d9adda76...331501`、`84ce63ca...db10`。
+- 泛化首跑曾在`wq_b`的32,768个元素中检出1个BF16中点漂移；根因为OpenBLAS Haswell对
+  `K=1024`与宽投影的归约顺序不同。exact shader现按K冻结归约，重新运行五条全部精确通过，
+  未用容差或按输出元素打补丁。Rust example测试为`18/18`。
+- 五条标准投影不再需要CPU展开完整F32权重，但尚未接入完整token热路径，最终BF16 RNE仍在
+  CPU。下一唯一L42投影阻塞是`wo_a [8,1024,4096]` grouped BF16-weight专用Vulkan内核；
+  完整L42对齐后才推广43层并跑一次两-token真实A/B。

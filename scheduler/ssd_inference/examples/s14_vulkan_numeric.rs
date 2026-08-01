@@ -45,8 +45,10 @@ const FULLDEPTH_BRIDGE_ITERATIONS: u32 = 20;
 const WRITEBACK_WORKER_ARG: &str = "--fulldepth43-writeback-worker";
 const PRODUCTION_WORKER_ARG: &str = "--fulldepth43-production-worker";
 const FP8_PROJECTION_WORKER_ARG: &str = "--l42-wq-a-fp8-projection-worker";
+const FP8_PROJECTION_SUITE_ARG: &str = "--l42-standard-fp8-projection-suite";
 const WRITEBACK_PROTOCOL: &str = "polaris-fulldepth43-vulkan-writeback-v1";
 const FP8_PROJECTION_PROTOCOL: &str = "polaris-fulldepth43-packed-fp8-projection-v1";
+const FP8_PROJECTION_FIXTURE_DIR_ENV: &str = "POLARIS_L42_FP8_PROJECTION_FIXTURE_DIR";
 const WRITEBACK_OUTPUT_FILE: &str = "vulkan_moe_branch.bf16le.bin";
 const PAYLOAD_CACHE_GIB_ENV: &str = "POLARIS_VERIFIED_PAYLOAD_CACHE_GIB";
 const DEFAULT_PAYLOAD_CACHE_GIB: usize = 10;
@@ -76,6 +78,71 @@ const L42_WQ_A_INPUT_SHA256: &str =
 const L42_WQ_A_OUTPUT_SHA256: &str =
     "76469fd163f5db49de956eff9b29087afa4caa97d566be80bab9d9119facb0b8";
 const FP8_PROJECTION_ARENA_MAX_BYTES: u64 = 64 * 1024 * 1024;
+
+#[derive(Debug, Clone, Copy)]
+struct FrozenFp8Projection {
+    name: &'static str,
+    file_stem: &'static str,
+    n: u32,
+    k: u32,
+    weight_sha256: &'static str,
+    scale_sha256: &'static str,
+    input_sha256: &'static str,
+    output_sha256: &'static str,
+}
+
+const L42_STANDARD_FP8_PROJECTIONS: [FrozenFp8Projection; 5] = [
+    FrozenFp8Projection {
+        name: "layers.42.attn.wq_a",
+        file_stem: "wq_a",
+        n: 1024,
+        k: 4096,
+        weight_sha256: L42_WQ_A_WEIGHT_SHA256,
+        scale_sha256: L42_WQ_A_SCALE_SHA256,
+        input_sha256: L42_WQ_A_INPUT_SHA256,
+        output_sha256: L42_WQ_A_OUTPUT_SHA256,
+    },
+    FrozenFp8Projection {
+        name: "layers.42.attn.wkv",
+        file_stem: "wkv",
+        n: 512,
+        k: 4096,
+        weight_sha256: "77dd49fd2396568513c3d397b7dfc65d54c9dd3fcd2223bfef2a8bdad5f652ed",
+        scale_sha256: "9fc73bfdab7bf74ecb69af224adcefca194ce379842402e334a7547653a66abe",
+        input_sha256: L42_WQ_A_INPUT_SHA256,
+        output_sha256: "3cc7f8f4264c6448dd32f9044c0d001107f06d57209a91a80fa56bdda59dd541",
+    },
+    FrozenFp8Projection {
+        name: "layers.42.attn.wq_b",
+        file_stem: "wq_b",
+        n: 32768,
+        k: 1024,
+        weight_sha256: "533f57bca168206b55ae28d8e852ca1fb270a0978c57ae5fdbf278d45b85f45c",
+        scale_sha256: "6192668ac70e241e49ff8a04bb74f32d337575a4c259aa3eaa9e7dd5dcf1c15f",
+        input_sha256: "4ceb243521589b40b930c63b03da362163dfdc7fe12c0b76397100ec4b4c58e1",
+        output_sha256: "284391a5a45d6a5367060ecd444a21770e69fa7949455bea6823317f4fb43c04",
+    },
+    FrozenFp8Projection {
+        name: "layers.42.attn.indexer.wq_b",
+        file_stem: "indexer-wq_b",
+        n: 8192,
+        k: 1024,
+        weight_sha256: "b1da5eb69957925039b13a3b22d4132a7441cffdf19a38c491a60f645cdd83f3",
+        scale_sha256: "98202fdf7f65cdc616c6f4ecfbcd8e194f5890b21b0b351320309706d9f952e9",
+        input_sha256: "4ceb243521589b40b930c63b03da362163dfdc7fe12c0b76397100ec4b4c58e1",
+        output_sha256: "d9adda7639665267be4fac36e2a74755bb5d730a4a2a8734695198fc4f331501",
+    },
+    FrozenFp8Projection {
+        name: "layers.42.attn.wo_b",
+        file_stem: "wo_b",
+        n: 4096,
+        k: 8192,
+        weight_sha256: "07237a368057a84e20b13783b4e5a0b70d39d7a26b183924f34e87395465d112",
+        scale_sha256: "f13bf9653a967f3e3a9d3e24a5b19c2fd713bcda573c01556befe28e1550dfee",
+        input_sha256: "94b3f7fd24ee36b8553ed513d1986ef49162c053bd6dbf62f98b9579e20ea3f0",
+        output_sha256: "84ce63ca9233b07bea99741f9982accac17bc65025b0098b7017acd7dab6db10",
+    },
+];
 
 struct DeviceBuffers {
     upload_x: GpuBuffer,
@@ -1747,7 +1814,10 @@ fn validate_l42_wq_a_request(request: &Fp8ProjectionRequest, expected_epoch: u64
     Ok(())
 }
 
-fn validate_l42_wq_a_catalog(document: &serde_json::Value) -> Result<()> {
+fn validate_l42_projection_catalog(
+    document: &serde_json::Value,
+    projection: FrozenFp8Projection,
+) -> Result<()> {
     if document.get("format").and_then(serde_json::Value::as_str)
         != Some("polaris-fulldepth43-native-top6-catalog-v1")
         || document.get("repo").and_then(serde_json::Value::as_str)
@@ -1791,17 +1861,29 @@ fn validate_l42_wq_a_catalog(document: &serde_json::Value) -> Result<()> {
         }
         Ok(())
     };
+    let shape = S14MatvecShape::new(projection.n, projection.k)?.validate_fp8()?;
+    let weight_name = format!("{}.weight", projection.name);
+    let scale_name = format!("{}.scale", projection.name);
     require(
-        "layers.42.attn.wq_a.weight",
+        &weight_name,
         "F8_E4M3",
-        &[1024, 4096],
-        4_194_304,
+        &[projection.n as u64, projection.k as u64],
+        shape.fp8_weight_bytes()?,
     )?;
-    require("layers.42.attn.wq_a.scale", "F8_E8M0", &[8, 32], 256)?;
+    require(
+        &scale_name,
+        "F8_E8M0",
+        &[(projection.n / 128) as u64, (projection.k / 128) as u64],
+        shape.fp8_scale_bytes()?,
+    )?;
     Ok(())
 }
 
-fn load_l42_wq_a_projection_assets() -> Result<(Arc<[u8]>, Arc<[u8]>)> {
+fn validate_l42_wq_a_catalog(document: &serde_json::Value) -> Result<()> {
+    validate_l42_projection_catalog(document, L42_STANDARD_FP8_PROJECTIONS[0])
+}
+
+fn load_l42_projection_assets(projection: FrozenFp8Projection) -> Result<(Arc<[u8]>, Arc<[u8]>)> {
     let catalog_path = Path::new(FULLDEPTH43_CATALOG_FILE);
     let catalog_bytes =
         std::fs::read(catalog_path).with_context(|| format!("read {}", catalog_path.display()))?;
@@ -1809,7 +1891,7 @@ fn load_l42_wq_a_projection_assets() -> Result<(Arc<[u8]>, Arc<[u8]>)> {
         bail!("FullDepth43 catalog SHA-256 drift");
     }
     let catalog: serde_json::Value = serde_json::from_slice(&catalog_bytes)?;
-    validate_l42_wq_a_catalog(&catalog)?;
+    validate_l42_projection_catalog(&catalog, projection)?;
 
     let path = Path::new(MODEL_DIR).join("l42_base_cache_manifest.json");
     let manifest: BaseManifest = serde_json::from_slice(&std::fs::read(&path)?)?;
@@ -1822,30 +1904,37 @@ fn load_l42_wq_a_projection_assets() -> Result<(Arc<[u8]>, Arc<[u8]>)> {
     {
         bail!("L42 base cache manifest contract drift");
     }
-    let weight_entry = base_entry(&manifest, "layers.42.attn.wq_a.weight")?;
-    let scale_entry = base_entry(&manifest, "layers.42.attn.wq_a.scale")?;
-    if weight_entry.bytes != 4_194_304
-        || weight_entry.sha256 != L42_WQ_A_WEIGHT_SHA256
-        || scale_entry.bytes != 256
-        || scale_entry.sha256 != L42_WQ_A_SCALE_SHA256
+    let shape = S14MatvecShape::new(projection.n, projection.k)?.validate_fp8()?;
+    let weight_name = format!("{}.weight", projection.name);
+    let scale_name = format!("{}.scale", projection.name);
+    let weight_entry = base_entry(&manifest, &weight_name)?;
+    let scale_entry = base_entry(&manifest, &scale_name)?;
+    if weight_entry.bytes != shape.fp8_weight_bytes()?
+        || weight_entry.sha256 != projection.weight_sha256
+        || scale_entry.bytes != shape.fp8_scale_bytes()?
+        || scale_entry.sha256 != projection.scale_sha256
     {
-        bail!("L42 wq_a payload whitelist drift");
+        bail!("L42 {} payload whitelist drift", projection.name);
     }
     let weight = read_verified_payload(
         &weight_entry.path,
         weight_entry.bytes as usize,
-        L42_WQ_A_WEIGHT_SHA256,
+        projection.weight_sha256,
         &weight_entry.tensor,
     )?;
     let scale = read_verified_payload(
         &scale_entry.path,
         scale_entry.bytes as usize,
-        L42_WQ_A_SCALE_SHA256,
+        projection.scale_sha256,
         &scale_entry.tensor,
     )?;
     validate_e4m3fn_codes(&weight)?;
     validate_ue8m0_codes(&scale)?;
     Ok((weight, scale))
+}
+
+fn load_l42_wq_a_projection_assets() -> Result<(Arc<[u8]>, Arc<[u8]>)> {
+    load_l42_projection_assets(L42_STANDARD_FP8_PROJECTIONS[0])
 }
 
 fn checked_arena_end(view: &ProjectionArenaView) -> Result<u64> {
@@ -1972,10 +2061,11 @@ impl Drop for ProjectionBufferArena<'_> {
 }
 
 /// One exact packed-FP8 projection slot. The descriptor, command buffer,
-/// fence, packed weight and scale all survive across requests. Only the 16 KiB
-/// activation staging buffer is rewritten for each token.
+/// fence, packed weight and scale all survive across requests. Only the
+/// shape-sized activation staging buffer is rewritten for each token.
 struct PersistentFp8ProjectionSlot<'a> {
     ctx: &'a VulkanContext,
+    shape: S14MatvecShape,
     buffers: ProjectionBufferArena<'a>,
     dispatch: Option<S14Fp8Dispatch>,
     command_pool: Option<vk::CommandPool>,
@@ -1987,13 +2077,16 @@ impl<'a> PersistentFp8ProjectionSlot<'a> {
     fn new(
         ctx: &'a VulkanContext,
         pipelines: &S14NumericPipelines,
+        shape: S14MatvecShape,
         weight: &[u8],
         scale: &[u8],
     ) -> Result<Self> {
-        if weight.len() != 4_194_304 || scale.len() != 256 {
-            bail!("L42 wq_a persistent payload byte drift");
+        let shape = shape.validate_fp8()?;
+        if weight.len() as u64 != shape.fp8_weight_bytes()?
+            || scale.len() as u64 != shape.fp8_scale_bytes()?
+        {
+            bail!("L42 packed-FP8 persistent payload byte drift");
         }
-        let shape = S14MatvecShape::new(1024, 4096)?.validate_fp8()?;
         let x_bytes = shape.fp32_input_bytes()?;
         let weight_bytes = shape.fp8_weight_bytes()?;
         let scale_bytes = shape.fp8_scale_bytes()?;
@@ -2021,7 +2114,7 @@ impl<'a> PersistentFp8ProjectionSlot<'a> {
             true,
         )?);
         if buffers.buffers.len() != 8 {
-            bail!("L42 wq_a persistent buffer layout drift");
+            bail!("L42 packed-FP8 persistent buffer layout drift");
         }
         unsafe {
             buffers.get(PROJECTION_UPLOAD_WEIGHT).write_at(0, weight);
@@ -2030,6 +2123,7 @@ impl<'a> PersistentFp8ProjectionSlot<'a> {
 
         let mut slot = Self {
             ctx,
+            shape,
             buffers,
             dispatch: None,
             command_pool: None,
@@ -2065,10 +2159,10 @@ impl<'a> PersistentFp8ProjectionSlot<'a> {
     fn begin_recording(&self) -> Result<vk::CommandBuffer> {
         let cb = self
             .command_buffer
-            .ok_or_else(|| anyhow::anyhow!("L42 wq_a command buffer is unavailable"))?;
+            .ok_or_else(|| anyhow::anyhow!("L42 packed-FP8 command buffer is unavailable"))?;
         let fence = self
             .fence
-            .ok_or_else(|| anyhow::anyhow!("L42 wq_a fence is unavailable"))?;
+            .ok_or_else(|| anyhow::anyhow!("L42 packed-FP8 fence is unavailable"))?;
         unsafe {
             self.ctx.device.reset_fences(&[fence])?;
             self.ctx
@@ -2086,7 +2180,7 @@ impl<'a> PersistentFp8ProjectionSlot<'a> {
     fn submit_and_wait(&self, cb: vk::CommandBuffer) -> Result<()> {
         let fence = self
             .fence
-            .ok_or_else(|| anyhow::anyhow!("L42 wq_a fence is unavailable"))?;
+            .ok_or_else(|| anyhow::anyhow!("L42 packed-FP8 fence is unavailable"))?;
         let command_buffers = [cb];
         unsafe {
             self.ctx.device.end_command_buffer(cb)?;
@@ -2108,14 +2202,14 @@ impl<'a> PersistentFp8ProjectionSlot<'a> {
                 cb,
                 self.buffers.get(PROJECTION_UPLOAD_WEIGHT),
                 self.buffers.get(PROJECTION_WEIGHT),
-                4_194_304,
+                self.shape.fp8_weight_bytes()?,
             );
             copy(
                 self.ctx,
                 cb,
                 self.buffers.get(PROJECTION_UPLOAD_SCALE),
                 self.buffers.get(PROJECTION_SCALE),
-                256,
+                self.shape.fp8_scale_bytes()?,
             );
             let barrier = vk::MemoryBarrier::default()
                 .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
@@ -2134,8 +2228,8 @@ impl<'a> PersistentFp8ProjectionSlot<'a> {
     }
 
     fn execute(&self, pipelines: &S14NumericPipelines, input: &[f32]) -> Result<Vec<f32>> {
-        if input.len() != 4096 || input.iter().any(|value| !value.is_finite()) {
-            bail!("L42 wq_a persistent activation contract drift");
+        if input.len() != self.shape.k as usize || input.iter().any(|value| !value.is_finite()) {
+            bail!("L42 packed-FP8 persistent activation contract drift");
         }
         unsafe {
             self.buffers
@@ -2149,7 +2243,7 @@ impl<'a> PersistentFp8ProjectionSlot<'a> {
                 cb,
                 self.buffers.get(PROJECTION_UPLOAD_X),
                 self.buffers.get(PROJECTION_X),
-                16_384,
+                self.shape.fp32_input_bytes()?,
             );
             let upload_barrier = vk::MemoryBarrier::default()
                 .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
@@ -2166,7 +2260,7 @@ impl<'a> PersistentFp8ProjectionSlot<'a> {
             let dispatch = self
                 .dispatch
                 .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("L42 wq_a dispatch is unavailable"))?;
+                .ok_or_else(|| anyhow::anyhow!("L42 packed-FP8 dispatch is unavailable"))?;
             pipelines.cmd_fp8_matvec(self.ctx, cb, dispatch);
             let readback_barrier = vk::MemoryBarrier::default()
                 .src_access_mask(vk::AccessFlags::SHADER_WRITE)
@@ -2185,14 +2279,14 @@ impl<'a> PersistentFp8ProjectionSlot<'a> {
                 cb,
                 self.buffers.get(PROJECTION_Y),
                 self.buffers.get(PROJECTION_READBACK),
-                4_096,
+                self.shape.fp32_output_bytes()?,
             );
         }
         self.submit_and_wait(cb)?;
         let raw = unsafe {
             std::slice::from_raw_parts(
                 self.buffers.get(PROJECTION_READBACK).mapped() as *const f32,
-                1024,
+                self.shape.n as usize,
             )
             .to_vec()
         };
@@ -2363,7 +2457,13 @@ fn run_l42_wq_a_fp8_projection_worker() -> Result<()> {
         );
     }
     let pipelines = S14NumericPipelines::new_exact_audit(&ctx)?;
-    let slot = match PersistentFp8ProjectionSlot::new(&ctx, &pipelines, &weight, &scale) {
+    let slot = match PersistentFp8ProjectionSlot::new(
+        &ctx,
+        &pipelines,
+        S14MatvecShape::new(1024, 4096)?,
+        &weight,
+        &scale,
+    ) {
         Ok(value) => value,
         Err(error) => {
             pipelines.destroy(&ctx);
@@ -2376,7 +2476,277 @@ fn run_l42_wq_a_fp8_projection_worker() -> Result<()> {
     result
 }
 
+fn validate_l42_projection_fixture_manifest(
+    document: &serde_json::Value,
+    projection: FrozenFp8Projection,
+) -> Result<()> {
+    if document.get("format").and_then(serde_json::Value::as_str)
+        != Some("polaris-l42-packed-fp8-projection-fixtures-v1")
+        || document.get("repo").and_then(serde_json::Value::as_str)
+            != Some("deepseek-ai/DeepSeek-V4-Flash-0731")
+        || document.get("revision").and_then(serde_json::Value::as_str) != Some(REVISION)
+        || document.get("layer").and_then(serde_json::Value::as_u64) != Some(42)
+        || document
+            .get("catalog_sha256")
+            .and_then(serde_json::Value::as_str)
+            != Some(FULLDEPTH43_CATALOG_SHA256)
+        || document
+            .get("projection_count")
+            .and_then(serde_json::Value::as_u64)
+            != Some(L42_STANDARD_FP8_PROJECTIONS.len() as u64)
+        || document
+            .get("layer_output_sha256")
+            .and_then(serde_json::Value::as_str)
+            != Some("853b8b947a3f7a275cf748d7e97a311ebb22323cd0c2f3e5e973f27b04388895")
+    {
+        bail!("L42 packed-FP8 fixture manifest identity drift");
+    }
+    let entries = document
+        .get("projections")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| anyhow::anyhow!("L42 packed-FP8 fixture projections are missing"))?;
+    if entries.len() != L42_STANDARD_FP8_PROJECTIONS.len() {
+        bail!("L42 packed-FP8 fixture projection count drift");
+    }
+    let matches: Vec<&serde_json::Value> = entries
+        .iter()
+        .filter(|entry| {
+            entry.get("projection").and_then(serde_json::Value::as_str) == Some(projection.name)
+        })
+        .collect();
+    if matches.len() != 1 {
+        bail!("fixture must contain exactly one {}", projection.name);
+    }
+    let entry = matches[0];
+    let shape = S14MatvecShape::new(projection.n, projection.k)?.validate_fp8()?;
+    let input = entry
+        .get("input")
+        .ok_or_else(|| anyhow::anyhow!("{} fixture input is missing", projection.name))?;
+    let output = entry
+        .get("output")
+        .ok_or_else(|| anyhow::anyhow!("{} fixture output is missing", projection.name))?;
+    let weight = entry
+        .get("weight")
+        .ok_or_else(|| anyhow::anyhow!("{} fixture weight is missing", projection.name))?;
+    let scale = entry
+        .get("scale")
+        .ok_or_else(|| anyhow::anyhow!("{} fixture scale is missing", projection.name))?;
+    let expected_input_shape = vec![1, 1, projection.k as u64];
+    let expected_output_shape = vec![1, 1, projection.n as u64];
+    let expected_weight_shape = vec![projection.n as u64, projection.k as u64];
+    let expected_scale_shape = vec![(projection.n / 128) as u64, (projection.k / 128) as u64];
+    let parse_shape = |value: &serde_json::Value| -> Option<Vec<u64>> {
+        value
+            .get("shape")?
+            .as_array()?
+            .iter()
+            .map(serde_json::Value::as_u64)
+            .collect()
+    };
+    if entry.get("n").and_then(serde_json::Value::as_u64) != Some(projection.n as u64)
+        || entry.get("k").and_then(serde_json::Value::as_u64) != Some(projection.k as u64)
+        || entry
+            .get("activation_contract")
+            .and_then(serde_json::Value::as_str)
+            != Some("cpu_e4m3fn_quant_dequant_f32")
+        || entry
+            .get("output_rounding")
+            .and_then(serde_json::Value::as_str)
+            != Some("bf16_rne_then_f32_le")
+        || input.get("bytes").and_then(serde_json::Value::as_u64) != Some(shape.fp32_input_bytes()?)
+        || input.get("sha256").and_then(serde_json::Value::as_str) != Some(projection.input_sha256)
+        || parse_shape(input).as_deref() != Some(expected_input_shape.as_slice())
+        || output.get("bytes").and_then(serde_json::Value::as_u64)
+            != Some(shape.fp32_output_bytes()?)
+        || output.get("sha256").and_then(serde_json::Value::as_str)
+            != Some(projection.output_sha256)
+        || parse_shape(output).as_deref() != Some(expected_output_shape.as_slice())
+        || weight.get("bytes").and_then(serde_json::Value::as_u64)
+            != Some(shape.fp8_weight_bytes()?)
+        || weight.get("sha256").and_then(serde_json::Value::as_str)
+            != Some(projection.weight_sha256)
+        || parse_shape(weight).as_deref() != Some(expected_weight_shape.as_slice())
+        || scale.get("bytes").and_then(serde_json::Value::as_u64) != Some(shape.fp8_scale_bytes()?)
+        || scale.get("sha256").and_then(serde_json::Value::as_str) != Some(projection.scale_sha256)
+        || parse_shape(scale).as_deref() != Some(expected_scale_shape.as_slice())
+    {
+        bail!("{} fixture tensor/SHA contract drift", projection.name);
+    }
+    Ok(())
+}
+
+fn read_l42_projection_fixture(
+    root: &Path,
+    projection: FrozenFp8Projection,
+    kind: &str,
+    element_count: usize,
+    expected_sha256: &str,
+) -> Result<Vec<f32>> {
+    if kind != "input" && kind != "output.bf16-f32le" {
+        bail!("unsupported L42 projection fixture kind");
+    }
+    let filename = if kind == "input" {
+        format!("{}.input.f32le.bin", projection.file_stem)
+    } else {
+        format!("{}.output.bf16-f32le.bin", projection.file_stem)
+    };
+    let path = root.join(filename);
+    let resolved = path
+        .canonicalize()
+        .with_context(|| format!("resolve {} fixture", projection.name))?;
+    if resolved.parent() != Some(root)
+        || resolved.extension().and_then(|value| value.to_str()) != Some("bin")
+    {
+        bail!("{} fixture path escaped frozen directory", projection.name);
+    }
+    let payload = std::fs::read(&resolved)?;
+    if payload.len() != element_count * std::mem::size_of::<f32>()
+        || sha256_bytes(&payload) != expected_sha256
+    {
+        bail!("{} {kind} fixture byte/SHA drift", projection.name);
+    }
+    let values: Vec<f32> = payload
+        .chunks_exact(4)
+        .map(|chunk| f32::from_le_bytes(chunk.try_into().unwrap()))
+        .collect();
+    if values.len() != element_count || values.iter().any(|value| !value.is_finite()) {
+        bail!("{} {kind} fixture shape/non-finite drift", projection.name);
+    }
+    Ok(values)
+}
+
+fn f32_le_sha256(values: &[f32]) -> String {
+    let mut payload = Vec::with_capacity(std::mem::size_of_val(values));
+    for value in values {
+        payload.extend_from_slice(&value.to_le_bytes());
+    }
+    sha256_bytes(&payload)
+}
+
+fn run_l42_standard_fp8_projection_suite() -> Result<()> {
+    let root = PathBuf::from(
+        std::env::var_os(FP8_PROJECTION_FIXTURE_DIR_ENV)
+            .ok_or_else(|| anyhow::anyhow!("{FP8_PROJECTION_FIXTURE_DIR_ENV} is required"))?,
+    )
+    .canonicalize()?;
+    if !root.is_dir() {
+        bail!("L42 packed-FP8 fixture root is not a directory");
+    }
+    let manifest_path = root.join("manifest.json");
+    let manifest: serde_json::Value = serde_json::from_slice(&std::fs::read(&manifest_path)?)?;
+    for projection in L42_STANDARD_FP8_PROJECTIONS {
+        validate_l42_projection_fixture_manifest(&manifest, projection)?;
+    }
+
+    let ctx = VulkanContext::init()?;
+    let properties = unsafe { ctx.instance.get_physical_device_properties(ctx.physical) };
+    if properties.vendor_id != AMD_VENDOR_ID || properties.device_id != NAVI10_DEVICE_ID {
+        bail!("L42 FP8 suite requires RX 5700 XT");
+    }
+    let pipelines = S14NumericPipelines::new_exact_audit(&ctx)?;
+    let result = (|| -> Result<Vec<serde_json::Value>> {
+        let mut reports = Vec::with_capacity(L42_STANDARD_FP8_PROJECTIONS.len());
+        for projection in L42_STANDARD_FP8_PROJECTIONS {
+            let shape = S14MatvecShape::new(projection.n, projection.k)?.validate_fp8()?;
+            let input = read_l42_projection_fixture(
+                &root,
+                projection,
+                "input",
+                projection.k as usize,
+                projection.input_sha256,
+            )?;
+            let expected_output = read_l42_projection_fixture(
+                &root,
+                projection,
+                "output.bf16-f32le",
+                projection.n as usize,
+                projection.output_sha256,
+            )?;
+            let load_started = Instant::now();
+            let (weight, scale) = load_l42_projection_assets(projection)?;
+            let slot = PersistentFp8ProjectionSlot::new(&ctx, &pipelines, shape, &weight, &scale)?;
+            let load_and_upload_ms = load_started.elapsed().as_secs_f64() * 1000.0;
+            let execute_started = Instant::now();
+            let output = slot.execute(&pipelines, &input)?;
+            let execute_ms = execute_started.elapsed().as_secs_f64() * 1000.0;
+            let output_sha256 = f32_le_sha256(&output);
+            if output_sha256 != projection.output_sha256 || output != expected_output {
+                let mismatch_count = output
+                    .iter()
+                    .zip(&expected_output)
+                    .filter(|(actual, expected)| actual.to_bits() != expected.to_bits())
+                    .count();
+                let first_mismatch = output
+                    .iter()
+                    .zip(&expected_output)
+                    .enumerate()
+                    .find(|(_, (actual, expected))| actual.to_bits() != expected.to_bits())
+                    .map(|(index, (actual, expected))| {
+                        format!(
+                            "index={index}, actual={actual:?} (0x{:08x}), expected={expected:?} (0x{:08x})",
+                            actual.to_bits(),
+                            expected.to_bits()
+                        )
+                    })
+                    .unwrap_or_else(|| "none".to_string());
+                if std::env::var_os("POLARIS_L42_FP8_DUMP_DRIFT").is_some() {
+                    let mut payload = Vec::with_capacity(output.len() * 4);
+                    for value in &output {
+                        payload.extend_from_slice(&value.to_le_bytes());
+                    }
+                    std::fs::write(
+                        root.join(format!(
+                            "{}.gpu-actual.bf16-f32le.bin",
+                            projection.file_stem
+                        )),
+                        payload,
+                    )?;
+                }
+                bail!(
+                    "{} GPU BF16 output drift: mismatch_count={mismatch_count}/{}, actual_sha256={output_sha256}, expected_sha256={}, first_mismatch=({first_mismatch})",
+                    projection.name,
+                    output.len(),
+                    projection.output_sha256,
+                );
+            }
+            drop(slot);
+            reports.push(serde_json::json!({
+                "projection": projection.name,
+                "n": projection.n,
+                "k": projection.k,
+                "weight_sha256": projection.weight_sha256,
+                "scale_sha256": projection.scale_sha256,
+                "input_sha256": projection.input_sha256,
+                "output_sha256": output_sha256,
+                "bf16_elements_exact": projection.n,
+                "load_verify_upload_ms": load_and_upload_ms,
+                "execute_readback_round_verify_ms": execute_ms,
+            }));
+        }
+        Ok(reports)
+    })();
+    pipelines.destroy(&ctx);
+    let reports = result?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "format": "polaris-l42-standard-packed-fp8-vulkan-suite-v1",
+            "status": "complete",
+            "device": ctx.gpu_name,
+            "revision": REVISION,
+            "numeric_mode": "packed_fp8_e4m3_ue8m0_exact_audit",
+            "projection_count": reports.len(),
+            "projections": reports,
+            "claim_limit": "L42 standard projection exact suite; wo_a grouped and full-token integration remain unproven",
+        }))?
+    );
+    Ok(())
+}
+
 fn main() -> Result<()> {
+    if std::env::args().any(|value| value == FP8_PROJECTION_SUITE_ARG) {
+        return run_l42_standard_fp8_projection_suite();
+    }
     if std::env::args().any(|value| value == FP8_PROJECTION_WORKER_ARG) {
         return run_l42_wq_a_fp8_projection_worker();
     }
@@ -5920,5 +6290,100 @@ mod fp8_projection_worker_tests {
                 .bytes()
                 .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)));
         }
+    }
+
+    #[test]
+    fn standard_projection_suite_contract_covers_five_distinct_shapes() {
+        let observed: Vec<(&str, u32, u32)> = L42_STANDARD_FP8_PROJECTIONS
+            .iter()
+            .map(|projection| (projection.name, projection.n, projection.k))
+            .collect();
+        assert_eq!(
+            observed,
+            vec![
+                ("layers.42.attn.wq_a", 1024, 4096),
+                ("layers.42.attn.wkv", 512, 4096),
+                ("layers.42.attn.wq_b", 32768, 1024),
+                ("layers.42.attn.indexer.wq_b", 8192, 1024),
+                ("layers.42.attn.wo_b", 4096, 8192),
+            ]
+        );
+        for projection in L42_STANDARD_FP8_PROJECTIONS {
+            let shape = S14MatvecShape::new(projection.n, projection.k)
+                .unwrap()
+                .validate_fp8()
+                .unwrap();
+            assert_eq!(
+                shape.fp8_weight_bytes().unwrap(),
+                projection.n as u64 * projection.k as u64
+            );
+            for digest in [
+                projection.weight_sha256,
+                projection.scale_sha256,
+                projection.input_sha256,
+                projection.output_sha256,
+            ] {
+                assert_eq!(digest.len(), 64);
+            }
+        }
+    }
+
+    #[test]
+    fn standard_projection_fixture_manifest_rejects_sha_drift() {
+        let projections: Vec<serde_json::Value> = L42_STANDARD_FP8_PROJECTIONS
+            .iter()
+            .map(|projection| {
+                let shape = S14MatvecShape::new(projection.n, projection.k)
+                    .unwrap()
+                    .validate_fp8()
+                    .unwrap();
+                serde_json::json!({
+                    "projection": projection.name,
+                    "n": projection.n,
+                    "k": projection.k,
+                    "activation_contract": "cpu_e4m3fn_quant_dequant_f32",
+                    "output_rounding": "bf16_rne_then_f32_le",
+                    "input": {
+                        "shape": [1, 1, projection.k],
+                        "bytes": shape.fp32_input_bytes().unwrap(),
+                        "sha256": projection.input_sha256,
+                    },
+                    "output": {
+                        "shape": [1, 1, projection.n],
+                        "bytes": shape.fp32_output_bytes().unwrap(),
+                        "sha256": projection.output_sha256,
+                    },
+                    "weight": {
+                        "shape": [projection.n, projection.k],
+                        "bytes": shape.fp8_weight_bytes().unwrap(),
+                        "sha256": projection.weight_sha256,
+                    },
+                    "scale": {
+                        "shape": [projection.n / 128, projection.k / 128],
+                        "bytes": shape.fp8_scale_bytes().unwrap(),
+                        "sha256": projection.scale_sha256,
+                    },
+                })
+            })
+            .collect();
+        let mut manifest = serde_json::json!({
+            "format": "polaris-l42-packed-fp8-projection-fixtures-v1",
+            "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+            "revision": REVISION,
+            "layer": 42,
+            "catalog_sha256": FULLDEPTH43_CATALOG_SHA256,
+            "projection_count": 5,
+            "projections": projections,
+            "layer_output_sha256": "853b8b947a3f7a275cf748d7e97a311ebb22323cd0c2f3e5e973f27b04388895",
+        });
+        for projection in L42_STANDARD_FP8_PROJECTIONS {
+            validate_l42_projection_fixture_manifest(&manifest, projection).unwrap();
+        }
+        manifest["projections"][4]["output"]["sha256"] = serde_json::json!("0".repeat(64));
+        assert!(validate_l42_projection_fixture_manifest(
+            &manifest,
+            L42_STANDARD_FP8_PROJECTIONS[4]
+        )
+        .is_err());
     }
 }
