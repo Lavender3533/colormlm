@@ -1,0 +1,496 @@
+{
+  "anchors": {
+    "attention_weight_bytes_s14": 1750339584,
+    "cpu_report_sha256": "19dacde039c0b5510db3067145b1809aa6559a6bd89a1681d4b1d7d05a1396c2",
+    "cpu_warm_token_ms": 57979.14700000183,
+    "device": "AMD Radeon RX 5700 XT",
+    "expert_page_bytes": 13369344,
+    "final_norm_head_bytes": 1059332116,
+    "gpu_evidence_sha256": "cbb6f8c47e65fb32d5e84576a95a2d8e54336695855407ae97eb78f9e45de87c",
+    "hc_weight_bytes_s14": 44043216,
+    "layer_count": 14,
+    "layers": [
+      0,
+      1,
+      2,
+      6,
+      7,
+      14,
+      15,
+      22,
+      23,
+      30,
+      31,
+      40,
+      41,
+      42
+    ],
+    "model_revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+    "route_catalog_sha256": "d95192e3f3be4c39b79addeb9e7f6b2852f9f0be7e7fea0a55419b78e2853f48",
+    "routed_bytes_per_layer": 80216064,
+    "router_weight_bytes_s14": 47987712,
+    "s14_current_known_gpu_anchor_ms": 20.347605599999998,
+    "s14_current_moe_anchor_ms": 19.1744,
+    "s14_expert_page_count": 3584,
+    "s14_fixed_weight_bytes": 3254045668,
+    "s14_full_expert_bank_bytes": 47915728896,
+    "s14_profile_bytes": 51169774564,
+    "s14_wq_a_floor_ms": 1.1732056,
+    "shared_and_batch_residual_ms_per_layer": 0.42737199999999986,
+    "shared_bytes_per_layer": 25167360,
+    "shared_weight_bytes_s14": 352343040,
+    "single_expert_chain_ms": 0.157038,
+    "single_expert_dispatches": 5,
+    "single_expert_iterations": 100,
+    "six_routed_envelope_ms_per_layer": 0.9422280000000001,
+    "top6_dispatches": 35,
+    "top6_evidence_sha256": "d4f14ebb3efc071df931fbced94781c104e89d300688196e0132699787b74790",
+    "top6_iterations": 1,
+    "top6_routed_plus_shared_ms": 1.3696,
+    "two_token_current_pages": 84,
+    "two_token_expert_miss_bytes": 1016070144,
+    "two_token_intersection_by_layer": {
+      "0": 0,
+      "1": 0,
+      "14": 0,
+      "15": 1,
+      "2": 1,
+      "22": 1,
+      "23": 0,
+      "30": 1,
+      "31": 0,
+      "40": 0,
+      "41": 2,
+      "42": 2,
+      "6": 0,
+      "7": 0
+    },
+    "two_token_new_bytes": 1016078336,
+    "two_token_previous_only_hit_rate": 0.09523809523809523,
+    "two_token_previous_overlap_pages": 8,
+    "two_token_report_sha256": "5ce3d5bcf1f1ad788659487cd070005078787736d104cba39fcb71108a25abe8",
+    "wq_a_dispatches": 1,
+    "wq_a_iterations": 100,
+    "wq_a_linear_ms": 0.0838004
+  },
+  "claim_limit": "阶段 roofline/调度条件，不是完整 GPU token 实测，不证明 20/50 tok/s，不证明质量。",
+  "cpu_observation": {
+    "measured_tps": 0.01724758041024592,
+    "speedup_ratio_to_20_tps": 1159.5829400000366,
+    "speedup_ratio_to_50_tps": 2898.9573500000915,
+    "use_limit": "只是 CPU 真实基线与需求倍数；不参与 GPU 阶段时间计算，不是单核外推。",
+    "warm_cache_ms_per_token": 57979.14700000183
+  },
+  "format": "polaris-s14-stage-roofline-v1",
+  "hard_conclusions": [
+    "当前 RX5700XT MoE+WQ_A 必要子操作锚点为 20.3476056 ms/token；尚未包含完整 attention、HC、router、norm/head 和 host 开销。",
+    "20 tok/s 只在乐观 shared/DMA 重叠、其他未测阶段为 0 时存在条件可行性；所需专家命中率由报告前沿给出。",
+    "50 tok/s 在当前单 token 锚点下即使 100% 专家命中也超出 20 ms；必须先有 batch/kernel fusion 加速，然后才有非零的未测阶段预算。",
+    "真实 token0->token1 仅复用 8/84 专家页；仅保留上一 token top-6 不足以满足 20 tok/s 的理论命中门，需要更大历史工作集或成功的预测预取。"
+  ],
+  "hardware_roof": {
+    "capacity_caveat": "容量未扣 KV/activation/workspace/runtime，且容量覆盖不等于路由命中率。",
+    "pcie_bytes_per_second": 22030000000.0,
+    "pcie_semantics": "optimistic SSD/RAM-to-device transfer roof; actual SSD path can only be slower",
+    "ram_bytes": 34359738368,
+    "ram_expert_pages_after_fixed_mirror": 2326,
+    "s14_fixed_weight_bytes": 3254045668,
+    "s14_full_expert_bank_bytes": 47915728896,
+    "s14_profile_bytes": 51169774564,
+    "s14_profile_fits_ram": false,
+    "s14_profile_fits_ssd": true,
+    "ssd_bytes": 126701535232,
+    "ssd_expert_pages_after_fixed_mirror": 9233,
+    "vram_bytes": 8589934592
+  },
+  "profile": "S14/top6 draft GPU token only; not final quality authority",
+  "shortest_exact_kernel_order": [
+    {
+      "dependency": "previous layer output",
+      "order": 1,
+      "stage": "HC-attention pre + attention norm"
+    },
+    {
+      "dependency": "wq_a -> q_norm/wq_b and wkv -> sparse attention -> wo_a/wo_b",
+      "order": 2,
+      "stage": "attention"
+    },
+    {
+      "dependency": "attention branch",
+      "order": 3,
+      "stage": "HC-attention post -> HC-FFN pre -> FFN norm"
+    },
+    {
+      "dependency": "FFN input; exact expert IDs become known here",
+      "order": 4,
+      "stage": "native top-6 router"
+    },
+    {
+      "dependency": "router; only these two branches may overlap exactly",
+      "order": 5,
+      "stage": "async routed-page lookup/SSD->GPU copy || shared expert"
+    },
+    {
+      "dependency": "all six pages resident; current measured order is 6x[w1,w3,SwiGLU,w2,weighted accumulate]",
+      "order": 6,
+      "stage": "six routed experts"
+    },
+    {
+      "dependency": "both MoE branches",
+      "order": 7,
+      "stage": "routed/shared accumulate -> HC-FFN post"
+    },
+    {
+      "dependency": "current layer output; no exact future-layer route prefetch before this",
+      "order": 8,
+      "stage": "next retained layer"
+    },
+    {
+      "dependency": "L42 output",
+      "order": 9,
+      "stage": "final HC -> norm -> full BF16 head/top1"
+    }
+  ],
+  "targets": {
+    "20_tps": {
+      "batch_requirements": [
+        {
+          "batch_size": 1,
+          "minimum_fraction_of_ideal_linear_batch_speedup": 1.0,
+          "possible_under_ideal_batching": true
+        },
+        {
+          "batch_size": 2,
+          "minimum_fraction_of_ideal_linear_batch_speedup": 0.5,
+          "possible_under_ideal_batching": true
+        },
+        {
+          "batch_size": 4,
+          "minimum_fraction_of_ideal_linear_batch_speedup": 0.25,
+          "possible_under_ideal_batching": true
+        },
+        {
+          "batch_size": 8,
+          "minimum_fraction_of_ideal_linear_batch_speedup": 0.125,
+          "possible_under_ideal_batching": true
+        }
+      ],
+      "command_buffer_requirements": {
+        "per_measured_gpu_dispatch": {
+          "command_buffers_per_token": 504,
+          "maximum_average_submit_overhead_us_at_current_kernels_100_percent_hit": 58.834115873015875
+        },
+        "resident_per_layer": {
+          "command_buffers_per_token": 15,
+          "maximum_average_submit_overhead_us_at_current_kernels_100_percent_hit": 1976.8262933333333
+        },
+        "route_split_per_layer": {
+          "command_buffers_per_token": 29,
+          "maximum_average_submit_overhead_us_at_current_kernels_100_percent_hit": 1022.4963586206896
+        },
+        "whole_token_persistent": {
+          "command_buffers_per_token": 1,
+          "maximum_average_submit_overhead_us_at_current_kernels_100_percent_hit": 29652.3944
+        }
+      },
+      "current_kernel_100_percent_hit_floor": {
+        "command_buffers_per_token": 29,
+        "config": {
+          "attention_remainder_ms_per_layer": 0.0,
+          "batch_efficiency": 1.0,
+          "batch_size": 1,
+          "command_buffer_mode": "route_split_per_layer",
+          "expert_cache_hit_rate": 1.0,
+          "hc_ms_per_layer": 0.0,
+          "kernel_fusion_speedup": 1.0,
+          "measured_kernel_speedup": 1.0,
+          "norm_head_ms_per_token": 0.0,
+          "pcie_bytes_per_second": 22030000000.0,
+          "router_ms_per_layer": 0.0,
+          "submit_overhead_us": 0.0,
+          "target_tps": 20.0,
+          "vram_bytes": 8589934592
+        },
+        "expert_miss_bytes": 0.0,
+        "gpu_copy_compute_critical_ms": 20.347605599999998,
+        "host_dispatch_work_ms": 0.0,
+        "ideal_pipeline_period_ms": 20.347605599999998,
+        "ideal_pipeline_throughput_tps": 49.14583168449069,
+        "sequential_latency_ms": 20.347605599999998,
+        "shared_copy_overlap_credit_ms": 0.0,
+        "stage_work_ms": {
+          "attention": 1.1732055999999997,
+          "dispatch_overhead": 0.0,
+          "hc": 0.0,
+          "norm_head": 0.0,
+          "router": 0.0,
+          "shared": 5.983208,
+          "six_routed": 13.191192000000001,
+          "ssd_miss": 0.0
+        },
+        "target_met_under_ideal_pipeline": true,
+        "target_period_ms": 50.0
+      },
+      "hard_stage_budget": {
+        "current_known_gpu_anchor_ms": 20.347605599999998,
+        "joint_unmeasured_pool_ms_at_100_percent_expert_hit": 29.652394400000002,
+        "stages": {
+          "attention": {
+            "current_measured_or_zero_floor_ms": 1.1732056,
+            "exclusive_sequential_max_ms_if_all_other_unmeasured_stages_are_zero": 30.8256,
+            "measurement_status": "measured necessary sub-operation/envelope"
+          },
+          "dispatch_overhead": {
+            "current_measured_or_zero_floor_ms": 0.0,
+            "exclusive_sequential_max_ms_if_all_other_unmeasured_stages_are_zero": 29.652394400000002,
+            "measurement_status": "unmeasured; zero is a roofline placeholder, not an estimate"
+          },
+          "hc": {
+            "current_measured_or_zero_floor_ms": 0.0,
+            "exclusive_sequential_max_ms_if_all_other_unmeasured_stages_are_zero": 29.652394400000002,
+            "measurement_status": "unmeasured; zero is a roofline placeholder, not an estimate"
+          },
+          "norm_head": {
+            "current_measured_or_zero_floor_ms": 0.0,
+            "exclusive_sequential_max_ms_if_all_other_unmeasured_stages_are_zero": 29.652394400000002,
+            "measurement_status": "unmeasured; zero is a roofline placeholder, not an estimate"
+          },
+          "router": {
+            "current_measured_or_zero_floor_ms": 0.0,
+            "exclusive_sequential_max_ms_if_all_other_unmeasured_stages_are_zero": 29.652394400000002,
+            "measurement_status": "unmeasured; zero is a roofline placeholder, not an estimate"
+          },
+          "shared": {
+            "current_measured_or_zero_floor_ms": 5.983207999999998,
+            "exclusive_sequential_max_ms_if_all_other_unmeasured_stages_are_zero": 35.635602399999996,
+            "measurement_status": "measured necessary sub-operation/envelope"
+          },
+          "six_routed": {
+            "current_measured_or_zero_floor_ms": 13.191192000000001,
+            "exclusive_sequential_max_ms_if_all_other_unmeasured_stages_are_zero": 42.84358640000001,
+            "measurement_status": "measured necessary sub-operation/envelope"
+          },
+          "ssd_miss": {
+            "current_measured_or_zero_floor_ms": 0.0,
+            "exclusive_pipeline_max_ms_with_shared_overlap": 35.635602399999996,
+            "exclusive_sequential_max_ms_if_all_other_unmeasured_stages_are_zero": 29.652394400000002,
+            "measurement_status": "unmeasured; zero is a roofline placeholder, not an estimate"
+          }
+        },
+        "target_tps": 20.0,
+        "token_period_ms": 50.0
+      },
+      "minimum_ideal_batch_size": 1,
+      "minimum_measured_kernel_speedup_at_100_percent_hit": 1.0,
+      "required_expert_cache_hit_rate_current_kernels": 0.300948426283132,
+      "required_hit_rate_at_zero_unknown_budget_and_minimum_speedup": 0.3009484262828496,
+      "target_tps": 20.0
+    },
+    "50_tps": {
+      "batch_requirements": [
+        {
+          "batch_size": 1,
+          "minimum_fraction_of_ideal_linear_batch_speedup": 1.0173802799999492,
+          "possible_under_ideal_batching": false
+        },
+        {
+          "batch_size": 2,
+          "minimum_fraction_of_ideal_linear_batch_speedup": 0.5086901399999746,
+          "possible_under_ideal_batching": true
+        },
+        {
+          "batch_size": 4,
+          "minimum_fraction_of_ideal_linear_batch_speedup": 0.2543450699999873,
+          "possible_under_ideal_batching": true
+        },
+        {
+          "batch_size": 8,
+          "minimum_fraction_of_ideal_linear_batch_speedup": 0.12717253499999365,
+          "possible_under_ideal_batching": true
+        }
+      ],
+      "command_buffer_requirements": {
+        "per_measured_gpu_dispatch": {
+          "command_buffers_per_token": 504,
+          "maximum_average_submit_overhead_us_at_current_kernels_100_percent_hit": null
+        },
+        "resident_per_layer": {
+          "command_buffers_per_token": 15,
+          "maximum_average_submit_overhead_us_at_current_kernels_100_percent_hit": null
+        },
+        "route_split_per_layer": {
+          "command_buffers_per_token": 29,
+          "maximum_average_submit_overhead_us_at_current_kernels_100_percent_hit": null
+        },
+        "whole_token_persistent": {
+          "command_buffers_per_token": 1,
+          "maximum_average_submit_overhead_us_at_current_kernels_100_percent_hit": null
+        }
+      },
+      "current_kernel_100_percent_hit_floor": {
+        "command_buffers_per_token": 29,
+        "config": {
+          "attention_remainder_ms_per_layer": 0.0,
+          "batch_efficiency": 1.0,
+          "batch_size": 1,
+          "command_buffer_mode": "route_split_per_layer",
+          "expert_cache_hit_rate": 1.0,
+          "hc_ms_per_layer": 0.0,
+          "kernel_fusion_speedup": 1.0,
+          "measured_kernel_speedup": 1.0,
+          "norm_head_ms_per_token": 0.0,
+          "pcie_bytes_per_second": 22030000000.0,
+          "router_ms_per_layer": 0.0,
+          "submit_overhead_us": 0.0,
+          "target_tps": 50.0,
+          "vram_bytes": 8589934592
+        },
+        "expert_miss_bytes": 0.0,
+        "gpu_copy_compute_critical_ms": 20.347605599999998,
+        "host_dispatch_work_ms": 0.0,
+        "ideal_pipeline_period_ms": 20.347605599999998,
+        "ideal_pipeline_throughput_tps": 49.14583168449069,
+        "sequential_latency_ms": 20.347605599999998,
+        "shared_copy_overlap_credit_ms": 0.0,
+        "stage_work_ms": {
+          "attention": 1.1732055999999997,
+          "dispatch_overhead": 0.0,
+          "hc": 0.0,
+          "norm_head": 0.0,
+          "router": 0.0,
+          "shared": 5.983208,
+          "six_routed": 13.191192000000001,
+          "ssd_miss": 0.0
+        },
+        "target_met_under_ideal_pipeline": false,
+        "target_period_ms": 20.0
+      },
+      "hard_stage_budget": {
+        "current_known_gpu_anchor_ms": 20.347605599999998,
+        "joint_unmeasured_pool_ms_at_100_percent_expert_hit": -0.34760559999999785,
+        "stages": {
+          "attention": {
+            "current_measured_or_zero_floor_ms": 1.1732056,
+            "exclusive_sequential_max_ms_if_all_other_unmeasured_stages_are_zero": 0.8256000000000014,
+            "measurement_status": "measured necessary sub-operation/envelope"
+          },
+          "dispatch_overhead": {
+            "current_measured_or_zero_floor_ms": 0.0,
+            "exclusive_sequential_max_ms_if_all_other_unmeasured_stages_are_zero": -0.34760559999999785,
+            "measurement_status": "unmeasured; zero is a roofline placeholder, not an estimate"
+          },
+          "hc": {
+            "current_measured_or_zero_floor_ms": 0.0,
+            "exclusive_sequential_max_ms_if_all_other_unmeasured_stages_are_zero": -0.34760559999999785,
+            "measurement_status": "unmeasured; zero is a roofline placeholder, not an estimate"
+          },
+          "norm_head": {
+            "current_measured_or_zero_floor_ms": 0.0,
+            "exclusive_sequential_max_ms_if_all_other_unmeasured_stages_are_zero": -0.34760559999999785,
+            "measurement_status": "unmeasured; zero is a roofline placeholder, not an estimate"
+          },
+          "router": {
+            "current_measured_or_zero_floor_ms": 0.0,
+            "exclusive_sequential_max_ms_if_all_other_unmeasured_stages_are_zero": -0.34760559999999785,
+            "measurement_status": "unmeasured; zero is a roofline placeholder, not an estimate"
+          },
+          "shared": {
+            "current_measured_or_zero_floor_ms": 5.983207999999998,
+            "exclusive_sequential_max_ms_if_all_other_unmeasured_stages_are_zero": 5.6356024,
+            "measurement_status": "measured necessary sub-operation/envelope"
+          },
+          "six_routed": {
+            "current_measured_or_zero_floor_ms": 13.191192000000001,
+            "exclusive_sequential_max_ms_if_all_other_unmeasured_stages_are_zero": 12.843586400000003,
+            "measurement_status": "measured necessary sub-operation/envelope"
+          },
+          "ssd_miss": {
+            "current_measured_or_zero_floor_ms": 0.0,
+            "exclusive_pipeline_max_ms_with_shared_overlap": 5.6356024,
+            "exclusive_sequential_max_ms_if_all_other_unmeasured_stages_are_zero": -0.34760559999999785,
+            "measurement_status": "unmeasured; zero is a roofline placeholder, not an estimate"
+          }
+        },
+        "target_tps": 50.0,
+        "token_period_ms": 20.0
+      },
+      "minimum_ideal_batch_size": 2,
+      "minimum_measured_kernel_speedup_at_100_percent_hit": 1.0173802799999492,
+      "required_expert_cache_hit_rate_current_kernels": null,
+      "required_hit_rate_at_zero_unknown_budget_and_minimum_speedup": 0.8846345143777924,
+      "target_tps": 50.0
+    }
+  },
+  "two_token_cold_cache_counterexample": {
+    "20_tps_additional_successful_prefetch_or_history_hits_beyond_previous_token": 18,
+    "20_tps_current_kernel_pipeline_at_observed_hit": {
+      "command_buffers_per_token": 29,
+      "config": {
+        "attention_remainder_ms_per_layer": 0.0,
+        "batch_efficiency": 1.0,
+        "batch_size": 1,
+        "command_buffer_mode": "route_split_per_layer",
+        "expert_cache_hit_rate": 0.09523809523809523,
+        "hc_ms_per_layer": 0.0,
+        "kernel_fusion_speedup": 1.0,
+        "measured_kernel_speedup": 1.0,
+        "norm_head_ms_per_token": 0.0,
+        "pcie_bytes_per_second": 22030000000.0,
+        "router_ms_per_layer": 0.0,
+        "submit_overhead_us": 0.0,
+        "target_tps": 20.0,
+        "vram_bytes": 8589934592
+      },
+      "expert_miss_bytes": 1016070143.9999999,
+      "gpu_copy_compute_critical_ms": 60.48651035533365,
+      "host_dispatch_work_ms": 0.0,
+      "ideal_pipeline_period_ms": 60.48651035533365,
+      "ideal_pipeline_throughput_tps": 16.532611885284943,
+      "sequential_latency_ms": 60.48651035533365,
+      "shared_copy_overlap_credit_ms": 5.983208,
+      "stage_work_ms": {
+        "attention": 1.1732055999999997,
+        "dispatch_overhead": 0.0,
+        "hc": 0.0,
+        "norm_head": 0.0,
+        "router": 0.0,
+        "shared": 5.983208,
+        "six_routed": 13.191192000000001,
+        "ssd_miss": 46.12211275533364
+      },
+      "target_met_under_ideal_pipeline": false,
+      "target_period_ms": 50.0
+    },
+    "20_tps_required_coverage_of_the_76_observed_cold_pages": 0.23684210526315788,
+    "20_tps_required_total_hit_pages_out_of_84": 26,
+    "capacity_caveat": "未扣 KV/activation/workspace/runtime；容量不等于命中率，prefetch 假阳性还会额外占页。",
+    "current_token_pages": 84,
+    "intersection_by_layer": {
+      "0": 0,
+      "1": 0,
+      "14": 0,
+      "15": 1,
+      "2": 1,
+      "22": 1,
+      "23": 0,
+      "30": 1,
+      "31": 0,
+      "40": 0,
+      "41": 2,
+      "42": 2,
+      "6": 0,
+      "7": 0
+    },
+    "minimum_layer_expert_working_set_pages_previous_set_plus_successful_prefetch": 102,
+    "non_generalization": "8/84 只是两个真实 token 的冷缓存反例，不是长序列稳态命中率。",
+    "observed_previous_only_hit_rate": 0.09523809523809523,
+    "observed_scope": "exactly token0->token1; cache retains only immediately previous token routed pages",
+    "previous_token_intersection_pages": 8,
+    "s14_fixed_weight_bytes_excluding_full_embedding": 3254045668,
+    "source_report_sha256": "5ce3d5bcf1f1ad788659487cd070005078787736d104cba39fcb71108a25abe8",
+    "theoretical_vram_expert_page_capacity_after_s14_fixed_weights": 399,
+    "token1_expert_miss_bytes": 1016070144,
+    "token1_extra_nonexpert_bytes": 8192,
+    "token1_total_new_bytes": 1016078336
+  }
+}

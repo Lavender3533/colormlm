@@ -1,0 +1,60 @@
+{
+  "format": "polaris-s14-gpu-stage-measurements-v1",
+  "model_revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+  "s14_layers": [0, 1, 2, 6, 7, 14, 15, 22, 23, 30, 31, 40, 41, 42],
+  "cpu_warm_token": {
+    "file": "s14_first_real_token_warm_report.json",
+    "sha256": "19dacde039c0b5510db3067145b1809aa6559a6bd89a1681d4b1d7d05a1396c2",
+    "elapsed_s": 57.97914700000183,
+    "cache_semantics": "all reported base/routed/final payload ranges were cache hits",
+    "use": "CPU baseline observation only; never scaled into a GPU timing"
+  },
+  "two_token_cold_counterexample": {
+    "file": "s14_two_real_tokens_report.json",
+    "sha256": "5ce3d5bcf1f1ad788659487cd070005078787736d104cba39fcb71108a25abe8",
+    "format": "polaris-s14-contiguous-token-report-v2",
+    "committed_tokens": 2,
+    "token1_output_token_id": 53,
+    "token1_text": "S",
+    "token1_new_bytes": 1016078336,
+    "previous_token_expert_intersection_pages": 8,
+    "current_token_expert_pages": 84,
+    "intersection_by_layer": {
+      "0": 0,
+      "1": 0,
+      "2": 1,
+      "6": 0,
+      "7": 0,
+      "14": 0,
+      "15": 1,
+      "22": 1,
+      "23": 0,
+      "30": 1,
+      "31": 0,
+      "40": 0,
+      "41": 2,
+      "42": 2
+    },
+    "use": "two-token counterexample for a cache retaining only the immediately previous token; not a long-sequence steady-state estimate"
+  },
+  "committed_rx5700xt_evidence": {
+    "file": "scheduler/ssd_inference/evidence/s14_vulkan_numeric_rx5700xt.json",
+    "sha256": "cbb6f8c47e65fb32d5e84576a95a2d8e54336695855407ae97eb78f9e45de87c",
+    "device": "AMD Radeon RX 5700 XT",
+    "single_expert_chain_ms": 0.157038,
+    "single_expert_dispatches": 5,
+    "single_expert_iterations": 100,
+    "wq_a_linear_ms": 0.0838004,
+    "wq_a_dispatches": 1,
+    "wq_a_iterations": 100
+  },
+  "delegated_current_top6_shared_evidence": {
+    "source": "delegated real RX 5700 XT L42 measurement supplied with this task",
+    "concurrent_v3_evidence_sha256": "d4f14ebb3efc071df931fbced94781c104e89d300688196e0132699787b74790",
+    "top6_routed_plus_shared_ms": 1.3696,
+    "dispatches": 35,
+    "timestamp_iterations": 1,
+    "routed_payload_bytes": 80216064,
+    "semantic_limit": "minimal GPU-resident top-6 routed plus shared batch; excludes official inter-matvec BF16/requant boundaries and is not a full layer/token benchmark"
+  }
+}
