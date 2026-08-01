@@ -747,39 +747,63 @@ class FullDepthTokenWorker:
                     }
                 else:
                     comparison = None
+                    verification_error: VulkanWritebackError | None = None
                     if self.config.vulkan_writeback_verify_cpu:
                         if cpu_moe_branch is None or cpu_state is None:
                             raise FullDepthError("Vulkan verify 模式缺少 CPU reference")
-                        comparison = verify_exact_bf16_writeback(
-                            cpu_moe_branch,
-                            vulkan_moe_branch,
+                        try:
+                            comparison = verify_exact_bf16_writeback(
+                                cpu_moe_branch,
+                                vulkan_moe_branch,
+                            )
+                        except VulkanWritebackError as error:
+                            verification_error = error
+                    if verification_error is not None:
+                        if not self.config.vulkan_writeback_cpu_fallback:
+                            raise verification_error
+                        assert cpu_moe_branch is not None and cpu_state is not None
+                        fallback = {
+                            "position": position,
+                            "layer": layer,
+                            "type": type(verification_error).__name__,
+                            "message": str(verification_error),
+                        }
+                        self.writeback_fallbacks.append(fallback)
+                        moe_branch, state = cpu_moe_branch, cpu_state
+                        writeback_evidence = {
+                            **worker_evidence,
+                            "status": "cpu_fallback_after_exact_verification_failure",
+                            "failure": fallback,
+                            "cpu_verification_enabled": True,
+                            "state_source": "cpu_reference",
+                        }
+                    else:
+                        moe_branch = vulkan_moe_branch
+                        state = s14.hc_post(
+                            moe_branch,
+                            pending.post_attention_state,
+                            pending.post_ffn,
+                            pending.comb_ffn,
                         )
-                    moe_branch = vulkan_moe_branch
-                    state = s14.hc_post(
-                        moe_branch,
-                        pending.post_attention_state,
-                        pending.post_ffn,
-                        pending.comb_ffn,
-                    )
-                    self.writeback_layers.append(layer)
-                    writeback_evidence = {
-                        **worker_evidence,
-                        "comparison": comparison,
-                        "cpu_verification_enabled": self.config.vulkan_writeback_verify_cpu,
-                        "state_source": "vulkan_moe_branch_then_cpu_hc_post",
-                        "cpu_layer_output_exact": (
-                            None
-                            if cpu_state is None
-                            else bool(torch.equal(state, cpu_state))
-                        ),
-                    }
-                    if (
-                        cpu_state is not None
-                        and not writeback_evidence["cpu_layer_output_exact"]
-                    ):
-                        raise FullDepthError(
-                            "Vulkan writeback 后 hc_post 与 CPU 层输出不等价"
-                        )
+                        self.writeback_layers.append(layer)
+                        writeback_evidence = {
+                            **worker_evidence,
+                            "comparison": comparison,
+                            "cpu_verification_enabled": self.config.vulkan_writeback_verify_cpu,
+                            "state_source": "vulkan_moe_branch_then_cpu_hc_post",
+                            "cpu_layer_output_exact": (
+                                None
+                                if cpu_state is None
+                                else bool(torch.equal(state, cpu_state))
+                            ),
+                        }
+                        if (
+                            cpu_state is not None
+                            and not writeback_evidence["cpu_layer_output_exact"]
+                        ):
+                            raise FullDepthError(
+                                "Vulkan writeback 后 hc_post 与 CPU 层输出不等价"
+                            )
             else:
                 if cpu_moe_branch is None or cpu_state is None:
                     raise FullDepthError("CPU 层路径缺少 reference 输出")

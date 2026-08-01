@@ -1,0 +1,133 @@
+{
+  "format": "polaris-fulldepth43-vulkan-parity-diagnostic-v1",
+  "status": "all_43_layers_exact_bf16_verified",
+  "recorded_at": "2026-08-02T02:13:59+09:00",
+  "hardware": {
+    "gpu": "AMD Radeon RX 5700 XT",
+    "cpu_reference": "NumPy OpenBLAS 0.3.30 Haswell",
+    "numeric_boundary": "BF16 after every official expert matvec"
+  },
+  "fresh_all_layer_ab": {
+    "source_report": "C:/Users/Kangnaixi/AppData/Local/Temp/polaris-fd43-all-layer-ab-final-20260802-020908/all_layer_ab_report.json",
+    "source_report_sha256": "bb7174ef47dd1a02638dd9b7916ca5b6f31803269ccf8e81c44823d3cff0ccbc",
+    "exact_bf16_layers": 43,
+    "cpu_fallbacks": 0,
+    "token_ids": {
+      "verified": 5,
+      "baseline": 5,
+      "candidate": 5
+    },
+    "timing_seconds": {
+      "verified_cpu_gpu_exact": 197.0469912999979,
+      "cpu_baseline": 187.13397600000462,
+      "vulkan_candidate_without_cpu_verification": 96.19532539999636
+    },
+    "speedup_vs_cpu": 1.945354155431878
+  },
+  "execution_mode_isolation": {
+    "exact_validation_slow_path": {
+      "pipeline_constructor": "S14NumericPipelines::new_exact_audit",
+      "matvec_shaders": ["s14_mxfp4_matvec_exact.comp", "s14_fp8_matvec_exact.comp"],
+      "vulkan_writeback_verify_cpu": true,
+      "vulkan_writeback_cpu_fallback": false,
+      "diagnostic_environment_variable": "POLARIS_FULLDEPTH43_WRITEBACK_DIAGNOSTIC_DIR",
+      "purpose": "逐层同时计算 CPU reference 与 Vulkan 分支并要求 BF16 逐位一致"
+    },
+    "exact_kernel_without_cpu_recompute": {
+      "pipeline_constructor": "S14NumericPipelines::new_exact_audit",
+      "vulkan_writeback_verify_cpu": false,
+      "vulkan_writeback_cpu_fallback": false,
+      "diagnostic_environment_variable": "unset",
+      "purpose": "A/B candidate 仅提交 exact-audit Vulkan MoE 分支；不计算逐层 CPU reference"
+    },
+    "fast_production_default": {
+      "pipeline_constructor": "S14NumericPipelines::new",
+      "matvec_shaders": ["s14_mxfp4_matvec.comp", "s14_fp8_matvec.comp"],
+      "active_lanes": 128,
+      "measured_by_this_report": false,
+      "purpose": "保留原 128-lane 默认 shader；exact-audit shader 不会覆盖或拖慢生产默认路径"
+    },
+    "development_survey_only": {
+      "vulkan_writeback_verify_cpu": true,
+      "vulkan_writeback_cpu_fallback": true,
+      "purpose": "只用于继续定位后续层；禁止进入正式 A/B 或生产路径"
+    }
+  },
+  "pre_fix_boundary_cases": [
+    {
+      "layer": 3,
+      "output_index": 1858,
+      "stage": "shared FP8 w3 midpoint propagated through shared FP8 w2",
+      "cpu": {"value": 0.1650390625, "f32_bits": "0x3e290000", "bf16_bits": "0x3e29"},
+      "gpu": {"value": 0.1640625, "f32_bits": "0x3e280000", "bf16_bits": "0x3e28"},
+      "stage_evidence": {
+        "shared_up_index": 419,
+        "cpu_bf16": {"value": -0.004486083984375, "f32_bits": "0xbb930000", "bf16_bits": "0xbb93"},
+        "gpu_raw": {"value": -0.0044708251953125, "f32_bits": "0xbb928000", "bf16_bits": "0xbb92"},
+        "shared_down_index": 1858,
+        "cpu_bf16_bits": "0x3dca",
+        "gpu_raw_f32_bits": "0x3dc97fff",
+        "gpu_bf16_bits": "0x3dc9"
+      }
+    },
+    {
+      "layer": 4,
+      "output_index": 698,
+      "stage": "shared FP8 w2 reduction midpoint",
+      "cpu": {"value": 3.25, "f32_bits": "0x40500000", "bf16_bits": "0x4050"},
+      "gpu": {"value": 3.265625, "f32_bits": "0x40510000", "bf16_bits": "0x4051"},
+      "raw_stage": {"cpu": 1.64453125, "cpu_f32_bits": "0x3fd28000", "gpu": 1.6445313692092896, "gpu_f32_bits": "0x3fd28001"}
+    },
+    {
+      "layer": 5,
+      "output_index": 443,
+      "stage": "routed MXFP4 reduction then BF16 accumulator",
+      "cpu": {"value": -1.203125, "f32_bits": "0xbf9a0000", "bf16_bits": "0xbf9a"},
+      "gpu": {"value": -1.1953125, "f32_bits": "0xbf990000", "bf16_bits": "0xbf99"}
+    },
+    {
+      "layer": 7,
+      "output_index": 1253,
+      "stage": "BF16 expert accumulation boundary; rejected ULP special-case",
+      "cpu": {"value": -0.10400390625, "f32_bits": "0xbdd50000", "bf16_bits": "0xbdd5"},
+      "gpu": {"value": -0.103515625, "f32_bits": "0xbdd40000", "bf16_bits": "0xbdd4"}
+    },
+    {
+      "layer": 9,
+      "output_index": 2632,
+      "stage": "routed MXFP4 reduction then BF16 accumulator",
+      "cpu": {"value": 0.1181640625, "f32_bits": "0x3df20000", "bf16_bits": "0x3df2"},
+      "gpu": {"value": 0.11767578125, "f32_bits": "0x3df10000", "bf16_bits": "0x3df1"}
+    },
+    {
+      "layer": 15,
+      "output_index": 724,
+      "stage": "shared FP8 w3 and w2 reduction midpoints",
+      "cpu": {"value": 0.0037841796875, "f32_bits": "0x3b780000", "bf16_bits": "0x3b78"},
+      "gpu": {"value": 0.0028076171875, "f32_bits": "0x3b380000", "bf16_bits": "0x3b38"},
+      "stage_evidence": {
+        "shared_up_index": 735,
+        "shared_up_cpu_bf16": {"value": -0.56640625, "f32_bits": "0xbf110000", "bf16_bits": "0xbf11"},
+        "shared_up_gpu_bf16": {"value": -0.5625, "f32_bits": "0xbf100000", "bf16_bits": "0xbf10"},
+        "shared_down_index": 724,
+        "shared_down_cpu_bf16": {"value": 0.1962890625, "f32_bits": "0x3e490000", "bf16_bits": "0x3e49"},
+        "shared_down_gpu_bf16": {"value": 0.1953125, "f32_bits": "0x3e480000", "bf16_bits": "0x3e48"}
+      }
+    },
+    {
+      "layer": 41,
+      "output_index": 3484,
+      "stage": "routed MXFP4 reduction then BF16 accumulator",
+      "cpu": {"value": -8.25, "f32_bits": "0xc1040000", "bf16_bits": "0xc104"},
+      "gpu": {"value": -8.1875, "f32_bits": "0xc1030000", "bf16_bits": "0xc103"}
+    }
+  ],
+  "fix": {
+    "mxfp4_exact_audit": "独立 exact shader 使用 12 个 FMA lane 后固定顺序合并",
+    "fp8_exact_audit": "独立 exact shader 使用 8 个 FMA lane，并按 0,1,3,4,6,2,5,7 合并",
+    "production_default": "原 128-lane shader 保持不变",
+    "tolerance_relaxed": false,
+    "formal_cpu_fallback_used": false
+  },
+  "claim_limit": "只证明同一 BOS 单 token 的 43 个 MoE 分支逐 BF16 位一致及相邻 A/B；attention、HC、router 和 head 仍在 CPU，不证明交互式聊天速度、质量或长上下文。"
+}

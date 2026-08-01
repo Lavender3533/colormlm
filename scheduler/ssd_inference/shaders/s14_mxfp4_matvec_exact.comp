@@ -1,0 +1,79 @@
+#version 450
+
+// Audit-only MXFP4 matvec. It reproduces the frozen Haswell OpenBLAS
+// reduction order at the official BF16 boundary. The default production
+// pipeline continues to use s14_mxfp4_matvec.comp with all 128 lanes.
+
+layout(local_size_x = 128) in;
+
+layout(set = 0, binding = 0) readonly buffer X { float x[]; };
+layout(set = 0, binding = 1) readonly buffer PackedWeight { uint weight_words[]; };
+layout(set = 0, binding = 2) readonly buffer WeightScale { uint scale_words[]; };
+layout(set = 0, binding = 3) writeonly buffer Y { float y[]; };
+
+layout(push_constant) uniform Push {
+    uint N;
+    uint K;
+} push;
+
+shared float partial[128];
+
+uint packed_byte(uint byte_index) {
+    uint word = weight_words[byte_index >> 2u];
+    return (word >> ((byte_index & 3u) * 8u)) & 0xffu;
+}
+
+uint scale_byte(uint byte_index) {
+    uint word = scale_words[byte_index >> 2u];
+    return (word >> ((byte_index & 3u) * 8u)) & 0xffu;
+}
+
+float e2m1(uint code) {
+    uint magnitude_code = code & 7u;
+    float magnitude;
+    if (magnitude_code <= 4u) {
+        magnitude = 0.5 * float(magnitude_code);
+    } else if (magnitude_code == 5u) {
+        magnitude = 3.0;
+    } else if (magnitude_code == 6u) {
+        magnitude = 4.0;
+    } else {
+        magnitude = 6.0;
+    }
+    return (code & 8u) == 0u ? magnitude : -magnitude;
+}
+
+float ue8m0(uint code) {
+    return ldexp(1.0, int(code) - 127);
+}
+
+void main() {
+    uint n = gl_WorkGroupID.x;
+    uint tid = gl_LocalInvocationID.x;
+    if (n >= push.N) return;
+
+    uint packed_k = push.K >> 1u;
+    uint row_weight_base = n * packed_k;
+    uint row_scale_base = n * (push.K >> 5u);
+    const uint active_lanes = 12u;
+    float acc = 0.0;
+
+    if (tid < active_lanes) {
+        for (uint pair = tid; pair < packed_k; pair += active_lanes) {
+            uint code_pair = packed_byte(row_weight_base + pair);
+            uint k = pair << 1u;
+            float scale = ue8m0(scale_byte(row_scale_base + (k >> 5u)));
+            acc = fma(scale * e2m1(code_pair & 0x0fu), x[k], acc);
+            acc = fma(scale * e2m1(code_pair >> 4u), x[k + 1u], acc);
+        }
+        partial[tid] = acc;
+    }
+    barrier();
+    if (tid == 0u) {
+        float total = partial[0];
+        for (uint lane = 1u; lane < active_lanes; ++lane) {
+            total += partial[lane];
+        }
+        y[n] = total;
+    }
+}

@@ -25,6 +25,13 @@ pub const S14_MXFP4_MATVEC_SPV: &[u8] =
 pub const S14_FP8_MATVEC_SPV: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/s14_fp8_matvec.spv"));
 
+/// Audit-only OpenBLAS-compatible reductions. These shaders deliberately use
+/// fewer active lanes and must never replace the default production kernels.
+pub const S14_MXFP4_MATVEC_EXACT_SPV: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/s14_mxfp4_matvec_exact.spv"));
+pub const S14_FP8_MATVEC_EXACT_SPV: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/s14_fp8_matvec_exact.spv"));
+
 pub const S14_SWIGLU_LIMIT_SPV: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/s14_swiglu_limit.spv"));
 
@@ -213,9 +220,23 @@ pub struct S14NumericPipelines {
 
 impl S14NumericPipelines {
     pub fn new(ctx: &VulkanContext) -> Result<Self> {
+        Self::new_with_matvec_spv(ctx, S14_MXFP4_MATVEC_SPV, S14_FP8_MATVEC_SPV)
+    }
+
+    /// Construct the slow, deterministic audit pipeline used by the
+    /// FullDepth43 exact-writeback worker. Production callers use `new`.
+    pub fn new_exact_audit(ctx: &VulkanContext) -> Result<Self> {
+        Self::new_with_matvec_spv(ctx, S14_MXFP4_MATVEC_EXACT_SPV, S14_FP8_MATVEC_EXACT_SPV)
+    }
+
+    fn new_with_matvec_spv(
+        ctx: &VulkanContext,
+        mxfp4_matvec_spv: &[u8],
+        fp8_matvec_spv: &[u8],
+    ) -> Result<Self> {
         Ok(Self {
-            mxfp4_matvec: ComputePipeline::new(ctx, S14_MXFP4_MATVEC_SPV, 4, 8)?,
-            fp8_matvec: ComputePipeline::new(ctx, S14_FP8_MATVEC_SPV, 4, 8)?,
+            mxfp4_matvec: ComputePipeline::new(ctx, mxfp4_matvec_spv, 4, 8)?,
+            fp8_matvec: ComputePipeline::new(ctx, fp8_matvec_spv, 4, 8)?,
             swiglu_limit: ComputePipeline::new(ctx, S14_SWIGLU_LIMIT_SPV, 3, 4)?,
             route_mix: ComputePipeline::new(ctx, S14_ROUTE_MIX_SPV, 2, 8)?,
             moe_accumulate: ComputePipeline::new(ctx, S14_MOE_ACCUMULATE_SPV, 2, 8)?,

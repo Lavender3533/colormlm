@@ -47,6 +47,7 @@ const PAYLOAD_CACHE_GIB_ENV: &str = "POLARIS_VERIFIED_PAYLOAD_CACHE_GIB";
 const DEFAULT_PAYLOAD_CACHE_GIB: usize = 10;
 const MIN_PAYLOAD_CACHE_GIB: usize = 8;
 const MAX_PAYLOAD_CACHE_GIB: usize = 12;
+const WRITEBACK_DIAGNOSTIC_DIR_ENV: &str = "POLARIS_FULLDEPTH43_WRITEBACK_DIAGNOSTIC_DIR";
 
 struct DeviceBuffers {
     upload_x: GpuBuffer,
@@ -757,6 +758,21 @@ struct WritebackError<'a> {
 struct OfficialMoeResult {
     branch_bf16: Vec<u16>,
     gpu_kernel_ms: f64,
+    diagnostics: Option<OfficialMoeDiagnostics>,
+}
+
+struct ExpertDiagnostics {
+    expert_id: Option<u32>,
+    gate: Vec<f32>,
+    up: Vec<f32>,
+    hidden: Vec<f32>,
+    down: Vec<f32>,
+}
+
+struct OfficialMoeDiagnostics {
+    routed: Vec<ExpertDiagnostics>,
+    shared: ExpertDiagnostics,
+    accumulator: Vec<f32>,
 }
 
 #[derive(Serialize)]
@@ -911,7 +927,7 @@ fn run_fulldepth_writeback_worker() -> Result<()> {
         bail!("FullDepth43 writeback worker requires timestamp queries");
     }
     let timestamp_period_ns = properties.limits.timestamp_period as f64;
-    let pipelines = S14NumericPipelines::new(&ctx)?;
+    let pipelines = S14NumericPipelines::new_exact_audit(&ctx)?;
     let payload_cache_capacity = payload_cache_capacity_bytes()?;
     let mut payload_cache = VerifiedPayloadCache::new(payload_cache_capacity)?;
     let mut stdout = std::io::stdout().lock();
@@ -928,6 +944,8 @@ fn run_fulldepth_writeback_worker() -> Result<()> {
             "official_boundary_graph": true,
             "verified_payload_cache": true,
             "payload_cache_capacity_bytes": payload_cache_capacity,
+            "numeric_mode": "exact_audit_12_lane_mxfp4_8_lane_fp8",
+            "production_default_shader_unchanged": true,
         }),
     )?;
     stdout.write_all(b"\n")?;
@@ -1084,6 +1102,7 @@ fn execute_writeback_request(
         w2,
         s2,
     };
+    let diagnostic_dir = std::env::var_os(WRITEBACK_DIAGNOSTIC_DIR_ENV).map(PathBuf::from);
     let result = run_official_top6_shared_moe_batch(
         ctx,
         pipelines,
@@ -1092,7 +1111,43 @@ fn execute_writeback_request(
         &input,
         &routed,
         &shared,
+        diagnostic_dir.is_some(),
     )?;
+    if let (Some(root), Some(diagnostics)) = (diagnostic_dir, result.diagnostics.as_ref()) {
+        std::fs::create_dir_all(&root)?;
+        for expert in diagnostics.routed.iter().chain([&diagnostics.shared]) {
+            let label = match expert.expert_id {
+                Some(expert_id) => format!("routed_e{expert_id}"),
+                None => "shared".to_string(),
+            };
+            for (stage, values) in [
+                ("gate", expert.gate.as_slice()),
+                ("up", expert.up.as_slice()),
+                ("hidden", expert.hidden.as_slice()),
+                ("down", expert.down.as_slice()),
+            ] {
+                let path = root.join(format!("{label}_{stage}_gpu.f32le.bin"));
+                if path.exists() {
+                    bail!(
+                        "refuse to overwrite writeback diagnostic {}",
+                        path.display()
+                    );
+                }
+                std::fs::write(path, bytemuck::cast_slice(values))?;
+            }
+        }
+        let accumulator_path = root.join("accumulator_gpu.f32le.bin");
+        if accumulator_path.exists() {
+            bail!(
+                "refuse to overwrite writeback diagnostic {}",
+                accumulator_path.display()
+            );
+        }
+        std::fs::write(
+            accumulator_path,
+            bytemuck::cast_slice(&diagnostics.accumulator),
+        )?;
+    }
     let mut output_bytes = Vec::with_capacity(result.branch_bf16.len() * 2);
     for value in result.branch_bf16 {
         output_bytes.extend_from_slice(&value.to_le_bytes());
@@ -1235,6 +1290,7 @@ fn run_official_top6_shared_moe_batch(
     x: &[f32],
     routed: &[MoePayload],
     shared: &MoePayload,
+    capture_shared_diagnostics: bool,
 ) -> Result<OfficialMoeResult> {
     if x.len() != 4096 || routed.len() != 6 || shared.expert_id.is_some() {
         bail!("official FullDepth43 MoE shape/route contract drift");
@@ -1364,7 +1420,34 @@ fn run_official_top6_shared_moe_batch(
     if output.iter().any(|value| !value.is_finite()) {
         bail!("official Vulkan MoE output contains non-finite values");
     }
-    let branch_bf16 = output.into_iter().map(f32_to_bf16_bits).collect();
+    let branch_bf16 = output.iter().copied().map(f32_to_bf16_bits).collect();
+    let diagnostics = if capture_shared_diagnostics {
+        let shared = ExpertDiagnostics {
+            expert_id: None,
+            gate: read_device_f32(ctx, &buffers.gate, &buffers.readback, 2048)?,
+            up: read_device_f32(ctx, &buffers.up, &buffers.readback, 2048)?,
+            hidden: read_device_f32(ctx, &buffers.hidden, &buffers.readback, 2048)?,
+            down: read_device_f32(ctx, &buffers.down, &buffers.readback, 4096)?,
+        };
+        let mut routed_diagnostics = Vec::with_capacity(routed_dispatches.len());
+        for (dispatch, payload) in routed_dispatches.iter().zip(routed) {
+            record_routed_diagnostic_once(ctx, pipelines, dispatch)?;
+            routed_diagnostics.push(ExpertDiagnostics {
+                expert_id: payload.expert_id,
+                gate: read_device_f32(ctx, &buffers.gate, &buffers.readback, 2048)?,
+                up: read_device_f32(ctx, &buffers.up, &buffers.readback, 2048)?,
+                hidden: read_device_f32(ctx, &buffers.hidden, &buffers.readback, 2048)?,
+                down: read_device_f32(ctx, &buffers.down, &buffers.readback, 4096)?,
+            });
+        }
+        Some(OfficialMoeDiagnostics {
+            routed: routed_diagnostics,
+            shared,
+            accumulator: output,
+        })
+    } else {
+        None
+    };
 
     shared_dispatch.accumulate.binder.destroy(ctx);
     shared_dispatch.w2.binder.destroy(ctx);
@@ -1382,7 +1465,94 @@ fn run_official_top6_shared_moe_batch(
     Ok(OfficialMoeResult {
         branch_bf16,
         gpu_kernel_ms,
+        diagnostics,
     })
+}
+
+fn record_routed_diagnostic_once(
+    ctx: &VulkanContext,
+    pipelines: &S14NumericPipelines,
+    dispatch: &RoutedOfficialDispatch,
+) -> Result<()> {
+    unsafe {
+        let pool = make_command_pool(ctx)?;
+        let cb = allocate_command_buffer(ctx, pool)?;
+        ctx.device.begin_command_buffer(
+            cb,
+            &vk::CommandBufferBeginInfo::default()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+        )?;
+        let read_after_write = vk::MemoryBarrier::default()
+            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ);
+        pipelines.cmd_mxfp4_matvec(ctx, cb, &dispatch.w1);
+        pipelines.cmd_mxfp4_matvec(ctx, cb, &dispatch.w3);
+        ctx.device.cmd_pipeline_barrier(
+            cb,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::DependencyFlags::empty(),
+            &[read_after_write],
+            &[],
+            &[],
+        );
+        pipelines.cmd_official_expert_prepare(ctx, cb, &dispatch.prepare);
+        ctx.device.cmd_pipeline_barrier(
+            cb,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::DependencyFlags::empty(),
+            &[read_after_write],
+            &[],
+            &[],
+        );
+        pipelines.cmd_mxfp4_matvec(ctx, cb, &dispatch.w2);
+        ctx.device.end_command_buffer(cb)?;
+        submit_and_wait(ctx, cb)?;
+        ctx.device.destroy_command_pool(pool, None);
+    }
+    Ok(())
+}
+
+fn read_device_f32(
+    ctx: &VulkanContext,
+    source: &GpuBuffer,
+    readback: &GpuBuffer,
+    count: usize,
+) -> Result<Vec<f32>> {
+    let bytes = count
+        .checked_mul(std::mem::size_of::<f32>())
+        .ok_or_else(|| anyhow::anyhow!("diagnostic readback byte overflow"))?
+        as u64;
+    if bytes > source.size() || bytes > readback.size() {
+        bail!("diagnostic readback exceeds buffer capacity");
+    }
+    unsafe {
+        let pool = make_command_pool(ctx)?;
+        let cb = allocate_command_buffer(ctx, pool)?;
+        ctx.device.begin_command_buffer(
+            cb,
+            &vk::CommandBufferBeginInfo::default()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+        )?;
+        let barrier = vk::MemoryBarrier::default()
+            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .dst_access_mask(vk::AccessFlags::TRANSFER_READ);
+        ctx.device.cmd_pipeline_barrier(
+            cb,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::PipelineStageFlags::TRANSFER,
+            vk::DependencyFlags::empty(),
+            &[barrier],
+            &[],
+            &[],
+        );
+        copy(ctx, cb, source, readback, bytes);
+        ctx.device.end_command_buffer(cb)?;
+        submit_and_wait(ctx, cb)?;
+        ctx.device.destroy_command_pool(pool, None);
+        Ok(std::slice::from_raw_parts(readback.mapped() as *const f32, count).to_vec())
+    }
 }
 
 fn record_official_moe_once(
