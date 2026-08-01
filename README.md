@@ -75,6 +75,11 @@ L0--L2 使用 checkpoint 的 `tid2eid[token_id]` hash route；后续层使用原
 也尚未达到可交互速度或 Claude/GPT 综合质量。最新 A/B 见
 [`fast16/research/polaris_meridian_v1/fulldepth43_native_top6/FP8_MATERIALIZATION_AB.md`](fast16/research/polaris_meridian_v1/fulldepth43_native_top6/FP8_MATERIALIZATION_AB.md)。
 
+第一条原生迁移也已闭合：L42 `wq_a` 的 packed E4M3 + UE8M0 权重常驻 RX 5700 XT，连续两个
+arena epoch 的1024元素 BF16 输出逐位匹配冻结 SHA；每次请求只上传16 KiB activation。
+这还没有接入完整 token 热路径，边界与证据见
+[`fast16/research/polaris_meridian_v1/fulldepth43_native_top6/PACKED_FP8_L42_WQ_A.md`](fast16/research/polaris_meridian_v1/fulldepth43_native_top6/PACKED_FP8_L42_WQ_A.md)。
+
 ### 1. 首个真实 S14 token
 
 固定 BOS token 已通过全部 14 层、84 个真实 routed expert、14 个 shared expert 和真实全词表

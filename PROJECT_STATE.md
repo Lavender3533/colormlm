@@ -1272,3 +1272,17 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
 - 下一硬门冻结为packed-FP8原生Vulkan attention：先做L42 `wq_a` worker/arena exact SHA闭环，
   再扩展`wkv/wq_b/indexer/wo_b`，最后实现`wo_a` grouped BF16-weight专用内核并推广43层。
   合理首版目标约`27--33s/token`，不是`20--50 token/s`承诺；完整GPU边界和长序列质量门仍未完成。
+- 上述第一硬门已经真实通过：L42 `wq_a [1024,4096]`现在由持久RX 5700 XT worker直接消费
+  packed E4M3 weight与UE8M0 scale。weight+scale仅启动时验证并上传`4,194,560 B`，随后每请求
+  只上传`16,384 B` activation并回读`4,096 B`输出；Vulkan context、descriptor、command
+  buffer、fence和权重VRAM跨请求存活。
+- 冻结真实输入连续执行arena epoch 0/1，两次1024元素BF16-rounded输出均逐位匹配SHA-256
+  `76469fd163f5db49de956eff9b29087afa4caa97d566be80bab9d9119facb0b8`，两次输出完全一致。
+  Rust example测试`16/16`，FullDepth43 Python测试`51 passed, 2 subtests passed`；严格JSON、
+  canonical arena、offset/epoch/SHA/shape/NaN/半写失败均为poison退出。完整证据见
+  `fast16/research/polaris_meridian_v1/fulldepth43_native_top6/PACKED_FP8_L42_WQ_A.md`。
+- 同一持久worker连续20次完整协议往返全部命中冻结输出SHA，平均`3.0521ms`、中位
+  `2.9935ms`；该数值包含Python/arena/JSONL/GPU/readback验证，只是单个`wq_a`原语实测，
+  不外推为完整token速度。
+- 这只证明首条attention投影不再需要CPU展开完整F32权重；尚未接入完整token热路径，BF16 RNE
+  仍在CPU。下一步已推进到L42其余标准投影，再单独处理`wo_a` grouped BF16-weight语义。
