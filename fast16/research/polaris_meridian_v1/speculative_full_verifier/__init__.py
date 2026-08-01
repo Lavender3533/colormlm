@@ -6,6 +6,14 @@
 from .assets import AssetAudit, AssetContractError, audit_assets
 from .cache_replay import ExpertPageCache, ReplayReport, RouteBlock, replay_blocks
 from .cost_model import HardwareBudget, build_analysis_report
+from .runtime_controller import (
+    AtomicSpeculativeController,
+    NativeBatchedVerifierBackend,
+    SerialSnapshotDraftBackend,
+    SerialSnapshotVerifierBackend,
+    SpeculativeRoundResult,
+)
+from .speed_gate import RoundTiming, evaluate_speed_gate
 from .verifier import (
     DeepSeekTokenizer,
     DraftStep,
@@ -18,17 +26,24 @@ from .verifier import (
 __all__ = [
     "AssetAudit",
     "AssetContractError",
+    "AtomicSpeculativeController",
     "DeepSeekTokenizer",
     "DraftStep",
     "ExpertPageCache",
     "FullDepthVerification",
     "HardwareBudget",
+    "NativeBatchedVerifierBackend",
     "ReplayReport",
     "RouteBlock",
     "SessionState",
+    "SerialSnapshotDraftBackend",
+    "SerialSnapshotVerifierBackend",
+    "SpeculativeRoundResult",
     "SpeculativeSession",
     "VerificationResult",
     "audit_assets",
     "build_analysis_report",
+    "evaluate_speed_gate",
     "replay_blocks",
+    "RoundTiming",
 ]

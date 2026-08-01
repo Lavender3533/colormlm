@@ -1,11 +1,18 @@
 # Polaris 全深度原生验证器（离线原型）
 
-本目录实现一个可运行、可拒绝错误输入的调度与成本原型，不加载权重：
+本目录实现一个可运行、可拒绝错误输入的调度与成本原型。默认
+命令不加载权重；`runtime_controller.py` 可由真实 runtime bridge 注入模型步进：
 
 - `S14/top6` 草稿后端必须提交 DeepSeek 原生 token ID，以及每 token 的冻结 14 层 top-6 route；
 - `FullDepth43/native-top6` 后端必须通过**一次** causal-block 调用返回与 N 个草稿位置对齐的 greedy token，以及完整 `N x 43 x 6` 原生 route；
 - 只提交与 target 一致的最长草稿前缀。首个不一致处提交 FullDepth43 预测作为 fallback，后续草稿和预测全部丢弃；
 - 草稿全一致时只提交 N 个已验证 token，不偷加未纳入对齐合同的 bonus token。
+- `K=4/8` 草稿/target 双 runtime 使用两阶段原子提交，任一失败双边恢复轮次前 snapshot；
+- 串行 target 桥仅供正确性对接；只有一次 `batched_causal` target forward 才有加速资格。
+- `s14_runtime_bridge.py` 已把现有 `DecoderRuntime` snapshot/token report 转成真实 S14 草稿边界，不做 token 映射。
+
+完整资产审计、原子状态语义和下一内核边界见
+[`SPECULATIVE_RUNTIME_AUDIT.md`](SPECULATIVE_RUNTIME_AUDIT.md)。
 
 ## 运行
 
@@ -27,6 +34,9 @@ python -m fast16.research.polaris_meridian_v1.speculative_full_verifier replay-c
 python -m unittest discover `
   -s fast16/research/polaris_meridian_v1/speculative_full_verifier/tests `
   -t . -v
+
+python -m fast16.research.polaris_meridian_v1.speculative_full_verifier `
+  static-speed-gate --baseline-seconds-per-token 219.76 --block-size 8
 ```
 
 `tokenize-draft` 只把调用者提供的 S14 候选文本变成恰好 N 个本地 DeepSeek token，不伪装成已运行 S14 权重。实际 S14 后端通过 `S14Top6Backend` 直接提交 token ID 和 route。

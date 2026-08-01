@@ -1,0 +1,45 @@
+{
+  "format": "polaris-speculative-block-speed-gate-v1",
+  "status": "stop_serial_verifier",
+  "passed": false,
+  "evidence_kind": "static_projection",
+  "same_process_adjacent_baseline": false,
+  "rounds": [
+    {
+      "block_size": 8,
+      "accepted_prefix_length": 8,
+      "draft_seconds": 0.0,
+      "verifier_seconds": 1758.08,
+      "verifier_mode": "serial_reference",
+      "verifier_forward_calls": 8
+    }
+  ],
+  "totals": {
+    "round_count": 1,
+    "committed_tokens": 8,
+    "baseline_seconds": 1758.08,
+    "candidate_seconds": 1758.08,
+    "effective_candidate_tps": 0.004550418638514743,
+    "speedup_vs_native": 1.0
+  },
+  "requirements": {
+    "supported_block_sizes": [
+      4,
+      8
+    ],
+    "one_batched_target_forward_per_round": false,
+    "minimum_speedup": 1.08,
+    "speed_threshold_met": false
+  },
+  "failures": [
+    "FullDepth43 尚未做到每块一次 batched_causal forward；串行 K 次不具备加速资格",
+    "证据不是真实模型时延，只能做静态/控制面判断",
+    "有效加速低于 1.080x"
+  ],
+  "claim_limit": "通过只表示同进程相邻短测中的有效 token/s 加速；不表示长上下文、质量或 20/50 token/s 已达成。",
+  "static_assumptions": [
+    "乐观地把草稿时间设为 0。",
+    "乐观地假设整块全接受。",
+    "当前串行 verifier 仍需 K 次 target token forward。"
+  ]
+}

@@ -10,6 +10,7 @@ from typing import Any, Sequence
 from .assets import audit_assets
 from .cache_replay import ExpertPageCache, load_route_blocks_jsonl, replay_blocks
 from .cost_model import HardwareBudget, build_analysis_report, committed_tokens
+from .speed_gate import current_serial_static_gate
 from .verifier import DeepSeekTokenizer
 
 
@@ -43,6 +44,13 @@ def _parser() -> argparse.ArgumentParser:
     replay.add_argument("--asset-root", default=DEFAULT_ASSET_ROOT)
     replay.add_argument("--cache-pages", type=int, help="默认用 8GiB 扣除非路由+head 后的理论页数")
     replay.add_argument("--output")
+
+    speed = subparsers.add_parser(
+        "static-speed-gate", help="证明当前串行 FullDepth verifier 不具备加速资格"
+    )
+    speed.add_argument("--baseline-seconds-per-token", type=float, required=True)
+    speed.add_argument("--block-size", type=int, choices=(4, 8), required=True)
+    speed.add_argument("--output")
     return parser
 
 
@@ -69,6 +77,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.output,
         )
         return 0
+    if args.command == "static-speed-gate":
+        report = current_serial_static_gate(
+            baseline_target_seconds_per_token=args.baseline_seconds_per_token,
+            block_size=args.block_size,
+        )
+        _emit_json(report, args.output)
+        # A rejected current serial path is the expected gate result, not a
+        # positive speed claim.  Return 2 so automation cannot accidentally
+        # promote it.
+        return 0 if report["passed"] else 2
     if args.command == "replay-cache":
         audit = audit_assets(args.asset_root)
         hardware = HardwareBudget()
