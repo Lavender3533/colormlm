@@ -1,0 +1,65 @@
+{
+  "format": "polaris-fulldepth43-vulkan-bridge-evidence-v1",
+  "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+  "source_manifest_sha256": "5173b6a353cab8ab9f03226654adf991e5ce85215cea08f523f4f59dffb85019",
+  "layer": 42,
+  "position": 0,
+  "input_token_id": 0,
+  "expert_ids": [
+    26,
+    23,
+    123,
+    28,
+    154,
+    152
+  ],
+  "route_weights": [
+    1.4999732,
+    0.0000051114034,
+    0.0000065146123,
+    0.000008056696,
+    0.0000030574752,
+    0.0000041864128
+  ],
+  "route_weight_sum": 1.5000001,
+  "payload_count": 42,
+  "payload_bytes": 105383424,
+  "device": {
+    "name": "AMD Radeon RX 5700 XT",
+    "vendor_id": "0x1002",
+    "device_id": "0x731f",
+    "driver_version_raw": "0x00800161",
+    "timestamp_valid_bits": 64,
+    "timestamp_period_ns": 10.0
+  },
+  "result": {
+    "cpu_reference_ms": 249.5751,
+    "timing": {
+      "iterations": 20,
+      "gpu_kernel_ms_mean": 1.4220140000000001,
+      "submit_readback_sync_ms": 28.712999999999997
+    },
+    "error": {
+      "max_abs": 0.11328125,
+      "mean_abs": 0.000868905772222206,
+      "rmse": 0.0032810247316518598,
+      "max_rel_for_abs_ref_gt_1e_5": 0.0006951553,
+      "max_abs_reference": 18711.113,
+      "rmse_reference": 1866.8712732424776,
+      "relative_rmse": 1.7574991798728617e-6
+    },
+    "input_f32_le_sha256": "94ecacbfa5e09411c22e296c7e8e5096ae51cc0d5a1d3aef4959d394a9505e84",
+    "cpu_reference_output_f32_le_sha256": "88e2c57d05de93102f8f9353ddbfb9f017c4b2a36d7c025d8ad7e218fade4efa",
+    "gpu_output_f32_le_sha256": "7b5f17d25048c3022ac327ce1c1eacbcf47557856cbe953bd1e616451faf58cd",
+    "tolerance": {
+      "max_abs_limit": 0.46777782,
+      "rmse_limit": 0.046671781831061944,
+      "relative_scale_factor": 0.000025,
+      "passed": true
+    },
+    "reference_semantics": "F32 packed decode and route-weight-after-w2 accumulation for the existing bounded Vulkan minimal top6+shared chain"
+  },
+  "bridge_wall_ms_including_payload_read_upload_pipeline_and_readback": 714.8172000000001,
+  "expansion_status": "single_real_layer_only",
+  "claim_limit": "Real FullDepth43 live layer activation and native top-6 payloads executed by the existing bounded Vulkan minimal MoE batch. This is not official BF16/requantized expert parity and is not wired into token commit."
+}

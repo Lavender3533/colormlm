@@ -99,6 +99,13 @@ class FullDepthContractTests(unittest.TestCase):
             ExecutionConfig(allow_fetch=True, download_budget_bytes=0).validate()
         with self.assertRaises(FullDepthError):
             ExecutionConfig(allow_fetch=False, download_budget_bytes=1).validate()
+        with self.assertRaises(FullDepthError):
+            ExecutionConfig(vulkan_bridge_layer=43).validate()
+        with self.assertRaises(FullDepthError):
+            ExecutionConfig(
+                token_count=2,
+                vulkan_bridge_capture=Path("capture"),
+            ).validate()
 
     def test_first_preview_forced_prefill_runs_five_inputs_before_argmax(self) -> None:
         queue = s14._load_forced_prefill(PREVIEW_FORCED_PREFILL)

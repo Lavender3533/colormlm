@@ -1,0 +1,717 @@
+{
+  "format": "polaris-fulldepth43-vulkan-bridge-capture-v1",
+  "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+  "profile": "fulldepth43_native_top6",
+  "layer": 42,
+  "position": 0,
+  "input_token_id": 0,
+  "completed_layers_before_capture": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41
+  ],
+  "route_source": "sqrtsoftplus_plus_bias_top6",
+  "expert_ids": [
+    26,
+    23,
+    123,
+    28,
+    154,
+    152
+  ],
+  "route_weights": [
+    1.499973177909851,
+    5.111403424962191e-06,
+    6.5146123233716935e-06,
+    8.056696060521062e-06,
+    3.057475169043755e-06,
+    4.1864127524604555e-06
+  ],
+  "route_weight_sum": 1.5000001045095814,
+  "source_ffn_input_f32_le_sha256": "3709794755053a3e5f4e6f1f5fbe43c5b6fb9e0468a00fd2f0e60deae750766a",
+  "input": {
+    "name": "ffn_input_activation_quant",
+    "file": "ffn_input_activation_quant.f32le.bin",
+    "shape": [
+      1,
+      1,
+      4096
+    ],
+    "bytes": 16384,
+    "f32_le_sha256": "94ecacbfa5e09411c22e296c7e8e5096ae51cc0d5a1d3aef4959d394a9505e84"
+  },
+  "payload_count": 42,
+  "payload_bytes": 105383424,
+  "payloads": [
+    {
+      "tensor": "layers.42.ffn.experts.26.w1.scale",
+      "kind": "routed",
+      "expert_id": 26,
+      "dtype": "F8_E8M0",
+      "shape": [
+        2048,
+        128
+      ],
+      "bytes": 262144,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\71a61d3bdd70cbb6782effe20ba28e7b499039f7c23a44d1f1525a038ea8ebd3.bin",
+      "sha256": "b21a426c4cf54af996564e9ef21eccfab4ee2d92223a7269af623ebc3890a507",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.26.w1.weight",
+      "kind": "routed",
+      "expert_id": 26,
+      "dtype": "I8",
+      "shape": [
+        2048,
+        2048
+      ],
+      "bytes": 4194304,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\951b436bbfe6135dedcfd0deb7b893a2263ef8817120e2ecf8698f3396b55185.bin",
+      "sha256": "9781ee2ee946ac449ad51d59ce2ce325141af8b8c3513364d2fa1de4f9a99eb2",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.26.w2.scale",
+      "kind": "routed",
+      "expert_id": 26,
+      "dtype": "F8_E8M0",
+      "shape": [
+        4096,
+        64
+      ],
+      "bytes": 262144,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\20527211b6126a992749848bba3b369ce10ff76b92ccd7b3ccd5f4f228833dd4.bin",
+      "sha256": "c10a90d83f88a8455718de8c09aeade5efc0d172a5a8d6575c929e6720add312",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.26.w2.weight",
+      "kind": "routed",
+      "expert_id": 26,
+      "dtype": "I8",
+      "shape": [
+        4096,
+        1024
+      ],
+      "bytes": 4194304,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\ee58071ee22d0b8ea2f8db1b0a55589fbf602e726cb3ef3494d875f31875efd0.bin",
+      "sha256": "6083487bf1c45aa5f4970536038381a27cceb53d7439fea19b33d989a9b0baf6",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.26.w3.scale",
+      "kind": "routed",
+      "expert_id": 26,
+      "dtype": "F8_E8M0",
+      "shape": [
+        2048,
+        128
+      ],
+      "bytes": 262144,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\b49fdf1c8cda36d2dc53b653c6eccb3144d96d5daa367a14bf3db1efd8380973.bin",
+      "sha256": "34f4580069280ee74bcc2adef6280097c13dfb374dae015f0b70f73b968b52f0",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.26.w3.weight",
+      "kind": "routed",
+      "expert_id": 26,
+      "dtype": "I8",
+      "shape": [
+        2048,
+        2048
+      ],
+      "bytes": 4194304,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\273aaf787bbcee387baf11c58ebe0b3c907286258e800a9cd0752f7f1cc445aa.bin",
+      "sha256": "59a9b592bcdce30636801b032552715c4ad91d8680d4d576abc8747e421c14e7",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.23.w1.scale",
+      "kind": "routed",
+      "expert_id": 23,
+      "dtype": "F8_E8M0",
+      "shape": [
+        2048,
+        128
+      ],
+      "bytes": 262144,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\fd1580b1b5b5e75ad3930c7136efd79aed77f364a70f8ae44f8e3b45e055b7b0.bin",
+      "sha256": "3768f6f27cf9441d955db574e53ea42569a46f6b3559e10241b9cfbcc714521a",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.23.w1.weight",
+      "kind": "routed",
+      "expert_id": 23,
+      "dtype": "I8",
+      "shape": [
+        2048,
+        2048
+      ],
+      "bytes": 4194304,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\7ca609621efae62a476124c5333da303c7c387abb6e6aacf7812e19bfbfe9772.bin",
+      "sha256": "a2da78c064a45a8949f0ca2e78ce457d040768d531ff873ead941e1d65f48d0f",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.23.w2.scale",
+      "kind": "routed",
+      "expert_id": 23,
+      "dtype": "F8_E8M0",
+      "shape": [
+        4096,
+        64
+      ],
+      "bytes": 262144,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\b6617f30eb103d19679c85053831d94c36f7e8998d8c3b98e9949d10453e8b3d.bin",
+      "sha256": "6aa4c4f71c529e2c6f966e5838f30660e66f28dddabe43b516b765909536bcfc",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.23.w2.weight",
+      "kind": "routed",
+      "expert_id": 23,
+      "dtype": "I8",
+      "shape": [
+        4096,
+        1024
+      ],
+      "bytes": 4194304,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\99cf1c7bb01d709266fd25f6b3b47b507646a3ad7bfaee24302a73d96c860b71.bin",
+      "sha256": "e1af905121d62bc8f93dfbb9d0578be61d160c8015d2f7cfabd29db84ea6226d",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.23.w3.scale",
+      "kind": "routed",
+      "expert_id": 23,
+      "dtype": "F8_E8M0",
+      "shape": [
+        2048,
+        128
+      ],
+      "bytes": 262144,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\31da24fa2ad261f9aebd17e536e464bd0948680243d8cb64f700709184afea60.bin",
+      "sha256": "1a56f65befa2013f037f84453f6602c14a721a5352aa2088179bc1202422044c",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.23.w3.weight",
+      "kind": "routed",
+      "expert_id": 23,
+      "dtype": "I8",
+      "shape": [
+        2048,
+        2048
+      ],
+      "bytes": 4194304,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\495d2463e2b6d28a0f98ced1a44b2c55188d7513f26de970af98b303456e16f3.bin",
+      "sha256": "51f6286bbed451d341822758ad2caf858a2db00a89a2ab4a18970ee3f7d29806",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.123.w1.scale",
+      "kind": "routed",
+      "expert_id": 123,
+      "dtype": "F8_E8M0",
+      "shape": [
+        2048,
+        128
+      ],
+      "bytes": 262144,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\a9bc81340c50f8a29e7f69d19326f2d82a99ac1f46d0858444cf17ebc082be90.bin",
+      "sha256": "122a8dc05d29c60152ad6d0d8b2fc4be0112012bfb6a01ff155e40caf4494af4",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.123.w1.weight",
+      "kind": "routed",
+      "expert_id": 123,
+      "dtype": "I8",
+      "shape": [
+        2048,
+        2048
+      ],
+      "bytes": 4194304,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\c2e638ddb0fd0538917d70a0fb3383f38f4038d2773ee4f6f4213fe5540301db.bin",
+      "sha256": "521497502a195abbcd944315e8409ab02a07d2fe4f62b2313836eaec98f199e5",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.123.w2.scale",
+      "kind": "routed",
+      "expert_id": 123,
+      "dtype": "F8_E8M0",
+      "shape": [
+        4096,
+        64
+      ],
+      "bytes": 262144,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\02ee2a9c7ed5f77d1efe31bd8dff069eca50f0d67a20f7feb17c49deb8f2e40b.bin",
+      "sha256": "ce464ea5a6bce920211e8d64a9da09745e05e2081d3d67379bf9d05b79ee3973",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.123.w2.weight",
+      "kind": "routed",
+      "expert_id": 123,
+      "dtype": "I8",
+      "shape": [
+        4096,
+        1024
+      ],
+      "bytes": 4194304,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\bafca538ac6d095a6c66a0ba7c5c945e0ca8a989390be8f52d5b5a85e2e3e70c.bin",
+      "sha256": "fd99c62a953886cc9cbf4564b2c162dfd7f8002a6aa01ef2379cb6cf7f40765d",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.123.w3.scale",
+      "kind": "routed",
+      "expert_id": 123,
+      "dtype": "F8_E8M0",
+      "shape": [
+        2048,
+        128
+      ],
+      "bytes": 262144,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\05cd3cdb579187f09018d6677e7670dff1349e6ffaf3801a7dafc28b34894199.bin",
+      "sha256": "c75eaa16eebae3e099a1130d3a320f0b149755d192de41cd76af320468658f02",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.123.w3.weight",
+      "kind": "routed",
+      "expert_id": 123,
+      "dtype": "I8",
+      "shape": [
+        2048,
+        2048
+      ],
+      "bytes": 4194304,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\57188a48091864cddcf00ec8739952a05301f196821364739f4e1f59f7382d93.bin",
+      "sha256": "02a8314a8b2e55dfd4ef92f3e0e7f18a888cb0c91782e633d28e73429727a009",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.28.w1.scale",
+      "kind": "routed",
+      "expert_id": 28,
+      "dtype": "F8_E8M0",
+      "shape": [
+        2048,
+        128
+      ],
+      "bytes": 262144,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\4dfb6e944e6e562a9eb83bc6538446eebdb1955f93c6753a3bce61c1b22cde80.bin",
+      "sha256": "048966a9b917f77f7ebec70c9f104d605b8fb32c0b09f3b0a4602c1fbb2765da",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.28.w1.weight",
+      "kind": "routed",
+      "expert_id": 28,
+      "dtype": "I8",
+      "shape": [
+        2048,
+        2048
+      ],
+      "bytes": 4194304,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\69e42c182aa73c68c93fcf79e255d61896fb31b6ab9daefc3b1cfb21cc1fd712.bin",
+      "sha256": "4e95d8a43de8e2597f302065767d8429c2c867a53b431009387a13aeac09d34d",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.28.w2.scale",
+      "kind": "routed",
+      "expert_id": 28,
+      "dtype": "F8_E8M0",
+      "shape": [
+        4096,
+        64
+      ],
+      "bytes": 262144,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\0e45698c27e0374a80c06a64fa03b8b4fe28f78586c0e2bd69b39b01bbc40fb3.bin",
+      "sha256": "61b25fba0b0cc888485d7205dda2b98821c51dbea748e53f22b26238cfe04c7c",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.28.w2.weight",
+      "kind": "routed",
+      "expert_id": 28,
+      "dtype": "I8",
+      "shape": [
+        4096,
+        1024
+      ],
+      "bytes": 4194304,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\c23f69719ab5cfb5110ff6dae1d9e9e2d35d01faa21dacf87bd37fe7d8a4ffdf.bin",
+      "sha256": "5ffff7499ef7e56a62bbd34c1f36dd8b9740a70de74951cb5c33cad35cfd30a2",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.28.w3.scale",
+      "kind": "routed",
+      "expert_id": 28,
+      "dtype": "F8_E8M0",
+      "shape": [
+        2048,
+        128
+      ],
+      "bytes": 262144,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\21e6e0b911a00eb3e63a6174f9a8bd80ac306643921eed1fcdf947ca0a1722c6.bin",
+      "sha256": "8d43b9a1821f5c4f47659c593431b6c7fd3e2d911b09142750aa8b734ed1f5e3",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.28.w3.weight",
+      "kind": "routed",
+      "expert_id": 28,
+      "dtype": "I8",
+      "shape": [
+        2048,
+        2048
+      ],
+      "bytes": 4194304,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\253aa75b74919aeb389124a52ceedb796e87edc87bcc6019e6715ccf855733ac.bin",
+      "sha256": "9cb0fb6b2d40a0988db10270600a571882b975950239a471103372d11240eb57",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.154.w1.scale",
+      "kind": "routed",
+      "expert_id": 154,
+      "dtype": "F8_E8M0",
+      "shape": [
+        2048,
+        128
+      ],
+      "bytes": 262144,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\4a5daa8df8bc8eac5e345b0ec04df626fa68d350bc0e8316e81db33b1129994d.bin",
+      "sha256": "73cea60eeff08d94f58a41b7de04bf2a2cf5e564c0611c770aa2a2c5eab58e51",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.154.w1.weight",
+      "kind": "routed",
+      "expert_id": 154,
+      "dtype": "I8",
+      "shape": [
+        2048,
+        2048
+      ],
+      "bytes": 4194304,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\6e89ac59cd6820eb5ebd6fe1ec6e54473a99e59e6cc9695c1ad6d36cc5ce754c.bin",
+      "sha256": "a8c625b0149215572dcb508bfe7582c9670d5c7bba3e3a70fecda7880bda92e2",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.154.w2.scale",
+      "kind": "routed",
+      "expert_id": 154,
+      "dtype": "F8_E8M0",
+      "shape": [
+        4096,
+        64
+      ],
+      "bytes": 262144,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\bd7352c3c2d6cd46bcc3ab8cf4d22db90e0f39f1eab570cd528e34f763f8d0ee.bin",
+      "sha256": "dbb450ce8ce3ecbb0a6d88aa0e0f9de34fc61d83bb0da3f174f15fde0e79ad77",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.154.w2.weight",
+      "kind": "routed",
+      "expert_id": 154,
+      "dtype": "I8",
+      "shape": [
+        4096,
+        1024
+      ],
+      "bytes": 4194304,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\90758671a816f3223833b417a9008f86050e2bd5722b56c5aaa97e0ade3d10d7.bin",
+      "sha256": "888f7da0aff7195364e069b4538b80edfe0d0771157e2bc53be5c4497c805645",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.154.w3.scale",
+      "kind": "routed",
+      "expert_id": 154,
+      "dtype": "F8_E8M0",
+      "shape": [
+        2048,
+        128
+      ],
+      "bytes": 262144,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\c4bf4d0deab7378a0c06e723c45a0a68cbe40ee9dbfd24aa266b1f74c7a54649.bin",
+      "sha256": "0eb3628ef2039a02ac29d3c4202b02373506e2ef1254bcd8d3c27ef41ef651f3",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.154.w3.weight",
+      "kind": "routed",
+      "expert_id": 154,
+      "dtype": "I8",
+      "shape": [
+        2048,
+        2048
+      ],
+      "bytes": 4194304,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\06f1e43fe93e509793c2f79eaba4daa4af673f80c6d20333b5d402ab2d6d2066.bin",
+      "sha256": "cc06f55075b34ce36fad1f1126e426db4debf4bbac108cd93d1814d04ff1a48b",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.152.w1.scale",
+      "kind": "routed",
+      "expert_id": 152,
+      "dtype": "F8_E8M0",
+      "shape": [
+        2048,
+        128
+      ],
+      "bytes": 262144,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\b41d6e509be733f585683a1a87ae157f4c028c3af88d60b1f2b3f79186cf1fb7.bin",
+      "sha256": "2858a31074d7084781ef0814b48fadbb0bfb3d8f2d31ae2d6091535c14ffb57b",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.152.w1.weight",
+      "kind": "routed",
+      "expert_id": 152,
+      "dtype": "I8",
+      "shape": [
+        2048,
+        2048
+      ],
+      "bytes": 4194304,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\c4248185e343b77895af1fad3f3f4e37610899e6b6369abaff04dd0669c42728.bin",
+      "sha256": "86a35bdf635c397ef7b831571a4d91de1d2b1d598942f2008b8ec6c86c970a69",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.152.w2.scale",
+      "kind": "routed",
+      "expert_id": 152,
+      "dtype": "F8_E8M0",
+      "shape": [
+        4096,
+        64
+      ],
+      "bytes": 262144,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\39fff472f133fe586fa09b1556d2a428de02196d5988deb542df3356072e105c.bin",
+      "sha256": "56bf372ee9dfd6b35362158b448e3e983e19119f63d37f58229e4dbd5110de9e",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.152.w2.weight",
+      "kind": "routed",
+      "expert_id": 152,
+      "dtype": "I8",
+      "shape": [
+        4096,
+        1024
+      ],
+      "bytes": 4194304,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\982c9dcd96f935970fbb644dad59d4d31141bd5e778fa9e9811c056921036404.bin",
+      "sha256": "f01e5af63458c9a4ea8a391135e79d6db0f88536c040e52ebeac0a025abd9388",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.152.w3.scale",
+      "kind": "routed",
+      "expert_id": 152,
+      "dtype": "F8_E8M0",
+      "shape": [
+        2048,
+        128
+      ],
+      "bytes": 262144,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\723a6379793d52f709214f7135a82f2c162ba245f0626094835961a08c92ef0f.bin",
+      "sha256": "64ab8539865afe02c248543863ff084a7ce20bce1e682e3a0c72d4c02e8cd560",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.experts.152.w3.weight",
+      "kind": "routed",
+      "expert_id": 152,
+      "dtype": "I8",
+      "shape": [
+        2048,
+        2048
+      ],
+      "bytes": 4194304,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\db61fd5be66c3950817ac82a73bd9000acf420f7ec18e0fc85a58fef67218ec1.bin",
+      "sha256": "1d8897f0a3869d1181c46d8b11e22bd8944910e7b2b5669d01685d918eabc0de",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.shared_experts.w1.scale",
+      "kind": "shared",
+      "expert_id": null,
+      "dtype": "F8_E8M0",
+      "shape": [
+        16,
+        32
+      ],
+      "bytes": 512,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\b495b447d0055707e3b117dc2e08f5d7fb7bc83f217d33656c995e09deff494f.bin",
+      "sha256": "16be9dc81893b562a37b68bc9efb7eb5c07bcabf137a69c4ae67614a17b659f2",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.shared_experts.w1.weight",
+      "kind": "shared",
+      "expert_id": null,
+      "dtype": "F8_E4M3",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bytes": 8388608,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\b9256a754bde6cc3883eb29fedc44d46e0dd6db8d4fe0bc3d7419974eb0b4f6e.bin",
+      "sha256": "114dc8ea9a3510b944135bd01b11407a298d2af81a359f06c59a33d80f8e5694",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.shared_experts.w2.scale",
+      "kind": "shared",
+      "expert_id": null,
+      "dtype": "F8_E8M0",
+      "shape": [
+        32,
+        16
+      ],
+      "bytes": 512,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\b393fbf1701e6ecaf104d86a3bfa847afa180b5c3778f0f5c05ca5cd9a487172.bin",
+      "sha256": "42b5eadc11e6c3b9aa637a3f9a7b3a8ddbcd71b504c44f75f9a3d3e948a4eee6",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.shared_experts.w2.weight",
+      "kind": "shared",
+      "expert_id": null,
+      "dtype": "F8_E4M3",
+      "shape": [
+        4096,
+        2048
+      ],
+      "bytes": 8388608,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\0e241e722347ccd9e864dd76bbc1d733b28d971ed63c607d1df4481b71a6725d.bin",
+      "sha256": "f3db4b69404c7bb80afe15fa5d70cd3366c620ba95af5c1ea5561674252d59f8",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.shared_experts.w3.scale",
+      "kind": "shared",
+      "expert_id": null,
+      "dtype": "F8_E8M0",
+      "shape": [
+        16,
+        32
+      ],
+      "bytes": 512,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\6de4217f92582ba75a827308d1516978fbefbf288047d3a53d64c45b69092131.bin",
+      "sha256": "0d36460a439d8bf6f3abfd8e15dbe7071873d61326d9953a5509911365adef95",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    },
+    {
+      "tensor": "layers.42.ffn.shared_experts.w3.weight",
+      "kind": "shared",
+      "expert_id": null,
+      "dtype": "F8_E4M3",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bytes": 8388608,
+      "path": "D:\\models\\Polaris-S14\\range_cache\\5546f3c0c51ff032565622485a7c93e90b8cd407d48ca30ca9b0d3a9a02298e1.bin",
+      "sha256": "09a987e93c5ce65a2ad07ccedcb8a34ebd46d39c4fbdf3691557d185f221cbee",
+      "cache_hit": true,
+      "hash_authority": "tofu"
+    }
+  ],
+  "reference_semantics": "FullDepth43 live L42 post-attention/HC/RMSNorm activation, then official activation quantization as the input to the existing bounded Vulkan top6+shared minimal packed chain. The Vulkan chain does not yet implement official BF16/requantize boundaries or route-weight-before-w2."
+}

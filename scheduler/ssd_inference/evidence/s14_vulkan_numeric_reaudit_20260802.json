@@ -1,0 +1,42 @@
+{
+  "format": "polaris-s14-vulkan-evidence-reaudit-v1",
+  "recorded_date": "2026-08-02",
+  "audited_commit": "fac6b6a0b001d8c4cec2cab8fba0d43b8e6af545",
+  "runner_modified_before_replay": false,
+  "command": "$env:POLARIS_S14_L42_CAPTURE_DIR=<retained-06ff-capture>; cargo run --release --offline -p ssd_inference --example s14_vulkan_numeric",
+  "capture_manifest_sha256": "a7dfc6ec15346a82d44af668089c23a033f93fc9497f112121ac208a9dea9846",
+  "capture_integrity": {
+    "payload_files_reverified": 76,
+    "payload_bytes_reverified": 247515224,
+    "expert_126_w1_w3_input_sha256": "1a2006c1b79b31bc3db3540ef730b08547c6148e224074b0ba712e2c3b9d7c9f",
+    "expert_126_w2_input_sha256": "7795b1df61092c44883579a0107d02e693303fd16e926fcbd1baa154b49a9a31",
+    "wq_a_input_sha256": "47156935b19ca5483f0e92d2284eaa6a9417686978dc4b41ca893ee162f37577"
+  },
+  "device": {
+    "name": "AMD Radeon RX 5700 XT",
+    "vendor_id": "0x1002",
+    "device_id": "0x731f",
+    "driver_version_raw": "0x00800161",
+    "timestamp_valid_bits": 64,
+    "timestamp_period_ns": 10
+  },
+  "top6_routed_plus_shared_replay": {
+    "expert_ids": [126, 12, 205, 149, 227, 174],
+    "cpu_reference_ms": 157.6863,
+    "gpu_fill_plus_35_dispatch_barriers_ms": 1.36644,
+    "submit_readback_sync_ms": 2.3908,
+    "max_abs_error": 0.00001096725464,
+    "mean_abs_error": 0.0000009757682164,
+    "rmse": 0.000001426471034,
+    "matches_committed_error_evidence": true
+  },
+  "fp8_wq_a_replay": {
+    "cpu_reference_ms": 11.2189,
+    "gpu_kernel_ms_mean": 0.0833568,
+    "submit_readback_sync_ms": 9.2276,
+    "max_abs_error": 0.00000005960464478,
+    "rmse": 0.000000007205182117,
+    "matches_committed_error_evidence": true
+  },
+  "conclusion": "The fac6b6a RX 5700 XT evidence is reproducible from its retained hash-verified capture. This replay does not widen the original bounded claim."
+}

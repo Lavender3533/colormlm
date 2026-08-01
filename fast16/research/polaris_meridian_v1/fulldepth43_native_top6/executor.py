@@ -8,6 +8,7 @@ HC/norm/BF16 head argmax 产生 token。静态页缺失或预算不足时 fail c
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import time
@@ -29,6 +30,7 @@ from .profile import FULLDEPTH43_NATIVE_TOP6, ExecutionProfile
 
 
 REPORT_FORMAT = "polaris-fulldepth43-native-top6-reference-v1"
+VULKAN_BRIDGE_FORMAT = "polaris-fulldepth43-vulkan-bridge-capture-v1"
 DEFAULT_REPORT = Path(__file__).resolve().parent / "last_run_report.json"
 DEFAULT_FORCED_PREFILL = Path(__file__).resolve().parent / "first_preview_forced_prefill.json"
 
@@ -237,6 +239,8 @@ class ExecutionConfig:
     range_attempts: int = 4
     range_workers: int = 3
     forced_prefill_path: Path | None = None
+    vulkan_bridge_capture: Path | None = None
+    vulkan_bridge_layer: int = 42
 
     def validate(self) -> None:
         if not self.endpoint.startswith("https://"):
@@ -251,6 +255,130 @@ class ExecutionConfig:
             raise FullDepthError("head_chunk_size 必须为正整数")
         if self.range_attempts <= 0 or not 1 <= self.range_workers <= 8:
             raise FullDepthError("range_attempts/workers 必须分别为正数和 1..8")
+        if self.vulkan_bridge_layer not in FULLDEPTH43_NATIVE_TOP6.layers:
+            raise FullDepthError("Vulkan bridge layer 必须位于 0..42")
+        if self.vulkan_bridge_capture is not None and self.token_count != 1:
+            raise FullDepthError("Vulkan bridge capture 当前只允许单 token")
+
+
+def _sha256_bytes(payload: bytes) -> str:
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _bridge_payload_entry(
+    cached: online_range.CachedRange,
+    *,
+    kind: str,
+    expert_id: int | None,
+) -> dict[str, Any]:
+    entry = dict(cached.entry)
+    tensor = entry.get("tensor")
+    observed = cached.proof.get("observed_sha256")
+    path = cached.path.resolve()
+    if not isinstance(tensor, str) or not tensor.startswith("layers."):
+        raise FullDepthError("Vulkan bridge 只接受已命名的真实层 payload")
+    if not isinstance(observed, str) or len(observed) != 64:
+        raise FullDepthError(f"Vulkan bridge payload 缺少 SHA proof: {tensor}")
+    if not path.is_file() or path.stat().st_size != entry.get("bytes"):
+        raise FullDepthError(f"Vulkan bridge payload 字节漂移: {tensor}")
+    return {
+        "tensor": tensor,
+        "kind": kind,
+        "expert_id": expert_id,
+        "dtype": entry.get("dtype"),
+        "shape": entry.get("shape"),
+        "bytes": entry.get("bytes"),
+        "path": str(path),
+        "sha256": observed,
+        "cache_hit": cached.cache_hit,
+        "hash_authority": cached.proof.get("hash_authority"),
+    }
+
+
+def _write_vulkan_bridge_capture(
+    capture_dir: Path,
+    *,
+    layer: int,
+    position: int,
+    token_id: int,
+    completed_layers: Sequence[int],
+    pending: s14.PendingLayer,
+    routed: RoutedLayer,
+    kernel: FullDepthNativeLayerReference,
+    profile: ExecutionProfile,
+) -> dict[str, Any]:
+    capture_dir = capture_dir.resolve()
+    if capture_dir.exists():
+        raise FullDepthError(f"Vulkan bridge capture 目录已存在: {capture_dir}")
+    if list(completed_layers) != list(range(layer)):
+        raise FullDepthError("Vulkan bridge capture 前缀不是连续真实 FullDepth 层")
+    if tuple(pending.route_ids) != routed.expert_ids or len(set(pending.route_ids)) != profile.top_k:
+        raise FullDepthError("Vulkan bridge route 与已获取 payload 不一致")
+
+    capture_dir.mkdir(parents=True, exist_ok=False)
+    raw_ffn = pending.ffn_input.float().contiguous().numpy().astype("<f4", copy=False)
+    quantized = kernel._activation_quant(raw_ffn).astype("<f4", copy=False)
+    input_bytes = quantized.tobytes(order="C")
+    input_file = "ffn_input_activation_quant.f32le.bin"
+    temporary = capture_dir / (input_file + ".tmp")
+    temporary.write_bytes(input_bytes)
+    os.replace(temporary, capture_dir / input_file)
+
+    payloads: list[dict[str, Any]] = []
+    for expert_id in pending.route_ids:
+        pages = routed.experts[expert_id]
+        if len(pages) != 6:
+            raise FullDepthError(f"Vulkan bridge E{expert_id} 不是完整 6 payload")
+        payloads.extend(
+            _bridge_payload_entry(page, kind="routed", expert_id=expert_id) for page in pages
+        )
+    if len(routed.shared) != 6:
+        raise FullDepthError("Vulkan bridge shared expert 不是完整 6 payload")
+    payloads.extend(
+        _bridge_payload_entry(page, kind="shared", expert_id=None) for page in routed.shared
+    )
+    if len(payloads) != 42:
+        raise FullDepthError("Vulkan bridge top6+shared 必须精确包含 42 payload")
+
+    document = {
+        "format": VULKAN_BRIDGE_FORMAT,
+        "revision": profile.revision,
+        "profile": profile.profile_id,
+        "layer": layer,
+        "position": position,
+        "input_token_id": token_id,
+        "completed_layers_before_capture": list(completed_layers),
+        "route_source": pending.route_source,
+        "expert_ids": pending.route_ids,
+        "route_weights": pending.route_weights,
+        "route_weight_sum": float(sum(pending.route_weights)),
+        "source_ffn_input_f32_le_sha256": _sha256_bytes(raw_ffn.tobytes(order="C")),
+        "input": {
+            "name": "ffn_input_activation_quant",
+            "file": input_file,
+            "shape": list(quantized.shape),
+            "bytes": len(input_bytes),
+            "f32_le_sha256": _sha256_bytes(input_bytes),
+        },
+        "payload_count": len(payloads),
+        "payload_bytes": sum(int(entry["bytes"]) for entry in payloads),
+        "payloads": payloads,
+        "reference_semantics": (
+            "FullDepth43 live L{layer} post-attention/HC/RMSNorm activation, then official "
+            "activation quantization as the input to the existing bounded Vulkan "
+            "top6+shared minimal packed chain. The Vulkan chain does not yet implement "
+            "official BF16/requantize boundaries or route-weight-before-w2."
+        ).format(layer=layer),
+    }
+    manifest_path = capture_dir / "bridge_manifest.json"
+    write_json(manifest_path, document)
+    return {
+        "manifest": str(manifest_path),
+        "input_f32_le_sha256": document["input"]["f32_le_sha256"],
+        "source_ffn_input_f32_le_sha256": document["source_ffn_input_f32_le_sha256"],
+        "payload_count": len(payloads),
+        "payload_bytes": document["payload_bytes"],
+    }
 
 
 @dataclass
@@ -416,6 +544,7 @@ def execute(
     final_head: s14.FinalHeadReference | None = None
     current_layer: int | None = None
     stage = "bootstrap"
+    execution_started = time.perf_counter()
     try:
         for _ in range(config.token_count):
             position = decoder.position
@@ -449,6 +578,7 @@ def execute(
             state = s14._initial_state(embedding, input_token_id)
             next_states: dict[int, s14.LayerRuntimeState] = {}
             for layer in profile.layers:
+                layer_started = time.perf_counter()
                 current_layer = layer
                 stage = f"position_{position}_layer_{layer}_base"
                 prerequisites = session.prepare_layer(layer, input_token_id)
@@ -471,6 +601,23 @@ def execute(
                 for expert_id in pending.route_ids:
                     pages.extend(routed.experts[expert_id])
                 kernel.add_routed(pages)
+                bridge_capture = None
+                if (
+                    config.vulkan_bridge_capture is not None
+                    and position == 0
+                    and layer == config.vulkan_bridge_layer
+                ):
+                    bridge_capture = _write_vulkan_bridge_capture(
+                        config.vulkan_bridge_capture,
+                        layer=layer,
+                        position=position,
+                        token_id=input_token_id,
+                        completed_layers=token_report["completed_layers"],
+                        pending=pending,
+                        routed=routed,
+                        kernel=kernel,
+                        profile=profile,
+                    )
                 moe_branch, state = kernel.finish_layer(pending)
                 if tuple(state.shape) != (1, 1, s14.HC_MULT, s14.HIDDEN_SIZE) or state.dtype != torch.bfloat16:
                     raise FullDepthError(f"L{layer} 破坏 BF16 [1,1,4,4096] mHC 状态")
@@ -487,6 +634,8 @@ def execute(
                         "shared_and_expert_ranges": len(pages),
                         "moe_branch": kernel._summary_tensor(moe_branch),
                         "layer_output": kernel._summary_tensor(state),
+                        "elapsed_seconds": time.perf_counter() - layer_started,
+                        "vulkan_bridge_capture": bridge_capture,
                     }
                 )
                 write_json(config.report_path, report)
@@ -553,6 +702,7 @@ def execute(
             "traceback": traceback.format_exc().splitlines(),
         }
         report["claim_limit"] = "failure before current token commit; no fake token emitted"
+    report["execution_seconds"] = time.perf_counter() - execution_started
     write_json(config.report_path, report)
     return report
 
@@ -577,6 +727,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--head-chunk-size", type=int, default=4096)
     parser.add_argument("--range-attempts", type=int, default=4)
     parser.add_argument("--range-workers", type=int, choices=range(1, 9), default=3)
+    parser.add_argument("--vulkan-bridge-capture", type=Path)
+    parser.add_argument("--vulkan-bridge-layer", type=int, choices=range(43), default=42)
     return parser
 
 
@@ -595,6 +747,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             range_attempts=args.range_attempts,
             range_workers=args.range_workers,
             forced_prefill_path=args.forced_prefill,
+            vulkan_bridge_capture=args.vulkan_bridge_capture,
+            vulkan_bridge_layer=args.vulkan_bridge_layer,
         )
         if args.command == "preflight":
             catalog = _load_or_build_catalog(config)

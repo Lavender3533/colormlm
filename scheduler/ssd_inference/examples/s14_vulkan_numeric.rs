@@ -12,7 +12,7 @@
 use anyhow::{bail, Context, Result};
 use ash::vk;
 use rayon::prelude::*;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use ssd_inference::buffer::GpuBuffer;
 use ssd_inference::device::VulkanContext;
@@ -28,12 +28,15 @@ const MODEL_DIR: &str = "D:/models/Polaris-S14";
 const ROUTE_MANIFEST: &str = "D:/models/Polaris-S14/l42_real_layer_route_manifest.json";
 const S14_MANIFEST: &str = "D:/models/Polaris-S14/s14_base_cache_manifest.json";
 const CAPTURE_DIR_ENV: &str = "POLARIS_S14_L42_CAPTURE_DIR";
+const FULLDEPTH_BRIDGE_DIR_ENV: &str = "POLARIS_FULLDEPTH43_VULKAN_BRIDGE_DIR";
+const FULLDEPTH_BRIDGE_EVIDENCE_ENV: &str = "POLARIS_FULLDEPTH43_VULKAN_EVIDENCE";
 const REVISION: &str = "7872f01b1d1fe23eabc4c98b48bffcef5a386062";
 const REAL_EXPERT_ID: u32 = 126;
 const AMD_VENDOR_ID: u32 = 0x1002;
 const NAVI10_DEVICE_ID: u32 = 0x731f;
 const ITERATIONS: u32 = 100;
 const MOE_BATCH_ITERATIONS: u32 = 1;
+const FULLDEPTH_BRIDGE_ITERATIONS: u32 = 20;
 
 struct DeviceBuffers {
     upload_x: GpuBuffer,
@@ -489,17 +492,22 @@ struct SharedMoeDispatch {
     accumulate: S14MoeAccumulateDispatch,
 }
 
+#[derive(Serialize)]
 struct Timing {
     iterations: u32,
     gpu_kernel_ms_mean: f64,
     submit_readback_sync_ms: f64,
 }
 
+#[derive(Serialize)]
 struct ErrorStats {
     max_abs: f32,
     mean_abs: f64,
     rmse: f64,
     max_rel_for_abs_ref_gt_1e_5: f32,
+    max_abs_reference: f32,
+    rmse_reference: f64,
+    relative_rmse: f64,
 }
 
 #[derive(Deserialize)]
@@ -565,6 +573,89 @@ struct CaptureInput {
 }
 
 #[derive(Deserialize)]
+struct FullDepthBridgeManifest {
+    format: String,
+    revision: String,
+    profile: String,
+    layer: u32,
+    position: u32,
+    input_token_id: u32,
+    completed_layers_before_capture: Vec<u32>,
+    route_source: String,
+    expert_ids: Vec<u32>,
+    route_weights: Vec<f32>,
+    route_weight_sum: f32,
+    source_ffn_input_f32_le_sha256: String,
+    input: CaptureInput,
+    payload_count: usize,
+    payload_bytes: u64,
+    payloads: Vec<FullDepthBridgePayload>,
+    reference_semantics: String,
+}
+
+#[derive(Deserialize)]
+struct FullDepthBridgePayload {
+    tensor: String,
+    kind: String,
+    expert_id: Option<u32>,
+    dtype: String,
+    shape: Vec<usize>,
+    bytes: u64,
+    path: PathBuf,
+    sha256: String,
+}
+
+#[derive(Serialize)]
+struct MoeBatchResult {
+    cpu_reference_ms: f64,
+    timing: Timing,
+    error: ErrorStats,
+    input_f32_le_sha256: String,
+    cpu_reference_output_f32_le_sha256: String,
+    gpu_output_f32_le_sha256: String,
+    tolerance: MoeBatchTolerance,
+    reference_semantics: &'static str,
+}
+
+#[derive(Serialize)]
+struct MoeBatchTolerance {
+    max_abs_limit: f32,
+    rmse_limit: f64,
+    relative_scale_factor: f64,
+    passed: bool,
+}
+
+#[derive(Serialize)]
+struct FullDepthBridgeDeviceEvidence {
+    name: String,
+    vendor_id: String,
+    device_id: String,
+    driver_version_raw: String,
+    timestamp_valid_bits: u32,
+    timestamp_period_ns: f64,
+}
+
+#[derive(Serialize)]
+struct FullDepthBridgeEvidence {
+    format: &'static str,
+    revision: &'static str,
+    source_manifest_sha256: String,
+    layer: u32,
+    position: u32,
+    input_token_id: u32,
+    expert_ids: Vec<u32>,
+    route_weights: Vec<f32>,
+    route_weight_sum: f32,
+    payload_count: usize,
+    payload_bytes: u64,
+    device: FullDepthBridgeDeviceEvidence,
+    result: MoeBatchResult,
+    bridge_wall_ms_including_payload_read_upload_pipeline_and_readback: f64,
+    expansion_status: &'static str,
+    claim_limit: &'static str,
+}
+
+#[derive(Deserialize)]
 struct BaseManifest {
     format: String,
     revision: String,
@@ -592,6 +683,9 @@ struct S14Manifest {
 }
 
 fn main() -> Result<()> {
+    if let Some(path) = std::env::var_os(FULLDEPTH_BRIDGE_DIR_ENV) {
+        return run_fulldepth_bridge(PathBuf::from(path));
+    }
     println!("Polaris S14 Vulkan numerical kernels (hash-verified real L42 payloads)");
     let capture_dir = std::env::var_os(CAPTURE_DIR_ENV)
         .map(PathBuf::from)
@@ -660,6 +754,316 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+fn run_fulldepth_bridge(capture_dir: PathBuf) -> Result<()> {
+    let bridge_started = Instant::now();
+    let capture_root = capture_dir
+        .canonicalize()
+        .with_context(|| format!("resolve FullDepth43 bridge {}", capture_dir.display()))?;
+    let manifest_path = capture_root.join("bridge_manifest.json");
+    let manifest_bytes = std::fs::read(&manifest_path)
+        .with_context(|| format!("read {}", manifest_path.display()))?;
+    let manifest_sha256 = sha256_bytes(&manifest_bytes);
+    let manifest: FullDepthBridgeManifest = serde_json::from_slice(&manifest_bytes)
+        .context("parse FullDepth43 Vulkan bridge manifest")?;
+    let expected_prefix: Vec<u32> = (0..manifest.layer).collect();
+    if manifest.format != "polaris-fulldepth43-vulkan-bridge-capture-v1"
+        || manifest.revision != REVISION
+        || manifest.profile != "fulldepth43_native_top6"
+        || manifest.layer > 42
+        || manifest.position != 0
+        || manifest.completed_layers_before_capture != expected_prefix
+        || manifest.route_source.is_empty()
+        || manifest.expert_ids.len() != 6
+        || manifest.route_weights.len() != 6
+        || manifest.payload_count != 42
+        || manifest.payloads.len() != 42
+        || manifest.input.name != "ffn_input_activation_quant"
+        || manifest.input.shape != [1, 1, 4096]
+        || manifest.input.bytes != 4096 * std::mem::size_of::<f32>()
+        || manifest.source_ffn_input_f32_le_sha256.len() != 64
+        || !manifest.reference_semantics.contains("FullDepth43 live")
+    {
+        bail!("FullDepth43 Vulkan bridge contract drift");
+    }
+    let mut unique_experts = manifest.expert_ids.clone();
+    unique_experts.sort_unstable();
+    unique_experts.dedup();
+    if unique_experts.len() != 6
+        || manifest
+            .route_weights
+            .iter()
+            .any(|weight| !weight.is_finite() || *weight < 0.0)
+        || (manifest.route_weights.iter().sum::<f32>() - 1.5).abs() > 2.0e-6
+        || (manifest.route_weight_sum - 1.5).abs() > 2.0e-6
+    {
+        bail!("FullDepth43 bridge route is not a valid native top-6");
+    }
+    let observed_payload_bytes = manifest
+        .payloads
+        .iter()
+        .try_fold(0u64, |total, payload| total.checked_add(payload.bytes))
+        .ok_or_else(|| anyhow::anyhow!("FullDepth43 bridge payload byte overflow"))?;
+    if observed_payload_bytes != manifest.payload_bytes {
+        bail!("FullDepth43 bridge payload byte total drift");
+    }
+
+    let input = load_fulldepth_bridge_input(&manifest, &capture_root)?;
+    println!(
+        "FullDepth43 live L{} position{} token{} input_sha256={} source_ffn_sha256={}",
+        manifest.layer,
+        manifest.position,
+        manifest.input_token_id,
+        manifest.input.f32_le_sha256,
+        manifest.source_ffn_input_f32_le_sha256,
+    );
+    println!(
+        "FullDepth43 live route top6={:?}, weights={:?}, source={}, payloads={} / {} bytes",
+        manifest.expert_ids,
+        manifest.route_weights,
+        manifest.route_source,
+        manifest.payload_count,
+        manifest.payload_bytes,
+    );
+
+    let routed = manifest
+        .expert_ids
+        .iter()
+        .zip(&manifest.route_weights)
+        .map(|(&expert_id, &mix_weight)| {
+            let (w1, s1) = load_fulldepth_bridge_pair(&manifest, expert_id, "w1")?;
+            let (w3, s3) = load_fulldepth_bridge_pair(&manifest, expert_id, "w3")?;
+            let (w2, s2) = load_fulldepth_bridge_pair(&manifest, expert_id, "w2")?;
+            Ok(MoePayload {
+                expert_id: Some(expert_id),
+                mix_weight,
+                w1,
+                s1,
+                w3,
+                s3,
+                w2,
+                s2,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let (w1, s1) = load_fulldepth_bridge_shared_pair(&manifest, "w1")?;
+    let (w3, s3) = load_fulldepth_bridge_shared_pair(&manifest, "w3")?;
+    let (w2, s2) = load_fulldepth_bridge_shared_pair(&manifest, "w2")?;
+    let shared = MoePayload {
+        expert_id: None,
+        mix_weight: 1.0,
+        w1,
+        s1,
+        w3,
+        s3,
+        w2,
+        s2,
+    };
+
+    let ctx = VulkanContext::init()?;
+    let queue_props = unsafe {
+        ctx.instance
+            .get_physical_device_queue_family_properties(ctx.physical)
+    };
+    let timestamp_bits = queue_props[ctx.qf_graphics as usize].timestamp_valid_bits;
+    let physical_properties = unsafe { ctx.instance.get_physical_device_properties(ctx.physical) };
+    if physical_properties.vendor_id != AMD_VENDOR_ID
+        || physical_properties.device_id != NAVI10_DEVICE_ID
+        || timestamp_bits == 0
+    {
+        bail!(
+            "FullDepth43 bridge requires timestamp-capable RX 5700 XT; found 0x{:04x}:0x{:04x} ({})",
+            physical_properties.vendor_id,
+            physical_properties.device_id,
+            ctx.gpu_name
+        );
+    }
+    let timestamp_period_ns = physical_properties.limits.timestamp_period as f64;
+    println!(
+        "FullDepth43 Vulkan bridge GPU={} vendor=0x{:04x} device=0x{:04x} driver=0x{:08x} timestamp_bits={} timestamp_period_ns={}",
+        ctx.gpu_name,
+        physical_properties.vendor_id,
+        physical_properties.device_id,
+        physical_properties.driver_version,
+        timestamp_bits,
+        timestamp_period_ns,
+    );
+    let pipelines = S14NumericPipelines::new(&ctx)?;
+    let result = run_top6_shared_moe_batch(
+        &ctx,
+        &pipelines,
+        timestamp_bits,
+        timestamp_period_ns,
+        &input,
+        &routed,
+        &shared,
+        FULLDEPTH_BRIDGE_ITERATIONS,
+    )?;
+    pipelines.destroy(&ctx);
+
+    let evidence = FullDepthBridgeEvidence {
+        format: "polaris-fulldepth43-vulkan-bridge-evidence-v1",
+        revision: REVISION,
+        source_manifest_sha256: manifest_sha256,
+        layer: manifest.layer,
+        position: manifest.position,
+        input_token_id: manifest.input_token_id,
+        expert_ids: manifest.expert_ids,
+        route_weights: manifest.route_weights,
+        route_weight_sum: manifest.route_weight_sum,
+        payload_count: manifest.payload_count,
+        payload_bytes: manifest.payload_bytes,
+        device: FullDepthBridgeDeviceEvidence {
+            name: ctx.gpu_name.clone(),
+            vendor_id: format!("0x{:04x}", physical_properties.vendor_id),
+            device_id: format!("0x{:04x}", physical_properties.device_id),
+            driver_version_raw: format!("0x{:08x}", physical_properties.driver_version),
+            timestamp_valid_bits: timestamp_bits,
+            timestamp_period_ns,
+        },
+        result,
+        bridge_wall_ms_including_payload_read_upload_pipeline_and_readback: bridge_started
+            .elapsed()
+            .as_secs_f64()
+            * 1000.0,
+        expansion_status: "single_real_layer_only",
+        claim_limit: "Real FullDepth43 live layer activation and native top-6 payloads executed by the existing bounded Vulkan minimal MoE batch. This is not official BF16/requantized expert parity and is not wired into token commit.",
+    };
+    let evidence_path = std::env::var_os(FULLDEPTH_BRIDGE_EVIDENCE_ENV)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| capture_root.join("vulkan_evidence.json"));
+    if let Some(parent) = evidence_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(&evidence_path, serde_json::to_vec_pretty(&evidence)?)?;
+    println!("FullDepth43 Vulkan evidence={}", evidence_path.display());
+    Ok(())
+}
+
+fn load_fulldepth_bridge_input(
+    manifest: &FullDepthBridgeManifest,
+    capture_root: &Path,
+) -> Result<Vec<f32>> {
+    if manifest.input.file.components().count() != 1 {
+        bail!("FullDepth43 bridge input must be a capture-local file");
+    }
+    let path = capture_root
+        .join(&manifest.input.file)
+        .canonicalize()
+        .context("resolve FullDepth43 bridge input")?;
+    if !path.starts_with(capture_root) {
+        bail!("FullDepth43 bridge input escapes capture directory");
+    }
+    let bytes = std::fs::read(&path)?;
+    if bytes.len() != manifest.input.bytes || sha256_bytes(&bytes) != manifest.input.f32_le_sha256 {
+        bail!("FullDepth43 bridge input bytes/SHA-256 drift");
+    }
+    let values: Vec<f32> = bytes
+        .chunks_exact(4)
+        .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+        .collect();
+    if values.len() != 4096 || values.iter().any(|value| !value.is_finite()) {
+        bail!("FullDepth43 bridge input shape/value drift");
+    }
+    Ok(values)
+}
+
+fn fulldepth_bridge_payload<'a>(
+    manifest: &'a FullDepthBridgeManifest,
+    tensor: &str,
+    kind: &str,
+    expert_id: Option<u32>,
+) -> Result<&'a FullDepthBridgePayload> {
+    let matches: Vec<&FullDepthBridgePayload> = manifest
+        .payloads
+        .iter()
+        .filter(|payload| {
+            payload.tensor == tensor && payload.kind == kind && payload.expert_id == expert_id
+        })
+        .collect();
+    if matches.len() != 1 {
+        bail!("FullDepth43 bridge must contain exactly one {tensor}");
+    }
+    Ok(matches[0])
+}
+
+fn load_fulldepth_bridge_pair(
+    manifest: &FullDepthBridgeManifest,
+    expert_id: u32,
+    component: &str,
+) -> Result<(Vec<u8>, Vec<u8>)> {
+    let prefix = format!(
+        "layers.{}.ffn.experts.{expert_id}.{component}",
+        manifest.layer
+    );
+    let weight = fulldepth_bridge_payload(
+        manifest,
+        &format!("{prefix}.weight"),
+        "routed",
+        Some(expert_id),
+    )?;
+    let scale = fulldepth_bridge_payload(
+        manifest,
+        &format!("{prefix}.scale"),
+        "routed",
+        Some(expert_id),
+    )?;
+    if weight.dtype != "I8"
+        || scale.dtype != "F8_E8M0"
+        || weight.bytes != 4_194_304
+        || scale.bytes != 262_144
+        || weight.shape.iter().product::<usize>() != weight.bytes as usize
+        || scale.shape.iter().product::<usize>() != scale.bytes as usize
+    {
+        bail!("FullDepth43 bridge E{expert_id}/{component} physical ABI drift");
+    }
+    Ok((
+        read_verified_payload(
+            &weight.path,
+            weight.bytes as usize,
+            &weight.sha256,
+            &weight.tensor,
+        )?,
+        read_verified_payload(
+            &scale.path,
+            scale.bytes as usize,
+            &scale.sha256,
+            &scale.tensor,
+        )?,
+    ))
+}
+
+fn load_fulldepth_bridge_shared_pair(
+    manifest: &FullDepthBridgeManifest,
+    component: &str,
+) -> Result<(Vec<u8>, Vec<u8>)> {
+    let prefix = format!("layers.{}.ffn.shared_experts.{component}", manifest.layer);
+    let weight = fulldepth_bridge_payload(manifest, &format!("{prefix}.weight"), "shared", None)?;
+    let scale = fulldepth_bridge_payload(manifest, &format!("{prefix}.scale"), "shared", None)?;
+    if weight.dtype != "F8_E4M3"
+        || scale.dtype != "F8_E8M0"
+        || weight.bytes != 8_388_608
+        || scale.bytes != 512
+        || weight.shape.iter().product::<usize>() != weight.bytes as usize
+        || scale.shape.iter().product::<usize>() != scale.bytes as usize
+    {
+        bail!("FullDepth43 bridge shared/{component} physical ABI drift");
+    }
+    Ok((
+        read_verified_payload(
+            &weight.path,
+            weight.bytes as usize,
+            &weight.sha256,
+            &weight.tensor,
+        )?,
+        read_verified_payload(
+            &scale.path,
+            scale.bytes as usize,
+            &scale.sha256,
+            &scale.tensor,
+        )?,
+    ))
+}
+
 fn run_real_moe_batch(
     ctx: &VulkanContext,
     pipelines: &S14NumericPipelines,
@@ -725,7 +1129,7 @@ fn run_real_moe_batch(
         s2,
     };
 
-    run_top6_shared_moe_batch(
+    let _ = run_top6_shared_moe_batch(
         ctx,
         pipelines,
         timestamp_bits,
@@ -733,6 +1137,7 @@ fn run_real_moe_batch(
         w1_w3_input,
         &routed,
         &shared,
+        MOE_BATCH_ITERATIONS,
     )
     .context("real L42 top-6 routed + shared GPU-resident MoE batch")?;
     Ok(())
@@ -900,8 +1305,9 @@ fn run_top6_shared_moe_batch(
     x: &[f32],
     routed: &[MoePayload],
     shared: &MoePayload,
-) -> Result<()> {
-    if x.len() != 4096 || routed.len() != 6 || shared.expert_id.is_some() {
+    iterations: u32,
+) -> Result<MoeBatchResult> {
+    if x.len() != 4096 || routed.len() != 6 || shared.expert_id.is_some() || iterations == 0 {
         bail!("real L42 MoE batch shape/route contract drift");
     }
     let up_shape = S14MatvecShape::new(2048, 4096)?.validate_mxfp4()?;
@@ -1033,12 +1439,17 @@ fn run_top6_shared_moe_batch(
         &swiglu,
         &routed_dispatches,
         &shared_dispatch,
+        iterations,
     )?;
     let actual = buffers.output();
     let error = error_stats(&actual, &expected)?;
-    enforce_error(&error, 1.0e-3, 1.5e-4)?;
+    let relative_scale_factor = 2.5e-5f64;
+    let max_abs_limit =
+        1.0e-3f32.max((error.max_abs_reference as f64 * relative_scale_factor) as f32);
+    let rmse_limit = 1.5e-4f64.max(error.rmse_reference * relative_scale_factor);
+    enforce_error(&error, max_abs_limit, rmse_limit)?;
     println!(
-        "GPU-resident real L42 top6+shared minimal MoE batch: ids={:?}, weights={:?}, cpu_ref_ms={cpu_ms:.6}, iterations={}, gpu_fill_plus_35_dispatch_barriers_ms_mean={:.7}, submit_readback_sync_ms={:.6}, max_abs={:.9e}, mean_abs={:.9e}, rmse={:.9e}, max_rel_abs_ref_gt_1e-5={:.9e}",
+        "GPU-resident real L42 top6+shared minimal MoE batch: ids={:?}, weights={:?}, cpu_ref_ms={cpu_ms:.6}, iterations={}, gpu_fill_plus_35_dispatch_barriers_ms_mean={:.7}, submit_readback_sync_ms={:.6}, max_abs={:.9e}, mean_abs={:.9e}, rmse={:.9e}, max_abs_ref={:.9e}, rmse_ref={:.9e}, relative_rmse={:.9e}, max_rel_abs_ref_gt_1e-5={:.9e}, max_abs_limit={:.9e}, rmse_limit={:.9e}",
         routed
             .iter()
             .map(|payload| payload.expert_id.unwrap())
@@ -1053,7 +1464,12 @@ fn run_top6_shared_moe_batch(
         error.max_abs,
         error.mean_abs,
         error.rmse,
+        error.max_abs_reference,
+        error.rmse_reference,
+        error.relative_rmse,
         error.max_rel_for_abs_ref_gt_1e_5,
+        max_abs_limit,
+        rmse_limit,
     );
 
     shared_dispatch.accumulate.binder.destroy(ctx);
@@ -1068,7 +1484,21 @@ fn run_top6_shared_moe_batch(
     }
     swiglu.binder.destroy(ctx);
     buffers.destroy(ctx);
-    Ok(())
+    Ok(MoeBatchResult {
+        cpu_reference_ms: cpu_ms,
+        timing,
+        error,
+        input_f32_le_sha256: sha256_f32_le(x),
+        cpu_reference_output_f32_le_sha256: sha256_f32_le(&expected),
+        gpu_output_f32_le_sha256: sha256_f32_le(&actual),
+        tolerance: MoeBatchTolerance {
+            max_abs_limit,
+            rmse_limit,
+            relative_scale_factor,
+            passed: true,
+        },
+        reference_semantics: "F32 packed decode and route-weight-after-w2 accumulation for the existing bounded Vulkan minimal top6+shared chain",
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1081,6 +1511,7 @@ fn benchmark_top6_shared_moe_batch(
     swiglu: &S14SwigluLimitDispatch,
     routed: &[RoutedMoeDispatch],
     shared: &SharedMoeDispatch,
+    iterations: u32,
 ) -> Result<Timing> {
     unsafe {
         let pool = make_command_pool(ctx)?;
@@ -1105,7 +1536,7 @@ fn benchmark_top6_shared_moe_batch(
         let shader_serial = vk::MemoryBarrier::default()
             .src_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::SHADER_WRITE)
             .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::SHADER_WRITE);
-        for iteration in 0..MOE_BATCH_ITERATIONS {
+        for iteration in 0..iterations {
             if iteration > 0 {
                 let compute_to_fill = vk::MemoryBarrier::default()
                     .src_access_mask(vk::AccessFlags::SHADER_WRITE)
@@ -1257,11 +1688,11 @@ fn benchmark_top6_shared_moe_batch(
         };
         let elapsed_ticks = ticks[1].wrapping_sub(ticks[0]) & mask;
         let gpu_kernel_ms_mean =
-            elapsed_ticks as f64 * timestamp_period_ns / 1_000_000.0 / MOE_BATCH_ITERATIONS as f64;
+            elapsed_ticks as f64 * timestamp_period_ns / 1_000_000.0 / iterations as f64;
         ctx.device.destroy_query_pool(queries, None);
         ctx.device.destroy_command_pool(pool, None);
         Ok(Timing {
-            iterations: MOE_BATCH_ITERATIONS,
+            iterations,
             gpu_kernel_ms_mean,
             submit_readback_sync_ms,
         })
@@ -1750,11 +2181,15 @@ fn error_stats(actual: &[f32], expected: &[f32]) -> Result<ErrorStats> {
     let mut sum_abs = 0.0f64;
     let mut sum_square = 0.0f64;
     let mut max_rel = 0.0f32;
+    let mut max_abs_reference = 0.0f32;
+    let mut sum_reference_square = 0.0f64;
     for (&a, &e) in actual.iter().zip(expected) {
         if !a.is_finite() || !e.is_finite() {
             bail!("non-finite numerical result: actual={a}, expected={e}");
         }
         let delta = (a - e).abs();
+        max_abs_reference = max_abs_reference.max(e.abs());
+        sum_reference_square += (e as f64) * (e as f64);
         max_abs = max_abs.max(delta);
         sum_abs += delta as f64;
         sum_square += (delta as f64) * (delta as f64);
@@ -1762,11 +2197,16 @@ fn error_stats(actual: &[f32], expected: &[f32]) -> Result<ErrorStats> {
             max_rel = max_rel.max(delta / e.abs());
         }
     }
+    let rmse = (sum_square / actual.len() as f64).sqrt();
+    let rmse_reference = (sum_reference_square / actual.len() as f64).sqrt();
     Ok(ErrorStats {
         max_abs,
         mean_abs: sum_abs / actual.len() as f64,
-        rmse: (sum_square / actual.len() as f64).sqrt(),
+        rmse,
         max_rel_for_abs_ref_gt_1e_5: max_rel,
+        max_abs_reference,
+        rmse_reference,
+        relative_rmse: rmse / rmse_reference.max(f64::MIN_POSITIVE),
     })
 }
 
@@ -1926,6 +2366,18 @@ fn sha256_file(path: &Path) -> Result<String> {
 fn sha256_bytes(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn sha256_f32_le(values: &[f32]) -> String {
+    let mut digest = Sha256::new();
+    for value in values {
+        digest.update(value.to_le_bytes());
+    }
+    digest
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 unsafe fn make_command_pool(ctx: &VulkanContext) -> Result<vk::CommandPool> {

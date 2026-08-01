@@ -70,3 +70,18 @@ preflight cold upper bound 的 `--download-budget-bytes`。catalog 本身永远�
 
 `preflight_report.json` 只记录本机当前缺口；真实执行证据以
 `first_real_token_report.json` 为准。
+
+## Vulkan 单层桥
+
+executor 可在真实 FullDepth 前向经过指定层时，固化已完成层前缀、FFN 激活、原生
+top-6 route 和 42 个带 SHA proof 的 routed/shared payload：
+
+```powershell
+python -X utf8 -m fast16.research.polaris_meridian_v1.fulldepth43_native_top6.executor run `
+  --vulkan-bridge-capture <fresh-dir> `
+  --vulkan-bridge-layer 42
+```
+
+当前只允许单 token，capture 目录必须不存在。该入口不会改变 CPU correctness 计算；
+GPU 结果不会写回 token state。真实 RX 5700 XT 数值与速度记录见
+`scheduler/ssd_inference/FULLDEPTH43_VULKAN_BRIDGE.md`。
