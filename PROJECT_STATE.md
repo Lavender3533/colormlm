@@ -1079,3 +1079,25 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
 - 第二波已并行启动：RX 5700 XT packed FP4/FP8 Vulkan 数值核、Python Range→Rust Runner
   运行时桥、hash/score router + compressor/indexer/head 原生参考算子。下一真实里程碑仍是
   “单层真实 weight forward”，不是继续写架构文档，也不是先下载完整4.0GiB S14骨架。
+
+### 2026-08-01 北极星 S14 真实单层、最终头与 Range→Runner 闭环
+
+- 真实 L42 单层单 token 已完成并固化为可重复脚本：读取固定 revision 的76个 Range payload、
+  共247,515,224字节，执行HC、FP8稀疏注意力、原生top-6 router、六个FP4 routed experts、
+  FP8 shared expert与第二次HC；五个F32指纹逐项复现，负向拒绝4/4通过。该结果是完整真实单层，
+  仍不是S14首token或质量证明。
+- 旧 catalog 漏掉最终 `hc_head_base/fn/scale`，现已修正为22,013条Range、509条prerequisite；
+  外部 TOFU skeleton 为4,313,107,428字节，正式 catalog 已通过固定header、metadata与skeleton
+  三方一致性校验。旧 catalog/skeleton 均保留了 pre-HC-head 备份。
+- 已用严格HTTPS 206与精确Content-Range取得真实最终边界：HC head+norm共270,356字节，原生
+  BF16 `head.weight` 1,059,061,760字节；全词表129,280维真实权重投影在CPU参考路径耗时
+  0.305秒。此次输入为合成四路hidden，只证明最终权重/公式闭环，不是模型输出质量。
+- Range状态机新增按token派生8,192字节原生embedding行与按词表行派生head块，避免单token
+  读取完整1.06GB embedding。真实L0离线worker smoke返回24个已校验artifact、118,437,720
+  字节，全部cache hit，耗时0.798秒，且abort清理成功、未下载任何新页。
+- Rust Runner已接入持久UTF-8 JSONL Range桥；真实input token ID会传到Python，executor只在
+  已验证embedding row ready后运行，最后HC/norm/head artifacts也在Runner做argmax前交给
+  executor。Rust原测试14/14、桥测试7/7、Python worker 3/3、Range测试7/7及Clippy均通过。
+- 当前唯一主阻塞缩小为：把已验证的单层算子泛化到预注册14层、逐层用真实router取84个命中
+  expert页并串到已完成的最终头，生成第一个真实S14 token。完成前不得宣称S14可用、20 token/s
+  或质量接近Claude/GPT。
