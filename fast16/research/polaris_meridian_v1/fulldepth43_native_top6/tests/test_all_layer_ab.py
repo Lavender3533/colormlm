@@ -72,6 +72,8 @@ class AllLayerAbTests(unittest.TestCase):
         self.assertTrue(configs[0].vulkan_writeback_verify_cpu)
         self.assertFalse(configs[2].vulkan_writeback_verify_cpu)
         self.assertTrue(configs[0].vulkan_writeback_all_layers)
+        self.assertFalse(configs[0].vulkan_writeback_fast_production)
+        self.assertTrue(configs[2].vulkan_writeback_fast_production)
         self.assertFalse(configs[2].vulkan_writeback_cpu_fallback)
 
     def test_rejects_token_drift(self) -> None:

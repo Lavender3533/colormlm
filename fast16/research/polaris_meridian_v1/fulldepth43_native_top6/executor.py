@@ -254,6 +254,7 @@ class ExecutionConfig:
     vulkan_writeback_all_layers: bool = False
     vulkan_writeback_verify_cpu: bool = True
     vulkan_writeback_cpu_fallback: bool = True
+    vulkan_writeback_fast_production: bool = False
 
     def validate(self) -> None:
         if not self.endpoint.startswith("https://"):
@@ -291,6 +292,8 @@ class ExecutionConfig:
             raise FullDepthError("checkpoint manifest 不得覆盖 execution report")
         if self.vulkan_writeback_all_layers and self.vulkan_writeback_worker is None:
             raise FullDepthError("全层 Vulkan writeback 必须指定 worker")
+        if self.vulkan_writeback_fast_production and self.vulkan_writeback_verify_cpu:
+            raise FullDepthError("fast production 累加顺序不适用逐 BF16 CPU 审计")
 
 
 def _sha256_bytes(payload: bytes) -> str:
@@ -576,13 +579,29 @@ class FullDepthTokenWorker:
             return
         if self.config.vulkan_writeback_worker is not None:
             self.stage = "vulkan_writeback_worker_start"
+            worker_arg = (
+                "--fulldepth43-production-worker"
+                if self.config.vulkan_writeback_fast_production
+                else "--fulldepth43-writeback-worker"
+            )
             self._writeback = PersistentVulkanWriteback(
                 (
                     str(self.config.vulkan_writeback_worker.resolve()),
-                    "--fulldepth43-writeback-worker",
+                    worker_arg,
                 ),
                 timeout_seconds=self.config.vulkan_writeback_timeout_seconds,
             )
+            expected_mode = (
+                "fast_production_128_lane"
+                if self.config.vulkan_writeback_fast_production
+                else "exact_audit_12_lane_mxfp4_8_lane_fp8"
+            )
+            if self._writeback.hello.get("numeric_mode") != expected_mode:
+                self._writeback.close()
+                self._writeback = None
+                raise FullDepthError(
+                    f"Vulkan worker numeric_mode 漂移，期望 {expected_mode}"
+                )
         self._started = True
 
     def close(self) -> None:
@@ -1004,6 +1023,7 @@ def execute(
                 "all_layers": config.vulkan_writeback_all_layers,
                 "cpu_verification": config.vulkan_writeback_verify_cpu,
                 "cpu_fallback": config.vulkan_writeback_cpu_fallback,
+                "fast_production": config.vulkan_writeback_fast_production,
             }
         for _ in range(config.token_count):
             position = decoder.position
@@ -1148,6 +1168,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--vulkan-writeback-all-layers", action="store_true")
     parser.add_argument("--vulkan-writeback-no-cpu-verify", action="store_true")
     parser.add_argument("--vulkan-writeback-no-cpu-fallback", action="store_true")
+    parser.add_argument("--vulkan-writeback-fast-production", action="store_true")
     parser.add_argument(
         "--checkpoint",
         type=Path,
@@ -1183,6 +1204,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             vulkan_writeback_all_layers=args.vulkan_writeback_all_layers,
             vulkan_writeback_verify_cpu=not args.vulkan_writeback_no_cpu_verify,
             vulkan_writeback_cpu_fallback=not args.vulkan_writeback_no_cpu_fallback,
+            vulkan_writeback_fast_production=args.vulkan_writeback_fast_production,
             checkpoint_path=args.checkpoint,
             resume_checkpoint_path=args.resume_checkpoint,
         )

@@ -97,6 +97,7 @@ def run_all_layer_ab(
             vulkan_writeback_all_layers=True,
             vulkan_writeback_verify_cpu=False,
             vulkan_writeback_cpu_fallback=False,
+            vulkan_writeback_fast_production=True,
         )
     )
     _require_complete(candidate, label="Vulkan candidate")

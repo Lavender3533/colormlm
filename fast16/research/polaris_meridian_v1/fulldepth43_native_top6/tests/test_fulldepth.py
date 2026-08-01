@@ -110,6 +110,8 @@ class FullDepthContractTests(unittest.TestCase):
             ExecutionConfig(vulkan_writeback_worker=Path("missing.exe")).validate()
         with self.assertRaises(FullDepthError):
             ExecutionConfig(vulkan_writeback_all_layers=True).validate()
+        with self.assertRaises(FullDepthError):
+            ExecutionConfig(vulkan_writeback_fast_production=True).validate()
         with tempfile.TemporaryDirectory() as directory:
             worker = Path(directory) / "worker.exe"
             worker.write_bytes(b"fixture")

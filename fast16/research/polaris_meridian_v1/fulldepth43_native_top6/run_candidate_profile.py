@@ -48,6 +48,7 @@ def run_profiled_candidate(
                     vulkan_writeback_all_layers=True,
                     vulkan_writeback_verify_cpu=False,
                     vulkan_writeback_cpu_fallback=False,
+                    vulkan_writeback_fast_production=True,
                 )
             )
     runtime_profile = profiler.snapshot()
