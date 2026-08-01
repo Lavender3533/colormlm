@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import os
+import tempfile
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
@@ -28,6 +29,13 @@ from .catalog import build_catalog, read_json, validate_catalog, write_json
 from . import checkpoint as decoder_checkpoint
 from .preflight import DEFAULT_ASSET_ROOT, DEFAULT_CATALOG, run_preflight
 from .profile import FULLDEPTH43_NATIVE_TOP6, ExecutionProfile
+from .fulldepth_packed_fp8_attention import (
+    FullDepthPackedFp8Arena,
+    FullDepthPackedFp8Error,
+    PackedFp8Asset,
+    PersistentFullDepthPackedFp8Attention,
+    WORKER_ARG as FULLDEPTH_FP8_ATTENTION_WORKER_ARG,
+)
 from .vulkan_writeback import (
     PersistentVulkanWriteback,
     VulkanWritebackError,
@@ -234,13 +242,124 @@ class FullDepthNativeLayerReference(s14.NativeLayerReference):
         store: s14.TensorStore,
         *,
         profile: ExecutionProfile = FULLDEPTH43_NATIVE_TOP6,
+        attention_worker: PersistentFullDepthPackedFp8Attention | None = None,
+        attention_position: int | None = None,
+        attention_verify_cpu: bool = False,
     ) -> None:
         profile.validate()
+        if attention_worker is not None and (
+            isinstance(attention_position, bool)
+            or not isinstance(attention_position, int)
+            or attention_position < 0
+        ):
+            raise FullDepthError("Vulkan attention 必须携带有效 position")
+        self.attention_worker = attention_worker
+        self.attention_position = attention_position
+        self.attention_verify_cpu = attention_verify_cpu
+        self.attention_vulkan_evidence: list[dict[str, Any]] = []
         super().__init__(
             layer,
             store,
             profile_layers=profile.layers,
             compress_ratios={value: profile.ratio_for(value) for value in profile.layers},
+        )
+
+    def _packed_asset(self, tensor: str) -> PackedFp8Asset:
+        source = self.store.source(tensor)
+        return PackedFp8Asset.from_mapping(
+            {
+                "tensor": tensor,
+                "path": str(source.path),
+                "bytes": source.entry["bytes"],
+                "sha256": source.proof["observed_sha256"],
+                "dtype": source.entry["dtype"],
+                "shape": source.entry["shape"],
+            }
+        )
+
+    def _vulkan_attention_projection(
+        self,
+        array: Any,
+        prefix: str,
+        suffix: str,
+        *,
+        activation_already_quantized: bool,
+    ) -> Any:
+        worker = self.attention_worker
+        position = self.attention_position
+        if worker is None or position is None:
+            raise FullDepthError("Vulkan attention projection 未绑定 worker/position")
+        activation_array = (
+            array if activation_already_quantized else self._activation_quant(array)
+        )
+        activation = torch.from_numpy(activation_array).to(dtype=torch.float32).contiguous()
+        started = time.perf_counter()
+        try:
+            output, evidence = worker.execute(
+                layer=self.layer,
+                position=position,
+                suffix=suffix,
+                activation=activation,
+                weight=self._packed_asset(prefix + ".weight"),
+                scale=self._packed_asset(prefix + ".scale"),
+            )
+        except FullDepthPackedFp8Error as error:
+            raise FullDepthError(
+                f"L{self.layer} {prefix} Vulkan attention 失败: {error}"
+            ) from error
+        self.attention_vulkan_evidence.append(
+            {
+                **evidence,
+                "elapsed_seconds": time.perf_counter() - started,
+            }
+        )
+        if self.attention_verify_cpu:
+            cpu_output = (
+                super()._grouped_wo_a(array, prefix)
+                if suffix == "wo_a"
+                else super()._linear_fp8(array, prefix)
+            )
+            cpu_tensor = torch.from_numpy(cpu_output).to(torch.float32)
+            exact = bool(torch.equal(output, cpu_tensor))
+            self.attention_vulkan_evidence[-1]["cpu_exact_bf16"] = exact
+            self.attention_vulkan_evidence[-1]["cpu_output_sha256"] = _sha256_bytes(
+                cpu_tensor.contiguous().numpy().astype("<f4", copy=False).tobytes()
+            )
+            if not exact:
+                max_abs = float((output - cpu_tensor).abs().max().item())
+                raise FullDepthError(
+                    f"L{self.layer} {prefix} Vulkan/CPU BF16 不等价，max_abs={max_abs}"
+                )
+        return output.numpy()
+
+    def _linear_fp8(self, array: Any, prefix: str) -> Any:
+        approved = {
+            "wq_a",
+            "wkv",
+            "wq_b",
+            "indexer.wq_b",
+            "wo_b",
+        }
+        layer_prefix = f"layers.{self.layer}.attn."
+        suffix = prefix[len(layer_prefix) :] if prefix.startswith(layer_prefix) else ""
+        if self.attention_worker is None or suffix not in approved:
+            return super()._linear_fp8(array, prefix)
+        return self._vulkan_attention_projection(
+            array,
+            prefix,
+            suffix,
+            activation_already_quantized=False,
+        )
+
+    def _grouped_wo_a(self, array: Any, prefix: str) -> Any:
+        expected = f"layers.{self.layer}.attn.wo_a"
+        if self.attention_worker is None or prefix != expected:
+            return super()._grouped_wo_a(array, prefix)
+        return self._vulkan_attention_projection(
+            array,
+            prefix,
+            "wo_a",
+            activation_already_quantized=True,
         )
 
 
@@ -271,6 +390,10 @@ class ExecutionConfig:
     vulkan_final_head_timeout_seconds: float = 60.0
     vulkan_final_head_scratch: Path | None = None
     vulkan_final_head_validate_cpu_once: bool = False
+    vulkan_attention_worker: Path | None = None
+    vulkan_attention_timeout_seconds: float = 60.0
+    vulkan_attention_scratch: Path | None = None
+    vulkan_attention_verify_cpu: bool = False
 
     def validate(self) -> None:
         if not self.endpoint.startswith("https://"):
@@ -317,6 +440,13 @@ class ExecutionConfig:
             raise FullDepthError("Vulkan final-head worker 不存在")
         if self.vulkan_final_head_timeout_seconds <= 0:
             raise FullDepthError("Vulkan final-head timeout 必须为正数")
+        if (
+            self.vulkan_attention_worker is not None
+            and not self.vulkan_attention_worker.resolve().is_file()
+        ):
+            raise FullDepthError("Vulkan attention worker 不存在")
+        if self.vulkan_attention_timeout_seconds <= 0:
+            raise FullDepthError("Vulkan attention timeout 必须为正数")
 
     def resolved_vulkan_final_head_worker(self) -> Path:
         worker = self.vulkan_final_head_worker or DEFAULT_VULKAN_FINAL_HEAD_WORKER
@@ -332,6 +462,12 @@ class ExecutionConfig:
         scratch = self.vulkan_final_head_scratch
         if scratch is None:
             scratch = self.asset_root / "runtime" / "vulkan_final_head"
+        return scratch.resolve()
+
+    def resolved_vulkan_attention_scratch(self) -> Path:
+        scratch = self.vulkan_attention_scratch
+        if scratch is None:
+            scratch = self.asset_root / "runtime" / "vulkan_attention"
         return scratch.resolve()
 
 
@@ -604,6 +740,10 @@ class FullDepthTokenWorker:
         self.writeback_fallbacks: list[dict[str, Any]] = []
         self._final_head: FullDepthVulkanFinalHead | None = None
         self._writeback: PersistentVulkanWriteback | None = None
+        self._attention: PersistentFullDepthPackedFp8Attention | None = None
+        self._attention_arena_path: Path | None = None
+        self.attention_layers: list[int] = []
+        self.attention_projection_count = 0
         self._started = False
         self._closed = False
 
@@ -615,11 +755,42 @@ class FullDepthTokenWorker:
     def final_head_hello(self) -> Mapping[str, Any] | None:
         return None if self._final_head is None else self._final_head.hello
 
+    @property
+    def attention_hello(self) -> Mapping[str, Any] | None:
+        return None if self._attention is None else self._attention.hello
+
     def start(self) -> None:
         if self._closed:
             raise FullDepthError("FullDepth token worker 已关闭")
         if self._started:
             return
+        if self.config.vulkan_attention_worker is not None:
+            self.stage = "vulkan_attention_worker_start"
+            scratch = self.config.resolved_vulkan_attention_scratch()
+            scratch.mkdir(parents=True, exist_ok=True)
+            descriptor, arena_name = tempfile.mkstemp(
+                prefix="fulldepth43-attention-",
+                suffix=".bin",
+                dir=scratch,
+            )
+            os.close(descriptor)
+            arena_path = Path(arena_name).resolve()
+            try:
+                with arena_path.open("r+b") as stream:
+                    stream.truncate(512 * 1024)
+                arena = FullDepthPackedFp8Arena(arena_path)
+                self._attention = PersistentFullDepthPackedFp8Attention(
+                    (
+                        str(self.config.vulkan_attention_worker.resolve()),
+                        FULLDEPTH_FP8_ATTENTION_WORKER_ARG,
+                    ),
+                    arena,
+                    timeout_seconds=self.config.vulkan_attention_timeout_seconds,
+                )
+            except Exception:
+                arena_path.unlink(missing_ok=True)
+                raise
+            self._attention_arena_path = arena_path
         if self.config.vulkan_writeback_worker is not None:
             self.stage = "vulkan_writeback_worker_start"
             worker_arg = (
@@ -655,6 +826,10 @@ class FullDepthTokenWorker:
             self._writeback.close()
         if self._final_head is not None:
             self._final_head.close()
+        if self._attention is not None:
+            self._attention.close()
+        if self._attention_arena_path is not None:
+            self._attention_arena_path.unlink(missing_ok=True)
 
     def _notify(self, token_report: dict[str, Any]) -> None:
         self.last_token_report = token_report
@@ -724,7 +899,14 @@ class FullDepthTokenWorker:
             prerequisites = session.prepare_layer(layer, input_token_id)
             store = s14.TensorStore(self.config.asset_root.resolve() / "range_cache")
             store.add_ranges((*prerequisites.non_expert, *prerequisites.router))
-            kernel = FullDepthNativeLayerReference(layer, store, profile=self.profile)
+            kernel = FullDepthNativeLayerReference(
+                layer,
+                store,
+                profile=self.profile,
+                attention_worker=self._attention,
+                attention_position=position if self._attention is not None else None,
+                attention_verify_cpu=self.config.vulkan_attention_verify_cpu,
+            )
 
             self.stage = f"position_{position}_layer_{layer}_native_route"
             pending = kernel.prepare_route(
@@ -880,6 +1062,24 @@ class FullDepthTokenWorker:
                     f"L{layer} 破坏 BF16 [1,1,4,4096] mHC 状态"
                 )
             session.finish_layer(layer, input_token_id)
+            attention_vulkan = list(kernel.attention_vulkan_evidence)
+            if attention_vulkan:
+                expected_suffixes = ["wq_a", "wq_b", "wkv", "wo_a", "wo_b"]
+                if self.profile.ratio_for(layer) == 4:
+                    expected_suffixes.insert(3, "indexer.wq_b")
+                observed_suffixes = [
+                    row["projection"]["name"].removeprefix(
+                        f"layers.{layer}.attn."
+                    )
+                    for row in attention_vulkan
+                ]
+                if observed_suffixes != expected_suffixes:
+                    raise FullDepthError(
+                        f"L{layer} Vulkan attention 投影闭包漂移: "
+                        f"expected={expected_suffixes}, observed={observed_suffixes}"
+                    )
+                self.attention_layers.append(layer)
+                self.attention_projection_count += len(attention_vulkan)
             next_states[layer] = pending.runtime_state
             token_report["completed_layers"].append(layer)
             token_report["layers"].append(
@@ -895,6 +1095,7 @@ class FullDepthTokenWorker:
                     "elapsed_seconds": time.perf_counter() - layer_started,
                     "vulkan_bridge_capture": bridge_capture,
                     "vulkan_writeback": writeback_evidence,
+                    "vulkan_attention": attention_vulkan,
                 }
             )
             self._notify(token_report)
@@ -1080,6 +1281,16 @@ def execute(
                 "cpu_fallback": config.vulkan_writeback_cpu_fallback,
                 "fast_production": config.vulkan_writeback_fast_production,
             }
+        attention_hello = getattr(worker, "attention_hello", None)
+        if attention_hello is not None:
+            report["vulkan_attention_worker"] = {
+                "path": str(config.vulkan_attention_worker.resolve()),
+                "hello": attention_hello,
+                "mode": "persistent_process_dynamic_layer_projection",
+                "cpu_fallback": False,
+                "activation_quantization": "cpu_e4m3fn_quant_dequant",
+                "cpu_verification": config.vulkan_attention_verify_cpu,
+            }
         for _ in range(config.token_count):
             position = decoder.position
             input_token_id = decoder.input_token_id
@@ -1147,10 +1358,18 @@ def execute(
             write_json(config.report_path, report)
 
         report["status"] = "complete"
+        all_attention_vulkan = set(getattr(worker, "attention_layers", ())) == set(
+            profile.layers
+        )
         if set(worker.writeback_layers) == set(profile.layers):
             report["claim_limit"] = (
                 "FullDepth43/native-top6 with all 43 MoE branches written back from Vulkan; "
-                "final BF16 head+argmax is persistent Vulkan while attention/HC/router remain CPU, "
+                + (
+                    "all approved attention FP8 projections also execute through Vulkan; "
+                    if all_attention_vulkan
+                    else "attention remains CPU or only partially executes through Vulkan; "
+                )
+                + "final BF16 head+argmax is persistent Vulkan while HC/router remain CPU, "
                 "so this is not a full-GPU token, "
                 "20/50 token/s, or quality claim"
             )
@@ -1162,8 +1381,14 @@ def execute(
             )
         else:
             report["claim_limit"] = (
-                "CPU/PyTorch FullDepth43/native-top6 layer path plus persistent Vulkan final "
-                "head+device argmax; not a full-model speed or quality claim"
+                "FullDepth43/native-top6 correctness path with "
+                + (
+                    "all approved attention FP8 projections on Vulkan, "
+                    if all_attention_vulkan
+                    else "CPU or partial Vulkan attention, "
+                )
+                + "CPU MoE/HC/router, and persistent Vulkan final head+device argmax; "
+                "not a full-model speed or quality claim"
             )
     except Exception as error:
         report["status"] = "blocked"
@@ -1193,6 +1418,12 @@ def execute(
     finally:
         report["vulkan_writeback_layers"] = worker.writeback_layers
         report["vulkan_writeback_fallbacks"] = worker.writeback_fallbacks
+        report["vulkan_attention_layers"] = list(
+            getattr(worker, "attention_layers", ())
+        )
+        report["vulkan_attention_projection_count"] = int(
+            getattr(worker, "attention_projection_count", 0)
+        )
         try:
             worker.close()
         except Exception as close_error:
@@ -1242,6 +1473,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--vulkan-final-head-worker", type=Path)
     parser.add_argument("--vulkan-final-head-timeout-seconds", type=float, default=60.0)
     parser.add_argument("--vulkan-final-head-scratch", type=Path)
+    parser.add_argument("--vulkan-attention-worker", type=Path)
+    parser.add_argument("--vulkan-attention-timeout-seconds", type=float, default=60.0)
+    parser.add_argument("--vulkan-attention-scratch", type=Path)
+    parser.add_argument("--vulkan-attention-verify-cpu", action="store_true")
     parser.add_argument(
         "--vulkan-final-head-validate-cpu-once",
         action="store_true",
@@ -1289,6 +1524,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             vulkan_final_head_validate_cpu_once=(
                 args.vulkan_final_head_validate_cpu_once
             ),
+            vulkan_attention_worker=args.vulkan_attention_worker,
+            vulkan_attention_timeout_seconds=args.vulkan_attention_timeout_seconds,
+            vulkan_attention_scratch=args.vulkan_attention_scratch,
+            vulkan_attention_verify_cpu=args.vulkan_attention_verify_cpu,
             checkpoint_path=args.checkpoint,
             resume_checkpoint_path=args.resume_checkpoint,
         )

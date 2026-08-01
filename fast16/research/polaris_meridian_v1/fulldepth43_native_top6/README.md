@@ -191,8 +191,26 @@ python -X utf8 -m `
 
 输出目录必须是新目录。生产 worker 默认禁用已被真实 A/B 否决的 GPU payload LRU；只有显式
 设置 `POLARIS_GPU_PAYLOAD_CACHE_GIB=1..7` 才会启用实验缓存。6GiB实验会在8GiB显卡上OOM，
-4GiB实验为0命中且回归约9.37%，不得用于正式入口。当前已知最快两 token 完整运行是
-`117.9932s`；默认3个 Range worker现在也会并行验证本地已缓存页，且保持输入顺序。生产默认
-还会创建约100.5MiB的固定 Vulkan 上传槽，逐层完整覆写后复用；真实 A/B 相对原
-`139.9329s`基线缩短`15.68%`，详见`REUSABLE_GPU_SLOT_AB.md`。这个入口仍是新架构连续性与
-剖析工具，不是可交互聊天服务。
+4GiB实验为0命中且回归约9.37%，不得用于正式入口。默认3个 Range worker会并行验证本地已缓存页，
+且保持输入顺序；MoE生产路径还会创建约100.5MiB固定 Vulkan 上传槽并逐层复用。
+
+2026-08-02 的最新正式门已进一步把43层 packed-FP8 attention接入同一 token worker。236个
+attention权重槽跨token驻留于RX 5700 XT（`4,775,506,560 B`，约`4.448 GiB`），第二token
+`236/236`命中且零权重重传。完整两-token墙钟从`93.7806s`降至`63.8851s`，输出仍为`[5,223]`；
+第二token层主体为`20.6784s`。slot身份绑定kernel、weight与scale的完整tensor/SHA，并有258槽、
+`5 GiB`逻辑常驻硬上限，超预算在分配前拒绝。运行入口新增：
+
+```powershell
+python -X utf8 -m `
+  fast16.research.polaris_meridian_v1.fulldepth43_native_top6.run_candidate_profile `
+  --worker scheduler/target/release/examples/s14_vulkan_numeric.exe `
+  --vulkan-attention-worker scheduler/target/release/examples/s14_vulkan_numeric.exe `
+  --vulkan-final-head-worker scheduler/target/release/examples/s14_bf16_head.exe `
+  --vulkan-final-head-scratch <scratch-dir> `
+  --output-root <fresh-output-dir> `
+  --token-count 2
+```
+
+Vulkan与NumPy/OpenBLAS的归约顺序存在最高`6.103515625e-05`的已知投影差异，短轨最终输出不变，
+但不能声称所有层逐位等价。实现、数值边界和A/B证据见`FULLDEPTH43_VULKAN_ATTENTION.md`与
+`FULLDEPTH43_VULKAN_ATTENTION_AB.json`。这个入口仍是新架构连续性与剖析工具，不是可交互聊天服务。

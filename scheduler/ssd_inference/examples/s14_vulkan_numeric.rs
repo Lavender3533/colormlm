@@ -18,9 +18,9 @@ use ssd_inference::buffer::GpuBuffer;
 use ssd_inference::device::VulkanContext;
 use ssd_inference::s14_vulkan::{
     validate_e4m3fn_codes, validate_ue8m0_codes, S14Bf16AccumulateDispatch, S14Fp8Dispatch,
-    S14GroupedMatvecShape, S14MatvecShape, S14MoeAccumulateDispatch, S14Mxfp4Dispatch,
-    S14NumericPipelines, S14OfficialExpertPrepareDispatch, S14RouteMixDispatch,
-    S14SwigluLimitDispatch,
+    S14GroupedFp8Bf16Dispatch, S14GroupedMatvecShape, S14MatvecShape,
+    S14MoeAccumulateDispatch, S14Mxfp4Dispatch, S14NumericPipelines,
+    S14OfficialExpertPrepareDispatch, S14RouteMixDispatch, S14SwigluLimitDispatch,
 };
 use ssd_inference::{VerifiedPayloadCache, VerifiedPayloadCacheStats};
 use std::collections::HashMap;
@@ -46,10 +46,12 @@ const FULLDEPTH_BRIDGE_ITERATIONS: u32 = 20;
 const WRITEBACK_WORKER_ARG: &str = "--fulldepth43-writeback-worker";
 const PRODUCTION_WORKER_ARG: &str = "--fulldepth43-production-worker";
 const FP8_PROJECTION_WORKER_ARG: &str = "--l42-wq-a-fp8-projection-worker";
+const FULLDEPTH_FP8_ATTENTION_WORKER_ARG: &str = "--fulldepth43-packed-fp8-attention-worker";
 const FP8_PROJECTION_SUITE_ARG: &str = "--l42-standard-fp8-projection-suite";
 const WO_A_GROUPED_SUITE_ARG: &str = "--l42-wo-a-grouped-suite";
 const WRITEBACK_PROTOCOL: &str = "polaris-fulldepth43-vulkan-writeback-v1";
 const FP8_PROJECTION_PROTOCOL: &str = "polaris-fulldepth43-packed-fp8-projection-v1";
+const FULLDEPTH_FP8_ATTENTION_PROTOCOL: &str = "polaris-fulldepth43-packed-fp8-attention-v1";
 const FP8_PROJECTION_FIXTURE_DIR_ENV: &str = "POLARIS_L42_FP8_PROJECTION_FIXTURE_DIR";
 const WO_A_GROUPED_FIXTURE_DIR_ENV: &str = "POLARIS_L42_WO_A_FIXTURE_DIR";
 const WRITEBACK_OUTPUT_FILE: &str = "vulkan_moe_branch.bf16le.bin";
@@ -81,6 +83,10 @@ const L42_WQ_A_INPUT_SHA256: &str =
 const L42_WQ_A_OUTPUT_SHA256: &str =
     "76469fd163f5db49de956eff9b29087afa4caa97d566be80bab9d9119facb0b8";
 const FP8_PROJECTION_ARENA_MAX_BYTES: u64 = 64 * 1024 * 1024;
+const FULLDEPTH_FP8_PAYLOAD_CACHE_BYTES: usize = 256 * 1024 * 1024;
+const FULLDEPTH_FP8_GPU_SLOT_MAX_ENTRIES: usize = 43 * 6;
+const FULLDEPTH_FP8_GPU_SLOT_MAX_RESIDENT_BYTES: u64 = 5 * 1024 * 1024 * 1024;
+const FULLDEPTH_FP8_MAX_POSITION: u32 = 1_048_575;
 const L42_WO_A_CAPTURE_MANIFEST_SHA256: &str =
     "f91fc9fd40a95ee04984376b7a80544db8decc88bc5f139b9a6fd382fa4bb43d";
 const L42_WO_A_WEIGHT_SHA256: &str =
@@ -1769,6 +1775,196 @@ struct Fp8ProjectionRequest {
     output: ProjectionArenaView,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct FullDepthFp8AssetView {
+    tensor: String,
+    path: PathBuf,
+    bytes: u64,
+    sha256: String,
+    dtype: String,
+    shape: Vec<usize>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct FullDepthFp8ProjectionSpec {
+    name: String,
+    kernel: String,
+    n: u32,
+    k: u32,
+    groups: Option<u32>,
+    n_per_group: Option<u32>,
+    activation_contract: String,
+    output_rounding: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FullDepthFp8AttentionRequest {
+    protocol: String,
+    op: String,
+    request_id: String,
+    revision: String,
+    profile: String,
+    layer: u32,
+    position: u32,
+    arena_epoch: u64,
+    input_sha256: String,
+    projection: FullDepthFp8ProjectionSpec,
+    weight: FullDepthFp8AssetView,
+    scale: FullDepthFp8AssetView,
+    input: ProjectionArenaView,
+    output: ProjectionArenaView,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FullDepthFp8Kernel {
+    Standard(S14MatvecShape),
+    GroupedWoA(S14GroupedMatvecShape),
+}
+
+impl FullDepthFp8Kernel {
+    fn input_elements(self) -> Result<u64> {
+        match self {
+            Self::Standard(shape) => Ok(shape.k as u64),
+            Self::GroupedWoA(shape) => Ok(shape.groups as u64 * shape.k as u64),
+        }
+    }
+
+    fn output_elements(self) -> Result<u64> {
+        match self {
+            Self::Standard(shape) => Ok(shape.n as u64),
+            Self::GroupedWoA(shape) => Ok(shape.flat_n()? as u64),
+        }
+    }
+
+    fn weight_bytes(self) -> Result<u64> {
+        match self {
+            Self::Standard(shape) => shape.fp8_weight_bytes(),
+            Self::GroupedWoA(shape) => shape.fp8_weight_bytes(),
+        }
+    }
+
+    fn scale_bytes(self) -> Result<u64> {
+        match self {
+            Self::Standard(shape) => shape.fp8_scale_bytes(),
+            Self::GroupedWoA(shape) => shape.fp8_scale_bytes(),
+        }
+    }
+
+    fn input_shape(self) -> Vec<usize> {
+        match self {
+            Self::Standard(shape) => vec![1, 1, shape.k as usize],
+            Self::GroupedWoA(shape) => {
+                vec![1, 1, shape.groups as usize, shape.k as usize]
+            }
+        }
+    }
+
+    fn output_shape(self) -> Result<Vec<usize>> {
+        Ok(vec![1, 1, self.output_elements()? as usize])
+    }
+
+    fn weight_shape(self) -> Result<Vec<usize>> {
+        match self {
+            Self::Standard(shape) => Ok(vec![shape.n as usize, shape.k as usize]),
+            Self::GroupedWoA(shape) => Ok(vec![shape.flat_n()? as usize, shape.k as usize]),
+        }
+    }
+
+    fn scale_shape(self) -> Result<Vec<usize>> {
+        match self {
+            Self::Standard(shape) => Ok(vec![
+                shape.n.div_ceil(128) as usize,
+                shape.k.div_ceil(128) as usize,
+            ]),
+            Self::GroupedWoA(shape) => Ok(vec![
+                shape.flat_n()?.div_ceil(128) as usize,
+                shape.k.div_ceil(128) as usize,
+            ]),
+        }
+    }
+
+    fn numeric_mode(self) -> &'static str {
+        match self {
+            Self::Standard(_) => "packed_fp8_e4m3_ue8m0_bf16_output",
+            Self::GroupedWoA(_) => "grouped_packed_fp8_e4m3_ue8m0_bf16_input_output",
+        }
+    }
+}
+
+fn fulldepth_fp8_slot_key(
+    kernel: FullDepthFp8Kernel,
+    request: &FullDepthFp8AttentionRequest,
+) -> String {
+    format!(
+        "{}:{}:{}:{}:{}",
+        kernel.numeric_mode(),
+        request.weight.tensor,
+        request.weight.sha256,
+        request.scale.tensor,
+        request.scale.sha256
+    )
+}
+
+fn reserve_fulldepth_fp8_gpu_slot(
+    current_entries: usize,
+    current_resident_bytes: u64,
+    request: &FullDepthFp8AttentionRequest,
+) -> Result<u64> {
+    let next_entries = current_entries
+        .checked_add(1)
+        .ok_or_else(|| anyhow::anyhow!("FullDepth43 GPU slot entry overflow"))?;
+    if next_entries > FULLDEPTH_FP8_GPU_SLOT_MAX_ENTRIES {
+        bail!(
+            "FullDepth43 GPU slot entry budget exceeded: {} > {}",
+            next_entries,
+            FULLDEPTH_FP8_GPU_SLOT_MAX_ENTRIES
+        );
+    }
+    let next_resident_bytes = current_resident_bytes
+        .checked_add(request.weight.bytes)
+        .and_then(|value| value.checked_add(request.scale.bytes))
+        .ok_or_else(|| anyhow::anyhow!("FullDepth43 GPU slot byte overflow"))?;
+    if next_resident_bytes > FULLDEPTH_FP8_GPU_SLOT_MAX_RESIDENT_BYTES {
+        bail!(
+            "FullDepth43 GPU slot resident budget exceeded: {} > {}",
+            next_resident_bytes,
+            FULLDEPTH_FP8_GPU_SLOT_MAX_RESIDENT_BYTES
+        );
+    }
+    Ok(next_resident_bytes)
+}
+
+#[derive(Serialize)]
+struct FullDepthFp8AttentionResponse {
+    protocol: &'static str,
+    request_id: String,
+    ok: bool,
+    revision: &'static str,
+    profile: &'static str,
+    layer: u32,
+    position: u32,
+    arena_epoch: u64,
+    projection: FullDepthFp8ProjectionSpec,
+    input: ProjectionArenaView,
+    output_written: ProjectionArenaView,
+    input_sha256: String,
+    output_sha256: String,
+    weight_sha256: String,
+    scale_sha256: String,
+    catalog_sha256: &'static str,
+    payload_hash_verified: bool,
+    gpu_slot_cache_hit: bool,
+    gpu_slot_cache_entries: usize,
+    gpu_slot_resident_bytes: u64,
+    payload_uploaded_bytes: u64,
+    activation_uploaded_bytes: u64,
+    numeric_mode: &'static str,
+    output_rounding: &'static str,
+}
+
 #[derive(Serialize)]
 struct Fp8ProjectionResponse {
     protocol: &'static str,
@@ -1835,6 +2031,282 @@ fn validate_l42_wq_a_request(request: &Fp8ProjectionRequest, expected_epoch: u64
     {
         bail!("L42 wq_a FP8 projection arena tensor contract drift");
     }
+    Ok(())
+}
+
+fn is_lower_sha256(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn expected_fulldepth_fp8_kernel(
+    layer: u32,
+    projection: &FullDepthFp8ProjectionSpec,
+) -> Result<FullDepthFp8Kernel> {
+    let prefix = format!("layers.{layer}.attn.");
+    let suffix = projection
+        .name
+        .strip_prefix(&prefix)
+        .ok_or_else(|| anyhow::anyhow!("FullDepth43 projection layer/name mismatch"))?;
+    let expected = match suffix {
+        "wq_a" => ("standard", 1024, 4096),
+        "wkv" => ("standard", 512, 4096),
+        "wq_b" => ("standard", 32768, 1024),
+        "indexer.wq_b" => ("standard", 8192, 1024),
+        "wo_b" => ("standard", 4096, 8192),
+        "wo_a" => ("grouped_wo_a", 8192, 4096),
+        _ => bail!("FullDepth43 projection is not an approved packed-FP8 attention tensor"),
+    };
+    if projection.kernel != expected.0
+        || projection.n != expected.1
+        || projection.k != expected.2
+        || projection.output_rounding != "bf16_rne_then_f32_le"
+    {
+        bail!("FullDepth43 projection kernel/shape/rounding drift");
+    }
+    match suffix {
+        "wo_a" => {
+            if projection.groups != Some(8)
+                || projection.n_per_group != Some(1024)
+                || projection.activation_contract != "bf16_carrying_f32_per_group"
+            {
+                bail!("FullDepth43 wo_a grouped activation contract drift");
+            }
+            Ok(FullDepthFp8Kernel::GroupedWoA(
+                S14GroupedMatvecShape::new(8, 1024, 4096)?.validate_fp8_bf16_weight()?,
+            ))
+        }
+        _ => {
+            if projection.groups.is_some()
+                || projection.n_per_group.is_some()
+                || projection.activation_contract != "cpu_e4m3fn_quant_dequant_f32"
+            {
+                bail!("FullDepth43 standard FP8 activation contract drift");
+            }
+            Ok(FullDepthFp8Kernel::Standard(
+                S14MatvecShape::new(expected.1, expected.2)?.validate_fp8()?,
+            ))
+        }
+    }
+}
+
+fn validate_fulldepth_fp8_attention_request(
+    request: &FullDepthFp8AttentionRequest,
+    expected_epoch: u64,
+) -> Result<FullDepthFp8Kernel> {
+    if request.protocol != FULLDEPTH_FP8_ATTENTION_PROTOCOL
+        || request.op != "execute_fp8_attention"
+        || request.revision != REVISION
+        || request.profile != "fulldepth43_native_top6"
+        || request.layer > 42
+        || request.position > FULLDEPTH_FP8_MAX_POSITION
+        || request.arena_epoch != expected_epoch
+        || request.request_id.is_empty()
+        || request.request_id.len() > 128
+        || !request
+            .request_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+        || !is_lower_sha256(&request.input_sha256)
+    {
+        bail!("FullDepth43 packed-FP8 attention request identity drift");
+    }
+    let kernel = expected_fulldepth_fp8_kernel(request.layer, &request.projection)?;
+    let weight_tensor = format!("{}.weight", request.projection.name);
+    let scale_tensor = format!("{}.scale", request.projection.name);
+    if request.weight.tensor != weight_tensor
+        || request.scale.tensor != scale_tensor
+        || request.weight.dtype != "F8_E4M3"
+        || request.scale.dtype != "F8_E8M0"
+        || request.weight.bytes != kernel.weight_bytes()?
+        || request.scale.bytes != kernel.scale_bytes()?
+        || request.weight.shape != kernel.weight_shape()?
+        || request.scale.shape != kernel.scale_shape()?
+        || !is_lower_sha256(&request.weight.sha256)
+        || !is_lower_sha256(&request.scale.sha256)
+        || request
+            .weight
+            .path
+            .extension()
+            .and_then(|value| value.to_str())
+            != Some("bin")
+        || request
+            .scale
+            .path
+            .extension()
+            .and_then(|value| value.to_str())
+            != Some("bin")
+    {
+        bail!("FullDepth43 packed-FP8 asset contract drift");
+    }
+    let input_bytes = kernel
+        .input_elements()?
+        .checked_mul(4)
+        .ok_or_else(|| anyhow::anyhow!("FullDepth43 FP8 input byte overflow"))?;
+    let output_bytes = kernel
+        .output_elements()?
+        .checked_mul(4)
+        .ok_or_else(|| anyhow::anyhow!("FullDepth43 FP8 output byte overflow"))?;
+    if request.input.dtype != "f32_le"
+        || request.input.shape != kernel.input_shape()
+        || request.input.bytes != input_bytes
+        || request.output.dtype != "f32_le_bf16_rounded"
+        || request.output.shape != kernel.output_shape()?
+        || request.output.bytes != output_bytes
+    {
+        bail!("FullDepth43 packed-FP8 arena tensor contract drift");
+    }
+    Ok(kernel)
+}
+
+fn validate_fulldepth_fp8_attention_catalog(
+    document: &serde_json::Value,
+    request: &FullDepthFp8AttentionRequest,
+    kernel: FullDepthFp8Kernel,
+) -> Result<()> {
+    if document.get("format").and_then(serde_json::Value::as_str)
+        != Some("polaris-fulldepth43-native-top6-catalog-v1")
+        || document.get("repo").and_then(serde_json::Value::as_str)
+            != Some("deepseek-ai/DeepSeek-V4-Flash-0731")
+        || document.get("revision").and_then(serde_json::Value::as_str) != Some(REVISION)
+        || document
+            .get("download_authorized")
+            .and_then(serde_json::Value::as_bool)
+            != Some(false)
+    {
+        bail!("FullDepth43 catalog identity drift");
+    }
+    let entries = document
+        .pointer(&format!("/layers/{}/non_expert", request.layer))
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| anyhow::anyhow!("FullDepth43 catalog lacks requested layer"))?;
+    let require = |asset: &FullDepthFp8AssetView| -> Result<()> {
+        let matches: Vec<&serde_json::Value> = entries
+            .iter()
+            .filter(|entry| {
+                entry.get("tensor").and_then(serde_json::Value::as_str)
+                    == Some(asset.tensor.as_str())
+            })
+            .collect();
+        if matches.len() != 1 {
+            bail!(
+                "FullDepth43 catalog must contain exactly one {}",
+                asset.tensor
+            );
+        }
+        let entry = matches[0];
+        let shape: Option<Vec<usize>> = entry
+            .get("shape")
+            .and_then(serde_json::Value::as_array)
+            .map(|values| values.iter().map(serde_json::Value::as_u64).collect())
+            .flatten()
+            .map(|values: Vec<u64>| values.into_iter().map(|value| value as usize).collect());
+        if entry.get("kind").and_then(serde_json::Value::as_str) != Some("non_expert")
+            || entry.get("layer").and_then(serde_json::Value::as_u64) != Some(request.layer as u64)
+            || entry.get("dtype").and_then(serde_json::Value::as_str) != Some(asset.dtype.as_str())
+            || entry.get("bytes").and_then(serde_json::Value::as_u64) != Some(asset.bytes)
+            || shape.as_deref() != Some(asset.shape.as_slice())
+        {
+            bail!("FullDepth43 catalog asset byte/shape/dtype drift");
+        }
+        Ok(())
+    };
+    require(&request.weight)?;
+    require(&request.scale)?;
+    if request.weight.bytes != kernel.weight_bytes()?
+        || request.scale.bytes != kernel.scale_bytes()?
+    {
+        bail!("FullDepth43 catalog kernel byte contract drift");
+    }
+    Ok(())
+}
+
+fn validate_fulldepth_fp8_cache_proofs(
+    document: &serde_json::Value,
+    request: &FullDepthFp8AttentionRequest,
+    cache_root: &Path,
+) -> Result<()> {
+    let entries = document
+        .pointer(&format!("/layers/{}/non_expert", request.layer))
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| anyhow::anyhow!("FullDepth43 catalog lacks requested layer"))?;
+    let validate = |asset: &FullDepthFp8AssetView| -> Result<()> {
+        let entry = entries
+            .iter()
+            .find(|entry| {
+                entry.get("tensor").and_then(serde_json::Value::as_str)
+                    == Some(asset.tensor.as_str())
+            })
+            .ok_or_else(|| anyhow::anyhow!("FullDepth43 catalog lacks {}", asset.tensor))?;
+        let payload = asset.path.canonicalize()?;
+        if payload.parent() != Some(cache_root)
+            || payload.extension().and_then(|value| value.to_str()) != Some("bin")
+        {
+            bail!("FullDepth43 payload is outside canonical range_cache");
+        }
+        let cache_key = payload
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| anyhow::anyhow!("FullDepth43 payload cache key is missing"))?;
+        if !is_lower_sha256(cache_key) {
+            bail!("FullDepth43 payload cache key is not lowercase SHA-256");
+        }
+        let metadata_path = cache_root.join(format!("{cache_key}.json"));
+        let metadata: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(&metadata_path)
+                .with_context(|| format!("read {}", metadata_path.display()))?,
+        )?;
+        let expected_identity = serde_json::json!({
+            "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+            "revision": REVISION,
+            "source_file": entry.get("file").and_then(serde_json::Value::as_str),
+            "source_file_bytes": entry.get("file_bytes").and_then(serde_json::Value::as_u64),
+            "start": entry.get("start").and_then(serde_json::Value::as_u64),
+            "end": entry.get("end").and_then(serde_json::Value::as_u64),
+            "header_tensor_table_sha256": entry
+                .get("header_tensor_table_sha256")
+                .and_then(serde_json::Value::as_str),
+        });
+        if metadata.get("format").and_then(serde_json::Value::as_str)
+            != Some("polaris-s14-range-cache-entry-v1")
+            || metadata.get("cache_key").and_then(serde_json::Value::as_str)
+                != Some(cache_key)
+            || metadata.get("identity") != Some(&expected_identity)
+            || metadata.get("bytes").and_then(serde_json::Value::as_u64)
+                != Some(asset.bytes)
+            || metadata
+                .get("observed_sha256")
+                .and_then(serde_json::Value::as_str)
+                != Some(asset.sha256.as_str())
+        {
+            bail!("FullDepth43 payload cache proof/catalog identity drift");
+        }
+        let authoritative = metadata
+            .get("authoritative")
+            .and_then(serde_json::Value::as_bool)
+            == Some(true);
+        if authoritative {
+            if metadata.get("hash_authority").and_then(serde_json::Value::as_str)
+                != Some("official_lock")
+                || metadata
+                    .get("expected_sha256")
+                    .and_then(serde_json::Value::as_str)
+                    != Some(asset.sha256.as_str())
+            {
+                bail!("FullDepth43 authoritative payload proof is inconsistent");
+            }
+        } else if metadata.get("hash_authority").and_then(serde_json::Value::as_str)
+            != Some("tofu")
+            || !metadata.get("expected_sha256").is_some_and(serde_json::Value::is_null)
+        {
+            bail!("FullDepth43 TOFU payload proof attempts to masquerade as authoritative");
+        }
+        Ok(())
+    };
+    validate(&request.weight)?;
+    validate(&request.scale)?;
     Ok(())
 }
 
@@ -2039,6 +2511,61 @@ fn write_projection_output(path: &Path, view: &ProjectionArenaView, values: &[f3
     file.write_all(&payload)?;
     file.flush()?;
     Ok(())
+}
+
+fn read_fulldepth_fp8_input(
+    path: &Path,
+    view: &ProjectionArenaView,
+    expected_sha256: &str,
+    kernel: FullDepthFp8Kernel,
+) -> Result<Vec<f32>> {
+    let mut file = File::open(path)?;
+    file.seek(SeekFrom::Start(view.offset))?;
+    let mut payload = vec![0u8; view.bytes as usize];
+    file.read_exact(&mut payload)?;
+    if sha256_bytes(&payload) != expected_sha256 {
+        bail!("FullDepth43 FP8 activation SHA-256 drift");
+    }
+    let values: Vec<f32> = payload
+        .chunks_exact(4)
+        .map(|chunk| f32::from_le_bytes(chunk.try_into().unwrap()))
+        .collect();
+    if values.len() as u64 != kernel.input_elements()?
+        || values.iter().any(|value| !value.is_finite())
+    {
+        bail!("FullDepth43 FP8 activation shape/non-finite drift");
+    }
+    if matches!(kernel, FullDepthFp8Kernel::GroupedWoA(_))
+        && values.iter().any(|value| value.to_bits() & 0xffff != 0)
+    {
+        bail!("FullDepth43 grouped wo_a input is not BF16-carrying F32");
+    }
+    Ok(values)
+}
+
+fn write_fulldepth_fp8_output(
+    path: &Path,
+    view: &ProjectionArenaView,
+    values: &[f32],
+    kernel: FullDepthFp8Kernel,
+) -> Result<String> {
+    if values.len() as u64 != kernel.output_elements()?
+        || values.len() * std::mem::size_of::<f32>() != view.bytes as usize
+        || values.iter().any(|value| !value.is_finite())
+        || values.iter().any(|value| value.to_bits() & 0xffff != 0)
+    {
+        bail!("FullDepth43 FP8 BF16 output contract drift");
+    }
+    let mut payload = Vec::with_capacity(view.bytes as usize);
+    for value in values {
+        payload.extend_from_slice(&value.to_le_bytes());
+    }
+    let output_sha256 = sha256_bytes(&payload);
+    let mut file = OpenOptions::new().write(true).open(path)?;
+    file.seek(SeekFrom::Start(view.offset))?;
+    file.write_all(&payload)?;
+    file.flush()?;
+    Ok(output_sha256)
 }
 
 const PROJECTION_UPLOAD_X: usize = 0;
@@ -2340,6 +2867,351 @@ impl Drop for PersistentFp8ProjectionSlot<'_> {
     }
 }
 
+struct PersistentGroupedFp8ProjectionSlot<'a> {
+    ctx: &'a VulkanContext,
+    shape: S14GroupedMatvecShape,
+    buffers: ProjectionBufferArena<'a>,
+    dispatch: Option<S14GroupedFp8Bf16Dispatch>,
+    command_pool: Option<vk::CommandPool>,
+    command_buffer: Option<vk::CommandBuffer>,
+    fence: Option<vk::Fence>,
+}
+
+impl<'a> PersistentGroupedFp8ProjectionSlot<'a> {
+    fn new(
+        ctx: &'a VulkanContext,
+        pipelines: &S14NumericPipelines,
+        shape: S14GroupedMatvecShape,
+        weight: &[u8],
+        scale: &[u8],
+    ) -> Result<Self> {
+        let shape = shape.validate_fp8_bf16_weight()?;
+        if weight.len() as u64 != shape.fp8_weight_bytes()?
+            || scale.len() as u64 != shape.fp8_scale_bytes()?
+        {
+            bail!("FullDepth43 grouped persistent payload byte drift");
+        }
+        let x_bytes = shape.fp32_input_bytes()?;
+        let weight_bytes = shape.fp8_weight_bytes()?;
+        let scale_bytes = shape.fp8_scale_bytes()?;
+        let y_bytes = shape.fp32_output_bytes()?;
+        let storage_dst = vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::TRANSFER_DST;
+        let mut buffers = ProjectionBufferArena::new(ctx);
+        buffers.push(GpuBuffer::new_staging(ctx, x_bytes)?);
+        buffers.push(GpuBuffer::new_staging(ctx, weight_bytes)?);
+        buffers.push(GpuBuffer::new_staging(ctx, scale_bytes)?);
+        buffers.push(GpuBuffer::new_vram(ctx, x_bytes, storage_dst)?);
+        buffers.push(GpuBuffer::new_vram(ctx, weight_bytes, storage_dst)?);
+        buffers.push(GpuBuffer::new_vram(ctx, scale_bytes, storage_dst)?);
+        buffers.push(GpuBuffer::new_vram(
+            ctx,
+            y_bytes,
+            vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::TRANSFER_SRC,
+        )?);
+        buffers.push(GpuBuffer::new(
+            ctx,
+            y_bytes,
+            vk::BufferUsageFlags::TRANSFER_DST,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            true,
+        )?);
+        unsafe {
+            buffers.get(PROJECTION_UPLOAD_WEIGHT).write_at(0, weight);
+            buffers.get(PROJECTION_UPLOAD_SCALE).write_at(0, scale);
+        }
+        let mut slot = Self {
+            ctx,
+            shape,
+            buffers,
+            dispatch: None,
+            command_pool: None,
+            command_buffer: None,
+            fence: None,
+        };
+        unsafe {
+            let pool = ctx.device.create_command_pool(
+                &vk::CommandPoolCreateInfo::default()
+                    .queue_family_index(ctx.qf_graphics)
+                    .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER),
+                None,
+            )?;
+            slot.command_pool = Some(pool);
+            slot.command_buffer = Some(allocate_command_buffer(ctx, pool)?);
+            slot.fence = Some(ctx.device.create_fence(&vk::FenceCreateInfo::default(), None)?);
+        }
+        slot.dispatch = Some(pipelines.bind_grouped_fp8_bf16_weight(
+            ctx,
+            shape,
+            slot.buffers.get(PROJECTION_X),
+            slot.buffers.get(PROJECTION_WEIGHT),
+            slot.buffers.get(PROJECTION_SCALE),
+            slot.buffers.get(PROJECTION_Y),
+        )?);
+        slot.upload_static_payload()?;
+        Ok(slot)
+    }
+
+    fn begin_recording(&self) -> Result<vk::CommandBuffer> {
+        let command_buffer = self
+            .command_buffer
+            .ok_or_else(|| anyhow::anyhow!("FullDepth43 grouped command buffer unavailable"))?;
+        let fence = self
+            .fence
+            .ok_or_else(|| anyhow::anyhow!("FullDepth43 grouped fence unavailable"))?;
+        unsafe {
+            self.ctx.device.reset_fences(&[fence])?;
+            self.ctx
+                .device
+                .reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?;
+            self.ctx.device.begin_command_buffer(
+                command_buffer,
+                &vk::CommandBufferBeginInfo::default()
+                    .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+            )?;
+        }
+        Ok(command_buffer)
+    }
+
+    fn submit_and_wait(&self, command_buffer: vk::CommandBuffer) -> Result<()> {
+        let fence = self
+            .fence
+            .ok_or_else(|| anyhow::anyhow!("FullDepth43 grouped fence unavailable"))?;
+        let command_buffers = [command_buffer];
+        unsafe {
+            self.ctx.device.end_command_buffer(command_buffer)?;
+            self.ctx.device.queue_submit(
+                self.ctx.q_graphics,
+                &[vk::SubmitInfo::default().command_buffers(&command_buffers)],
+                fence,
+            )?;
+            self.ctx.device.wait_for_fences(&[fence], true, u64::MAX)?;
+        }
+        Ok(())
+    }
+
+    fn upload_static_payload(&self) -> Result<()> {
+        let command_buffer = self.begin_recording()?;
+        unsafe {
+            copy(
+                self.ctx,
+                command_buffer,
+                self.buffers.get(PROJECTION_UPLOAD_WEIGHT),
+                self.buffers.get(PROJECTION_WEIGHT),
+                self.shape.fp8_weight_bytes()?,
+            );
+            copy(
+                self.ctx,
+                command_buffer,
+                self.buffers.get(PROJECTION_UPLOAD_SCALE),
+                self.buffers.get(PROJECTION_SCALE),
+                self.shape.fp8_scale_bytes()?,
+            );
+            let barrier = vk::MemoryBarrier::default()
+                .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ);
+            self.ctx.device.cmd_pipeline_barrier(
+                command_buffer,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[barrier],
+                &[],
+                &[],
+            );
+        }
+        self.submit_and_wait(command_buffer)
+    }
+
+    fn execute(&self, pipelines: &S14NumericPipelines, input: &[f32]) -> Result<Vec<f32>> {
+        if input.len() * std::mem::size_of::<f32>() != self.shape.fp32_input_bytes()? as usize
+            || input.iter().any(|value| !value.is_finite())
+            || input.iter().any(|value| value.to_bits() & 0xffff != 0)
+        {
+            bail!("FullDepth43 grouped persistent activation contract drift");
+        }
+        unsafe {
+            self.buffers
+                .get(PROJECTION_UPLOAD_X)
+                .write_at(0, bytemuck::cast_slice(input));
+        }
+        let command_buffer = self.begin_recording()?;
+        unsafe {
+            copy(
+                self.ctx,
+                command_buffer,
+                self.buffers.get(PROJECTION_UPLOAD_X),
+                self.buffers.get(PROJECTION_X),
+                self.shape.fp32_input_bytes()?,
+            );
+            let upload_barrier = vk::MemoryBarrier::default()
+                .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ);
+            self.ctx.device.cmd_pipeline_barrier(
+                command_buffer,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[upload_barrier],
+                &[],
+                &[],
+            );
+            let dispatch = self
+                .dispatch
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("FullDepth43 grouped dispatch unavailable"))?;
+            pipelines.cmd_grouped_fp8_bf16_weight_matvec(self.ctx, command_buffer, dispatch);
+            let readback_barrier = vk::MemoryBarrier::default()
+                .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+                .dst_access_mask(vk::AccessFlags::TRANSFER_READ);
+            self.ctx.device.cmd_pipeline_barrier(
+                command_buffer,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::DependencyFlags::empty(),
+                &[readback_barrier],
+                &[],
+                &[],
+            );
+            copy(
+                self.ctx,
+                command_buffer,
+                self.buffers.get(PROJECTION_Y),
+                self.buffers.get(PROJECTION_READBACK),
+                self.shape.fp32_output_bytes()?,
+            );
+        }
+        self.submit_and_wait(command_buffer)?;
+        let output = unsafe {
+            std::slice::from_raw_parts(
+                self.buffers.get(PROJECTION_READBACK).mapped() as *const f32,
+                self.shape.flat_n()? as usize,
+            )
+            .to_vec()
+        };
+        if output.iter().any(|value| !value.is_finite()) {
+            bail!("FullDepth43 grouped persistent output contains non-finite values");
+        }
+        Ok(output.into_iter().map(round_f32_to_bf16_f32).collect())
+    }
+}
+
+impl Drop for PersistentGroupedFp8ProjectionSlot<'_> {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = self.ctx.device.device_wait_idle();
+        }
+        if let Some(dispatch) = self.dispatch.take() {
+            dispatch.binder.destroy(self.ctx);
+        }
+        unsafe {
+            if let Some(fence) = self.fence.take() {
+                self.ctx.device.destroy_fence(fence, None);
+            }
+            if let Some(pool) = self.command_pool.take() {
+                self.ctx.device.destroy_command_pool(pool, None);
+            }
+        }
+    }
+}
+
+fn execute_fulldepth_grouped_fp8_once(
+    ctx: &VulkanContext,
+    pipelines: &S14NumericPipelines,
+    shape: S14GroupedMatvecShape,
+    input: &[f32],
+    weight: &[u8],
+    scale: &[u8],
+) -> Result<Vec<f32>> {
+    let shape = shape.validate_fp8_bf16_weight()?;
+    if input.len() * 4 != shape.fp32_input_bytes()? as usize
+        || weight.len() != shape.fp8_weight_bytes()? as usize
+        || scale.len() != shape.fp8_scale_bytes()? as usize
+    {
+        bail!("FullDepth43 grouped FP8 tensor byte contract drift");
+    }
+    let buffers = DeviceBuffers::new(ctx, input, weight, scale, shape.flat_n()? as usize)?;
+    let result = (|| -> Result<Vec<f32>> {
+        buffers.upload(ctx)?;
+        let dispatch = pipelines.bind_grouped_fp8_bf16_weight(
+            ctx,
+            shape,
+            &buffers.x,
+            &buffers.weight,
+            &buffers.scale,
+            &buffers.y,
+        )?;
+        let execution = (|| -> Result<Vec<f32>> {
+            let pool = unsafe { make_command_pool(ctx)? };
+            let recorded = (|| -> Result<()> {
+                let cb = unsafe { allocate_command_buffer(ctx, pool)? };
+                unsafe {
+                    ctx.device.begin_command_buffer(
+                        cb,
+                        &vk::CommandBufferBeginInfo::default()
+                            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+                    )?;
+                    pipelines.cmd_grouped_fp8_bf16_weight_matvec(ctx, cb, &dispatch);
+                    let barrier = vk::MemoryBarrier::default()
+                        .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+                        .dst_access_mask(vk::AccessFlags::TRANSFER_READ);
+                    ctx.device.cmd_pipeline_barrier(
+                        cb,
+                        vk::PipelineStageFlags::COMPUTE_SHADER,
+                        vk::PipelineStageFlags::TRANSFER,
+                        vk::DependencyFlags::empty(),
+                        &[barrier],
+                        &[],
+                        &[],
+                    );
+                    copy(
+                        ctx,
+                        cb,
+                        &buffers.y,
+                        &buffers.readback,
+                        shape.fp32_output_bytes()?,
+                    );
+                    ctx.device.end_command_buffer(cb)?;
+                    submit_and_wait(ctx, cb)?;
+                }
+                Ok(())
+            })();
+            unsafe { ctx.device.destroy_command_pool(pool, None) };
+            recorded?;
+            let raw = buffers.output(shape.flat_n()? as usize);
+            if raw.iter().any(|value| !value.is_finite()) {
+                bail!("FullDepth43 grouped FP8 output contains non-finite values");
+            }
+            Ok(raw.into_iter().map(round_f32_to_bf16_f32).collect())
+        })();
+        dispatch.binder.destroy(ctx);
+        execution
+    })();
+    buffers.destroy(ctx);
+    result
+}
+
+fn execute_fulldepth_fp8_once(
+    ctx: &VulkanContext,
+    pipelines: &S14NumericPipelines,
+    kernel: FullDepthFp8Kernel,
+    input: &[f32],
+    weight: &[u8],
+    scale: &[u8],
+) -> Result<Vec<f32>> {
+    validate_e4m3fn_codes(weight)?;
+    validate_ue8m0_codes(scale)?;
+    match kernel {
+        FullDepthFp8Kernel::Standard(shape) => {
+            let slot = PersistentFp8ProjectionSlot::new(ctx, pipelines, shape, weight, scale)?;
+            slot.execute(pipelines, input)
+        }
+        FullDepthFp8Kernel::GroupedWoA(shape) => {
+            execute_fulldepth_grouped_fp8_once(ctx, pipelines, shape, input, weight, scale)
+        }
+    }
+}
+
 fn write_fp8_projection_error(
     stdout: &mut impl Write,
     request_id: &str,
@@ -2496,6 +3368,267 @@ fn run_l42_wq_a_fp8_projection_worker() -> Result<()> {
     };
     let result = run_l42_wq_a_fp8_projection_loop(&pipelines, &slot);
     drop(slot);
+    pipelines.destroy(&ctx);
+    result
+}
+
+fn write_fulldepth_fp8_attention_error(
+    stdout: &mut impl Write,
+    request_id: &str,
+    error: &anyhow::Error,
+) -> Result<()> {
+    serde_json::to_writer(
+        &mut *stdout,
+        &Fp8ProjectionError {
+            protocol: FULLDEPTH_FP8_ATTENTION_PROTOCOL,
+            request_id,
+            ok: false,
+            error: format!("{error:#}"),
+            poisoned: true,
+        },
+    )?;
+    stdout.write_all(b"\n")?;
+    stdout.flush()?;
+    Ok(())
+}
+
+fn run_fulldepth_fp8_attention_loop(
+    ctx: &VulkanContext,
+    pipelines: &S14NumericPipelines,
+    catalog: &serde_json::Value,
+) -> Result<()> {
+    let cache_root = Path::new(MODEL_DIR).join("range_cache").canonicalize()?;
+    let mut payload_cache = VerifiedPayloadCache::new(FULLDEPTH_FP8_PAYLOAD_CACHE_BYTES)?;
+    let mut standard_slots: HashMap<String, PersistentFp8ProjectionSlot<'_>> = HashMap::new();
+    let mut grouped_slots: HashMap<String, PersistentGroupedFp8ProjectionSlot<'_>> =
+        HashMap::new();
+    let mut gpu_slot_resident_bytes = 0u64;
+    let mut stdout = std::io::stdout().lock();
+    serde_json::to_writer(
+        &mut stdout,
+        &serde_json::json!({
+            "protocol": FULLDEPTH_FP8_ATTENTION_PROTOCOL,
+            "op": "hello",
+            "ready": true,
+            "revision": REVISION,
+            "profile": "fulldepth43_native_top6",
+            "layers": {"min": 0, "max": 42},
+            "position_max": FULLDEPTH_FP8_MAX_POSITION,
+            "projections": ["wq_a", "wkv", "wq_b", "indexer.wq_b", "wo_b", "wo_a"],
+            "kernels": ["standard", "grouped_wo_a"],
+            "arena_transport": "shared_binary_file",
+            "catalog_sha256": FULLDEPTH43_CATALOG_SHA256,
+            "payload_root": cache_root,
+            "payload_cache_bytes": FULLDEPTH_FP8_PAYLOAD_CACHE_BYTES,
+            "output_rounding": "bf16_rne_then_f32_le",
+        }),
+    )?;
+    stdout.write_all(b"\n")?;
+    stdout.flush()?;
+
+    let mut expected_epoch = 0u64;
+    let stdin = std::io::stdin();
+    for line_result in BufReader::new(stdin.lock()).lines() {
+        let line = match line_result {
+            Ok(value) => value,
+            Err(error) => {
+                let error = anyhow::Error::new(error).context("read FullDepth43 FP8 request");
+                write_fulldepth_fp8_attention_error(&mut stdout, "unknown", &error)?;
+                return Err(error.context("FullDepth43 FP8 worker poisoned"));
+            }
+        };
+        if line.len() > 65_536 {
+            let error = anyhow::anyhow!("FullDepth43 FP8 request exceeds 64 KiB");
+            write_fulldepth_fp8_attention_error(&mut stdout, "unknown", &error)?;
+            return Err(error.context("FullDepth43 FP8 worker poisoned"));
+        }
+        let request: FullDepthFp8AttentionRequest = match serde_json::from_str(&line) {
+            Ok(value) => value,
+            Err(error) => {
+                let error = anyhow::Error::new(error).context("parse FullDepth43 FP8 JSON request");
+                write_fulldepth_fp8_attention_error(&mut stdout, "unknown", &error)?;
+                return Err(error.context("FullDepth43 FP8 worker poisoned"));
+            }
+        };
+        let request_id = request.request_id.clone();
+        let response = (|| -> Result<FullDepthFp8AttentionResponse> {
+            let kernel = validate_fulldepth_fp8_attention_request(&request, expected_epoch)?;
+            validate_fulldepth_fp8_attention_catalog(catalog, &request, kernel)?;
+            validate_fulldepth_fp8_cache_proofs(catalog, &request, &cache_root)?;
+            let arena = resolve_projection_arena(&request.input, &request.output)?;
+            let input =
+                read_fulldepth_fp8_input(&arena, &request.input, &request.input_sha256, kernel)?;
+            let slot_key = fulldepth_fp8_slot_key(kernel, &request);
+            let (output, gpu_slot_cache_hit, payload_uploaded_bytes) = match kernel {
+                FullDepthFp8Kernel::Standard(shape) => {
+                    let hit = standard_slots.contains_key(&slot_key);
+                    if !hit {
+                        let next_resident_bytes = reserve_fulldepth_fp8_gpu_slot(
+                            standard_slots.len() + grouped_slots.len(),
+                            gpu_slot_resident_bytes,
+                            &request,
+                        )?;
+                        let weight = read_verified_payload_cached_with_root(
+                            &mut payload_cache,
+                            &cache_root,
+                            &request.weight.path,
+                            request.weight.bytes as usize,
+                            &request.weight.sha256,
+                            &request.weight.tensor,
+                        )?;
+                        let scale = read_verified_payload_cached_with_root(
+                            &mut payload_cache,
+                            &cache_root,
+                            &request.scale.path,
+                            request.scale.bytes as usize,
+                            &request.scale.sha256,
+                            &request.scale.tensor,
+                        )?;
+                        validate_e4m3fn_codes(&weight)?;
+                        validate_ue8m0_codes(&scale)?;
+                        let slot = PersistentFp8ProjectionSlot::new(
+                            ctx,
+                            pipelines,
+                            shape,
+                            &weight,
+                            &scale,
+                        )?;
+                        gpu_slot_resident_bytes = next_resident_bytes;
+                        standard_slots.insert(slot_key.clone(), slot);
+                    }
+                    let slot = standard_slots
+                        .get(&slot_key)
+                        .ok_or_else(|| anyhow::anyhow!("FullDepth43 GPU slot insertion failed"))?;
+                    (
+                        slot.execute(pipelines, &input)?,
+                        hit,
+                        if hit {
+                            0
+                        } else {
+                            request.weight.bytes + request.scale.bytes
+                        },
+                    )
+                }
+                FullDepthFp8Kernel::GroupedWoA(shape) => {
+                    let hit = grouped_slots.contains_key(&slot_key);
+                    if !hit {
+                        let next_resident_bytes = reserve_fulldepth_fp8_gpu_slot(
+                            standard_slots.len() + grouped_slots.len(),
+                            gpu_slot_resident_bytes,
+                            &request,
+                        )?;
+                        let weight = read_verified_payload_cached_with_root(
+                            &mut payload_cache,
+                            &cache_root,
+                            &request.weight.path,
+                            request.weight.bytes as usize,
+                            &request.weight.sha256,
+                            &request.weight.tensor,
+                        )?;
+                        let scale = read_verified_payload_cached_with_root(
+                            &mut payload_cache,
+                            &cache_root,
+                            &request.scale.path,
+                            request.scale.bytes as usize,
+                            &request.scale.sha256,
+                            &request.scale.tensor,
+                        )?;
+                        validate_e4m3fn_codes(&weight)?;
+                        validate_ue8m0_codes(&scale)?;
+                        let slot = PersistentGroupedFp8ProjectionSlot::new(
+                            ctx,
+                            pipelines,
+                            shape,
+                            &weight,
+                            &scale,
+                        )?;
+                        gpu_slot_resident_bytes = next_resident_bytes;
+                        grouped_slots.insert(slot_key.clone(), slot);
+                    }
+                    let slot = grouped_slots
+                        .get(&slot_key)
+                        .ok_or_else(|| anyhow::anyhow!("FullDepth43 grouped GPU slot insertion failed"))?;
+                    (
+                        slot.execute(pipelines, &input)?,
+                        hit,
+                        if hit {
+                            0
+                        } else {
+                            request.weight.bytes + request.scale.bytes
+                        },
+                    )
+                }
+            };
+            let output_sha256 =
+                write_fulldepth_fp8_output(&arena, &request.output, &output, kernel)?;
+            Ok(FullDepthFp8AttentionResponse {
+                protocol: FULLDEPTH_FP8_ATTENTION_PROTOCOL,
+                request_id: request.request_id,
+                ok: true,
+                revision: REVISION,
+                profile: "fulldepth43_native_top6",
+                layer: request.layer,
+                position: request.position,
+                arena_epoch: request.arena_epoch,
+                projection: request.projection,
+                input: request.input,
+                output_written: request.output,
+                input_sha256: request.input_sha256,
+                output_sha256,
+                weight_sha256: request.weight.sha256,
+                scale_sha256: request.scale.sha256,
+                catalog_sha256: FULLDEPTH43_CATALOG_SHA256,
+                payload_hash_verified: true,
+                gpu_slot_cache_hit,
+                gpu_slot_cache_entries: standard_slots.len() + grouped_slots.len(),
+                gpu_slot_resident_bytes,
+                payload_uploaded_bytes,
+                activation_uploaded_bytes: kernel
+                    .input_elements()?
+                    .checked_mul(4)
+                    .ok_or_else(|| anyhow::anyhow!("FullDepth43 request byte overflow"))?,
+                numeric_mode: kernel.numeric_mode(),
+                output_rounding: "bf16_rne_then_f32_le",
+            })
+        })();
+        match response {
+            Ok(response) => {
+                serde_json::to_writer(&mut stdout, &response)?;
+                stdout.write_all(b"\n")?;
+                stdout.flush()?;
+                expected_epoch = expected_epoch
+                    .checked_add(1)
+                    .ok_or_else(|| anyhow::anyhow!("FullDepth43 FP8 arena epoch overflow"))?;
+            }
+            Err(error) => {
+                write_fulldepth_fp8_attention_error(&mut stdout, &request_id, &error)?;
+                return Err(error.context("FullDepth43 FP8 worker poisoned"));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn run_fulldepth_fp8_attention_worker() -> Result<()> {
+    let catalog_path = Path::new(FULLDEPTH43_CATALOG_FILE);
+    let catalog_bytes =
+        std::fs::read(catalog_path).with_context(|| format!("read {}", catalog_path.display()))?;
+    if sha256_bytes(&catalog_bytes) != FULLDEPTH43_CATALOG_SHA256 {
+        bail!("FullDepth43 catalog SHA-256 drift");
+    }
+    let catalog: serde_json::Value = serde_json::from_slice(&catalog_bytes)?;
+    let ctx = VulkanContext::init()?;
+    let properties = unsafe { ctx.instance.get_physical_device_properties(ctx.physical) };
+    if properties.vendor_id != AMD_VENDOR_ID || properties.device_id != NAVI10_DEVICE_ID {
+        bail!(
+            "FullDepth43 packed-FP8 worker requires RX 5700 XT; found 0x{:04x}:0x{:04x} ({})",
+            properties.vendor_id,
+            properties.device_id,
+            ctx.gpu_name
+        );
+    }
+    let pipelines = S14NumericPipelines::new_exact_audit(&ctx)?;
+    let result = run_fulldepth_fp8_attention_loop(&ctx, &pipelines, &catalog);
     pipelines.destroy(&ctx);
     result
 }
@@ -3112,6 +4245,9 @@ fn run_l42_wo_a_grouped_suite() -> Result<()> {
 }
 
 fn main() -> Result<()> {
+    if std::env::args().any(|value| value == FULLDEPTH_FP8_ATTENTION_WORKER_ARG) {
+        return run_fulldepth_fp8_attention_worker();
+    }
     if std::env::args().any(|value| value == WO_A_GROUPED_SUITE_ARG) {
         return run_l42_wo_a_grouped_suite();
     }
@@ -6567,11 +7703,215 @@ mod fp8_projection_worker_tests {
         })
     }
 
+    fn fulldepth_request(layer: u32, suffix: &str) -> FullDepthFp8AttentionRequest {
+        let (kernel, n, k, groups, n_per_group, activation_contract, input_shape) = match suffix {
+            "wo_a" => (
+                "grouped_wo_a",
+                8192,
+                4096,
+                Some(8),
+                Some(1024),
+                "bf16_carrying_f32_per_group",
+                vec![1, 1, 8, 4096],
+            ),
+            "wq_a" => (
+                "standard",
+                1024,
+                4096,
+                None,
+                None,
+                "cpu_e4m3fn_quant_dequant_f32",
+                vec![1, 1, 4096],
+            ),
+            _ => panic!("unsupported test projection"),
+        };
+        let projection_name = format!("layers.{layer}.attn.{suffix}");
+        let spec = FullDepthFp8ProjectionSpec {
+            name: projection_name.clone(),
+            kernel: kernel.to_string(),
+            n,
+            k,
+            groups,
+            n_per_group,
+            activation_contract: activation_contract.to_string(),
+            output_rounding: "bf16_rne_then_f32_le".to_string(),
+        };
+        let kernel_shape = expected_fulldepth_fp8_kernel(layer, &spec).unwrap();
+        FullDepthFp8AttentionRequest {
+            protocol: FULLDEPTH_FP8_ATTENTION_PROTOCOL.to_string(),
+            op: "execute_fp8_attention".to_string(),
+            request_id: format!("l{layer}-{suffix}-0"),
+            revision: REVISION.to_string(),
+            profile: "fulldepth43_native_top6".to_string(),
+            layer,
+            position: 17,
+            arena_epoch: 0,
+            input_sha256: "1".repeat(64),
+            projection: spec,
+            weight: FullDepthFp8AssetView {
+                tensor: format!("{projection_name}.weight"),
+                path: PathBuf::from("range_cache/weight.bin"),
+                bytes: kernel_shape.weight_bytes().unwrap(),
+                sha256: "2".repeat(64),
+                dtype: "F8_E4M3".to_string(),
+                shape: kernel_shape.weight_shape().unwrap(),
+            },
+            scale: FullDepthFp8AssetView {
+                tensor: format!("{projection_name}.scale"),
+                path: PathBuf::from("range_cache/scale.bin"),
+                bytes: kernel_shape.scale_bytes().unwrap(),
+                sha256: "3".repeat(64),
+                dtype: "F8_E8M0".to_string(),
+                shape: kernel_shape.scale_shape().unwrap(),
+            },
+            input: ProjectionArenaView {
+                path: PathBuf::from("arena.bin"),
+                offset: 0,
+                bytes: kernel_shape.input_elements().unwrap() * 4,
+                dtype: "f32_le".to_string(),
+                shape: input_shape,
+            },
+            output: ProjectionArenaView {
+                path: PathBuf::from("arena.bin"),
+                offset: kernel_shape.input_elements().unwrap() * 4,
+                bytes: kernel_shape.output_elements().unwrap() * 4,
+                dtype: "f32_le_bf16_rounded".to_string(),
+                shape: kernel_shape.output_shape().unwrap(),
+            },
+        }
+    }
+
+    fn fulldepth_catalog(request: &FullDepthFp8AttentionRequest) -> serde_json::Value {
+        serde_json::json!({
+            "format": "polaris-fulldepth43-native-top6-catalog-v1",
+            "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+            "revision": REVISION,
+            "download_authorized": false,
+            "layers": {
+                request.layer.to_string(): {
+                    "non_expert": [
+                        {
+                            "tensor": request.weight.tensor,
+                            "kind": "non_expert",
+                            "layer": request.layer,
+                            "dtype": request.weight.dtype,
+                            "shape": request.weight.shape,
+                            "bytes": request.weight.bytes
+                        },
+                        {
+                            "tensor": request.scale.tensor,
+                            "kind": "non_expert",
+                            "layer": request.layer,
+                            "dtype": request.scale.dtype,
+                            "shape": request.scale.shape,
+                            "bytes": request.scale.bytes
+                        }
+                    ]
+                }
+            }
+        })
+    }
+
     #[test]
     fn frozen_l42_wq_a_request_contract_accepts_only_expected_epoch() {
         let request = request(PathBuf::from("arena.bin"));
         validate_l42_wq_a_request(&request, 0).unwrap();
         assert!(validate_l42_wq_a_request(&request, 1).is_err());
+    }
+
+    #[test]
+    fn fulldepth_fp8_protocol_accepts_dynamic_standard_and_grouped_requests() {
+        for request in [fulldepth_request(7, "wq_a"), fulldepth_request(42, "wo_a")] {
+            let kernel = validate_fulldepth_fp8_attention_request(&request, 0).unwrap();
+            validate_fulldepth_fp8_attention_catalog(
+                &fulldepth_catalog(&request),
+                &request,
+                kernel,
+            )
+            .unwrap();
+        }
+    }
+
+    #[test]
+    fn fulldepth_fp8_slot_identity_binds_kernel_weight_and_scale() {
+        let request = fulldepth_request(7, "wq_a");
+        let kernel = validate_fulldepth_fp8_attention_request(&request, 0).unwrap();
+        let original = fulldepth_fp8_slot_key(kernel, &request);
+
+        let mut changed_scale = request.clone();
+        changed_scale.scale.sha256 = "4".repeat(64);
+        assert_ne!(
+            original,
+            fulldepth_fp8_slot_key(kernel, &changed_scale),
+            "scale identity drift must never hit an existing GPU slot"
+        );
+
+        let grouped = fulldepth_request(7, "wo_a");
+        let grouped_kernel =
+            validate_fulldepth_fp8_attention_request(&grouped, 0).unwrap();
+        assert_ne!(original, fulldepth_fp8_slot_key(grouped_kernel, &grouped));
+    }
+
+    #[test]
+    fn fulldepth_fp8_slot_reservation_is_entry_and_byte_bounded() {
+        let request = fulldepth_request(7, "wq_a");
+        let payload_bytes = request.weight.bytes + request.scale.bytes;
+        assert_eq!(
+            reserve_fulldepth_fp8_gpu_slot(
+                FULLDEPTH_FP8_GPU_SLOT_MAX_ENTRIES - 1,
+                FULLDEPTH_FP8_GPU_SLOT_MAX_RESIDENT_BYTES - payload_bytes,
+                &request,
+            )
+            .unwrap(),
+            FULLDEPTH_FP8_GPU_SLOT_MAX_RESIDENT_BYTES
+        );
+        assert!(reserve_fulldepth_fp8_gpu_slot(
+            FULLDEPTH_FP8_GPU_SLOT_MAX_ENTRIES,
+            0,
+            &request,
+        )
+        .is_err());
+        assert!(reserve_fulldepth_fp8_gpu_slot(
+            0,
+            FULLDEPTH_FP8_GPU_SLOT_MAX_RESIDENT_BYTES - payload_bytes + 1,
+            &request,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn fulldepth_fp8_protocol_rejects_epoch_identity_path_and_shape_drift() {
+        let request = fulldepth_request(7, "wq_a");
+        assert!(validate_fulldepth_fp8_attention_request(&request, 1).is_err());
+
+        let mut bad_name = request.clone();
+        bad_name.projection.name = "layers.8.attn.wq_a".to_string();
+        assert!(validate_fulldepth_fp8_attention_request(&bad_name, 0).is_err());
+
+        let mut bad_path = request.clone();
+        bad_path.weight.path = PathBuf::from("range_cache/weight.dat");
+        assert!(validate_fulldepth_fp8_attention_request(&bad_path, 0).is_err());
+
+        let mut bad_sha = request.clone();
+        bad_sha.scale.sha256 = "A".repeat(64);
+        assert!(validate_fulldepth_fp8_attention_request(&bad_sha, 0).is_err());
+
+        let mut bad_shape = request;
+        bad_shape.output.shape = vec![1, 1, 1023];
+        assert!(validate_fulldepth_fp8_attention_request(&bad_shape, 0).is_err());
+    }
+
+    #[test]
+    fn fulldepth_fp8_catalog_rejects_dtype_and_shape_drift() {
+        let request = fulldepth_request(42, "wo_a");
+        let kernel = validate_fulldepth_fp8_attention_request(&request, 0).unwrap();
+        let mut bad_dtype = fulldepth_catalog(&request);
+        bad_dtype["layers"]["42"]["non_expert"][1]["dtype"] = serde_json::json!("F8_E4M3");
+        assert!(validate_fulldepth_fp8_attention_catalog(&bad_dtype, &request, kernel).is_err());
+
+        let mut bad_shape = fulldepth_catalog(&request);
+        bad_shape["layers"]["42"]["non_expert"][0]["shape"] = serde_json::json!([8191, 4096]);
+        assert!(validate_fulldepth_fp8_attention_catalog(&bad_shape, &request, kernel).is_err());
     }
 
     #[test]

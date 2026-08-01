@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import numpy as np
 import tempfile
 import threading
 import unittest
@@ -134,6 +135,10 @@ class FullDepthContractTests(unittest.TestCase):
             ExecutionConfig(vulkan_writeback_all_layers=True).validate()
         with self.assertRaises(FullDepthError):
             ExecutionConfig(vulkan_writeback_fast_production=True).validate()
+        with self.assertRaises(FullDepthError):
+            ExecutionConfig(vulkan_attention_worker=Path("missing.exe")).validate()
+        with self.assertRaises(FullDepthError):
+            ExecutionConfig(vulkan_attention_timeout_seconds=0).validate()
         with tempfile.TemporaryDirectory() as directory:
             worker = Path(directory) / "worker.exe"
             worker.write_bytes(b"fixture")
@@ -144,6 +149,41 @@ class FullDepthContractTests(unittest.TestCase):
                 vulkan_writeback_all_layers=True,
                 vulkan_writeback_verify_cpu=False,
             ).validate()
+
+    def test_native_layer_routes_only_approved_attention_fp8_to_worker(self) -> None:
+        class FakeAttentionWorker:
+            def __init__(self) -> None:
+                self.requests: list[dict[str, object]] = []
+
+            def execute(self, **request: object) -> tuple[torch.Tensor, dict[str, object]]:
+                self.requests.append(request)
+                layer = int(request["layer"])
+                suffix = str(request["suffix"])
+                return torch.zeros((1, 1, 1024), dtype=torch.float32), {
+                    "projection": {"name": f"layers.{layer}.attn.{suffix}"},
+                }
+
+        class TestLayer(FullDepthNativeLayerReference):
+            def _packed_asset(self, tensor: str) -> object:
+                return tensor
+
+        with tempfile.TemporaryDirectory() as directory:
+            worker = FakeAttentionWorker()
+            kernel = TestLayer(
+                7,
+                TensorStore(Path(directory)),
+                attention_worker=worker,
+                attention_position=3,
+            )
+            output = kernel._linear_fp8(
+                np.zeros((1, 1, 4096), dtype=np.float32),
+                "layers.7.attn.wq_a",
+            )
+        self.assertEqual(output.shape, (1, 1, 1024))
+        self.assertEqual(worker.requests[0]["layer"], 7)
+        self.assertEqual(worker.requests[0]["position"], 3)
+        self.assertEqual(worker.requests[0]["suffix"], "wq_a")
+        self.assertEqual(len(kernel.attention_vulkan_evidence), 1)
 
     def test_first_preview_forced_prefill_runs_five_inputs_before_argmax(self) -> None:
         queue = s14._load_forced_prefill(PREVIEW_FORCED_PREFILL)

@@ -1,0 +1,63 @@
+{
+  "format": "polaris-fulldepth43-vulkan-attention-ab-v1",
+  "date": "2026-08-02",
+  "status": "complete",
+  "profile": "FullDepth43/native-top6",
+  "device": "AMD Radeon RX 5700 XT",
+  "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+  "baseline": {
+    "execution_seconds": 93.78056360000483,
+    "output_token_ids": [5, 223],
+    "report_sha256": "17b22c04ba52a7f95f08ff926d5bc79cb6f82648fe7cd2cd36802c01eb0761cd"
+  },
+  "candidate": {
+    "execution_seconds": 63.885079000006954,
+    "output_token_ids": [5, 223],
+    "completed_layers_per_token": [43, 43],
+    "vulkan_moe_writebacks": 86,
+    "cpu_fallbacks": 0,
+    "error": null,
+    "report_sha256": "13ac69e0e131a03a82156362d8f14457b4654be445ecc57fd68d37f4da584d7a"
+  },
+  "wall_clock": {
+    "seconds_saved": 29.89548459999787,
+    "reduction_fraction": 0.31878124264116
+  },
+  "attention_slots": {
+    "entries": 236,
+    "resident_bytes": 4775506560,
+    "resident_gib": 4.447537064552307,
+    "hard_limit_entries": 258,
+    "hard_limit_resident_bytes": 5368709120,
+    "identity_fields": [
+      "kernel",
+      "weight.tensor",
+      "weight.sha256",
+      "scale.tensor",
+      "scale.sha256"
+    ],
+    "position_0": {
+      "layer_seconds": 36.13375170001382,
+      "attention_seconds": 13.664902000011352,
+      "requests": 236,
+      "cache_hits": 0,
+      "payload_uploaded_bytes": 4775506560
+    },
+    "position_1": {
+      "layer_seconds": 20.678437100024894,
+      "attention_seconds": 3.5299735000153305,
+      "requests": 236,
+      "cache_hits": 236,
+      "payload_uploaded_bytes": 0
+    }
+  },
+  "numeric_boundary": {
+    "reference_backend": "NumPy/OpenBLAS",
+    "candidate_backend": "Vulkan packed-FP8",
+    "first_observed_projection": "layers.0.attn.wq_b",
+    "max_abs": 0.00006103515625,
+    "whole_layer_bit_exact_through": 1,
+    "final_short_trace_token_ids_unchanged": true
+  },
+  "claim_limit": "证明43层GPU数值轨迹闭环、跨token权重常驻及两token最终输出不变；不证明全部投影逐位等于OpenBLAS，不证明质量晋级或交互速度。"
+}

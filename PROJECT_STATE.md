@@ -1301,3 +1301,28 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
   `fast16/research/polaris_meridian_v1/fulldepth43_native_top6/verify_l42_attention_replay.py`。
 - L42 attention原语阻塞已消除，但43层生产热路径尚未切换，最终BF16 RNE仍在CPU。下一硬门是
   推广43层并只跑一次两-token真实A/B；在此之前不宣称完整GPU token或端到端速度晋级。
+
+### 2026-08-02 FullDepth43 全层 packed-FP8 Vulkan attention 常驻
+
+- 通用 packed-FP8 worker 已推广到 `L0--L42`，覆盖标准 `wq_a/wkv/wq_b/indexer.wq_b/wo_b`
+  与 grouped `wo_a`。Python executor 在同一 `FullDepthTokenWorker` 中同时接通43层 Vulkan
+  attention、43层 Vulkan MoE writeback和 Vulkan final head；严格 JSON、arena epoch、shape、
+  dtype、SHA以及 canonical Range cache sidecar proof 任一漂移都会 poison，禁止错误同形权重冒充。
+- worker 建立跨 token GPU slot。真实两-token组合门中，position 0 创建236个
+  attention slot、上传`4,775,506,560 B`（`4.447537 GiB`）；position 1 为`236/236`命中且
+  `payload_uploaded_bytes=0`。attention耗时从首token `13.6649s`降至第二token `3.5300s`。
+- 独立复核后，slot身份已收紧为`kernel + weight tensor/SHA + scale tensor/SHA`，消除了同权重、
+  不同scale误命中旧槽的协议漏洞；同时增加258槽与`5 GiB`逻辑常驻硬上限，超预算在GPU分配前
+  fail closed。新增负测后Rust example为`25/25`，真实L42七请求重放门再次通过。
+- 完整43层两-token执行从上一正式基线`93.7806s`降到`63.8851s`，墙钟缩短`31.88%`；输出仍为
+  `[5,223]`，每个token均完成43/43层、两token共86/86次 Vulkan MoE writeback，CPU fallback为0、
+  `error=null`。第二token层主体为`20.6784s`，说明当前仍约20--30秒/token，不是可交互聊天速度。
+- Vulkan与NumPy/OpenBLAS的浮点归约顺序不保证所有输入逐BF16位一致；首个边界在L0 `wq_b`
+  观察到`max_abs=6.103515625e-05`。L0/L1整层仍逐位一致，L2后部分隐藏状态及原生路由开始漂移，
+  但同一短轨最终token不变。因此当前冻结的准确表述是“GPU数值轨迹完整闭环且最终短轨输出不变”，
+  不是“43层全部投影逐位等于OpenBLAS”。质量门通过前也不得写成能力晋级。
+- 正式证据见
+  `fast16/research/polaris_meridian_v1/fulldepth43_native_top6/FULLDEPTH43_VULKAN_ATTENTION.md`
+  与同目录`FULLDEPTH43_VULKAN_ATTENTION_AB.json`。下一性能主线是把每层5--6次
+  Python→arena→JSONL投影边界合并成一次持久Rust/Vulkan整层请求，再迁移CPU router、compressor
+  与HC；质量主线同时固定GPU数值规范并运行极短多能力生成门。
