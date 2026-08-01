@@ -31,7 +31,7 @@ const DEFAULT_HEAD: &str = "D:/models/Polaris-S14/range_cache/ac7f39b6146436528a
 const DEFAULT_SHA256: &str = "029e3c5293b29cc426e21d87795e15efa4d363f27b2bc4a9e3aef7d79f047919";
 const SHADER: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/s14_bf16_head.spv"));
 const ARGMAX_SHADER: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/s14_head_argmax.spv"));
-const WORKER_PROTOCOL: &str = "polaris-s14-bf16-head-worker-v1";
+const WORKER_PROTOCOL: &str = "polaris-s14-bf16-head-worker-v2";
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -82,6 +82,7 @@ struct Report {
 struct WorkerRequest {
     protocol: String,
     request_id: u64,
+    position: usize,
     input_path: PathBuf,
     input_bytes: usize,
     input_sha256: String,
@@ -381,12 +382,15 @@ fn run_worker(head_path: &Path, expected_sha: &str) -> Result<()> {
             "head_bytes": HEAD_BYTES,
             "head_sha256": observed_sha,
             "upload_wall_ms": upload_wall_ms,
+            "position_contract": "first_any_then_strict_increment",
+            "production_response": "argmax_only_no_top10_or_logits",
         }),
     )?;
     writer.write_all(b"\n")?;
     writer.flush()?;
 
     let mut line = String::new();
+    let mut expected_position: Option<usize> = None;
     loop {
         line.clear();
         let read = reader.read_line(&mut line)?;
@@ -404,19 +408,31 @@ fn run_worker(head_path: &Path, expected_sha: &str) -> Result<()> {
         }
         let request: Result<WorkerRequest> = serde_json::from_str(&line).map_err(Into::into);
         let response = match request {
-            Ok(request) => process_worker_request(
-                &ctx,
-                command,
-                &pipeline,
-                &binder,
-                &argmax_pipeline,
-                &argmax_binder,
-                &hidden_buffer,
-                &logits_buffer,
-                &top_one_buffer,
-                &observed_sha,
-                &request,
-            ),
+            Ok(request) => {
+                let response = process_worker_request(
+                    &ctx,
+                    command,
+                    &pipeline,
+                    &binder,
+                    &argmax_pipeline,
+                    &argmax_binder,
+                    &hidden_buffer,
+                    &logits_buffer,
+                    &top_one_buffer,
+                    &observed_sha,
+                    expected_position,
+                    &request,
+                );
+                if response.is_ok() {
+                    expected_position = Some(
+                        request
+                            .position
+                            .checked_add(1)
+                            .context("head worker position overflow")?,
+                    );
+                }
+                response
+            }
             Err(error) => Err(error.context("parse head worker request")),
         };
         match response {
@@ -463,6 +479,7 @@ fn process_worker_request(
     logits_buffer: &GpuBuffer,
     top_one_buffer: &GpuBuffer,
     head_sha256: &str,
+    expected_position: Option<usize>,
     request: &WorkerRequest,
 ) -> Result<serde_json::Value> {
     let worker_started = Instant::now();
@@ -472,6 +489,13 @@ fn process_worker_request(
     if !matches!(request.batch, 1 | 4 | 8) {
         bail!("head worker batch must be K=1/4/8");
     }
+    if expected_position.is_some_and(|expected| request.position != expected) {
+        bail!("head worker position must advance exactly by one");
+    }
+    request
+        .position
+        .checked_add(1)
+        .context("head worker position overflow")?;
     validate_sha256(&request.input_sha256)?;
     let expected_bytes = request
         .batch
@@ -553,6 +577,7 @@ fn process_worker_request(
         "protocol": WORKER_PROTOCOL,
         "status": "ok",
         "request_id": request.request_id,
+        "position": request.position,
         "batch": request.batch,
         "input_path": input_path_utf8,
         "input_bytes": request.input_bytes,
