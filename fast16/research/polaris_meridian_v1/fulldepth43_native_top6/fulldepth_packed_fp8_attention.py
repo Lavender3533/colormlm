@@ -11,7 +11,6 @@ import json
 import math
 import os
 import queue
-import struct
 import subprocess
 import threading
 from collections import deque
@@ -19,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+import numpy as np
 import torch
 
 
@@ -216,12 +216,15 @@ class FullDepthPackedFp8Arena:
             or not bool(torch.isfinite(activation).all().item())
         ):
             raise FullDepthPackedFp8Error("attention activation CPU/F32/shape/有限数合同漂移")
-        values = activation.detach().contiguous().reshape(-1).tolist()
-        if spec["kernel"] == "grouped_wo_a" and any(
-            struct.unpack("<I", struct.pack("<f", value))[0] & 0xFFFF for value in values
+        activation_array = (
+            activation.detach().contiguous().numpy().astype("<f4", copy=False)
+        )
+        activation_bits = activation_array.view("<u4")
+        if spec["kernel"] == "grouped_wo_a" and bool(
+            np.any(activation_bits & np.uint32(0xFFFF))
         ):
             raise FullDepthPackedFp8Error("grouped wo_a activation 必须是 BF16-carrying F32")
-        payload = struct.pack(f"<{len(values)}f", *values)
+        payload = activation_array.tobytes(order="C")
         output_bytes = math.prod(output_shape) * 4
         output_offset = len(payload)
         if output_offset + output_bytes > self.path.stat().st_size:
@@ -264,13 +267,11 @@ class FullDepthPackedFp8Arena:
             raise FullDepthPackedFp8Error(f"读取 arena output 失败: {exc}") from exc
         if len(payload) != int(view["bytes"]) or _sha256(payload) != expected_sha256:
             raise FullDepthPackedFp8Error("arena output 字节/SHA 漂移")
-        values: list[float] = []
-        for (bits,) in struct.iter_unpack("<I", payload):
-            value = struct.unpack("<f", bits.to_bytes(4, "little"))[0]
-            if bits & 0xFFFF or not math.isfinite(value):
-                raise FullDepthPackedFp8Error("worker output 不是有限 BF16-carrying F32")
-            values.append(value)
-        return torch.tensor(values, dtype=torch.float32).reshape(tuple(view["shape"]))
+        values = np.frombuffer(payload, dtype="<f4")
+        bits = values.view("<u4")
+        if bool(np.any(bits & np.uint32(0xFFFF))) or not bool(np.isfinite(values).all()):
+            raise FullDepthPackedFp8Error("worker output 不是有限 BF16-carrying F32")
+        return torch.from_numpy(values.copy()).reshape(tuple(view["shape"]))
 
 
 class PersistentFullDepthPackedFp8Attention:
