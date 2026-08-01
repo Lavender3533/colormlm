@@ -1229,9 +1229,9 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
   `0/602`；端到端耗时 `160.2900s`，比无该缓存基线慢约 `9.37%`。因此朴素 GPU payload
   LRU 不晋级，不能作为默认加速；后续只有在抗顺序扫描驻留或按层生命周期策略通过真实 A/B
   后才可重开。
-- 生产 worker 已恢复默认无 GPU payload cache 的原始临时上传路径；仅显式设置
-  `POLARIS_GPU_PAYLOAD_CACHE_GIB=1..7` 才进入隔离实验，未设置或设为`0`时 telemetry 明确
-  `enabled=false`。默认安全路径 Rust 单测 `6/6`、release编译均通过。
+- 生产 worker 默认禁用 GPU payload resident cache；仅显式设置
+  `POLARIS_GPU_PAYLOAD_CACHE_GIB=1..7` 才进入隔离实验，未设置或设为`0`时该 cache telemetry
+  明确`enabled=false`。默认无resident-cache路径现使用有界固定上传槽，保持每请求完整覆写。
 - 主机 FP8 materialization cache 从6GiB增到8GiB后，命中率从约`18.01%`升到`22.67%`，
   但第二 token 仅为`59.35s`，相对6GiB基线约`60.14s`没有脱离机器噪声；完整两 token
   还因冷态波动为`171.7050s`。8GiB不晋级，生产研究默认继续使用6GiB，停止扫描更大容量。
@@ -1246,3 +1246,12 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
 - 当前主要瓶颈仍是 CPU attention/router/compressor、FP8 materialization、Range验证以及逐层
   Python→文件→Rust 边界。GPU kernel 两 token 合计仅约 `0.264s`；下一主线是把这些阶段并入
   持久 GPU 图并删除逐层文件中转，而不是继续扩大 VRAM LRU。
+- 默认路径现已用一个有界固定 Vulkan 上传槽复用42个权重 staging/device 对和MoE工作区；
+  槽约占`105.47MB`逻辑VRAM和`105.40MB`mapped staging，每层仍完整覆写约`100.5MiB`，
+  不缓存payload身份，且与实验resident LRU严格互斥。RX 5700 XT固化L42门保持4096个BF16
+  逐位一致，`max_abs=0`、`rmse=0`。
+- 同一`[5,223]`连续两-token门从`139.9329s`降到`117.9932s`，总时间缩短`15.68%`、有效TPS
+  提高`18.59%`；逐token为`67.77s / 49.57s`。86/86次响应启用复用槽、43/43×2、零fallback、
+  `error=null`。worker non-kernel从`19.8029s`降到`11.7180s`（`-40.83%`），证明主要收益来自
+  消除每层Vulkan buffer/memory反复创建销毁；完整证据见
+  `fast16/research/polaris_meridian_v1/fulldepth43_native_top6/REUSABLE_GPU_SLOT_AB.md`。

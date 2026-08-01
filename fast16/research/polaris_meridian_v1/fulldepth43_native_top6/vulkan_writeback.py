@@ -264,6 +264,7 @@ class PersistentVulkanWriteback:
             "worker_wall_ms": response.get("wall_ms"),
             "payload_cache": response.get("payload_cache"),
             "gpu_payload_cache": response.get("gpu_payload_cache"),
+            "reusable_gpu_slot": response.get("reusable_gpu_slot"),
             "boundaries": response.get("boundaries"),
             "persistent_context": True,
         }
