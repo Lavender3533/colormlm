@@ -57,6 +57,8 @@ const DEFAULT_GPU_PAYLOAD_CACHE_GIB: usize = 0;
 const MIN_GPU_PAYLOAD_CACHE_GIB: usize = 1;
 const MAX_GPU_PAYLOAD_CACHE_GIB: usize = 7;
 const GPU_VRAM_HARD_LIMIT_GIB: usize = 8;
+const OFFICIAL_ROUTED_EXPERT_COUNT: usize = 6;
+const REUSABLE_GPU_SLOT_MAX_LOGICAL_BYTES: u64 = 128 * 1024 * 1024;
 const WRITEBACK_DIAGNOSTIC_DIR_ENV: &str = "POLARIS_FULLDEPTH43_WRITEBACK_DIAGNOSTIC_DIR";
 
 struct DeviceBuffers {
@@ -730,6 +732,344 @@ impl MoeBatchBuffers {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct MoeWeightByteLayout {
+    w1: u64,
+    s1: u64,
+    w3: u64,
+    s3: u64,
+    w2: u64,
+    s2: u64,
+}
+
+impl MoeWeightByteLayout {
+    fn total(self) -> Result<u64> {
+        [self.w1, self.s1, self.w3, self.s3, self.w2, self.s2]
+            .into_iter()
+            .try_fold(0u64, |total, bytes| {
+                total
+                    .checked_add(bytes)
+                    .ok_or_else(|| anyhow::anyhow!("reusable GPU slot byte count overflow"))
+            })
+    }
+
+    fn from_payload(payload: &MoePayload) -> Self {
+        Self {
+            w1: payload.w1.len() as u64,
+            s1: payload.s1.len() as u64,
+            w3: payload.w3.len() as u64,
+            s3: payload.s3.len() as u64,
+            w2: payload.w2.len() as u64,
+            s2: payload.s2.len() as u64,
+        }
+    }
+}
+
+fn official_moe_weight_layouts() -> Result<(MoeWeightByteLayout, MoeWeightByteLayout)> {
+    let routed_up = S14MatvecShape::new(2048, 4096)?.validate_mxfp4()?;
+    let routed_down = S14MatvecShape::new(4096, 2048)?.validate_mxfp4()?;
+    let shared_up = S14MatvecShape::new(2048, 4096)?.validate_fp8()?;
+    let shared_down = S14MatvecShape::new(4096, 2048)?.validate_fp8()?;
+    Ok((
+        MoeWeightByteLayout {
+            w1: routed_up.mxfp4_weight_bytes()?,
+            s1: routed_up.mxfp4_scale_bytes()?,
+            w3: routed_up.mxfp4_weight_bytes()?,
+            s3: routed_up.mxfp4_scale_bytes()?,
+            w2: routed_down.mxfp4_weight_bytes()?,
+            s2: routed_down.mxfp4_scale_bytes()?,
+        },
+        MoeWeightByteLayout {
+            w1: shared_up.fp8_weight_bytes()?,
+            s1: shared_up.fp8_scale_bytes()?,
+            w3: shared_up.fp8_weight_bytes()?,
+            s3: shared_up.fp8_scale_bytes()?,
+            w2: shared_down.fp8_weight_bytes()?,
+            s2: shared_down.fp8_scale_bytes()?,
+        },
+    ))
+}
+
+fn require_exact_moe_weight_layout(
+    payload: &MoePayload,
+    expected: MoeWeightByteLayout,
+    label: &str,
+) -> Result<()> {
+    let actual = MoeWeightByteLayout::from_payload(payload);
+    if actual != expected {
+        bail!("{label} payload shape drift: expected {expected:?}, observed {actual:?}");
+    }
+    Ok(())
+}
+
+/// A persistently mapped staging buffer paired with one fixed-size VRAM slot.
+/// Unlike `UploadedBuffer`, its staging allocation is never released between
+/// requests and its contents are always overwritten before the next upload.
+struct ReusableUploadedBuffer {
+    staging: GpuBuffer,
+    device: GpuBuffer,
+    bytes: u64,
+}
+
+impl ReusableUploadedBuffer {
+    fn new(ctx: &VulkanContext, bytes: u64) -> Result<Self> {
+        if bytes == 0 || bytes > REUSABLE_GPU_SLOT_MAX_LOGICAL_BYTES {
+            bail!("reusable GPU upload buffer size is outside the fixed safety bound");
+        }
+        Ok(Self {
+            staging: GpuBuffer::new_staging(ctx, bytes)?,
+            device: GpuBuffer::new_vram(
+                ctx,
+                bytes,
+                vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+            )?,
+            bytes,
+        })
+    }
+
+    fn rewrite_staging(&self, bytes: &[u8], label: &str) -> Result<()> {
+        if bytes.len() as u64 != self.bytes {
+            bail!(
+                "{label} reusable upload size drift: expected {}, observed {}",
+                self.bytes,
+                bytes.len()
+            );
+        }
+        unsafe { self.staging.write_at(0, bytes) };
+        Ok(())
+    }
+
+    unsafe fn cmd_upload(&self, ctx: &VulkanContext, cb: vk::CommandBuffer) {
+        copy(ctx, cb, &self.staging, &self.device, self.bytes);
+    }
+
+    fn destroy(&self, ctx: &VulkanContext) {
+        self.device.destroy(ctx);
+        self.staging.destroy(ctx);
+    }
+}
+
+struct ReusableMoeWeights {
+    w1: ReusableUploadedBuffer,
+    s1: ReusableUploadedBuffer,
+    w3: ReusableUploadedBuffer,
+    s3: ReusableUploadedBuffer,
+    w2: ReusableUploadedBuffer,
+    s2: ReusableUploadedBuffer,
+}
+
+impl ReusableMoeWeights {
+    fn new(ctx: &VulkanContext, layout: MoeWeightByteLayout) -> Result<Self> {
+        Ok(Self {
+            w1: ReusableUploadedBuffer::new(ctx, layout.w1)?,
+            s1: ReusableUploadedBuffer::new(ctx, layout.s1)?,
+            w3: ReusableUploadedBuffer::new(ctx, layout.w3)?,
+            s3: ReusableUploadedBuffer::new(ctx, layout.s3)?,
+            w2: ReusableUploadedBuffer::new(ctx, layout.w2)?,
+            s2: ReusableUploadedBuffer::new(ctx, layout.s2)?,
+        })
+    }
+
+    fn rewrite_staging(&self, payload: &MoePayload, label: &str) -> Result<()> {
+        self.w1
+            .rewrite_staging(&payload.w1, &format!("{label}.w1"))?;
+        self.s1
+            .rewrite_staging(&payload.s1, &format!("{label}.s1"))?;
+        self.w3
+            .rewrite_staging(&payload.w3, &format!("{label}.w3"))?;
+        self.s3
+            .rewrite_staging(&payload.s3, &format!("{label}.s3"))?;
+        self.w2
+            .rewrite_staging(&payload.w2, &format!("{label}.w2"))?;
+        self.s2
+            .rewrite_staging(&payload.s2, &format!("{label}.s2"))?;
+        Ok(())
+    }
+
+    unsafe fn cmd_upload(&self, ctx: &VulkanContext, cb: vk::CommandBuffer) {
+        for buffer in [&self.w1, &self.s1, &self.w3, &self.s3, &self.w2, &self.s2] {
+            buffer.cmd_upload(ctx, cb);
+        }
+    }
+
+    fn destroy(&self, ctx: &VulkanContext) {
+        self.s2.destroy(ctx);
+        self.w2.destroy(ctx);
+        self.s3.destroy(ctx);
+        self.w3.destroy(ctx);
+        self.s1.destroy(ctx);
+        self.w1.destroy(ctx);
+    }
+}
+
+/// Default, non-resident FullDepth43 upload path. The slot owns exactly one
+/// layer's six routed experts plus shared expert and workspace. Every request
+/// rewrites all 42 mapped tensor staging buffers before copying them to the
+/// same fixed VRAM buffers; no payload identity or layer content is retained.
+struct ReusableOfficialMoeSlot {
+    x: ReusableUploadedBuffer,
+    routed: Vec<ReusableMoeWeights>,
+    shared: ReusableMoeWeights,
+    gate: GpuBuffer,
+    up: GpuBuffer,
+    hidden: GpuBuffer,
+    down: GpuBuffer,
+    accumulator: GpuBuffer,
+    readback: GpuBuffer,
+    logical_device_bytes: u64,
+    logical_staging_bytes: u64,
+}
+
+impl ReusableOfficialMoeSlot {
+    fn logical_byte_counts() -> Result<(u64, u64)> {
+        let (routed_layout, shared_layout) = official_moe_weight_layouts()?;
+        let x_bytes = 4096 * std::mem::size_of::<f32>() as u64;
+        let routed_bytes = routed_layout
+            .total()?
+            .checked_mul(OFFICIAL_ROUTED_EXPERT_COUNT as u64)
+            .ok_or_else(|| anyhow::anyhow!("reusable routed slot byte count overflow"))?;
+        let shared_bytes = shared_layout.total()?;
+        let staging_bytes = x_bytes
+            .checked_add(routed_bytes)
+            .and_then(|bytes| bytes.checked_add(shared_bytes))
+            .ok_or_else(|| anyhow::anyhow!("reusable staging byte count overflow"))?;
+        let intermediate_bytes = 2048 * std::mem::size_of::<f32>() as u64;
+        let output_bytes = 4096 * std::mem::size_of::<f32>() as u64;
+        let workspace_bytes = intermediate_bytes
+            .checked_mul(3)
+            .and_then(|bytes| bytes.checked_add(output_bytes.checked_mul(3)?))
+            .ok_or_else(|| anyhow::anyhow!("reusable workspace byte count overflow"))?;
+        let device_bytes = staging_bytes
+            .checked_add(workspace_bytes)
+            .ok_or_else(|| anyhow::anyhow!("reusable device byte count overflow"))?;
+        Ok((device_bytes, staging_bytes))
+    }
+
+    fn new(ctx: &VulkanContext) -> Result<Self> {
+        let (routed_layout, shared_layout) = official_moe_weight_layouts()?;
+        let (logical_device_bytes, logical_staging_bytes) = Self::logical_byte_counts()?;
+        if logical_device_bytes > REUSABLE_GPU_SLOT_MAX_LOGICAL_BYTES {
+            bail!(
+                "fixed reusable GPU slot requires {logical_device_bytes} bytes, above the {} byte safety bound",
+                REUSABLE_GPU_SLOT_MAX_LOGICAL_BYTES
+            );
+        }
+        let x_bytes = 4096 * std::mem::size_of::<f32>() as u64;
+        let x = ReusableUploadedBuffer::new(ctx, x_bytes)?;
+        let routed = (0..OFFICIAL_ROUTED_EXPERT_COUNT)
+            .map(|_| ReusableMoeWeights::new(ctx, routed_layout))
+            .collect::<Result<Vec<_>>>()?;
+        let shared = ReusableMoeWeights::new(ctx, shared_layout)?;
+        let intermediate_bytes = 2048 * std::mem::size_of::<f32>() as u64;
+        let output_bytes = 4096 * std::mem::size_of::<f32>() as u64;
+        let storage = vk::BufferUsageFlags::STORAGE_BUFFER;
+        let gate = GpuBuffer::new_vram(ctx, intermediate_bytes, storage)?;
+        let up = GpuBuffer::new_vram(ctx, intermediate_bytes, storage)?;
+        let hidden = GpuBuffer::new_vram(ctx, intermediate_bytes, storage)?;
+        let down = GpuBuffer::new_vram(ctx, output_bytes, storage)?;
+        let accumulator = GpuBuffer::new_vram(
+            ctx,
+            output_bytes,
+            storage | vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::TRANSFER_SRC,
+        )?;
+        let readback = GpuBuffer::new(
+            ctx,
+            output_bytes,
+            vk::BufferUsageFlags::TRANSFER_DST,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            true,
+        )?;
+        Ok(Self {
+            x,
+            routed,
+            shared,
+            gate,
+            up,
+            hidden,
+            down,
+            accumulator,
+            readback,
+            logical_device_bytes,
+            logical_staging_bytes,
+        })
+    }
+
+    fn rewrite_and_upload(
+        &self,
+        ctx: &VulkanContext,
+        x: &[f32],
+        routed: &[MoePayload],
+        shared: &MoePayload,
+    ) -> Result<()> {
+        if x.len() != 4096
+            || routed.len() != OFFICIAL_ROUTED_EXPERT_COUNT
+            || routed.iter().any(|payload| payload.expert_id.is_none())
+            || shared.expert_id.is_some()
+        {
+            bail!("reusable official MoE slot request contract drift");
+        }
+        let (routed_layout, shared_layout) = official_moe_weight_layouts()?;
+        self.x
+            .rewrite_staging(bytemuck::cast_slice(x), "activation")?;
+        for (index, (slot, payload)) in self.routed.iter().zip(routed).enumerate() {
+            require_exact_moe_weight_layout(payload, routed_layout, &format!("routed[{index}]"))?;
+            slot.rewrite_staging(payload, &format!("routed[{index}]"))?;
+        }
+        require_exact_moe_weight_layout(shared, shared_layout, "shared")?;
+        self.shared.rewrite_staging(shared, "shared")?;
+
+        unsafe {
+            let pool = make_command_pool(ctx)?;
+            let cb = allocate_command_buffer(ctx, pool)?;
+            ctx.device.begin_command_buffer(
+                cb,
+                &vk::CommandBufferBeginInfo::default()
+                    .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+            )?;
+            self.x.cmd_upload(ctx, cb);
+            for weights in &self.routed {
+                weights.cmd_upload(ctx, cb);
+            }
+            self.shared.cmd_upload(ctx, cb);
+            let barrier = vk::MemoryBarrier::default()
+                .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[barrier],
+                &[],
+                &[],
+            );
+            ctx.device.end_command_buffer(cb)?;
+            submit_and_wait(ctx, cb)?;
+            ctx.device.destroy_command_pool(pool, None);
+        }
+        Ok(())
+    }
+
+    fn output(&self) -> Vec<f32> {
+        unsafe { std::slice::from_raw_parts(self.readback.mapped() as *const f32, 4096).to_vec() }
+    }
+
+    fn destroy(&self, ctx: &VulkanContext) {
+        self.readback.destroy(ctx);
+        self.accumulator.destroy(ctx);
+        self.down.destroy(ctx);
+        self.hidden.destroy(ctx);
+        self.up.destroy(ctx);
+        self.gate.destroy(ctx);
+        self.shared.destroy(ctx);
+        for weights in self.routed.iter().rev() {
+            weights.destroy(ctx);
+        }
+        self.x.destroy(ctx);
+    }
+}
+
 /// Per-request activation/workspace buffers. Expert weights live in the
 /// worker-level `GpuPayloadCache` and are not reallocated or reuploaded here.
 struct OfficialMoeWorkspace {
@@ -1016,6 +1356,7 @@ struct WritebackResponse {
     wall_ms: f64,
     payload_cache: WritebackPayloadCacheTelemetry,
     gpu_payload_cache: WritebackGpuPayloadCacheTelemetry,
+    reusable_gpu_slot: WritebackReusableGpuSlotTelemetry,
     boundaries: [&'static str; 5],
     expansion_status: &'static str,
     claim_limit: &'static str,
@@ -1055,6 +1396,52 @@ struct WritebackGpuPayloadCacheTelemetry {
     total_uploaded_bytes: u64,
     total_hit_rate: f64,
     strict_sha_identity: bool,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+struct WritebackReusableGpuSlotTelemetry {
+    enabled: bool,
+    logical_device_bytes: u64,
+    logical_staging_bytes: u64,
+    request_uploads: u64,
+    request_uploaded_bytes: u64,
+    weight_tensor_slots_reused: usize,
+    workspace_reused: bool,
+    strict_fixed_shapes: bool,
+    resident_cache_isolated: bool,
+}
+
+impl WritebackReusableGpuSlotTelemetry {
+    fn for_successful_request(
+        slot_logical_bytes: Option<(u64, u64)>,
+        resident_cache_enabled: bool,
+    ) -> Result<Self> {
+        match (slot_logical_bytes, resident_cache_enabled) {
+            (Some((logical_device_bytes, logical_staging_bytes)), false) => Ok(Self {
+                enabled: true,
+                logical_device_bytes,
+                logical_staging_bytes,
+                request_uploads: 1,
+                request_uploaded_bytes: logical_staging_bytes,
+                weight_tensor_slots_reused: (OFFICIAL_ROUTED_EXPERT_COUNT + 1) * 6,
+                workspace_reused: true,
+                strict_fixed_shapes: true,
+                resident_cache_isolated: true,
+            }),
+            (None, true) => Ok(Self {
+                enabled: false,
+                logical_device_bytes: 0,
+                logical_staging_bytes: 0,
+                request_uploads: 0,
+                request_uploaded_bytes: 0,
+                weight_tensor_slots_reused: 0,
+                workspace_reused: false,
+                strict_fixed_shapes: true,
+                resident_cache_isolated: true,
+            }),
+            _ => bail!("GPU resident cache and reusable upload slot telemetry mode drift"),
+        }
+    }
 }
 
 impl WritebackGpuPayloadCacheTelemetry {
@@ -1352,6 +1739,14 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
     let mut gpu_payload_cache = gpu_payload_cache_capacity
         .map(GpuPayloadCache::new)
         .transpose()?;
+    // The two GPU weight modes are deliberately disjoint. Default operation
+    // owns one bounded upload slot; explicit resident-cache operation owns no
+    // reusable slot, so stale slot contents can never masquerade as a hit.
+    let reusable_gpu_slot = if gpu_payload_cache.is_none() {
+        Some(ReusableOfficialMoeSlot::new(&ctx)?)
+    } else {
+        None
+    };
     let mut stdout = std::io::stdout().lock();
     serde_json::to_writer(
         &mut stdout,
@@ -1368,6 +1763,15 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
             "payload_cache_capacity_bytes": payload_cache_capacity,
             "gpu_payload_cache": gpu_payload_cache.is_some(),
             "gpu_payload_cache_capacity_bytes": gpu_payload_cache_capacity.unwrap_or(0),
+            "reusable_gpu_upload_slot": reusable_gpu_slot.is_some(),
+            "reusable_gpu_upload_slot_device_bytes": reusable_gpu_slot
+                .as_ref()
+                .map(|slot| slot.logical_device_bytes)
+                .unwrap_or(0),
+            "reusable_gpu_upload_slot_staging_bytes": reusable_gpu_slot
+                .as_ref()
+                .map(|slot| slot.logical_staging_bytes)
+                .unwrap_or(0),
             "gpu_vram_hard_limit_bytes": GPU_VRAM_HARD_LIMIT_GIB as u64 * 1024 * 1024 * 1024,
             "gpu_payload_identity": "tensor+bytes+sha256",
             "numeric_mode": numeric_mode,
@@ -1403,6 +1807,9 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
                 if let Some(cache) = gpu_payload_cache.as_mut() {
                     cache.destroy(&ctx);
                 }
+                if let Some(slot) = reusable_gpu_slot.as_ref() {
+                    slot.destroy(&ctx);
+                }
                 pipelines.destroy(&ctx);
                 bail!("writeback worker poisoned by invalid request");
             }
@@ -1431,6 +1838,9 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
             if let Some(cache) = gpu_payload_cache.as_mut() {
                 cache.destroy(&ctx);
             }
+            if let Some(slot) = reusable_gpu_slot.as_ref() {
+                slot.destroy(&ctx);
+            }
             pipelines.destroy(&ctx);
             bail!("writeback worker poisoned by contract drift");
         }
@@ -1443,6 +1853,7 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
             timestamp_period_ns,
             &mut payload_cache,
             &mut gpu_payload_cache,
+            reusable_gpu_slot.as_ref(),
             request,
         ) {
             Ok(response) => {
@@ -1466,6 +1877,9 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
                 if let Some(cache) = gpu_payload_cache.as_mut() {
                     cache.destroy(&ctx);
                 }
+                if let Some(slot) = reusable_gpu_slot.as_ref() {
+                    slot.destroy(&ctx);
+                }
                 pipelines.destroy(&ctx);
                 return Err(error.context("writeback worker poisoned"));
             }
@@ -1473,6 +1887,9 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
     }
     if let Some(cache) = gpu_payload_cache.as_mut() {
         cache.destroy(&ctx);
+    }
+    if let Some(slot) = reusable_gpu_slot.as_ref() {
+        slot.destroy(&ctx);
     }
     pipelines.destroy(&ctx);
     Ok(())
@@ -1485,6 +1902,7 @@ fn execute_writeback_request(
     timestamp_period_ns: f64,
     payload_cache: &mut VerifiedPayloadCache,
     gpu_payload_cache: &mut Option<GpuPayloadCache>,
+    reusable_gpu_slot: Option<&ReusableOfficialMoeSlot>,
     request: WritebackRequest,
 ) -> Result<WritebackResponse> {
     let started = Instant::now();
@@ -1555,6 +1973,7 @@ fn execute_writeback_request(
         &routed,
         &shared,
         gpu_payload_cache.as_mut(),
+        reusable_gpu_slot,
         diagnostic_dir.is_some(),
     )?;
     if let (Some(root), Some(diagnostics)) = (diagnostic_dir, result.diagnostics.as_ref()) {
@@ -1630,6 +2049,10 @@ fn execute_writeback_request(
         (None, None) => WritebackGpuPayloadCacheTelemetry::disabled(),
         _ => bail!("GPU payload cache enablement changed within one request"),
     };
+    let reusable_gpu_slot_telemetry = WritebackReusableGpuSlotTelemetry::for_successful_request(
+        reusable_gpu_slot.map(|slot| (slot.logical_device_bytes, slot.logical_staging_bytes)),
+        gpu_payload_cache.is_some(),
+    )?;
     Ok(WritebackResponse {
         protocol: WRITEBACK_PROTOCOL,
         request_id: request.request_id,
@@ -1650,6 +2073,7 @@ fn execute_writeback_request(
         wall_ms: started.elapsed().as_secs_f64() * 1000.0,
         payload_cache: payload_cache_telemetry,
         gpu_payload_cache: gpu_payload_cache_telemetry,
+        reusable_gpu_slot: reusable_gpu_slot_telemetry,
         boundaries: [
             "w1_w3_output_round_to_bf16",
             "limited_swiglu_f32",
@@ -1755,6 +2179,16 @@ fn f32_to_bf16_bits(value: f32) -> u16 {
     (rounded >> 16) as u16
 }
 
+fn official_branch_bf16(output: &[f32]) -> Result<Vec<u16>> {
+    if output.len() != 4096 {
+        bail!("official Vulkan MoE output shape drift");
+    }
+    if output.iter().any(|value| !value.is_finite()) {
+        bail!("official Vulkan MoE output contains non-finite values");
+    }
+    Ok(output.iter().copied().map(f32_to_bf16_bits).collect())
+}
+
 fn run_official_top6_shared_moe_batch(
     ctx: &VulkanContext,
     pipelines: &S14NumericPipelines,
@@ -1764,10 +2198,11 @@ fn run_official_top6_shared_moe_batch(
     routed: &[MoePayload],
     shared: &MoePayload,
     gpu_payload_cache: Option<&mut GpuPayloadCache>,
+    reusable_gpu_slot: Option<&ReusableOfficialMoeSlot>,
     capture_shared_diagnostics: bool,
 ) -> Result<OfficialMoeResult> {
-    match gpu_payload_cache {
-        Some(cache) => run_official_top6_shared_moe_batch_cached(
+    match (gpu_payload_cache, reusable_gpu_slot) {
+        (Some(cache), None) => run_official_top6_shared_moe_batch_cached(
             ctx,
             pipelines,
             timestamp_bits,
@@ -1778,7 +2213,7 @@ fn run_official_top6_shared_moe_batch(
             cache,
             capture_shared_diagnostics,
         ),
-        None => run_official_top6_shared_moe_batch_uncached(
+        (None, Some(slot)) => run_official_top6_shared_moe_batch_reusable(
             ctx,
             pipelines,
             timestamp_bits,
@@ -1786,8 +2221,10 @@ fn run_official_top6_shared_moe_batch(
             x,
             routed,
             shared,
+            slot,
             capture_shared_diagnostics,
         ),
+        _ => bail!("GPU resident cache and reusable upload slot mode drift"),
     }
 }
 
@@ -1947,10 +2384,7 @@ fn run_official_top6_shared_moe_batch_cached(
         &shared_dispatch,
     )?;
     let output = buffers.output();
-    if output.iter().any(|value| !value.is_finite()) {
-        bail!("official Vulkan MoE output contains non-finite values");
-    }
-    let branch_bf16 = output.iter().copied().map(f32_to_bf16_bits).collect();
+    let branch_bf16 = official_branch_bf16(&output)?;
     let diagnostics = if capture_shared_diagnostics {
         let shared = ExpertDiagnostics {
             expert_id: None,
@@ -1999,7 +2433,7 @@ fn run_official_top6_shared_moe_batch_cached(
     })
 }
 
-fn run_official_top6_shared_moe_batch_uncached(
+fn run_official_top6_shared_moe_batch_reusable(
     ctx: &VulkanContext,
     pipelines: &S14NumericPipelines,
     timestamp_bits: u32,
@@ -2007,6 +2441,7 @@ fn run_official_top6_shared_moe_batch_uncached(
     x: &[f32],
     routed: &[MoePayload],
     shared: &MoePayload,
+    buffers: &ReusableOfficialMoeSlot,
     capture_shared_diagnostics: bool,
 ) -> Result<OfficialMoeResult> {
     if x.len() != 4096 || routed.len() != 6 || shared.expert_id.is_some() {
@@ -2034,11 +2469,11 @@ fn run_official_top6_shared_moe_batch_uncached(
         validate_ue8m0_codes(scale)?;
     }
 
-    // This is the production default. It is deliberately the original
-    // request-scoped allocation/upload/destroy path: no payload survives into
-    // the next layer request and therefore no resident-cache OOM is possible.
-    let buffers = MoeBatchBuffers::new(ctx, x, routed, shared)?;
-    buffers.upload(ctx)?;
+    // This is the production default. The fixed slot survives, but every byte
+    // of activation and weight staging is rewritten and uploaded on every
+    // request. It therefore removes allocator churn without becoming a
+    // resident payload cache or retaining layer identity.
+    buffers.rewrite_and_upload(ctx, x, routed, shared)?;
     let routed_dispatches = buffers
         .routed
         .iter()
@@ -2138,10 +2573,7 @@ fn run_official_top6_shared_moe_batch_uncached(
         &shared_dispatch,
     )?;
     let output = buffers.output();
-    if output.iter().any(|value| !value.is_finite()) {
-        bail!("official Vulkan MoE output contains non-finite values");
-    }
-    let branch_bf16 = output.iter().copied().map(f32_to_bf16_bits).collect();
+    let branch_bf16 = official_branch_bf16(&output)?;
     let diagnostics = if capture_shared_diagnostics {
         let shared = ExpertDiagnostics {
             expert_id: None,
@@ -2182,7 +2614,6 @@ fn run_official_top6_shared_moe_batch_uncached(
         dispatch.w3.binder.destroy(ctx);
         dispatch.w1.binder.destroy(ctx);
     }
-    buffers.destroy(ctx);
     Ok(OfficialMoeResult {
         branch_bf16,
         gpu_kernel_ms,
@@ -4294,6 +4725,121 @@ mod writeback_payload_cache_tests {
             sha256: seed.to_string().repeat(64),
         });
         GpuMoeIdentity { tensors }
+    }
+
+    fn fake_payload(layout: MoeWeightByteLayout, mix_weight: f32) -> MoePayload {
+        let bytes = |count: u64| Arc::<[u8]>::from(vec![0u8; count as usize]);
+        MoePayload {
+            expert_id: Some(0),
+            mix_weight,
+            gpu_identity: None,
+            w1: bytes(layout.w1),
+            s1: bytes(layout.s1),
+            w3: bytes(layout.w3),
+            s3: bytes(layout.s3),
+            w2: bytes(layout.w2),
+            s2: bytes(layout.s2),
+        }
+    }
+
+    #[test]
+    fn reusable_gpu_slot_has_exact_bounded_official_layout() {
+        let (routed, shared) = official_moe_weight_layouts().unwrap();
+        assert_eq!(
+            routed,
+            MoeWeightByteLayout {
+                w1: 4_194_304,
+                s1: 262_144,
+                w3: 4_194_304,
+                s3: 262_144,
+                w2: 4_194_304,
+                s2: 262_144,
+            }
+        );
+        assert_eq!(
+            shared,
+            MoeWeightByteLayout {
+                w1: 8_388_608,
+                s1: 512,
+                w3: 8_388_608,
+                s3: 512,
+                w2: 8_388_608,
+                s2: 512,
+            }
+        );
+        assert_eq!(routed.total().unwrap(), 13_369_344);
+        assert_eq!(shared.total().unwrap(), 25_167_360);
+        let (device_bytes, staging_bytes) = ReusableOfficialMoeSlot::logical_byte_counts().unwrap();
+        assert_eq!(staging_bytes, 105_399_808);
+        assert_eq!(device_bytes, 105_473_536);
+        assert!(device_bytes <= REUSABLE_GPU_SLOT_MAX_LOGICAL_BYTES);
+    }
+
+    #[test]
+    fn reusable_gpu_slot_rejects_tensor_shape_drift_without_freezing_route_weight() {
+        let layout = MoeWeightByteLayout {
+            w1: 1,
+            s1: 2,
+            w3: 3,
+            s3: 4,
+            w2: 5,
+            s2: 6,
+        };
+        let low_route_weight = fake_payload(layout, 0.05);
+        let high_route_weight = fake_payload(layout, 0.75);
+        require_exact_moe_weight_layout(&low_route_weight, layout, "low").unwrap();
+        require_exact_moe_weight_layout(&high_route_weight, layout, "high").unwrap();
+        assert_ne!(low_route_weight.mix_weight, high_route_weight.mix_weight);
+
+        let mut drift = fake_payload(layout, 0.25);
+        drift.s2 = Arc::from(vec![0u8; 7]);
+        let error = require_exact_moe_weight_layout(&drift, layout, "drift").unwrap_err();
+        assert!(format!("{error:#}").contains("payload shape drift"));
+    }
+
+    #[test]
+    fn reusable_gpu_slot_telemetry_is_exact_and_mode_exclusive() {
+        let (device_bytes, staging_bytes) = ReusableOfficialMoeSlot::logical_byte_counts().unwrap();
+        let reusable = WritebackReusableGpuSlotTelemetry::for_successful_request(
+            Some((device_bytes, staging_bytes)),
+            false,
+        )
+        .unwrap();
+        assert!(reusable.enabled);
+        assert_eq!(reusable.request_uploads, 1);
+        assert_eq!(reusable.request_uploaded_bytes, 105_399_808);
+        assert_eq!(reusable.weight_tensor_slots_reused, 42);
+        assert!(reusable.workspace_reused);
+        assert!(reusable.resident_cache_isolated);
+
+        let resident =
+            WritebackReusableGpuSlotTelemetry::for_successful_request(None, true).unwrap();
+        assert!(!resident.enabled);
+        assert_eq!(resident.request_uploaded_bytes, 0);
+        assert!(WritebackReusableGpuSlotTelemetry::for_successful_request(
+            Some((device_bytes, staging_bytes)),
+            true,
+        )
+        .is_err());
+        assert!(WritebackReusableGpuSlotTelemetry::for_successful_request(None, false).is_err());
+    }
+
+    #[test]
+    fn resident_and_reusable_paths_share_exact_bf16_output_contract() {
+        let mut output = vec![0.0f32; 4096];
+        output[0] = 1.0;
+        output[1] = -2.0;
+        output[2] = f32::from_bits(0x3f80_8000);
+        let rounded = official_branch_bf16(&output).unwrap();
+        assert_eq!(rounded.len(), 4096);
+        assert_eq!(rounded[0], 0x3f80);
+        assert_eq!(rounded[1], 0xc000);
+        // Round-to-nearest-even at the exact BF16 halfway point.
+        assert_eq!(rounded[2], 0x3f80);
+
+        output[17] = f32::NAN;
+        assert!(official_branch_bf16(&output).is_err());
+        assert!(official_branch_bf16(&output[..4095]).is_err());
     }
 
     #[test]
