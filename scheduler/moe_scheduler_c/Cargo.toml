@@ -1,0 +1,17 @@
+[package]
+name = "moe_scheduler_c"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "C ABI shim for the MoE scheduler — to be linked from llama.cpp"
+
+[lib]
+crate-type = ["staticlib"]
+name = "moe_scheduler_c"
+
+[dependencies]
+predictor = { path = "../predictor" }
+expert_cache = { path = "../expert_cache" }
+scheduler-core = { path = "../scheduler-core", default-features = false }
+smallvec.workspace = true

@@ -1,0 +1,45 @@
+{
+  "format": "polaris-s14-gitcode-budget-v1",
+  "package_upper_bound_bytes": 52231273716,
+  "package_upper_bound_gib": 48.64416431263089,
+  "environment": {
+    "overlay_bytes": 53687091200,
+    "overlay_gib": 50.0,
+    "ram_bytes": 1649267441664,
+    "ram_gib": 1536.0,
+    "hbm_bytes": 34359738368,
+    "hbm_gib": 32.0
+  },
+  "overlay": {
+    "raw_fit": true,
+    "remaining_bytes_if_raw_fit": 1455817484,
+    "required_safety_reserve_bytes": 2147483648,
+    "safe_fit": false,
+    "decision": "reject_overlay_output"
+  },
+  "ram_stream": {
+    "full_package_fit": true,
+    "recommended": true,
+    "mode": "1 GiB immutable segments in anonymous RAM, consume-by-layer, release after HBM upload",
+    "must_not_use_dev_shm": true,
+    "peak_hbm_policy": "only current layer non-expert tensors + traced hot expert pages; never full 52.231 GB"
+  },
+  "external_output": {
+    "allowed": true,
+    "minimum_free_bytes": 54378757364,
+    "requirements": [
+      "statvfs probe",
+      "atomic segment rename",
+      "resume journal",
+      "all range SHA-256 locked"
+    ]
+  },
+  "stop_conditions": [
+    "actual overlay/output free bytes < exact binary_bytes + manifest/journal + 2 GiB reserve",
+    "anonymous RAM available < current segment + runtime reserve",
+    "any response is not HTTP 206 with exact Content-Range",
+    "fixed revision/index/header/route trace/range SHA-256 mismatch",
+    "any selected routed expert lacks native route-trace evidence",
+    "runtime attempts to place the full package in 32 GiB HBM"
+  ]
+}

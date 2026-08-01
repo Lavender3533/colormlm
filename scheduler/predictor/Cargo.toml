@@ -1,0 +1,46 @@
+[package]
+name = "predictor"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "MoE Router co-occurrence matrix for predicting next-layer expert activations"
+
+[dependencies]
+arc-swap.workspace = true
+smallvec.workspace = true
+bytemuck.workspace = true
+tokio = { workspace = true, optional = true }
+parking_lot.workspace = true
+
+[features]
+default = ["async"]
+async = ["dep:tokio"]
+
+[dev-dependencies]
+criterion.workspace = true
+parquet = "53"
+arrow-array = "53"
+expert_cache = { path = "../expert_cache" }
+scheduler-core = { path = "../scheduler-core" }
+
+[[example]]
+name = "inspect_activations"
+
+[[example]]
+name = "train_matrix"
+
+[[example]]
+name = "extract_parquet_text"
+
+[[example]]
+name = "simulate_scheduler"
+
+[[example]]
+name = "build_matrix"
+
+[[example]]
+name = "fake_1t_simulation"
+
+[[example]]
+name = "async_prefetch_sim"

@@ -1,0 +1,57 @@
+#version 450
+
+// Scaled dot product with causal mask: scores = (Q @ K^T) / sqrt(head_dim)
+//
+// Q     shape: [n_tok, n_q_heads,  head_dim]
+// K     shape: [seq_len, n_kv_heads, head_dim]   (full KV cache, current_len entries valid)
+// Out scores: [n_q_heads, n_tok, seq_len]       (later softmax over last dim)
+//
+// GQA: n_q_heads >= n_kv_heads, q_head h uses kv_head (h * n_kv_heads / n_q_heads).
+// Causal: for query at position (base_pos + i), mask out j > base_pos + i.
+//
+// Workgroup processes one (q_head, q_token) pair.
+// 256 threads cooperate: each handles a stride of `seq_len` positions.
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0) readonly  buffer Q      { float q[]; };
+layout(set = 0, binding = 1) readonly  buffer K      { float k[]; };
+layout(set = 0, binding = 2) writeonly buffer SCORES { float scores[]; };
+
+layout(push_constant) uniform Push {
+    uint  n_tok;
+    uint  n_q_heads;
+    uint  n_kv_heads;
+    uint  head_dim;
+    uint  seq_len;     // current KV cache length
+    uint  base_pos;    // first query token's absolute position
+    float scale;       // 1/sqrt(head_dim)
+} push;
+
+const float NEG_INF = -1.0e30;
+
+void main() {
+    uint tid    = gl_LocalInvocationID.x;
+    uint q_head = gl_WorkGroupID.x;
+    uint q_tok  = gl_WorkGroupID.y;
+
+    uint kv_head = q_head * push.n_kv_heads / push.n_q_heads; // GQA mapping
+    uint q_pos   = push.base_pos + q_tok;
+
+    uint q_base = (q_tok * push.n_q_heads + q_head) * push.head_dim;
+    uint score_base = (q_head * push.n_tok + q_tok) * push.seq_len;
+
+    for (uint j = tid; j < push.seq_len; j += 256u) {
+        if (j > q_pos) {
+            // causal mask
+            scores[score_base + j] = NEG_INF;
+            continue;
+        }
+        uint k_base = (j * push.n_kv_heads + kv_head) * push.head_dim;
+        float dot = 0.0;
+        for (uint d = 0u; d < push.head_dim; d++) {
+            dot += q[q_base + d] * k[k_base + d];
+        }
+        scores[score_base + j] = dot * push.scale;
+    }
+}

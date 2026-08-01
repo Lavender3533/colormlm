@@ -1,0 +1,48 @@
+{
+  "format": "polaris-milestone-1-contract-v1",
+  "status": "superseded_before_quality_evaluation",
+  "superseded_by": "quality_architecture/architecture_spec.json",
+  "retained_role": "cross-model portal diagnostic only",
+  "objective": "300B+ donor连续原生层段在冻结blind上对v38产生可归因净增益，且本机解码不低于20 token/s",
+  "base": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+  "donor": {
+    "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "minimum_total_parameters": 300000000000,
+    "initial_native_layers": [40, 41, 42],
+    "required_native_state": ["hidden", "mHC", "router_topk", "target_token_nll"]
+  },
+  "training": {
+    "backpropagation": false,
+    "epochs": 0,
+    "allowed": ["closed_form_linear_algebra", "quantization", "activation_statistics", "weight_reconstruction"]
+  },
+  "portal_gate": {
+    "split": "leave_one_complete_task_out",
+    "minimum_input_cosine_gain": 0.1,
+    "minimum_output_cosine_gain": 0.1,
+    "maximum_input_nrmse_ratio": 0.9,
+    "maximum_output_nrmse_ratio": 0.9,
+    "minimum_positive_group_fraction": 0.8,
+    "minimum_router_topk_recall": 0.7,
+    "minimum_router_topk_recall_gain": 0.1
+  },
+  "quality_gate": {
+    "minimum_blind_tasks": 24,
+    "dimensions": ["reasoning", "knowledge", "long_context", "coding", "tools", "planning", "computer_use", "dialogue"],
+    "minimum_net_wins_vs_v38": 4,
+    "maximum_severe_regressions": 0,
+    "minimum_category_net_delta": -1,
+    "requires_pre_frozen_scoring": true,
+    "requires_key_decision_token_nll": true,
+    "requires_positive_loto_direction": true
+  },
+  "runtime_gate": {
+    "hardware": "RX 5700 XT 8GB + 32GB RAM",
+    "minimum_decode_tokens_per_second": 20.0,
+    "aspirational_decode_tokens_per_second": 50.0,
+    "requires_physical_noop_bypass": true,
+    "requires_exact_v38_noop_tokens": true,
+    "required_telemetry": ["time_to_first_token", "prefill_tps", "decode_tps", "p50", "p95", "ssd_bytes", "ram_bytes", "pcie_bytes", "vram_bytes", "cache_hit", "stall"]
+  },
+  "non_claim": "M1通过只证明首次旗舰donor净增益，不等于整体追上Claude/GPT"
+}

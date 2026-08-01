@@ -1,0 +1,13 @@
+[package]
+name = "expert_cache"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Tiered expert weight cache: VRAM / RAM / SSD / HDD"
+
+[dependencies]
+parking_lot.workspace = true
+smallvec.workspace = true
+arc-swap.workspace = true
+predictor = { path = "../predictor" }

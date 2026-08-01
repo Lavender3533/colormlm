@@ -1,0 +1,35 @@
+#version 450
+
+// X @ W^T matmul tailored for GGUF tensor layout.
+//   X shape: [M, K]   (e.g. activations [n_tok, hidden])
+//   W shape: [N, K]   (GGUF tensor layout: [out_features, in_features])
+//   Y shape: [M, N]   (output)
+//
+// Mathematically equivalent to a regular `Y = X * W^T`. Avoids the explicit
+// transpose because GGUF stores weights in [out, in] order.
+//
+// Naive: 16×16 workgroup, one thread per output element.
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0) readonly  buffer X { float x[]; };
+layout(set = 0, binding = 1) readonly  buffer W { float w[]; };
+layout(set = 0, binding = 2) writeonly buffer Y { float y[]; };
+
+layout(push_constant) uniform Push {
+    uint M;  // tokens
+    uint N;  // out_features
+    uint K;  // in_features
+} push;
+
+void main() {
+    uint n = gl_GlobalInvocationID.x;  // out feature
+    uint m = gl_GlobalInvocationID.y;  // token
+    if (m >= push.M || n >= push.N) return;
+
+    float acc = 0.0;
+    for (uint k = 0u; k < push.K; k++) {
+        acc += x[m * push.K + k] * w[n * push.K + k];
+    }
+    y[m * push.N + n] = acc;
+}

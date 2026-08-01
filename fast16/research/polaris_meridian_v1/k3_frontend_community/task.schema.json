@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "polaris-k3-frontend-community-task-v1",
+  "title": "K3 前端社区任务与关键 token 合同",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "task_id", "split", "source_task_sha256", "prompt_utf8", "prompt_sha256", "critical_tokens", "frozen_before_trace"],
+  "properties": {
+    "format": {"const": "polaris-k3-frontend-community-task-v1"},
+    "task_id": {"type": "string", "minLength": 1},
+    "split": {"enum": ["train", "validation", "blind"]},
+    "source_task_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "prompt_utf8": {"type": "string", "minLength": 1},
+    "prompt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "frozen_before_trace": {"const": true},
+    "critical_tokens": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["decision_id", "prefix_utf8", "prefix_sha256", "token_id", "token_text", "category", "selection_reason", "selected_before_trace"],
+        "properties": {
+          "decision_id": {"type": "string", "minLength": 1},
+          "prefix_utf8": {"type": "string"},
+          "prefix_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "token_id": {"type": "integer", "minimum": 0},
+          "token_text": {"type": "string", "minLength": 1},
+          "category": {
+            "enum": ["html_semantic_tag", "css_layout_or_responsive", "javascript_interaction_or_state", "accessibility_attribute", "task_specific_required_signal", "completion_or_closure"]
+          },
+          "selection_reason": {"type": "string", "minLength": 1},
+          "selected_before_trace": {"const": true}
+        }
+      }
+    }
+  }
+}

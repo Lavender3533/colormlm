@@ -1,0 +1,76 @@
+#version 450
+
+// Dequantize Q6_K block (210 bytes, 256 fp32 weights).
+// Layout per block (from ggml-quants.h block_q6_K):
+//   bytes   0..127: ql[128]      (256 × low 4-bit weights)
+//   bytes 128..191: qh[64]       (256 × high 2-bit weights)
+//   bytes 192..207: scales[16]   (int8, sign-extend!)
+//   bytes 208..209: d            (fp16 super-block scale)
+//
+// Decoded (matching ggml-quants.c dequantize_row_q6_K):
+//   for n in {0, 128}:
+//     ql_base = n/128 * 64,  qh_base = n/128 * 32,  sc_base = n/128 * 8
+//     for l in 0..32, is = l/16:
+//       q1 = (ql[ql_base+l]      & 0xF) | ((qh[qh_base+l] >> 0 & 3) << 4) - 32  → y[n+l]      sc[sc_base+is+0]
+//       q2 = (ql[ql_base+l+32]   & 0xF) | ((qh[qh_base+l] >> 2 & 3) << 4) - 32  → y[n+l+32]   sc[sc_base+is+2]
+//       q3 = (ql[ql_base+l]      >> 4)  | ((qh[qh_base+l] >> 4 & 3) << 4) - 32  → y[n+l+64]   sc[sc_base+is+4]
+//       q4 = (ql[ql_base+l+32]   >> 4)  | ((qh[qh_base+l] >> 6 & 3) << 4) - 32  → y[n+l+96]   sc[sc_base+is+6]
+//   y = d * sc[is] * q
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0) readonly  buffer Q { uint q_words[]; }; // packed byte stream
+layout(set = 0, binding = 1) writeonly buffer Y { float y[]; };
+
+layout(push_constant) uniform Push {
+    uint n_blocks;
+} push;
+
+uint read_byte(uint byte_idx) {
+    uint word_idx = byte_idx >> 2u;
+    uint shift = (byte_idx & 3u) * 8u;
+    return (q_words[word_idx] >> shift) & 0xFFu;
+}
+
+void main() {
+    uint blk = gl_WorkGroupID.x;
+    if (blk >= push.n_blocks) return;
+
+    uint blk_base = blk * 210u;
+
+    // d at byte 208..209, fp16 little-endian
+    uint d_lo = read_byte(blk_base + 208u);
+    uint d_hi = read_byte(blk_base + 209u);
+    uint d_packed = d_lo | (d_hi << 8u);
+    float d = unpackHalf2x16(d_packed).x;
+
+    uint w_idx = gl_LocalInvocationID.x;  // 0..255
+
+    uint n128       = w_idx >> 7u;          // 0 or 1
+    uint within_n   = w_idx & 127u;          // 0..127
+    uint which      = within_n >> 5u;        // 0..3
+    uint l          = within_n & 31u;        // 0..31
+    uint is         = l >> 4u;               // 0..1
+
+    uint ql_base = n128 * 64u;
+    uint qh_base = n128 * 32u;
+    uint sc_base = n128 * 8u;
+
+    uint ql_byte_in_blk = ql_base + l + (which & 1u) * 32u;
+    uint qh_byte_in_blk = 128u + qh_base + l;
+    uint sc_byte_in_blk = 192u + sc_base + is + which * 2u;
+
+    uint ql_byte = read_byte(blk_base + ql_byte_in_blk);
+    uint qh_byte = read_byte(blk_base + qh_byte_in_blk);
+    uint sc_byte = read_byte(blk_base + sc_byte_in_blk);
+
+    // Manual int8 sign-extension
+    int sc = (sc_byte < 128u) ? int(sc_byte) : (int(sc_byte) - 256);
+
+    uint ql_4bit = ((which & 2u) != 0u) ? (ql_byte >> 4u) : (ql_byte & 0xFu);
+    uint qh_2bit = (qh_byte >> (which * 2u)) & 0x3u;
+    int q = int(ql_4bit | (qh_2bit << 4u)) - 32;
+
+    float w = d * float(sc) * float(q);
+    y[blk * 256u + w_idx] = w;
+}

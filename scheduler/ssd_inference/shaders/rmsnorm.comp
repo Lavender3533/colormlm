@@ -1,0 +1,46 @@
+#version 450
+
+// RMSNorm: y[i] = x[i] / sqrt(mean(x^2) + eps) * weight[i]
+// One workgroup normalizes ONE hidden vector (length = push.hidden).
+// 256 threads cooperate via shared memory reduction.
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0) readonly  buffer X { float x[]; };
+layout(set = 0, binding = 1) readonly  buffer W { float w[]; };
+layout(set = 0, binding = 2) writeonly buffer Y { float y[]; };
+
+layout(push_constant) uniform Push {
+    uint  hidden;
+    float eps;
+} push;
+
+shared float partial[256];
+
+void main() {
+    uint tid = gl_LocalInvocationID.x;
+    uint vec_idx = gl_WorkGroupID.x;
+    uint base = vec_idx * push.hidden;
+
+    // 1) per-thread sum of squares
+    float local = 0.0;
+    for (uint i = tid; i < push.hidden; i += 256u) {
+        float v = x[base + i];
+        local += v * v;
+    }
+    partial[tid] = local;
+    barrier();
+
+    // 2) parallel reduction 256 → 1
+    for (uint stride = 128u; stride > 0u; stride >>= 1) {
+        if (tid < stride) partial[tid] += partial[tid + stride];
+        barrier();
+    }
+
+    float inv_rms = inversesqrt(partial[0] / float(push.hidden) + push.eps);
+
+    // 3) write normalized output, fused with per-element weight scale
+    for (uint i = tid; i < push.hidden; i += 256u) {
+        y[base + i] = x[base + i] * inv_rms * w[i];
+    }
+}

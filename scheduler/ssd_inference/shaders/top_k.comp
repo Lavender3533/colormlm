@@ -1,0 +1,40 @@
+#version 450
+
+// Top-K selection: pick top K elements from logits[N], output their indices + values.
+// Used for MoE router: select top-8 experts from N=128 router scores.
+//
+// Single-threaded selection (K=8, N=128 → ~1k ops, < 0.1 ms).
+// Uses local scratch array; N capped at 256.
+
+layout(local_size_x = 1) in;
+
+layout(set = 0, binding = 0) readonly  buffer LOGITS { float logits[]; };
+layout(set = 0, binding = 1) writeonly buffer IDX    { uint  idx[]; };
+layout(set = 0, binding = 2) writeonly buffer VAL    { float val[]; };
+
+layout(push_constant) uniform Push {
+    uint n;
+    uint k;
+} push;
+
+const uint MAX_N = 256u;
+
+void main() {
+    float scratch[MAX_N];
+    uint n = min(push.n, MAX_N);
+    for (uint i = 0u; i < n; i++) scratch[i] = logits[i];
+
+    for (uint kk = 0u; kk < push.k; kk++) {
+        float best_v = -1.0e30;
+        uint  best_i = 0u;
+        for (uint i = 0u; i < n; i++) {
+            if (scratch[i] > best_v) {
+                best_v = scratch[i];
+                best_i = i;
+            }
+        }
+        idx[kk] = best_i;
+        val[kk] = best_v;
+        scratch[best_i] = -1.0e30;
+    }
+}

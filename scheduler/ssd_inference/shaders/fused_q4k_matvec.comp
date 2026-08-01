@@ -1,0 +1,93 @@
+#version 450
+
+// Fused Q4K matvec: y[n] = dot(dequant(row_n), x)
+// 128 threads per workgroup stride through K dimension (not blocks).
+// Each thread decodes + accumulates ~K/128 weights.
+// Dispatch: (N, 1, 1).
+
+layout(local_size_x = 128) in;
+
+layout(set = 0, binding = 0) readonly buffer Q { uint q_words[]; };
+layout(set = 0, binding = 1) readonly buffer X { float x[]; };
+layout(set = 0, binding = 2) writeonly buffer Y { float y[]; };
+
+layout(push_constant) uniform Push {
+    uint N;
+    uint K;
+    uint q_offset;  // byte offset
+} push;
+
+shared float partial[128];
+
+void main() {
+    uint n = gl_WorkGroupID.x;
+    uint tid = gl_LocalInvocationID.x;
+    if (n >= push.N) return;
+
+    uint bpr = push.K / 256u;
+    uint row_word_base = (push.q_offset + n * bpr * 144u) / 4u;
+
+    float acc = 0.0;
+
+    // Each thread strides through weights k = tid, tid+128, tid+256, ...
+    for (uint k = tid; k < push.K; k += 128u) {
+        uint blk = k / 256u;
+        uint w_idx = k % 256u;
+        uint blk_word = row_word_base + blk * 36u; // 144 bytes = 36 u32
+
+        // Block header
+        vec2 dm = unpackHalf2x16(q_words[blk_word]);
+        float d = dm.x;
+        float dmin = dm.y;
+
+        // Scales
+        uint s0 = q_words[blk_word + 1u];
+        uint s1 = q_words[blk_word + 2u];
+        uint s2 = q_words[blk_word + 3u];
+
+        // Decode weight position within block
+        uint pair = w_idx / 64u;       // 0..3
+        uint within = w_idx % 64u;
+        uint is_high = within / 32u;   // 0 = low nibble, 1 = high nibble
+        uint l = within % 32u;
+        uint sub_idx = 2u * pair + is_high;
+
+        // Scale extraction (same as dequant_q4_k.comp)
+        uint scales[3] = uint[3](s0, s1, s2);
+        uint sc_byte_idx = sub_idx;
+        uint sc_val, m_val;
+        if (sc_byte_idx < 4u) {
+            sc_val = (scales[sc_byte_idx / 4u] >> ((sc_byte_idx % 4u) * 8u)) & 63u;
+            uint m_idx = sc_byte_idx + 4u;
+            m_val = (scales[m_idx / 4u] >> ((m_idx % 4u) * 8u)) & 63u;
+        } else {
+            uint sj4_idx = sc_byte_idx + 4u;
+            uint sj4 = (scales[sj4_idx / 4u] >> ((sj4_idx % 4u) * 8u)) & 0xFFu;
+            uint sjm4_idx = sc_byte_idx - 4u;
+            uint sjm4 = (scales[sjm4_idx / 4u] >> ((sjm4_idx % 4u) * 8u)) & 0xFFu;
+            uint sj = (scales[sc_byte_idx / 4u] >> ((sc_byte_idx % 4u) * 8u)) & 0xFFu;
+            sc_val = (sj4 & 0xFu) | ((sjm4 >> 6u) << 4u);
+            m_val = (sj4 >> 4u) | ((sj >> 6u) << 4u);
+        }
+
+        float d_sub = d * float(sc_val);
+        float m_sub = dmin * float(m_val);
+
+        // Read nibble
+        uint qs_byte_pos = 32u * pair + l; // 0..127
+        uint qs_word = blk_word + 4u + qs_byte_pos / 4u;
+        uint qs_byte = (q_words[qs_word] >> ((qs_byte_pos % 4u) * 8u)) & 0xFFu;
+        uint q4 = (is_high == 0u) ? (qs_byte & 0xFu) : (qs_byte >> 4u);
+
+        float w = d_sub * float(q4) - m_sub;
+        acc += w * x[k];
+    }
+
+    partial[tid] = acc;
+    barrier();
+    for (uint stride = 64u; stride > 0u; stride >>= 1u) {
+        if (tid < stride) partial[tid] += partial[tid + stride];
+        barrier();
+    }
+    if (tid == 0u) y[n] = partial[0];
+}

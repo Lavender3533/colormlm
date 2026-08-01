@@ -1,0 +1,84 @@
+{
+  "format": "polaris-meridian-bus-contract-v1",
+  "status": "architecture_contract_not_capability_evidence",
+  "quality_core": {
+    "candidate": "polaris-native-sparse-depth-s14",
+    "donor_repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "native_coordinate": true,
+    "selected_layers": [0, 1, 2, 6, 7, 14, 15, 22, 23, 30, 31, 40, 41, 42],
+    "storage_bytes": 52231273716,
+    "active_parameters_b_estimate": 4.589683616744186,
+    "physical_budget_pass": true,
+    "quality_pass": null
+  },
+  "routing_input_policy": {
+    "allowed": [
+      "continuous_hidden_state",
+      "hidden_similarity_to_frozen_anchors",
+      "counterfactual_nll_prior",
+      "uncertainty",
+      "resident_page_state",
+      "io_and_mac_budget",
+      "verifier_score"
+    ],
+    "forbidden": [
+      "prompt_keyword_rules",
+      "host_side_task_label_as_online_oracle",
+      "post_hoc_success_label",
+      "donor_identity_claim"
+    ]
+  },
+  "bagua_stations": [
+    {"id": "qian", "capabilities": ["reasoning", "planning"]},
+    {"id": "kun", "capabilities": ["knowledge", "memory"]},
+    {"id": "zhen", "capabilities": ["coding", "tool_use"]},
+    {"id": "xun", "capabilities": ["long_context", "retrieval"]},
+    {"id": "kan", "capabilities": ["debugging", "risk_recovery"]},
+    {"id": "li", "capabilities": ["vision", "frontend_understanding"]},
+    {"id": "gen", "capabilities": ["verification", "stop", "no_op"]},
+    {"id": "dui", "capabilities": ["dialogue", "alignment"]}
+  ],
+  "five_phase_cycle": ["water_retrieve", "wood_plan", "fire_execute", "earth_integrate", "metal_verify"],
+  "organ_required_fields": [
+    "donor_repo",
+    "donor_revision",
+    "license",
+    "tensor_manifest",
+    "native_state_contract",
+    "page_manifest",
+    "state_translation_evidence",
+    "routing_evidence",
+    "counterfactual_nll",
+    "task_correctness",
+    "alpha_zero_equivalence",
+    "io_mac_budget"
+  ],
+  "admission_gates": {
+    "alpha_zero_exact_bypass": true,
+    "no_op_required": true,
+    "frozen_tasks_required": true,
+    "counterfactual_nll_required": true,
+    "actual_correctness_required": true,
+    "speed_budget_required": true,
+    "synthetic_state_is_capability_evidence": false,
+    "nonzero_output_is_capability_evidence": false
+  },
+  "current_donors": [
+    {
+      "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "role": ["qian", "kan"],
+      "stage": "native_state_capture_blocked_by_ascend_runtime_adapter"
+    },
+    {
+      "repo": "moonshotai/Kimi-K3",
+      "role": ["zhen", "li", "dui"],
+      "stage": "frontend_route_trace_not_started"
+    },
+    {
+      "repo": "zai-org/GLM-5.2",
+      "role": ["xun"],
+      "stage": "indexshare_topology_only_no_weight_admission"
+    }
+  ],
+  "claim_limit": "八卦和五行仅定义拓扑命名；能力晋级只由冻结任务、反事实 NLL、正确性和速度证据决定。"
+}

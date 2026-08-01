@@ -1,0 +1,10 @@
+[package]
+name = "ssd-helper"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+gguf_reader = { path = "../gguf_reader" }
+memmap2 = "0.9"
+anyhow = "1.0"
+windows-sys = { version = "0.59", features = ["Win32_System_Memory", "Win32_Foundation", "Win32_System_Threading"] }

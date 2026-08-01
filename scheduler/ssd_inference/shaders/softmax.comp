@@ -1,0 +1,55 @@
+#version 450
+
+// Numerically stable softmax: y[i] = exp(x[i] - max(x)) / sum_j exp(x[j] - max(x))
+// One workgroup softmaxes ONE vector of length push.dim. 256 threads.
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0) readonly  buffer X { float x[]; };
+layout(set = 0, binding = 1) writeonly buffer Y { float y[]; };
+
+layout(push_constant) uniform Push { uint dim; } push;
+
+shared float partial[256];
+shared float gmax;
+shared float gsum;
+
+void main() {
+    uint tid = gl_LocalInvocationID.x;
+    uint vec_idx = gl_WorkGroupID.x;
+    uint base = vec_idx * push.dim;
+
+    // 1) per-thread max
+    float local = -1.0e30;
+    for (uint i = tid; i < push.dim; i += 256u) {
+        local = max(local, x[base + i]);
+    }
+    partial[tid] = local;
+    barrier();
+    for (uint stride = 128u; stride > 0u; stride >>= 1) {
+        if (tid < stride) partial[tid] = max(partial[tid], partial[tid + stride]);
+        barrier();
+    }
+    if (tid == 0u) gmax = partial[0];
+    barrier();
+
+    // 2) per-thread sum of exp(x - gmax)
+    float lsum = 0.0;
+    for (uint i = tid; i < push.dim; i += 256u) {
+        lsum += exp(x[base + i] - gmax);
+    }
+    partial[tid] = lsum;
+    barrier();
+    for (uint stride = 128u; stride > 0u; stride >>= 1) {
+        if (tid < stride) partial[tid] += partial[tid + stride];
+        barrier();
+    }
+    if (tid == 0u) gsum = partial[0];
+    barrier();
+
+    // 3) normalize
+    float inv = 1.0 / gsum;
+    for (uint i = tid; i < push.dim; i += 256u) {
+        y[base + i] = exp(x[base + i] - gmax) * inv;
+    }
+}

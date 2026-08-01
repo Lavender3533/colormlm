@@ -1,0 +1,47 @@
+#version 450
+
+// Rotary Position Embedding (RoPE), NeoX/HuggingFace style — matches Qwen3
+// (LlamaRotaryEmbedding behavior in transformers / llama.cpp).
+//
+// For each pair (x[j], x[j + d/2]) at position `pos` with j in 0..d/2:
+//   freq  = 1 / theta^(2j / d)
+//   angle = pos * freq
+//   x[j]       = x[j]       * cos(angle) - x[j + d/2] * sin(angle)
+//   x[j + d/2] = x[j + d/2] * cos(angle) + x[j]       * sin(angle)
+//
+// Layout: tensor is [n_tokens, n_heads, head_dim], applied in place.
+// Workgroup processes ONE token × ONE head: head_dim/2 pairs.
+// Caller dispatches (n_heads, n_tokens, 1).
+
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0) buffer X { float x[]; };
+
+layout(push_constant) uniform Push {
+    uint  n_heads;
+    uint  head_dim;
+    uint  base_pos;   // first token position (KV cache offset)
+    float theta;      // rope theta (10000.0 default, 1e7 for Qwen3-MoE)
+} push;
+
+void main() {
+    uint pair = gl_LocalInvocationID.x;
+    uint head = gl_WorkGroupID.x;
+    uint tok  = gl_WorkGroupID.y;
+    uint half_dim = push.head_dim >> 1;
+    if (pair >= half_dim) return;
+
+    uint base = (tok * push.n_heads + head) * push.head_dim;
+    uint i0 = base + pair;
+    uint i1 = base + pair + half_dim;
+
+    float pos = float(push.base_pos + tok);
+    float freq = 1.0 / pow(push.theta, float(2u * pair) / float(push.head_dim));
+    float angle = pos * freq;
+    float c = cos(angle);
+    float s = sin(angle);
+    float v0 = x[i0];
+    float v1 = x[i1];
+    x[i0] = v0 * c - v1 * s;
+    x[i1] = v1 * c + v0 * s;
+}

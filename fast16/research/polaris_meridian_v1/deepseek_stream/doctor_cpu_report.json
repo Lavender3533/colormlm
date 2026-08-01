@@ -1,0 +1,85 @@
+{
+  "format": "polaris-deepseek-stream-doctor-v1",
+  "ok": true,
+  "phase1_contract_ready": true,
+  "native_forward_ready": false,
+  "platform": {
+    "python": "3.12.5",
+    "machine": "AMD64",
+    "system": "Windows-11-10.0.22631-SP0",
+    "workspace": "D:\\project\\大模型ssd化\\fast16\\research\\polaris_meridian_v1\\deepseek_stream"
+  },
+  "snapshot": {
+    "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062"
+  },
+  "metadata": {
+    "config_checked": false,
+    "index_checked": false,
+    "ok": true
+  },
+  "device": {
+    "ok": true,
+    "requested": "cpu",
+    "selected": "cpu",
+    "fallback_used": false,
+    "fallback_reason": null,
+    "device_name": null,
+    "torch_version": "2.9.1+cpu",
+    "torch_npu_version": null,
+    "operator": "float16_matmul",
+    "matrix_size": 128,
+    "elapsed_seconds": 0.010672500000509899,
+    "finite": true,
+    "dtype_symbols": {
+      "float8_e4m3fn": true,
+      "float4_e2m1fn_x2": true,
+      "float8_e8m0fnu": true
+    }
+  },
+  "storage": {
+    "total_bytes": 644345434112,
+    "used_bytes": 515920396288,
+    "free_bytes": 128425037824
+  },
+  "memory": {
+    "total_bytes": null,
+    "available_bytes": null
+  },
+  "network": {
+    "ok": null,
+    "skipped": true
+  },
+  "budget": {
+    "window_seconds": 7200,
+    "network_mib_s_assumption": 50.0,
+    "base_weight_transfer_seconds": 2975.906237564087,
+    "runtime_and_upload_reserve_seconds": 900,
+    "transfer_plus_reserve_seconds": 3875.906237564087,
+    "fits_by_network_time_only": true,
+    "warning": "即使网络时间通过，也不代表官方 CUDA/FP4 kernel 可在 Ascend 运行。"
+  },
+  "memory_budget": {
+    "available_disk_gib": 119.60513687133789,
+    "available_ram_gib": 32.0,
+    "hbm_gib": 0.001,
+    "full_base_files_fit_disk": false,
+    "full_base_files_fit_ram": false,
+    "full_base_files_fit_hbm": false,
+    "one_shard_streaming_workspace_fit_disk": true,
+    "streaming_runtime_implemented": false
+  },
+  "python_modules": {
+    "torch": true,
+    "torch_npu": false,
+    "safetensors": true
+  },
+  "native_forward_blockers": [
+    "尚未提供官方 DeepSeek-V4 Ascend runtime adapter",
+    "官方 inference/kernel.py 为 CUDA/TileLang 路径，不能因 torch_npu matmul 成功就视为 FP4/FP8 kernel 已支持",
+    "45 个 base-forward 权重文件或等价远端 tensor source 尚未校验",
+    "单卡 32 GiB HBM 不能常驻 156.023 GB base-forward 文件",
+    "流式逐层 NPU 执行器尚未实现"
+  ],
+  "claim_limit": "doctor 只证明容器、NPU 基础算子和采集契约；native_forward_ready 固定为 false。"
+}

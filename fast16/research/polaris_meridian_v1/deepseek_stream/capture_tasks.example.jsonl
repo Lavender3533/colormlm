@@ -1,0 +1,8 @@
+{"format":"polaris-deepseek-capture-task-v1","sequence_id":"reasoning_boundary_01","capability":"reasoning","prompt_utf8":"请严格推理：一个函数接收闭区间 [left, right]，怎样避免循环漏掉 right？先给结论，再给最小代码。","max_observed_tokens":64}
+{"format":"polaris-deepseek-capture-task-v1","sequence_id":"debug_root_cause_01","capability":"debugging","prompt_utf8":"下面代码在空数组时越界：return values[0]。给出根因、最小补丁和一个回归测试。","max_observed_tokens":64}
+{"format":"polaris-deepseek-capture-task-v1","sequence_id":"tool_protocol_01","capability":"tool_use","prompt_utf8":"你需要先读取 config.json，再只修改 timeout 字段。请说明第一步应调用的工具名、必要参数和停止条件。","max_observed_tokens":64}
+{"format":"polaris-deepseek-capture-task-v1","sequence_id":"frontend_layout_01","capability":"frontend","prompt_utf8":"设计一个响应式仪表盘：桌面三栏、平板两栏、手机单栏；指出 CSS Grid 的关键规则和无障碍要求。","max_observed_tokens":64}
+{"format":"polaris-deepseek-capture-task-v1","sequence_id":"long_context_retrieval_01","capability":"long_context","prompt_utf8":"长文档里有多个相似版本号。解释怎样引用唯一证据并避免把旧版本结论混入最终答案。","max_observed_tokens":64}
+{"format":"polaris-deepseek-capture-task-v1","sequence_id":"knowledge_calibration_01","capability":"knowledge","prompt_utf8":"当资料不足以确定一个技术事实时，应该怎样区分已有证据、合理推断和待验证？","max_observed_tokens":64}
+{"format":"polaris-deepseek-capture-task-v1","sequence_id":"planning_dependency_01","capability":"planning","prompt_utf8":"一个发布任务依赖编译、单测、兼容性检查和回滚方案。给出最短但不能颠倒依赖的执行顺序。","max_observed_tokens":64}
+{"format":"polaris-deepseek-capture-task-v1","sequence_id":"dialogue_naturalness_01","capability":"dialogue","prompt_utf8":"用户说自己反复实验却没有成果，很沮丧。请诚实说明现状，并给一个今天能看到结果的下一步。","max_observed_tokens":64}

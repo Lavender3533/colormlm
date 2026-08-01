@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "polaris-k3-pinned-expert-range-catalog-v1",
+  "title": "固定 K3 revision 的专家页 Range catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "repo", "revision", "entries"],
+  "properties": {
+    "format": {"const": "polaris-k3-pinned-expert-range-catalog-v1"},
+    "repo": {"const": "moonshotai/Kimi-K3"},
+    "revision": {"const": "9f62e4e9fffbd0a83ddd60e1c209d828994b3569"},
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["layer", "expert", "source_shard", "source_shard_lfs_sha256", "header_tensors_sha256", "range"],
+        "properties": {
+          "layer": {"type": "integer", "minimum": 1, "maximum": 92},
+          "expert": {"type": "integer", "minimum": 0, "maximum": 895},
+          "source_shard": {"type": "string", "pattern": "^model-[0-9]{5}-of-000096\\.safetensors$"},
+          "source_shard_lfs_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "header_tensors_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "range": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["start", "end_inclusive", "bytes"],
+            "properties": {
+              "start": {"type": "integer", "minimum": 0},
+              "end_inclusive": {"type": "integer", "minimum": 0},
+              "bytes": {"const": 17547264}
+            }
+          }
+        }
+      }
+    }
+  }
+}

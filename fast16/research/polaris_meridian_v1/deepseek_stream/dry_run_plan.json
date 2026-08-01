@@ -1,0 +1,97 @@
+{
+  "format": "polaris-deepseek-native-capture-plan-v1",
+  "status": "dry_run_only_no_native_forward",
+  "source": {
+    "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+    "snapshot_sha256": "af3f937d6346abf83124affeb70037d9ae9599125526192f98531a3daa82520f",
+    "metadata_verification": {
+      "config_checked": false,
+      "index_checked": false,
+      "ok": true
+    }
+  },
+  "capture": {
+    "layers": [
+      39,
+      40,
+      41,
+      42
+    ],
+    "hidden_size": 4096,
+    "hc_mult": 4,
+    "router_top_k": 6,
+    "task_count": 8,
+    "observed_tokens_per_task": 64,
+    "record_upper_bound": 512,
+    "per_record": {
+      "payload_bytes": 164692,
+      "header_bytes": 1664,
+      "cnob_bytes": 166356,
+      "chunks": 26
+    },
+    "cnob_upper_bound_bytes": 85174272,
+    "utf8_jsonl_upper_bound_bytes": 1048576,
+    "total_output_upper_bound_bytes": 90417152
+  },
+  "weights": {
+    "base_forward_file_count": 45,
+    "base_forward_file_union_bytes": 156023192948,
+    "tail_capture_layer_file_union_bytes": 14317593792,
+    "tail_only_is_not_a_valid_forward": true,
+    "dspark_download_required": false,
+    "largest_capture_layer_shard_bytes": 3590026352
+  },
+  "two_hour_budget": {
+    "window_seconds": 7200,
+    "network_mib_s_assumption": 50.0,
+    "base_weight_transfer_seconds": 2975.906237564087,
+    "runtime_and_upload_reserve_seconds": 900,
+    "transfer_plus_reserve_seconds": 3875.906237564087,
+    "fits_by_network_time_only": true,
+    "warning": "即使网络时间通过，也不代表官方 CUDA/FP4 kernel 可在 Ascend 运行。"
+  },
+  "memory": {
+    "available_disk_gib": 50.0,
+    "available_ram_gib": 1500.0,
+    "hbm_gib": 32.0,
+    "full_base_files_fit_disk": false,
+    "full_base_files_fit_ram": true,
+    "full_base_files_fit_hbm": false,
+    "one_shard_streaming_workspace_fit_disk": true,
+    "streaming_runtime_implemented": false
+  },
+  "gates": [
+    {
+      "id": "metadata",
+      "pass": true,
+      "meaning": "固定 config/index 契约"
+    },
+    {
+      "id": "doctor",
+      "pass": false,
+      "meaning": "必须在目标 910B4 容器运行 doctor.py"
+    },
+    {
+      "id": "adapter",
+      "pass": false,
+      "meaning": "必须提供并证明官方原生 runtime adapter"
+    },
+    {
+      "id": "weights",
+      "pass": false,
+      "meaning": "45 个 base-forward 文件或等价远端 tensor source 必须校验"
+    },
+    {
+      "id": "native_forward",
+      "pass": false,
+      "meaning": "真实 L39-L42 probe 尚未运行"
+    }
+  ],
+  "next_commands": [
+    "python -X utf8 doctor.py --device npu --network-mib-s <实测值>",
+    "python -X utf8 selftest.py --device npu",
+    "python -X utf8 run_capture.py --adapter your_adapter:run_native_capture --tasks tasks.jsonl --output-dir output"
+  ],
+  "claim_limit": "该计划只证明元数据、格式与资源下界；native_forward gate 为 false，不能写成已采集 DeepSeek 状态。"
+}

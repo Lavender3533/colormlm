@@ -1,0 +1,11 @@
+{
+  "format": "polaris-s14-route-trace-v1",
+  "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+  "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+  "status": "dry_run_no_native_trace",
+  "coverage_complete": false,
+  "top_k": 6,
+  "observed_tokens": 0,
+  "task_groups": 0,
+  "layers": {}
+}

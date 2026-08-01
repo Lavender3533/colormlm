@@ -1,0 +1,52 @@
+{
+  "format": "polaris-ascend-s14-selftest-v1",
+  "ok": true,
+  "checks": [
+    {
+      "id": "frozen_identity",
+      "pass": true
+    },
+    {
+      "id": "dry_run_no_io",
+      "pass": true
+    },
+    {
+      "id": "single_layer_lifecycle",
+      "pass": true
+    },
+    {
+      "id": "partial_load_failure_releases_payloads",
+      "pass": true
+    },
+    {
+      "id": "native_hard_refusal",
+      "pass": true
+    },
+    {
+      "id": "doctor_does_not_touch_device",
+      "pass": true
+    }
+  ],
+  "synthetic_summary": {
+    "layers": [
+      0,
+      1,
+      2,
+      6,
+      7,
+      14,
+      15,
+      22,
+      23,
+      30,
+      31,
+      40,
+      41,
+      42
+    ],
+    "max_live_layers": 1,
+    "event_count": 42,
+    "native_forward_executed": false
+  },
+  "claim_limit": "selftest 只验证代码合同，未加载 DeepSeek 权重、未触碰 NPU。"
+}

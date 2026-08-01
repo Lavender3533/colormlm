@@ -1,0 +1,22 @@
+[package]
+name = "scheduler-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "MoE expert prefetch scheduler — orchestrates Predictor + ExpertCache"
+
+[dependencies]
+predictor = { path = "../predictor" }
+expert_cache = { path = "../expert_cache" }
+parking_lot.workspace = true
+smallvec.workspace = true
+arc-swap.workspace = true
+tokio = { workspace = true, optional = true }
+
+[dev-dependencies]
+bytemuck.workspace = true
+
+[features]
+default = ["async"]
+async = ["dep:tokio"]

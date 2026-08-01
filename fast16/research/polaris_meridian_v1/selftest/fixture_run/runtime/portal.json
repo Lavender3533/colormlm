@@ -1,0 +1,157 @@
+{
+  "format": "polaris-native-state-portal-v1",
+  "source": {
+    "pairs": "C:\\Users\\Kangnaixi\\AppData\\Local\\Temp\\polaris-portal-s6bfpy_x\\pairs.npz",
+    "anchor": "C:\\Users\\Kangnaixi\\AppData\\Local\\Temp\\polaris-portal-s6bfpy_x\\anchor.npz",
+    "anchor_kind": "provided_anchor",
+    "router": "C:\\Users\\Kangnaixi\\AppData\\Local\\Temp\\polaris-portal-s6bfpy_x\\router.npy",
+    "samples": 80,
+    "groups": 8,
+    "dimensions": {
+      "base_input": [
+        80,
+        32
+      ],
+      "donor_input": [
+        80,
+        48
+      ],
+      "donor_output": [
+        80,
+        48
+      ],
+      "base_output": [
+        80,
+        32
+      ]
+    }
+  },
+  "execution": {
+    "input": "base @ anchor + residual_mean + (((base-source_mean)/scale) @ left) @ right",
+    "output": "donor @ anchor + residual_mean + (((donor-source_mean)/scale) @ left) @ right",
+    "input_source_scale": 1.054914359399565,
+    "output_source_scale": 1.048814501482619
+  },
+  "fit": {
+    "input": {
+      "requested_rank": 32,
+      "effective_rank": 32,
+      "ridge": 0.0001,
+      "scaled_regularizer": 0.0032,
+      "correction_singular_max": 2.792793035507202,
+      "correction_energy_retained": 1.0
+    },
+    "output": {
+      "requested_rank": 32,
+      "effective_rank": 32,
+      "ridge": 0.0001,
+      "scaled_regularizer": 0.004799999694824219,
+      "correction_singular_max": 3.065495252609253,
+      "correction_energy_retained": 1.0
+    }
+  },
+  "arrays": {
+    "input_anchor": {
+      "file": "input_anchor.f16",
+      "shape": [
+        32,
+        48
+      ],
+      "dtype": "float16-le",
+      "bytes": 3072,
+      "sha256": "fb2fff3a92477adc45bc7ac4fb6ff94b99184a11a7e96008de74f36e4df4aea0"
+    },
+    "input_source_mean": {
+      "file": "input_source_mean.f16",
+      "shape": [
+        32
+      ],
+      "dtype": "float16-le",
+      "bytes": 64,
+      "sha256": "a425cf65098772f24279c7cc549270ebd40bae5f0fc48f5d4adc73864473a46e"
+    },
+    "input_residual_mean": {
+      "file": "input_residual_mean.f16",
+      "shape": [
+        48
+      ],
+      "dtype": "float16-le",
+      "bytes": 96,
+      "sha256": "f109a744f31fc778105dad970e2d1458cb41e4a8e42cdb329dbc25159baa5f4e"
+    },
+    "input_left": {
+      "file": "input_left.f16",
+      "shape": [
+        32,
+        32
+      ],
+      "dtype": "float16-le",
+      "bytes": 2048,
+      "sha256": "80843ce946b816894410ea2b35d9989a0e2608d8c8d64ebb1a5c967fd6a2520e"
+    },
+    "input_right": {
+      "file": "input_right.f16",
+      "shape": [
+        32,
+        48
+      ],
+      "dtype": "float16-le",
+      "bytes": 3072,
+      "sha256": "2bd61d0492714d6a874145cfce52ed84399f4e4dc92ad8071e17b6373b605067"
+    },
+    "output_anchor": {
+      "file": "output_anchor.f16",
+      "shape": [
+        48,
+        32
+      ],
+      "dtype": "float16-le",
+      "bytes": 3072,
+      "sha256": "33398129493e8f2fb53ed66a4413b0610d4947e03f283c4a52d356c7560e1665"
+    },
+    "output_source_mean": {
+      "file": "output_source_mean.f16",
+      "shape": [
+        48
+      ],
+      "dtype": "float16-le",
+      "bytes": 96,
+      "sha256": "7d07e0bcc7c3c0cda257f154e1387930609a6cf2c78aa1648baf9fd89a29d408"
+    },
+    "output_residual_mean": {
+      "file": "output_residual_mean.f16",
+      "shape": [
+        32
+      ],
+      "dtype": "float16-le",
+      "bytes": 64,
+      "sha256": "94783ed82786e9bf8fd673fede87c6393e9034af732541ed565e79765a057031"
+    },
+    "output_left": {
+      "file": "output_left.f16",
+      "shape": [
+        48,
+        32
+      ],
+      "dtype": "float16-le",
+      "bytes": 3072,
+      "sha256": "56733d764f1c04e3e1ad5850e171b53844458eead14cd9af9a390ed29972d49b"
+    },
+    "output_right": {
+      "file": "output_right.f16",
+      "shape": [
+        32,
+        32
+      ],
+      "dtype": "float16-le",
+      "bytes": 2048,
+      "sha256": "8bc3486bc3f234678b4d973d56d4682d9a319e4ddfb70e0e77c64dd5ea94c652"
+    }
+  },
+  "runtime_budget": {
+    "input_macs": 4096,
+    "output_macs": 4096,
+    "total_macs_per_organ_invocation": 8192,
+    "resident_f16_bytes": 16704
+  }
+}

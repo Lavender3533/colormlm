@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "polaris-s14-route-trace-v1",
+  "type": "object",
+  "required": ["format", "repo", "revision", "status", "coverage_complete", "top_k", "observed_tokens", "task_groups", "capture_manifest_sha256", "layers"],
+  "properties": {
+    "format": {"const": "polaris-s14-route-trace-v1"},
+    "repo": {"const": "deepseek-ai/DeepSeek-V4-Flash-0731"},
+    "revision": {"const": "7872f01b1d1fe23eabc4c98b48bffcef5a386062"},
+    "status": {"const": "approved_native_trace"},
+    "coverage_complete": {"const": true},
+    "top_k": {"const": 6},
+    "observed_tokens": {"type": "integer", "minimum": 1},
+    "task_groups": {"type": "integer", "minimum": 1},
+    "capture_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "layers": {
+      "type": "object",
+      "patternProperties": {
+        "^(0|1|2|6|7|14|15|22|23|30|31|40|41|42)$": {
+          "type": "object",
+          "required": ["expert_ids", "events"],
+          "properties": {
+            "expert_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "integer", "minimum": 0, "maximum": 255}},
+            "events": {"type": "integer", "minimum": 1}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

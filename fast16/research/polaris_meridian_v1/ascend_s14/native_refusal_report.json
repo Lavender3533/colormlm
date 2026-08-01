@@ -1,0 +1,6 @@
+{
+  "format": "polaris-ascend-s14-native-refusal-v1",
+  "ok": false,
+  "native_forward_ready": false,
+  "error": "Ascend 原生 forward 尚不可用: official_fixed_revision_python_graph, mxfp4_expert_unpack_or_native_kernel, ue8m0_scale_semantics, fp8_attention_kernels, mhc_four_stream_state_transition, csa_hca_state_and_cache_semantics, native_router_top6_and_shared_expert, native_tokenizer_embedding_norm_lm_head, verified_s14_range_provider, ascend_numerical_parity_test, native_forward_ready_manifest"
+}

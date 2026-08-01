@@ -1,0 +1,72 @@
+{
+  "format": "polaris-native-state-portal-selftest-v1",
+  "checks": {
+    "geometry_gate_passed": true,
+    "runtime_manifest_written": true,
+    "eight_group_loto": true,
+    "router_evaluated": true,
+    "no_backpropagation": true,
+    "zero_epochs": true
+  },
+  "all_passed": true,
+  "fixture_decision": {
+    "status": "portal_geometry_pass",
+    "checks": {
+      "nonzero_anchor_required": true,
+      "input_cosine_gain_at_least_0_10": true,
+      "output_cosine_gain_at_least_0_10": true,
+      "input_nrmse_ratio_at_most_0_90": true,
+      "output_nrmse_ratio_at_most_0_90": true,
+      "positive_input_groups_at_least_80_percent": true,
+      "positive_output_groups_at_least_80_percent": true,
+      "router_recall_at_least_0_70": true,
+      "router_recall_gain_at_least_0_10": true
+    },
+    "passed": true,
+    "claim_boundary": "通过仅允许进入连续器官短 NLL/任务 A/B；不代表北极星能力提升，更不代表追上 Claude/GPT。"
+  },
+  "aggregate": {
+    "input_anchor": {
+      "cosine_mean": 0.6180763244628906,
+      "cosine_median": 0.62296462059021,
+      "cosine_p10": 0.4992222785949707,
+      "nrmse_mean": 1.3725793361663818,
+      "nrmse_median": 1.361443281173706
+    },
+    "input_portal": {
+      "cosine_mean": 0.9999173879623413,
+      "cosine_median": 0.9999222755432129,
+      "cosine_p10": 0.9998747706413269,
+      "nrmse_mean": 0.012787260115146637,
+      "nrmse_median": 0.012699250131845474
+    },
+    "output_anchor": {
+      "cosine_mean": 0.5196772813796997,
+      "cosine_median": 0.5306204557418823,
+      "cosine_p10": 0.35445138812065125,
+      "nrmse_mean": 1.7812955379486084,
+      "nrmse_median": 1.7510004043579102
+    },
+    "output_portal": {
+      "cosine_mean": 0.9998393058776855,
+      "cosine_median": 0.9998549222946167,
+      "cosine_p10": 0.9997562170028687,
+      "nrmse_mean": 0.017755424603819847,
+      "nrmse_median": 0.017370987683534622
+    },
+    "input_cosine_gain": 0.3818410038948059,
+    "output_cosine_gain": 0.48016196489334106,
+    "input_nrmse_ratio": 0.009316226467490196,
+    "output_nrmse_ratio": 0.009967702440917492,
+    "positive_input_groups": 8,
+    "positive_output_groups": 8,
+    "groups": 8,
+    "router_topk": {
+      "k": 4,
+      "anchor_recall_mean": 0.5218750238418579,
+      "portal_recall_mean": 0.996874988079071,
+      "recall_gain": 0.4749999940395355
+    }
+  },
+  "claim_boundary": "合成测试只验证门户编译和留出门，不是巨型 donor 能力证据。"
+}

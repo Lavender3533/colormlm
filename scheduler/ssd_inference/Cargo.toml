@@ -1,0 +1,27 @@
+[package]
+name = "ssd_inference"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ash = "0.38"
+anyhow = "1.0"
+gguf_reader = { path = "../gguf_reader" }
+expert_cache = { path = "../expert_cache" }
+predictor = { path = "../predictor" }
+scheduler-core = { path = "../scheduler-core" }
+parking_lot.workspace = true
+tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
+candle-core = { version = "0.8", default-features = false }
+rayon = "1.10"
+rand = "0.10.1"
+bytemuck.workspace = true
+smallvec.workspace = true
+arc-swap = "1"
+
+[build-dependencies]
+cc = "1"
+
+[dev-dependencies]
+memmap2 = "0.9"

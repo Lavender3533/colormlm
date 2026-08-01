@@ -1,0 +1,30 @@
+{
+  "format": "polaris-k3-frontend-community-selftest-v1",
+  "ok": true,
+  "evidence_status": "synthetic_algorithm_fixture_not_k3_capability_evidence",
+  "checks": {
+    "fixture_tasks_created": true,
+    "fixture_trace_records": true,
+    "one_cross_layer_community": true,
+    "only_expected_experts_selected": true,
+    "all_ranges_resolved_from_pinned_catalog": true,
+    "dry_run_only": true,
+    "revision_drift_rejected": true,
+    "duplicate_router_expert_rejected": true,
+    "counterfactual_delta_mismatch_rejected": true,
+    "unpinned_catalog_rejected": true
+  },
+  "fixture_summary": {
+    "tasks": 4,
+    "trace_records": 24,
+    "community_count": 1,
+    "selected_nodes": [
+      "L20/E101",
+      "L20/E111",
+      "L21/E202",
+      "L22/E303"
+    ],
+    "exact_range_count": 4
+  },
+  "claim_limit": "合成 fixture 只验证社区聚合、严格输入门和 Range dry-run；没有运行 Kimi K3。"
+}

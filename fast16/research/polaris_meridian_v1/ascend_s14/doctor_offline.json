@@ -1,0 +1,87 @@
+{
+  "format": "polaris-ascend-s14-doctor-v1",
+  "source": {
+    "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062"
+  },
+  "platform": {
+    "python": "3.12.5",
+    "system": "Windows-11-10.0.22631-SP0",
+    "machine": "AMD64",
+    "aarch64_expected": true,
+    "architecture_ok": false
+  },
+  "modules": {
+    "torch": true,
+    "torch_npu": false,
+    "safetensors": true
+  },
+  "device": {
+    "probed": false,
+    "available": null,
+    "reason": "使用 --probe-npu 才会导入 torch_npu；默认 doctor 不触碰设备",
+    "operator_support_proven": false
+  },
+  "required_device": "Ascend910B4",
+  "device_match": null,
+  "hbm_gate": {
+    "minimum_total_bytes": 34359738368,
+    "observed_total_bytes": null,
+    "pass": null
+  },
+  "semantic_gaps": [
+    {
+      "capability": "official_fixed_revision_python_graph",
+      "status": "missing",
+      "required": true
+    },
+    {
+      "capability": "mxfp4_expert_unpack_or_native_kernel",
+      "status": "missing",
+      "required": true
+    },
+    {
+      "capability": "ue8m0_scale_semantics",
+      "status": "missing",
+      "required": true
+    },
+    {
+      "capability": "fp8_attention_kernels",
+      "status": "missing",
+      "required": true
+    },
+    {
+      "capability": "mhc_four_stream_state_transition",
+      "status": "missing",
+      "required": true
+    },
+    {
+      "capability": "csa_hca_state_and_cache_semantics",
+      "status": "missing",
+      "required": true
+    },
+    {
+      "capability": "native_router_top6_and_shared_expert",
+      "status": "missing",
+      "required": true
+    },
+    {
+      "capability": "native_tokenizer_embedding_norm_lm_head",
+      "status": "missing",
+      "required": true
+    },
+    {
+      "capability": "verified_s14_range_provider",
+      "status": "missing",
+      "required": true
+    },
+    {
+      "capability": "ascend_numerical_parity_test",
+      "status": "missing",
+      "required": true
+    }
+  ],
+  "native_forward_ready": false,
+  "ok": false,
+  "claim_limit": "dtype 名称、torch_npu 可导入和 NPU 可见都不等于 FP4/FP8/mHC/CSA-HCA 原生语义兼容。"
+}

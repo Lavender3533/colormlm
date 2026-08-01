@@ -1,0 +1,77 @@
+{
+  "format": "polaris-k3-frontend-community-source-contract-v1",
+  "status": "frozen_before_native_trace",
+  "donor": {
+    "repo": "moonshotai/Kimi-K3",
+    "revision": "9f62e4e9fffbd0a83ddd60e1c209d828994b3569",
+    "license": "Kimi K3 License",
+    "text_layers": 93,
+    "moe_layer_first": 1,
+    "moe_layer_last": 92,
+    "experts_per_layer": 896,
+    "experts_per_token": 16,
+    "single_expert_page_bytes": 17547264,
+    "single_expert_tensors": 6,
+    "expert_weight_format": "MXFP4 packed plus U8 scales",
+    "audit": {
+      "path": "fast16/research/polaris_meridian_v0/k3_audit/k3_audit.json",
+      "sha256": "1fd666a2b7885d1e3e2996dd7ea6f81e064264fb10a3f9c927747952d475c0e0"
+    }
+  },
+  "frozen_frontend_tasks": [
+    {
+      "split": "train",
+      "path": "fast16/research/parallel_frontend_v47/data/train.jsonl",
+      "records": 8,
+      "sha256": "82ff801e45489f40823489655670db7d2482667883ce9b4281cdaadb9879289f"
+    },
+    {
+      "split": "validation",
+      "path": "fast16/research/parallel_frontend_v47/data/validation.jsonl",
+      "records": 8,
+      "sha256": "8f39f43ce7b66721393741c444db11ac4545209b3600158e266798c3ce1fe0eb"
+    },
+    {
+      "split": "blind",
+      "path": "fast16/research/parallel_frontend_v47/data/blind.jsonl",
+      "records": 8,
+      "sha256": "2e9885dad761c4dddff1a3b62f44afaf5c63ee63496fa1319dddb7626135e708"
+    }
+  ],
+  "scoring_contract": {
+    "path": "fast16/research/parallel_frontend_v47/scoring_contract.json",
+    "sha256": "d0eb0d44d866d61c828b886034cf4dcb3b7bc916f52ed4e0ae967db8c8a1bb07"
+  },
+  "critical_token_policy": {
+    "freeze_before_router_or_nll_trace": true,
+    "required_categories": [
+      "html_semantic_tag",
+      "css_layout_or_responsive",
+      "javascript_interaction_or_state",
+      "accessibility_attribute",
+      "task_specific_required_signal",
+      "completion_or_closure"
+    ],
+    "required_fields": [
+      "decision_id",
+      "prefix_utf8",
+      "prefix_sha256",
+      "token_id",
+      "token_text",
+      "category",
+      "selection_reason"
+    ],
+    "forbidden": [
+      "select_after_viewing_router_trace",
+      "select_after_viewing_counterfactual_nll",
+      "select_only_successful_generation_tokens"
+    ]
+  },
+  "moonvit_boundary": {
+    "vision_tower_payload_bytes": 802428928,
+    "role": "screenshot_image_and_video_patch_encoder",
+    "contains_html_css_js_generation_policy": false,
+    "may_be_called_frontend_programming_organ": false
+  },
+  "claim_limit": "该合同只冻结数据来源和 K3 ABI；没有原生 trace 时不得产生 expert ID 候选。"
+}

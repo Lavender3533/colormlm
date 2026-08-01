@@ -1,0 +1,26 @@
+[workspace]
+resolver = "2"
+members = ["predictor", "expert_cache", "scheduler-core", "moe_scheduler_c", "gguf_reader", "vulkan_xfer", "ssd_inference", "ssd-helper"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["大模型 SSD 化项目"]
+license = "Apache-2.0"
+
+[workspace.dependencies]
+arc-swap = "1.7"
+smallvec = { version = "1.13", features = ["union"] }
+bytemuck = { version = "1.18", features = ["derive"] }
+tokio = { version = "1.40", features = ["rt", "rt-multi-thread", "time", "sync", "macros"] }
+parking_lot = "0.12"
+
+[workspace.dependencies.criterion]
+version = "0.5"
+features = ["html_reports"]
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+opt-level = 3
+debug = true

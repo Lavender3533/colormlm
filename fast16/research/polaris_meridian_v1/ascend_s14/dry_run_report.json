@@ -1,0 +1,46 @@
+{
+  "format": "polaris-ascend-s14-dry-run-v1",
+  "source": {
+    "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062"
+  },
+  "layers": [
+    0,
+    1,
+    2,
+    6,
+    7,
+    14,
+    15,
+    22,
+    23,
+    30,
+    31,
+    40,
+    41,
+    42
+  ],
+  "lifecycle": [
+    "load verified current-layer tensors",
+    "execute one native block",
+    "free current layer"
+  ],
+  "max_live_layers": 1,
+  "weight_io_performed": false,
+  "device_touched": false,
+  "native_forward_executed": false,
+  "native_forward_ready": false,
+  "missing_capabilities": [
+    "official_fixed_revision_python_graph",
+    "mxfp4_expert_unpack_or_native_kernel",
+    "ue8m0_scale_semantics",
+    "fp8_attention_kernels",
+    "mhc_four_stream_state_transition",
+    "csa_hca_state_and_cache_semantics",
+    "native_router_top6_and_shared_expert",
+    "native_tokenizer_embedding_norm_lm_head",
+    "verified_s14_range_provider",
+    "ascend_numerical_parity_test"
+  ],
+  "claim_limit": "这是接口 dry-run，不是 DeepSeek forward 或质量证据。"
+}

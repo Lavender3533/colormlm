@@ -1,0 +1,112 @@
+#version 450
+
+// Fused Q6K matvec: y[n] = dot(dequant(row_n), x)
+// Q6K: 210 bytes/block. Layout: ql[128] qh[64] sc[16] d(fp16)
+// Decoded: w = d * sc[sub] * (q6 - 32) where q6 = ql_nibble | (qh_2bits << 4)
+
+layout(local_size_x = 128) in;
+
+layout(set = 0, binding = 0) readonly buffer Q { uint q_words[]; };
+layout(set = 0, binding = 1) readonly buffer X { float x[]; };
+layout(set = 0, binding = 2) writeonly buffer Y { float y[]; };
+
+layout(push_constant) uniform Push {
+    uint N;
+    uint K;
+    uint q_offset;
+} push;
+
+shared float partial[128];
+
+void main() {
+    uint n = gl_WorkGroupID.x;
+    uint tid = gl_LocalInvocationID.x;
+    if (n >= push.N) return;
+
+    uint bpr = push.K / 256u;
+    // Q6K: 210 bytes per block, NOT aligned to 4 bytes!
+    // Use byte-level addressing
+    uint row_byte_base = push.q_offset + n * bpr * 210u;
+
+    float acc = 0.0;
+
+    for (uint k = tid; k < push.K; k += 128u) {
+        uint blk = k / 256u;
+        uint w_idx = k % 256u;
+        uint blk_byte = row_byte_base + blk * 210u;
+
+        // Read d (fp16 at byte 208)
+        uint d_byte = blk_byte + 208u;
+        uint d_w = d_byte / 4u;
+        uint d_s = (d_byte % 4u) * 8u;
+        uint d_lo = (q_words[d_w] >> d_s) & 0xFFu;
+        uint d_hi;
+        if (d_s == 24u) {
+            d_hi = q_words[d_w + 1u] & 0xFFu;
+        } else {
+            d_hi = (q_words[d_w] >> (d_s + 8u)) & 0xFFu;
+        }
+        float d_val = unpackHalf2x16(d_lo | (d_hi << 8u)).x;
+
+        // Read scale (signed int8 at byte 192 + sub_idx)
+        // w_idx maps to: half = w_idx/128, within = w_idx%128
+        // sub groups of 16: sub = w_idx / 16 (0..15), but actual scale index is more complex
+        // Following ggml exactly:
+        uint hf = w_idx / 128u;
+        uint within_hf = w_idx % 128u;
+        uint l = within_hf % 32u;
+        uint quad = within_hf / 32u; // 0..3
+
+        // Scale index: hf*8 + quad*2 + l/16
+        uint sc_idx = hf * 8u + quad * 2u + l / 16u;
+        uint sc_byte_off = blk_byte + 192u + sc_idx;
+        uint sc_w = sc_byte_off / 4u;
+        uint sc_s = (sc_byte_off % 4u) * 8u;
+        int sc_val = int((q_words[sc_w] >> sc_s) & 0xFFu);
+        if (sc_val >= 128) sc_val -= 256; // sign extend
+
+        // Read ql (4-bit, at byte 0..127)
+        uint ql_idx = hf * 64u + quad * 16u + (l % 16u);
+        // For quad 0,1: use low nibble; quad 2,3: use high nibble of same byte
+        uint ql_byte_idx;
+        uint use_high_nibble;
+        if (quad < 2u) {
+            ql_byte_idx = hf * 64u + quad * 16u + (l % 16u);
+            use_high_nibble = 0u;
+        } else {
+            ql_byte_idx = hf * 64u + (quad - 2u) * 16u + (l % 16u);
+            use_high_nibble = 1u;
+        }
+        uint ql_off = blk_byte + ql_byte_idx;
+        uint ql_w = ql_off / 4u;
+        uint ql_s = (ql_off % 4u) * 8u;
+        uint ql_byte = (q_words[ql_w] >> ql_s) & 0xFFu;
+        uint ql_val = (use_high_nibble == 0u) ? (ql_byte & 0xFu) : (ql_byte >> 4u);
+
+        // Read qh (2-bit, at byte 128..191)
+        uint qh_idx = hf * 32u + (l % 16u) + (quad < 2u ? 0u : 16u);
+        // Actually: qh byte index and bit shift depend on quad
+        // quad 0: bits 0-1, quad 1: bits 2-3, quad 2: bits 4-5, quad 3: bits 6-7
+        uint qh_byte_idx2 = hf * 32u + (l % 16u);
+        if (quad >= 2u) qh_byte_idx2 += 16u;
+        uint qh_shift = (quad % 2u) * 2u;
+
+        uint qh_off = blk_byte + 128u + qh_byte_idx2;
+        uint qh_w2 = qh_off / 4u;
+        uint qh_s2 = (qh_off % 4u) * 8u;
+        uint qh_byte2 = (q_words[qh_w2] >> qh_s2) & 0xFFu;
+        uint qh_val = (qh_byte2 >> qh_shift) & 3u;
+
+        int q6 = int(ql_val | (qh_val << 4u)) - 32;
+        float w = d_val * float(sc_val) * float(q6);
+        acc += w * x[k];
+    }
+
+    partial[tid] = acc;
+    barrier();
+    for (uint stride = 64u; stride > 0u; stride >>= 1u) {
+        if (tid < stride) partial[tid] += partial[tid + stride];
+        barrier();
+    }
+    if (tid == 0u) y[n] = partial[0];
+}

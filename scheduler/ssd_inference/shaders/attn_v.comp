@@ -1,0 +1,42 @@
+#version 450
+
+// Attention output: out[i, h, :] = sum_j scores[h, i, j] * V[j, kv_head(h), :]
+//
+// Scores shape: [n_q_heads, n_tok, seq_len]   (already softmaxed)
+// V      shape: [seq_len,  n_kv_heads, head_dim]
+// Out    shape: [n_tok,    n_q_heads,  head_dim]
+//
+// Workgroup processes one (q_token, q_head). head_dim threads (assumed <= 128).
+// Each thread computes one element of head_dim by accumulating across seq_len.
+
+layout(local_size_x = 128) in;
+
+layout(set = 0, binding = 0) readonly  buffer S   { float scores[]; };
+layout(set = 0, binding = 1) readonly  buffer V   { float v[]; };
+layout(set = 0, binding = 2) writeonly buffer OUT { float out_buf[]; };
+
+layout(push_constant) uniform Push {
+    uint n_tok;
+    uint n_q_heads;
+    uint n_kv_heads;
+    uint head_dim;
+    uint seq_len;
+} push;
+
+void main() {
+    uint d      = gl_LocalInvocationID.x;
+    uint q_head = gl_WorkGroupID.x;
+    uint q_tok  = gl_WorkGroupID.y;
+    if (d >= push.head_dim) return;
+
+    uint kv_head = q_head * push.n_kv_heads / push.n_q_heads;
+    uint score_base = (q_head * push.n_tok + q_tok) * push.seq_len;
+
+    float acc = 0.0;
+    for (uint j = 0u; j < push.seq_len; j++) {
+        float s = scores[score_base + j];
+        float vjd = v[(j * push.n_kv_heads + kv_head) * push.head_dim + d];
+        acc += s * vjd;
+    }
+    out_buf[(q_tok * push.n_q_heads + q_head) * push.head_dim + d] = acc;
+}

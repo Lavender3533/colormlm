@@ -1,0 +1,57 @@
+{
+  "format": "polaris-deepseek-stream-selftest-v1",
+  "ok": true,
+  "evidence_status": "synthetic_contract_fixture_not_model_evidence",
+  "checks": [
+    {
+      "name": "planner_keeps_native_gate_false",
+      "passed": true
+    },
+    {
+      "name": "bf16_rounding_and_endianness",
+      "passed": true
+    },
+    {
+      "name": "official_probe_interface_fixture",
+      "passed": true
+    },
+    {
+      "name": "cnob_and_utf8_roundtrip",
+      "passed": true
+    },
+    {
+      "name": "synthetic_rejected_by_real_gate",
+      "passed": true
+    },
+    {
+      "name": "truncation_detected",
+      "passed": true
+    }
+  ],
+  "capture": {
+    "format": "polaris-deepseek-capture-validation-v1",
+    "ok": true,
+    "real_capture_required": false,
+    "records": 2,
+    "cnob_chunks": 52,
+    "chunks_per_record": 26,
+    "cnob_bytes": 332712,
+    "cnob_sha256": "9662c8e8d7c4f6bbced5fabaf201ce1e53d26d33521e2de5c795e5a67207b39b",
+    "sidecar_bytes": 891,
+    "sidecar_sha256": "34335e397617fd2940c0904b7d75937d45090c73c0c83e148d6f852780a0b69b"
+  },
+  "plan_summary": {
+    "base_forward_file_union_bytes": 156023192948,
+    "capture_bytes_per_record": 166356,
+    "native_forward_gate": false
+  },
+  "elapsed_seconds": 0.016938200000367942,
+  "claim_limit": "合成 fixture 只验证接口、NPU tensor 搬运和文件校验；没有运行 DeepSeek 权重。",
+  "device": {
+    "requested": "cpu",
+    "selected": "cpu",
+    "fallback_used": false,
+    "fallback_reason": null,
+    "device_name": null
+  }
+}

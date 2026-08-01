@@ -1,0 +1,119 @@
+#version 450
+
+// Dequantize Q3_K block (110 bytes, 256 fp32 weights).
+// Layout per block:
+//   bytes  0..31:  hmask[32]   (256 high bits, 1 per weight)
+//   bytes 32..95:  qs[64]      (256 × 2-bit low weights, packed 4 per byte)
+//   bytes 96..107: scales[12]  (16 × 6-bit scales, packed)
+//   bytes 108..109: f16 d      (super-block scale)
+//
+// Decoded as: w = d * (scale[sub] - 32) * (q2 + high_bit_correction)
+// where q2 = 2-bit value, high_bit_correction = 0 if hmask bit set, -4 otherwise
+//
+// ceil(110/4) = 28 u32 per block (with 2 bytes padding in last word)
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0) readonly  buffer Q { uint q_words[]; };
+layout(set = 0, binding = 1) writeonly buffer Y { float y[]; };
+
+layout(push_constant) uniform Push {
+    uint n_blocks;
+    uint block_stride; // in u32 units (28 for Q3K)
+} push;
+
+void main() {
+    uint blk = gl_WorkGroupID.x;
+    if (blk >= push.n_blocks) return;
+
+    // Q3K = 110 bytes. Read via byte offsets from base byte offset.
+    uint base_byte = blk * 110u;
+    uint w_idx = gl_LocalInvocationID.x; // 0..255
+
+    // d at bytes 108..109
+    uint d_word_idx = base_byte / 4u + 27u;
+    uint d_shift = (base_byte % 4u);
+    // Actually, let's compute byte offsets more carefully
+    // hmask: base_byte + 0..31
+    // qs:    base_byte + 32..95
+    // scales: base_byte + 96..107
+    // d:     base_byte + 108..109
+
+    // Read d (f16 at byte offset 108)
+    uint d_byte_off = base_byte + 108u;
+    uint d_w = d_byte_off / 4u;
+    uint d_s = (d_byte_off % 4u) * 8u;
+    uint d_lo = (q_words[d_w] >> d_s) & 0xFFu;
+    uint d_hi;
+    if (d_s == 24u) {
+        d_hi = q_words[d_w + 1u] & 0xFFu;
+    } else {
+        d_hi = (q_words[d_w] >> (d_s + 8u)) & 0xFFu;
+    }
+    float d_all = unpackHalf2x16(d_lo | (d_hi << 8u)).x;
+
+    // Unpack scales[12] → 16 signed 6-bit values
+    // Read 12 raw bytes from offset 96
+    uint raw_scales[3];
+    for (uint si = 0u; si < 3u; si++) {
+        uint off = base_byte + 96u + si * 4u;
+        uint w0 = off / 4u;
+        uint s0 = (off % 4u) * 8u;
+        if (s0 == 0u) {
+            raw_scales[si] = q_words[w0];
+        } else {
+            raw_scales[si] = (q_words[w0] >> s0) | (q_words[w0 + 1u] << (32u - s0));
+        }
+    }
+
+    uint kmask1 = 0x03030303u;
+    uint kmask2 = 0x0f0f0f0fu;
+    uint tmp = raw_scales[2];
+    uint aux0 = (raw_scales[0] & kmask2) | (((tmp >> 0u) & kmask1) << 4u);
+    uint aux1 = (raw_scales[1] & kmask2) | (((tmp >> 2u) & kmask1) << 4u);
+    uint aux2 = ((raw_scales[0] >> 4u) & kmask2) | (((tmp >> 4u) & kmask1) << 4u);
+    uint aux3 = ((raw_scales[1] >> 4u) & kmask2) | (((tmp >> 6u) & kmask1) << 4u);
+
+    // scales[0..15] as signed bytes (subtract 32 later)
+    uint aux[4] = uint[4](aux0, aux1, aux2, aux3);
+
+    // Map w_idx to the ggml dequant loop structure:
+    // half = w_idx / 128 (0 or 1)
+    // within_half = w_idx % 128
+    // shift_group = within_half / 32 (0..3) -> shift = shift_group * 2
+    // sub_pair = within_half % 32
+    // is_upper = sub_pair / 16
+    // l = sub_pair % 16
+    uint hf = w_idx / 128u;
+    uint within_half = w_idx % 128u;
+    uint shift_group = within_half / 32u;
+    uint shift = shift_group * 2u;
+    uint sub_pair = within_half % 32u;
+    uint is_upper = sub_pair / 16u;
+    uint l = sub_pair % 16u;
+
+    // scale index
+    uint is = hf * 8u + shift_group * 2u + is_upper;
+    uint sc_byte_val = (aux[is / 4u] >> ((is % 4u) * 8u)) & 0xFFu;
+    float dl = d_all * (float(sc_byte_val) - 32.0);
+
+    // qs index: half * 32 + is_upper * 16 + l
+    uint qs_idx = hf * 32u + is_upper * 16u + l;
+    uint qs_byte_off = base_byte + 32u + qs_idx;
+    uint qs_w = qs_byte_off / 4u;
+    uint qs_s = (qs_byte_off % 4u) * 8u;
+    uint qs_byte = (q_words[qs_w] >> qs_s) & 0xFFu;
+    uint q2 = (qs_byte >> shift) & 3u;
+
+    // hmask bit: byte index = is_upper * 16 + l, bit = m (which advances per shift_group+half)
+    uint hm_bit_idx = hf * 4u + shift_group;
+    uint hm_byte_idx = is_upper * 16u + l;
+    uint hm_byte_off = base_byte + hm_byte_idx;
+    uint hm_w = hm_byte_off / 4u;
+    uint hm_s = (hm_byte_off % 4u) * 8u;
+    uint hm_byte = (q_words[hm_w] >> hm_s) & 0xFFu;
+    int h = ((hm_byte >> hm_bit_idx) & 1u) != 0u ? 0 : -4;
+
+    float w = dl * float(int(q2) + h);
+    y[blk * 256u + w_idx] = w;
+}

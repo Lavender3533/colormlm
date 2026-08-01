@@ -1008,7 +1008,52 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
 - 首个300B+可证伪对象定为DeepSeek V4 L40--L42连续末端皮层。先在临时云端做供体原生逐层
   流式前向，只回传配对hidden、mHC、route trace和NLL，再用nullspace-anchored矩形CCA/
   Procrustes闭式构造入口/出口门；原生trace工具未就绪前不下载整层或DSpark。
-- “八宫/五相”只作工程拓扑：规划、知识、工具、代码、校验、视觉/UI、停止/记忆、对话八个
-  独立能力槽；观象→定宫→生候选→相克验证→归藏五阶段低占空比调度。所有晋级仍只看留出
-  激活、反事实NLL、完整任务和实际字节。完整契约见
+- 正式术语统一为“多能力总线 + 候选/验证调度”：规划、知识、工具、代码、校验、视觉/UI、
+  停止/记忆、对话是可合并/删除的能力槽，不是固定玄学结构。低占空比调度为难度检测→能力
+  路由→候选生成→原生验证→提交与缓存。所有晋级仍只看留出激活、反事实NLL、完整任务和
+  实际字节。完整契约见
   `fast16/research/polaris_meridian_v0/MERIDIAN_ARCHITECTURE.md`。
+
+### 2026-08-01 北极星原生稀深旗舰 S14
+
+- 在任何真实质量结果产生前完成七路线物理/函数边界审计。L40--L42跨模型portal降为状态采集与
+  连续皮层探针，不再预设为质量主脑；当前唯一先证伪的质量主脑改为
+  `Polaris Native Sparse-Depth S14`。该变更来自坐标充分性审计，不是看完blind后的调参。
+- S14直接使用固定revision的304.18B DeepSeek-V4-Flash-0731原生tokenizer、embedding、4096
+  hidden、mHC、attention、router、MoE、norm与lm head；只执行预注册的
+  `[0,1,2,6,7,14,15,22,23,30,31,40,41,42]`，其余residual block为identity。它不是4.59B
+  小模型替换主线，而是304B donor的稀深执行图。
+- 官方索引静态复算：完整本地切片`52,231,273,716 B`（48.644GiB），每token活跃参数粗估
+  `4.5897B`，活跃权重上界`4.3795GB/token`。RX 5700 XT在30%理论带宽效率下权重扫描上限
+  `30.69 token/s`；这只证明20 token/s存在物理空间，不是端到端测速。随机多span SSD下要守住
+  20 token/s仍需约99.03%专家页命中，质量与分页局部性均未验证。
+- S14质量状态固定为`physical_budget_pass=true, quality_pass=null`。最短门是四题原生早停；
+  低于3/4、重复/乱码、原生state不闭合或指令失败立即停止，不扫描层数和residual scale挽救。
+  通过后才跑冻结八维16题和本机真实20 token/s门。
+- DeepSeek原生状态采集已实现固定revision元数据、26块/token CNOB、原子提交、NPU/CPU doctor、
+  adapter证明与合成自检；合成6/6通过，但真实Ascend/native forward尚未发生。完整base forward
+  文件并集约156.02GB，官方CUDA/FP4语义不能因`torch_npu`矩阵乘可用而假定已兼容。
+- S14精确Range打包器已实现header-only抓取、14层route-trace强制覆盖、非专家/命中专家tensor
+  选择、1GiB分段、Range哈希锁、原子恢复日志与显式execute门；离线自检6/6通过且未访问网络。
+  50GiB GitCode overlay对52.231GB shard上界只余约1.356GiB，低于2GiB安全余量，故上界包拒绝
+  直接落盘；必须先取得原生trace缩小精确包，或采用可校验外部盘/逐层RAM消费。
+- Ascend S14已新增严格单层`load→execute→free`适配器骨架、设备doctor和10项原生语义支持矩阵；
+  合成生命周期自检6/6通过，14层最大同时在生层数为1，异常加载路径也会释放。但MXFP4/UE8M0、
+  FP8 attention、mHC、CSA/HCA和官方图移植仍未完成，因此`native_forward_ready=false`，不得把
+  `torch_npu`可见或矩阵乘成功写成DeepSeek已经能跑。
+- Kimi K3若指网页截图理解，可独立研究MoonViT-V2视觉塔；若指HTML/CSS/JS与工具策略，能力分布
+  在多层文本电路和后训练策略中。下一步必须在预冻结前端题上采原生router/NLL，定位跨任务重复
+  胜出的多层“专家社区”，禁止猜一颗“前端专家”。八卦/五行仅启发生成、抑制和循环拓扑，正式
+  晋级仍只认hidden、NLL、完整任务、字节和速度。
+- K3前端社区聚合器已冻结24题来源与revision，要求每个关键token记录原生top-16路由和逐专家
+  leave-one-out NLL；只有跨任务反事实正收益节点才能组成跨层社区。合成自检覆盖严格输入门、
+  社区聚合和精确Range dry-run，未运行K3、未下载权重，输出默认`download_authorized=false`。
+- 巨型页运行时已修复三项正确性风险：staging按最大页动态分配且尺寸硬校验；batch miss按
+  pipeline depth分波；VRAM槽使用`Loading/Ready`生命周期，fence完成前lookup不可见且Loading
+  不参与淘汰。Rust库check通过、first_token_235b示例check通过、纯逻辑测试2/2通过；尚缺真实
+  Vulkan/GPU集成smoke，旧refactored示例和test_streaming仍有本轮之前的独立编译缺口。
+- 设计与证据入口：`fast16/research/polaris_meridian_v1/MERIDIAN_BUS_ARCHITECTURE.md`、
+  `fast16/research/polaris_meridian_v1/quality_architecture/ARCHITECTURE.md`、
+  `fast16/research/polaris_meridian_v1/deepseek_stream/README.md`、
+  `fast16/research/polaris_meridian_v1/ascend_s14/README.md`、
+  `fast16/research/polaris_meridian_v1/k3_frontend_community/README.md`。

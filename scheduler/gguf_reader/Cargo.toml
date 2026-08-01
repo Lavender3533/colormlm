@@ -1,0 +1,12 @@
+[package]
+name = "gguf_reader"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+candle-core = { version = "0.8", default-features = false }
+memmap2 = "0.9"
+anyhow = "1.0"
+
+[dev-dependencies]

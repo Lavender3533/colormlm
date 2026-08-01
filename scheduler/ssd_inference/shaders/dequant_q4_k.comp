@@ -1,0 +1,83 @@
+#version 450
+
+// Dequantize Q4_K_M block (144 bytes, 256 fp32 weights).
+// Layout per block:
+//   bytes  0..1:  f16 d   (super-block scale)
+//   bytes  2..3:  f16 dmin
+//   bytes  4..15: scales[12]  (8 sub-block (6-bit scale, 6-bit min) packed)
+//   bytes 16..143: qs[128]    (256 × 4-bit weights)
+//
+// Decoded as: w = d * sc[sub] * q - dmin * m[sub]
+// where sub = which of 8 sub-blocks (0..7), q = 4-bit value (0..15).
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0) readonly  buffer Q { uint q_words[]; }; // 36 u32 per block
+layout(set = 0, binding = 1) writeonly buffer Y { float y[]; };
+
+layout(push_constant) uniform Push {
+    uint n_blocks;
+} push;
+
+// get_scale_min_k4 from ggml-quants.c, reading uint8_t scales[12] from 3 u32s.
+uint scale_byte(uint scales_u32[3], uint idx) {
+    return (scales_u32[idx / 4u] >> ((idx % 4u) * 8u)) & 0xFFu;
+}
+
+void get_scale_min_k4(uint j, uint scales_u32[3], out uint d_out, out uint m_out) {
+    if (j < 4u) {
+        d_out = scale_byte(scales_u32, j) & 63u;
+        m_out = scale_byte(scales_u32, j + 4u) & 63u;
+    } else {
+        uint sj4 = scale_byte(scales_u32, j + 4u);
+        uint sjm4 = scale_byte(scales_u32, j - 4u);
+        uint sj = scale_byte(scales_u32, j);
+        d_out = (sj4 & 0xFu) | ((sjm4 >> 6u) << 4u);
+        m_out = (sj4 >> 4u)  | ((sj    >> 6u) << 4u);
+    }
+}
+
+void main() {
+    uint blk = gl_WorkGroupID.x;
+    if (blk >= push.n_blocks) return;
+
+    uint base = blk * 36u;  // 144 bytes / 4 = 36 u32 per block
+
+    // Decode d, dmin (packed in first u32 as 2 fp16)
+    vec2 dm = unpackHalf2x16(q_words[base]);
+    float d    = dm.x;
+    float dmin = dm.y;
+
+    // Load 12 scale bytes as 3 u32
+    uint scales_u32[3];
+    scales_u32[0] = q_words[base + 1u];
+    scales_u32[1] = q_words[base + 2u];
+    scales_u32[2] = q_words[base + 3u];
+
+    // Each thread handles ONE output weight (256 threads / wg, 256 weights / block)
+    uint w_idx = gl_LocalInvocationID.x;
+
+    // Match the CPU loop structure exactly to avoid index errors:
+    //   for j in 0..4:
+    //     for l in 0..32: y[64*j + l] = d1 * (q[32*j + l] & 0xF) - m1
+    //     for l in 0..32: y[64*j + 32 + l] = d2 * (q[32*j + l] >> 4) - m2
+    uint pair_idx   = w_idx / 64u;        // 0..3
+    uint within     = w_idx % 64u;        // 0..63
+    uint is_high    = within / 32u;       // 0 or 1
+    uint l          = within % 32u;       // 0..31
+    uint sub_idx    = 2u * pair_idx + is_high;
+    uint qs_byte_idx = 32u * pair_idx + l;  // byte index in qs[128]
+
+    // qs[] starts at byte 16, i.e. q_words[base + 4 ..]
+    uint qs_word_idx = base + 4u + (qs_byte_idx / 4u);
+    uint qs_byte = (q_words[qs_word_idx] >> ((qs_byte_idx % 4u) * 8u)) & 0xFFu;
+    uint q4 = (is_high == 0u) ? (qs_byte & 0xFu) : (qs_byte >> 4u);
+
+    uint sc, m;
+    get_scale_min_k4(sub_idx, scales_u32, sc, m);
+    float d_sub = d * float(sc);
+    float m_sub = dmin * float(m);
+
+    float w = d_sub * float(q4) - m_sub;
+    y[blk * 256u + w_idx] = w;
+}

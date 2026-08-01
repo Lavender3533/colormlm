@@ -1,0 +1,68 @@
+{
+  "format": "polaris-deepseek-native-capture-contract-v1",
+  "container": {
+    "magic_hex": "434E4F42",
+    "version": 2,
+    "header_struct_little_endian": "<6I4qQ",
+    "header_bytes": 64,
+    "fields": ["magic", "version", "kind", "record", "dtype", "reserved", "ne0", "ne1", "ne2", "ne3", "payload_bytes"]
+  },
+  "dtypes": {
+    "0": {"name": "F32_LE", "item_bytes": 4},
+    "2": {"name": "I32_LE", "item_bytes": 4},
+    "3": {"name": "BF16_LE_BITS", "item_bytes": 2}
+  },
+  "layers": [39, 40, 41, 42],
+  "kind_formula": {
+    "hidden_mean": "1000 + layer",
+    "mhc_streams_after_layer": "1100 + layer",
+    "mhc_attention_post_comb": "1200 + layer",
+    "mhc_ffn_post_comb": "1300 + layer",
+    "router_topk_ids": "1400 + layer",
+    "router_topk_weights": "1500 + layer",
+    "token_ids": "2000",
+    "token_logprob_nll": "2001"
+  },
+  "tensor_contract": {
+    "hidden_mean": {"dtype": 3, "shape": [4096], "meaning": "mean over four mHC streams after the layer; same reduction used by official DSpark main_hidden"},
+    "mhc_streams_after_layer": {"dtype": 3, "shape": [4, 4096], "meaning": "all four post-layer mHC residual streams"},
+    "mhc_attention_post_comb": {"dtype": 0, "shape": [20], "layout": "post[4], then row-major comb[4,4]"},
+    "mhc_ffn_post_comb": {"dtype": 0, "shape": [20], "layout": "post[4], then row-major comb[4,4]"},
+    "router_topk_ids": {"dtype": 2, "shape": [6], "meaning": "official score router selected expert ids"},
+    "router_topk_weights": {"dtype": 0, "shape": [6], "meaning": "official normalized and route-scaled weights returned by Gate.forward"},
+    "token_ids": {"dtype": 2, "shape": [3], "layout": "input_token_id, target_token_id or -1, predicted_token_id"},
+    "token_logprob_nll": {"dtype": 0, "shape": [2], "layout": "target_logprob or NaN, target_nll or NaN"}
+  },
+  "record_group": {
+    "one_record_per": "observed final token position of one native forward step",
+    "record_ids": "start at 0 and are contiguous",
+    "expected_cnob_chunks_per_record": 26,
+    "sidecar": "one UTF-8 JSON object per record in the same order"
+  },
+  "utf8_sidecar_required_fields": [
+    "format",
+    "record",
+    "sequence_id",
+    "phase",
+    "token_position",
+    "input_token_id",
+    "input_token_text",
+    "target_token_id",
+    "target_token_text",
+    "predicted_token_id",
+    "predicted_token_text",
+    "target_logprob",
+    "target_nll",
+    "prefix_sha256",
+    "synthetic",
+    "native_forward_completed"
+  ],
+  "real_capture_gate": {
+    "synthetic_must_be": false,
+    "native_forward_completed_must_be": true,
+    "source_revision_must_equal": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+    "weights_verification": "all 45 base-forward files or an equivalent verified remote tensor source must be attested",
+    "adapter_attestation_required": true
+  },
+  "claim_limit": "selftest/synthetic CNOB 只能证明格式和设备 I/O；不得冒充 DeepSeek 原生激活。"
+}

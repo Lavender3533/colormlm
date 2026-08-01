@@ -1,0 +1,67 @@
+#version 450
+
+// Dequantize Q2_K block (84 bytes, 256 fp32 weights).
+// Layout per block:
+//   bytes  0..15:  scales[16]  (4-bit scale + 4-bit min per sub-block)
+//   bytes 16..79:  qs[64]      (256 × 2-bit weights, packed 4 per byte)
+//   bytes 80..81:  f16 d       (super-block scale)
+//   bytes 82..83:  f16 dmin    (super-block min)
+//
+// 21 u32 per block (84 bytes / 4)
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0) readonly  buffer Q { uint q_words[]; };
+layout(set = 0, binding = 1) writeonly buffer Y { float y[]; };
+
+layout(push_constant) uniform Push {
+    uint n_blocks;
+} push;
+
+void main() {
+    uint blk = gl_WorkGroupID.x;
+    if (blk >= push.n_blocks) return;
+
+    uint base = blk * 21u;  // 84 bytes / 4 = 21 u32
+
+    uint w_idx = gl_LocalInvocationID.x; // 0..255
+
+    // scales[16] at bytes 0..15 = words[base+0..base+3]
+    // qs[64] at bytes 16..79 = words[base+4..base+19]
+    // d at bytes 80..81, dmin at bytes 82..83 = words[base+20]
+    vec2 dm = unpackHalf2x16(q_words[base + 20u]);
+    float d = dm.x;
+    float dmin = dm.y;
+
+    // w_idx maps to: half = w_idx / 128 (0 or 1)
+    //                within_half = w_idx % 128
+    //                shift_group = within_half / 32 (0..3)  -> shift = shift_group * 2
+    //                sub_pair = within_half % 32
+    //                is_upper = sub_pair / 16 (0 or 1)
+    //                l = sub_pair % 16
+    uint hf = w_idx / 128u;
+    uint within_half = w_idx % 128u;
+    uint shift_group = within_half / 32u;
+    uint shift = shift_group * 2u;
+    uint sub_pair = within_half % 32u;
+    uint is_upper = sub_pair / 16u;
+    uint l = sub_pair % 16u;
+
+    // scale index: is = half * 8 + shift_group * 2 + is_upper
+    uint is = hf * 8u + shift_group * 2u + is_upper;
+
+    // Read scale byte
+    uint sc_word = base + (is / 4u);
+    uint sc_byte = (q_words[sc_word] >> ((is % 4u) * 8u)) & 0xFFu;
+    float dl = d * float(sc_byte & 0xFu);
+    float ml = dmin * float(sc_byte >> 4u);
+
+    // Read q byte: qs index = half * 32 + is_upper * 16 + l
+    uint qs_idx = hf * 32u + is_upper * 16u + l;
+    uint qs_word = base + 4u + (qs_idx / 4u);
+    uint qs_byte = (q_words[qs_word] >> ((qs_idx % 4u) * 8u)) & 0xFFu;
+    uint q2 = (qs_byte >> shift) & 3u;
+
+    float w = dl * float(q2) - ml;
+    y[blk * 256u + w_idx] = w;
+}

@@ -1,0 +1,45 @@
+{
+  "format": "polaris-s14-range-source-v1",
+  "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+  "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+  "index": {
+    "file": "model.safetensors.index.json",
+    "bytes": 5602871,
+    "sha256": "98efab455cf08dfbbbaaba6f570e1bf10bf927d2b4c3c453a59c2f6f0e3be92b"
+  },
+  "selected_layers": [0, 1, 2, 6, 7, 14, 15, 22, 23, 30, 31, 40, 41, 42],
+  "boundary_tensors": ["embed.weight", "norm.weight", "head.weight"],
+  "tokenizer_required": [
+    "tokenizer.json",
+    "tokenizer_config.json"
+  ],
+  "layer_shards": {
+    "0": {"file": "model-00002-of-00048.safetensors", "bytes": 3566321192},
+    "1": {"file": "model-00003-of-00048.safetensors", "bytes": 3566321192},
+    "2": {"file": "model-00004-of-00048.safetensors", "bytes": 3596229272},
+    "6": {"file": "model-00008-of-00048.safetensors", "bytes": 3590024776},
+    "7": {"file": "model-00009-of-00048.safetensors", "bytes": 3568768976},
+    "14": {"file": "model-00016-of-00048.safetensors", "bytes": 3590026352},
+    "15": {"file": "model-00017-of-00048.safetensors", "bytes": 3568770544},
+    "22": {"file": "model-00024-of-00048.safetensors", "bytes": 3590026352},
+    "23": {"file": "model-00025-of-00048.safetensors", "bytes": 3568770544},
+    "30": {"file": "model-00032-of-00048.safetensors", "bytes": 3590026352},
+    "31": {"file": "model-00033-of-00048.safetensors", "bytes": 3568770544},
+    "40": {"file": "model-00042-of-00048.safetensors", "bytes": 3590026352, "sha256": "4d19bf368083c9a183cb0849f316ec17b62f859ca824c0586e779657efb6e6a6"},
+    "41": {"file": "model-00043-of-00048.safetensors", "bytes": 3568770544, "sha256": "b7103842ceb70848f9804f55c193d6a57f43174a587cba42b61b5c1bc4e1303d"},
+    "42": {"file": "model-00044-of-00048.safetensors", "bytes": 3590026352, "sha256": "422d3889fa20c238b7f97464c14df0bcf3328f189c294f41a3a334421dc560c7"}
+  },
+  "boundary_shards": {
+    "embed.weight": {"file": "model-00001-of-00048.safetensors", "bytes": 1059061856, "sha256": "f3668ba4cccf1ca6a7eb84e888fb92c1cdc7204d472ba9db771e6fd3abf6b874"},
+    "norm.weight": {"file": "model-00045-of-00048.safetensors", "bytes": 1059332516, "sha256": "a5be6aed7b84fc87ec42b5d24ba0b0d67f253a3906fcd99c13f4f7be5958fc00"},
+    "head.weight": {"file": "model-00045-of-00048.safetensors", "bytes": 1059332516, "sha256": "a5be6aed7b84fc87ec42b5d24ba0b0d67f253a3906fcd99c13f4f7be5958fc00"}
+  },
+  "shard_union_budget": {
+    "selected_layer_shards_bytes": 50112879344,
+    "boundary_file_union_bytes": 2118394372,
+    "total_bytes": 52231273716,
+    "total_gb_decimal": 52.231273716,
+    "total_gib": 48.64416431263089
+  },
+  "authority_limit": "缺失的 shard SHA-256 必须由固定 revision 的 Git LFS OID/受信元数据补齐；不得从 main 猜测，也不得用首次下载结果反向批准自身。"
+}

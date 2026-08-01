@@ -1,0 +1,163 @@
+{
+  "schema_version": "polaris.quality_architecture.v1",
+  "date": "2026-08-01",
+  "objective": {
+    "quality": "Claude/GPT class general model capability",
+    "local_hardware": "RX 5700 XT 8GB VRAM + 32GB RAM",
+    "target_tokens_per_second": [20, 50],
+    "weight_budget_gb_decimal": [50, 70],
+    "training_allowed": false,
+    "tool_shell_may_count_as_model_capability": false
+  },
+  "authoritative_local_evidence": {
+    "v38_tokens_per_second_reference": 28.0,
+    "rx5700xt_nominal_bandwidth_gb_s": 448.0,
+    "measured_random_multispan_mib_s": 207.3905515291289,
+    "optimistic_sequential_mib_s": 3500.0,
+    "runtime_paging_report": "fast16/research/polaris_meridian_v0/runtime_paging/speed_budget_report.json",
+    "k3_audit": "fast16/research/polaris_meridian_v0/k3_audit/k3_audit.json"
+  },
+  "deepseek_v4_0731": {
+    "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+    "checkpoint_parameters": 304180418494,
+    "core_parameters_reported": 284000000000,
+    "active_parameters_reported": 13000000000,
+    "num_hidden_layers": 43,
+    "hidden_size": 4096,
+    "vocab_size": 129280,
+    "num_hash_layers": 3,
+    "num_routed_experts": 256,
+    "num_experts_per_token": 6,
+    "single_expert_bytes": 13369344,
+    "full_expert_bank_per_layer_bytes": 3422552064,
+    "top6_expert_bytes": 80216064,
+    "embedding_file_bytes": 1059061856,
+    "output_head_file_bytes": 1059332516,
+    "output_head_parameters": 529530880,
+    "layer_shard_bytes": [
+      3566321192,
+      3566321192,
+      3596229272,
+      3568768976,
+      3590024776,
+      3568768976,
+      3590024776,
+      3568768976,
+      3590024776,
+      3568768976,
+      3590026352,
+      3568770544,
+      3590026352,
+      3568770544,
+      3590026352,
+      3568770544,
+      3590026352,
+      3568770544,
+      3590026352,
+      3568770544,
+      3590026352,
+      3568770544,
+      3590026352,
+      3568770544,
+      3590026352,
+      3568770544,
+      3590026352,
+      3568770544,
+      3590026352,
+      3568770544,
+      3590026352,
+      3568770544,
+      3590026352,
+      3568770544,
+      3590026352,
+      3568770544,
+      3590026352,
+      3568770544,
+      3590026352,
+      3568770544,
+      3590026352,
+      3568770544,
+      3590026352
+    ],
+    "compress_ratios_main_layers": [
+      0, 0, 4, 128, 4, 128, 4, 128, 4, 128, 4, 128, 4, 128, 4, 128,
+      4, 128, 4, 128, 4, 128, 4, 128, 4, 128, 4, 128, 4, 128, 4, 128,
+      4, 128, 4, 128, 4, 128, 4, 128, 4, 128, 4
+    ]
+  },
+  "preregistered_candidate": {
+    "id": "polaris-native-sparse-depth-s14",
+    "name": "原生稀深旗舰 S14",
+    "selected_layers": [0, 1, 2, 6, 7, 14, 15, 22, 23, 30, 31, 40, 41, 42],
+    "selection_rule": "retain all three hash-routing entrance layers, four predeclared interior 4/128 compression pairs, and the L40-L42 terminal cortex",
+    "quality_result_known_when_selected": false,
+    "residual_rescaling": 1.0,
+    "learned_bridge": false,
+    "base_model_hidden_used": false,
+    "native_tokenizer_embedding_head": true,
+    "authority_model": "the sparse-depth DeepSeek graph itself",
+    "v38_role": "optional draft-only accelerator after target quality passes; never quality authority"
+  },
+  "architecture_candidates": [
+    {
+      "id": "continuous_terminal_cortex",
+      "training_free": true,
+      "native_coordinate_integrity": "only if a valid native portal exists",
+      "general_quality": "unlikely from terminal layers alone",
+      "local_20_50_tps": "plausible by bytes",
+      "fatal_test": "native-embedding-to-terminal NLL collapses"
+    },
+    {
+      "id": "native_state_portal",
+      "training_free": "only for exact donor states or closed-form bridges",
+      "native_coordinate_integrity": "exact state good; v38-to-donor bridge unproven",
+      "general_quality": "cannot create missing upstream donor computation",
+      "local_20_50_tps": "portal generation is the bottleneck",
+      "fatal_test": "held-out portal state loses task-relevant NLL despite high cosine"
+    },
+    {
+      "id": "structural_ir_candidate_verifier",
+      "training_free": true,
+      "native_coordinate_integrity": "not applicable",
+      "general_quality": "only improves externally verifiable domains",
+      "local_20_50_tps": "yes for generated surface tokens",
+      "fatal_test": "closed-book reasoning/knowledge does not improve",
+      "may_claim_claude_gpt_model_quality": false
+    },
+    {
+      "id": "weight_space_operator_alignment",
+      "training_free": "closed-form only",
+      "native_coordinate_integrity": "requires same architecture, width and identifiable symmetry",
+      "general_quality": "unidentified across current giant donors",
+      "local_20_50_tps": "yes only after an unproven compression",
+      "fatal_test": "aligned operator fails next-token NLL on held-out prompts"
+    },
+    {
+      "id": "same_width_giant_moe",
+      "training_free": true,
+      "native_coordinate_integrity": "possible only inside the giant donor's own ABI",
+      "general_quality": "strongest structural prior",
+      "local_20_50_tps": "original active path is too large; requires sparse depth",
+      "fatal_test": "no 300B+ donor shares v38's 2048 hidden/state ABI"
+    },
+    {
+      "id": "remote_local_hybrid",
+      "training_free": true,
+      "native_coordinate_integrity": "remote full model preserves it",
+      "general_quality": "yes while remote donor is available",
+      "local_20_50_tps": "network and provider dependent",
+      "fully_local": false,
+      "may_claim_local_model_quality": false
+    },
+    {
+      "id": "native_sparse_depth_flagship",
+      "training_free": true,
+      "native_coordinate_integrity": "preserved; skipped residual blocks become identity",
+      "general_quality": "unknown but directly falsifiable",
+      "local_20_50_tps": "physically plausible at S14, not measured",
+      "fully_local": true,
+      "selected": true
+    }
+  ]
+}

@@ -1,0 +1,192 @@
+#version 450
+
+// Fused gate + up Q4K matvec: compute BOTH gate[n] and up[n] in one dispatch.
+// Same input x, two independent weight matrices → two outputs.
+// Dispatch: (inter, 1, 1) — one workgroup per output row.
+// 128 threads per workgroup do parallel reduce over K dimension.
+//
+// This halves the dispatch count vs separate gate + up matvecs,
+// and reads x from cache (hot after first matvec).
+
+layout(local_size_x = 128) in;
+
+layout(set = 0, binding = 0) readonly buffer GATE_Q { uint gate_q[]; };
+layout(set = 0, binding = 1) readonly buffer UP_Q   { uint up_q[]; };
+layout(set = 0, binding = 2) readonly buffer X      { float x[]; };
+layout(set = 0, binding = 3) writeonly buffer G     { float g_out[]; };
+layout(set = 0, binding = 4) writeonly buffer U     { float u_out[]; };
+
+layout(push_constant) uniform Push {
+    uint N;    // output dim (inter)
+    uint K;    // input dim (d_model)
+} push;
+
+shared float partial_g[128];
+shared float partial_u[128];
+
+// Decode one Q4K weight at position k within row n
+float decode_q4k(uint row_word_base, uint k, uint K) {
+    uint bpr = K / 256u;
+    uint blk = k / 256u;
+    uint w_idx = k % 256u;
+    uint blk_word = row_word_base + blk * 36u;
+
+    vec2 dm = unpackHalf2x16(gate_q[blk_word]);  // placeholder, will use correct buffer
+    float d = dm.x;
+    float dmin = dm.y;
+
+    uint s0 = gate_q[blk_word + 1u];
+    uint s1 = gate_q[blk_word + 2u];
+    uint s2 = gate_q[blk_word + 3u];
+
+    uint pair = w_idx / 64u;
+    uint within = w_idx % 64u;
+    uint is_high = within / 32u;
+    uint l = within % 32u;
+    uint sub_idx = 2u * pair + is_high;
+
+    uint scales[3] = uint[3](s0, s1, s2);
+    uint sc_val, m_val;
+    if (sub_idx < 4u) {
+        sc_val = (scales[sub_idx / 4u] >> ((sub_idx % 4u) * 8u)) & 63u;
+        uint m_idx = sub_idx + 4u;
+        m_val = (scales[m_idx / 4u] >> ((m_idx % 4u) * 8u)) & 63u;
+    } else {
+        uint sj4_idx = sub_idx + 4u;
+        uint sj4 = (scales[sj4_idx / 4u] >> ((sj4_idx % 4u) * 8u)) & 0xFFu;
+        uint sjm4_idx = sub_idx - 4u;
+        uint sjm4 = (scales[sjm4_idx / 4u] >> ((sjm4_idx % 4u) * 8u)) & 0xFFu;
+        sc_val = (sj4 & 0xFu) | ((sjm4 >> 6u) << 4u);
+        m_val = (sj4 >> 4u) | ((gate_q[blk_word + sub_idx / 4u] >> (((sub_idx % 4u) * 8u) + 6u)) << 4u);
+    }
+
+    float d_sub = d * float(sc_val);
+    float m_sub = dmin * float(m_val);
+
+    uint qs_byte_pos = 32u * pair + l;
+    uint qs_word = blk_word + 4u + qs_byte_pos / 4u;
+    uint qs_byte = (gate_q[qs_word] >> ((qs_byte_pos % 4u) * 8u)) & 0xFFu;
+    uint q4 = (is_high == 0u) ? (qs_byte & 0xFu) : (qs_byte >> 4u);
+
+    return d_sub * float(q4) - m_sub;
+}
+
+void main() {
+    uint n = gl_WorkGroupID.x;
+    uint tid = gl_LocalInvocationID.x;
+    if (n >= push.N) return;
+
+    uint bpr = push.K / 256u;
+    uint gate_row_base = n * bpr * 36u / 4u;  // in uint words
+    uint up_row_base = n * bpr * 36u / 4u;
+
+    float acc_g = 0.0;
+    float acc_u = 0.0;
+
+    for (uint k = tid; k < push.K; k += 128u) {
+        float xk = x[k];
+
+        // Gate weight decode
+        {
+            uint blk = k / 256u;
+            uint w_idx = k % 256u;
+            uint blk_word = gate_row_base + blk * 36u;
+
+            vec2 dm = unpackHalf2x16(gate_q[blk_word]);
+            float d = dm.x;
+            float dmin = dm.y;
+            uint s0 = gate_q[blk_word + 1u];
+            uint s1 = gate_q[blk_word + 2u];
+            uint s2 = gate_q[blk_word + 3u];
+            uint pair = w_idx / 64u;
+            uint within = w_idx % 64u;
+            uint is_high = within / 32u;
+            uint l = within % 32u;
+            uint sub_idx = 2u * pair + is_high;
+            uint scales[3] = uint[3](s0, s1, s2);
+            uint sc_val, m_val;
+            if (sub_idx < 4u) {
+                sc_val = (scales[sub_idx / 4u] >> ((sub_idx % 4u) * 8u)) & 63u;
+                uint m_idx = sub_idx + 4u;
+                m_val = (scales[m_idx / 4u] >> ((m_idx % 4u) * 8u)) & 63u;
+            } else {
+                uint sj4_idx = sub_idx + 4u;
+                uint sj4 = (scales[sj4_idx / 4u] >> ((sj4_idx % 4u) * 8u)) & 0xFFu;
+                uint sjm4_idx = sub_idx - 4u;
+                uint sjm4 = (scales[sjm4_idx / 4u] >> ((sjm4_idx % 4u) * 8u)) & 0xFFu;
+                uint sj = (scales[sub_idx / 4u] >> ((sub_idx % 4u) * 8u)) & 0xFFu;
+                sc_val = (sj4 & 0xFu) | ((sjm4 >> 6u) << 4u);
+                m_val = (sj4 >> 4u) | ((sj >> 6u) << 4u);
+            }
+            float d_sub = d * float(sc_val);
+            float m_sub = dmin * float(m_val);
+            uint qs_byte_pos = 32u * pair + l;
+            uint qs_word = blk_word + 4u + qs_byte_pos / 4u;
+            uint qs_byte = (gate_q[qs_word] >> ((qs_byte_pos % 4u) * 8u)) & 0xFFu;
+            uint q4 = (is_high == 0u) ? (qs_byte & 0xFu) : (qs_byte >> 4u);
+            float w = d_sub * float(q4) - m_sub;
+            acc_g += w * xk;
+        }
+
+        // Up weight decode (same logic, different buffer)
+        {
+            uint blk = k / 256u;
+            uint w_idx = k % 256u;
+            uint blk_word = up_row_base + blk * 36u;
+
+            vec2 dm = unpackHalf2x16(up_q[blk_word]);
+            float d = dm.x;
+            float dmin = dm.y;
+            uint s0 = up_q[blk_word + 1u];
+            uint s1 = up_q[blk_word + 2u];
+            uint s2 = up_q[blk_word + 3u];
+            uint pair = w_idx / 64u;
+            uint within = w_idx % 64u;
+            uint is_high = within / 32u;
+            uint l = within % 32u;
+            uint sub_idx = 2u * pair + is_high;
+            uint scales[3] = uint[3](s0, s1, s2);
+            uint sc_val, m_val;
+            if (sub_idx < 4u) {
+                sc_val = (scales[sub_idx / 4u] >> ((sub_idx % 4u) * 8u)) & 63u;
+                uint m_idx = sub_idx + 4u;
+                m_val = (scales[m_idx / 4u] >> ((m_idx % 4u) * 8u)) & 63u;
+            } else {
+                uint sj4_idx = sub_idx + 4u;
+                uint sj4 = (scales[sj4_idx / 4u] >> ((sj4_idx % 4u) * 8u)) & 0xFFu;
+                uint sjm4_idx = sub_idx - 4u;
+                uint sjm4 = (scales[sjm4_idx / 4u] >> ((sjm4_idx % 4u) * 8u)) & 0xFFu;
+                uint sj = (scales[sub_idx / 4u] >> ((sub_idx % 4u) * 8u)) & 0xFFu;
+                sc_val = (sj4 & 0xFu) | ((sjm4 >> 6u) << 4u);
+                m_val = (sj4 >> 4u) | ((sj >> 6u) << 4u);
+            }
+            float d_sub = d * float(sc_val);
+            float m_sub = dmin * float(m_val);
+            uint qs_byte_pos = 32u * pair + l;
+            uint qs_word = blk_word + 4u + qs_byte_pos / 4u;
+            uint qs_byte = (up_q[qs_word] >> ((qs_byte_pos % 4u) * 8u)) & 0xFFu;
+            uint q4 = (is_high == 0u) ? (qs_byte & 0xFu) : (qs_byte >> 4u);
+            float w = d_sub * float(q4) - m_sub;
+            acc_u += w * xk;
+        }
+    }
+
+    partial_g[tid] = acc_g;
+    partial_u[tid] = acc_u;
+    barrier();
+
+    for (uint stride = 64u; stride > 0u; stride >>= 1u) {
+        if (tid < stride) {
+            partial_g[tid] += partial_g[tid + stride];
+            partial_u[tid] += partial_u[tid + stride];
+        }
+        barrier();
+    }
+
+    if (tid == 0u) {
+        // Fuse SwiGLU inline: silu(gate) * up
+        float gate_val = partial_g[0];
+        float silu = gate_val / (1.0 + exp(-gate_val));
+        g_out[n] = silu * partial_u[0];  // s[n] = swiglu output, stored in g_out
+    }
+}

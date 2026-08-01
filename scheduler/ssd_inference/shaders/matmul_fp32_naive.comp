@@ -1,0 +1,32 @@
+#version 450
+
+// Naive fp32 matrix multiply: C[M,N] = A[M,K] * B[K,N]
+// One workgroup invocation = one output element.
+// 16x16 workgroup → 256 threads compute a 16x16 tile (no shared memory).
+//
+// Performance: ~10% of peak. Will optimize with tiling/shared memory later.
+// This is a correctness-first scaffold for the full forward pass.
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0) readonly  buffer A { float a[]; };
+layout(set = 0, binding = 1) readonly  buffer B { float b[]; };
+layout(set = 0, binding = 2) writeonly buffer C { float c[]; };
+
+layout(push_constant) uniform Push {
+    uint M;
+    uint N;
+    uint K;
+} push;
+
+void main() {
+    uint col = gl_GlobalInvocationID.x;
+    uint row = gl_GlobalInvocationID.y;
+    if (row >= push.M || col >= push.N) return;
+
+    float acc = 0.0;
+    for (uint k = 0; k < push.K; k++) {
+        acc += a[row * push.K + k] * b[k * push.N + col];
+    }
+    c[row * push.N + col] = acc;
+}

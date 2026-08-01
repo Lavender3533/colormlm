@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "polaris-k3-frontend-router-trace-v1",
+  "title": "K3 前端关键 token 逐层原生路由与 NLL trace",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "repo", "revision", "synthetic", "native_forward_completed", "task_id", "split", "prompt_sha256", "token", "decision", "layer", "router", "counterfactual"],
+  "properties": {
+    "format": {"const": "polaris-k3-frontend-router-trace-v1"},
+    "repo": {"const": "moonshotai/Kimi-K3"},
+    "revision": {"const": "9f62e4e9fffbd0a83ddd60e1c209d828994b3569"},
+    "synthetic": {"type": "boolean"},
+    "native_forward_completed": {"type": "boolean"},
+    "task_id": {"type": "string", "minLength": 1},
+    "split": {"enum": ["train", "validation", "blind", "synthetic"]},
+    "prompt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "token": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["position", "phase", "prefix_sha256", "target_token_id", "target_token_text", "target_logprob", "target_nll"],
+      "properties": {
+        "position": {"type": "integer", "minimum": 0},
+        "phase": {"enum": ["prefill", "teacher_force", "decode"]},
+        "prefix_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "target_token_id": {"type": "integer", "minimum": 0},
+        "target_token_text": {"type": "string"},
+        "target_logprob": {"type": "number"},
+        "target_nll": {"type": "number", "minimum": 0}
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision_id", "category", "selection_reason", "selected_before_trace"],
+      "properties": {
+        "decision_id": {"type": "string", "minLength": 1},
+        "category": {"type": "string", "minLength": 1},
+        "selection_reason": {"type": "string", "minLength": 1},
+        "selected_before_trace": {"const": true}
+      }
+    },
+    "layer": {"type": "integer", "minimum": 1, "maximum": 92},
+    "router": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["topk_expert_ids", "topk_weights"],
+      "properties": {
+        "topk_expert_ids": {"type": "array", "minItems": 16, "maxItems": 16, "uniqueItems": true, "items": {"type": "integer", "minimum": 0, "maximum": 895}},
+        "topk_weights": {"type": "array", "minItems": 16, "maxItems": 16, "items": {"type": "number", "minimum": 0}}
+      }
+    },
+    "counterfactual": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "native_nll", "ablations"],
+      "properties": {
+        "mode": {"const": "leave_one_selected_expert_out"},
+        "native_nll": {"type": "number", "minimum": 0},
+        "ablations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["expert_id", "ablated_nll", "delta_nll"],
+            "properties": {
+              "expert_id": {"type": "integer", "minimum": 0, "maximum": 895},
+              "ablated_nll": {"type": "number", "minimum": 0},
+              "delta_nll": {"type": "number", "description": "ablated_nll - native_nll；正值表示该 expert 有帮助"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,124 @@
+{
+  "format": "polaris-deepseek-v4-official-snapshot-v1",
+  "captured_at": "2026-08-01T00:00:00+09:00",
+  "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+  "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+  "license": "MIT",
+  "metadata_artifacts": {
+    "config.json": {
+      "bytes": 1888,
+      "sha256": "6c8f3d2d3b48707541b88f32f22ef3f0f8a6b57d8523281e2b8d3cdb0ae9a023"
+    },
+    "inference/config.json": {
+      "bytes": 1162,
+      "sha256": "c90861f3d10a9e4ef5954f8f1a34c529d480da1c5799f84660028f4e38e14e71"
+    },
+    "model.safetensors.index.json": {
+      "bytes": 5602871,
+      "sha256": "98efab455cf08dfbbbaaba6f570e1bf10bf927d2b4c3c453a59c2f6f0e3be92b",
+      "tensor_keys": 72317,
+      "metadata_total_size": 166878536440
+    }
+  },
+  "config": {
+    "architectures": ["DeepseekV4ForCausalLM"],
+    "model_type": "deepseek_v4",
+    "hidden_size": 4096,
+    "num_hidden_layers": 43,
+    "vocab_size": 129280,
+    "max_position_embeddings": 1048576,
+    "hc_mult": 4,
+    "n_hash_layers": 3,
+    "n_routed_experts": 256,
+    "n_shared_experts": 1,
+    "num_experts_per_tok": 6,
+    "moe_intermediate_size": 2048,
+    "expert_dtype": "fp4",
+    "scale_fmt": "ue8m0",
+    "torch_dtype": "bfloat16",
+    "dspark_target_layer_ids": [40, 41, 42],
+    "dspark_stages": 3,
+    "dspark_block_size": 5
+  },
+  "capture_layers": [39, 40, 41, 42],
+  "capture_layer_shards": [
+    {
+      "layer": 39,
+      "file": "model-00041-of-00048.safetensors",
+      "bytes": 3568770544,
+      "sha256": "fd312e7fdd6cb5796df356a7f0314f124851dc149991e9fb02c5bed45cc4ba05",
+      "tensor_count": 1569,
+      "expert_tensor_count": 1536,
+      "router_weight": "layers.39.ffn.gate.weight",
+      "router_bias": "layers.39.ffn.gate.bias"
+    },
+    {
+      "layer": 40,
+      "file": "model-00042-of-00048.safetensors",
+      "bytes": 3590026352,
+      "sha256": "4d19bf368083c9a183cb0849f316ec17b62f859ca824c0586e779657efb6e6a6",
+      "tensor_count": 1576,
+      "expert_tensor_count": 1536,
+      "router_weight": "layers.40.ffn.gate.weight",
+      "router_bias": "layers.40.ffn.gate.bias"
+    },
+    {
+      "layer": 41,
+      "file": "model-00043-of-00048.safetensors",
+      "bytes": 3568770544,
+      "sha256": "b7103842ceb70848f9804f55c193d6a57f43174a587cba42b61b5c1bc4e1303d",
+      "tensor_count": 1569,
+      "expert_tensor_count": 1536,
+      "router_weight": "layers.41.ffn.gate.weight",
+      "router_bias": "layers.41.ffn.gate.bias"
+    },
+    {
+      "layer": 42,
+      "file": "model-00044-of-00048.safetensors",
+      "bytes": 3590026352,
+      "sha256": "422d3889fa20c238b7f97464c14df0bcf3328f189c294f41a3a334421dc560c7",
+      "tensor_count": 1576,
+      "expert_tensor_count": 1536,
+      "router_weight": "layers.42.ffn.gate.weight",
+      "router_bias": "layers.42.ffn.gate.bias"
+    }
+  ],
+  "base_forward_files": {
+    "patterns": [
+      "model-00001-of-00048.safetensors",
+      "model-00002-of-00048.safetensors..model-00044-of-00048.safetensors",
+      "model-00045-of-00048.safetensors"
+    ],
+    "file_count": 45,
+    "file_union_bytes": 156023192948,
+    "includes": ["embedding", "layers 0..42", "final norm", "untied lm head"],
+    "excludes": ["mtp.0", "mtp.1", "mtp.2"]
+  },
+  "dspark_optional_files": {
+    "patterns": ["model-00046-of-00048.safetensors..model-00048-of-00048.safetensors"],
+    "file_count": 3,
+    "file_union_bytes": 10863342388,
+    "required_for_this_capture": false
+  },
+  "boundary_files": [
+    {
+      "role": "embedding",
+      "file": "model-00001-of-00048.safetensors",
+      "bytes": 1059061856,
+      "sha256": "f3668ba4cccf1ca6a7eb84e888fb92c1cdc7204d472ba9db771e6fd3abf6b874"
+    },
+    {
+      "role": "final_norm_and_head",
+      "file": "model-00045-of-00048.safetensors",
+      "bytes": 1059332516,
+      "sha256": "a5be6aed7b84fc87ec42b5d24ba0b0d67f253a3906fcd99c13f4f7be5958fc00"
+    }
+  ],
+  "evidence": {
+    "official_config": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-0731/blob/7872f01b1d1fe23eabc4c98b48bffcef5a386062/config.json",
+    "official_inference_config": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-0731/blob/7872f01b1d1fe23eabc4c98b48bffcef5a386062/inference/config.json",
+    "official_index": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-0731/blob/7872f01b1d1fe23eabc4c98b48bffcef5a386062/model.safetensors.index.json",
+    "official_runtime": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-0731/tree/7872f01b1d1fe23eabc4c98b48bffcef5a386062/inference"
+  },
+  "claim_limit": "这是固定元数据快照，不包含权重，不证明 Ascend 910B4 已能运行 DeepSeek-V4。"
+}

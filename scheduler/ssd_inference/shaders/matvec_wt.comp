@@ -1,0 +1,52 @@
+#version 450
+
+// Optimized matvec for M=1: y[n] = sum_k x[k] * W[n, k]
+// where W is in GGUF [out_features=N, in_features=K] row-major layout.
+//
+// Each workgroup computes ONE output element y[n]:
+//   - 128 threads cooperate via shared memory to reduce K dimension
+//   - Works for any K multiple of 128 (Qwen3: K=2048, 768)
+//   - dispatch (N, 1, 1)
+//
+// For M>1, fall back to matmul_xwt.comp (or batch this shader per-token).
+
+layout(local_size_x = 128) in;
+
+layout(set = 0, binding = 0) readonly  buffer X { float x[]; };  // [K]
+layout(set = 0, binding = 1) readonly  buffer W { float w[]; };  // [N, K]
+layout(set = 0, binding = 2) writeonly buffer Y { float y[]; };  // [N]
+
+layout(push_constant) uniform Push {
+    uint N;   // out features
+    uint K;   // in features
+} push;
+
+shared float partial[128];
+
+void main() {
+    uint n   = gl_WorkGroupID.x;   // which output element
+    uint tid = gl_LocalInvocationID.x;
+
+    if (n >= push.N) return;
+
+    // Stride through K dimension, accumulate partial dot product
+    float acc = 0.0;
+    uint w_base = n * push.K;
+    for (uint k = tid; k < push.K; k += 128u) {
+        acc += x[k] * w[w_base + k];
+    }
+    partial[tid] = acc;
+    barrier();
+
+    // Parallel reduction in shared memory
+    for (uint stride = 64u; stride > 0u; stride >>= 1u) {
+        if (tid < stride) {
+            partial[tid] += partial[tid + stride];
+        }
+        barrier();
+    }
+
+    if (tid == 0u) {
+        y[n] = partial[0];
+    }
+}
