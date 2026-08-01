@@ -1196,7 +1196,9 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
   旧报告不含原始tensor，不伪造恢复点；下一次实跑必须显式写checkpoint。
 - 同层K=1/4/8的无损联合专家计划器已合入；它保留每个token原始top-6、route slot
   和权重，并为相同专家构建一次加载、多命中dispatch。当前仅是可接GPU的真实调度结构，
-  不把K次串行写成批处理。
+  不把K次串行写成批处理。后端无关的K=4/8已物化执行器也已合入：每个唯一专家只加载一次、
+  调用一次batch SwiGLU，按原route-slot顺序scatter/reduce，K=4/8与独立串行CPU参考逐值一致；
+  未知未来token在页加载前硬拒绝。当前仍是CPU数值基线和Vulkan trait契约，真实GPU batch接线待完成。
 - FullDepth Vulkan worker已接入默认10GiB（只允8--12GiB）的已验证host-RAM LRU。
   payload首次按canonical path/字节数/SHA-256完整读取校验，后续返回不可变`Arc<[u8]>`，
   不再重复读盘与哈希；worker响应已报hit/miss/disk bytes/resident bytes/eviction/hit rate。
