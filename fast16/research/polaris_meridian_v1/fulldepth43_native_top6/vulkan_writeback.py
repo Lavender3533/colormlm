@@ -262,6 +262,8 @@ class PersistentVulkanWriteback:
             "output_sha256": expected_output_sha,
             "gpu_kernel_ms": response.get("gpu_kernel_ms"),
             "worker_wall_ms": response.get("wall_ms"),
+            "payload_cache": response.get("payload_cache"),
+            "gpu_payload_cache": response.get("gpu_payload_cache"),
             "boundaries": response.get("boundaries"),
             "persistent_context": True,
         }
