@@ -27,7 +27,11 @@ from fast16.research.polaris_meridian_v1.s14_range_pack import online_range
 from .catalog import build_catalog, read_json, validate_catalog, write_json
 from .preflight import DEFAULT_ASSET_ROOT, DEFAULT_CATALOG, run_preflight
 from .profile import FULLDEPTH43_NATIVE_TOP6, ExecutionProfile
-from .vulkan_writeback import PersistentVulkanWriteback, verify_exact_bf16_writeback
+from .vulkan_writeback import (
+    PersistentVulkanWriteback,
+    VulkanWritebackError,
+    verify_exact_bf16_writeback,
+)
 
 
 REPORT_FORMAT = "polaris-fulldepth43-native-top6-reference-v1"
@@ -244,6 +248,9 @@ class ExecutionConfig:
     vulkan_bridge_layer: int = 42
     vulkan_writeback_worker: Path | None = None
     vulkan_writeback_timeout_seconds: float = 30.0
+    vulkan_writeback_all_layers: bool = False
+    vulkan_writeback_verify_cpu: bool = True
+    vulkan_writeback_cpu_fallback: bool = True
 
     def validate(self) -> None:
         if not self.endpoint.startswith("https://"):
@@ -260,7 +267,11 @@ class ExecutionConfig:
             raise FullDepthError("range_attempts/workers 必须分别为正数和 1..8")
         if self.vulkan_bridge_layer not in FULLDEPTH43_NATIVE_TOP6.layers:
             raise FullDepthError("Vulkan bridge layer 必须位于 0..42")
-        if self.vulkan_bridge_capture is not None and self.token_count != 1:
+        if (
+            self.vulkan_bridge_capture is not None
+            and self.token_count != 1
+            and not self.vulkan_writeback_all_layers
+        ):
             raise FullDepthError("Vulkan bridge capture 当前只允许单 token")
         if self.vulkan_writeback_worker is not None:
             if self.vulkan_bridge_capture is None:
@@ -269,6 +280,8 @@ class ExecutionConfig:
                 raise FullDepthError("Vulkan writeback worker 不存在")
         if self.vulkan_writeback_timeout_seconds <= 0:
             raise FullDepthError("Vulkan writeback timeout 必须为正数")
+        if self.vulkan_writeback_all_layers and self.vulkan_writeback_worker is None:
+            raise FullDepthError("全层 Vulkan writeback 必须指定 worker")
 
 
 def _sha256_bytes(payload: bytes) -> str:
@@ -375,9 +388,9 @@ def _write_vulkan_bridge_capture(
         "payloads": payloads,
         "reference_semantics": (
             "FullDepth43 live L{layer} post-attention/HC/RMSNorm activation, then official "
-            "activation quantization as the input to the existing bounded Vulkan "
-            "top6+shared minimal packed chain. The Vulkan chain does not yet implement "
-            "official BF16/requantize boundaries or route-weight-before-w2."
+            "activation quantization as the input to the bounded Vulkan top6+shared "
+            "packed chain with official BF16 boundaries, route-weight-before-w2 and "
+            "E4M3FN group-128 activation requantization."
         ).format(layer=layer),
     }
     manifest_path = capture_dir / "bridge_manifest.json"
@@ -523,6 +536,7 @@ class FullDepthTokenWorker:
         self.current_layer: int | None = None
         self.last_token_report: dict[str, Any] | None = None
         self.writeback_layers: list[int] = []
+        self.writeback_fallbacks: list[dict[str, Any]] = []
         self._final_head: s14.FinalHeadReference | None = None
         self._writeback: PersistentVulkanWriteback | None = None
         self._started = False
@@ -641,14 +655,29 @@ class FullDepthTokenWorker:
             for expert_id in pending.route_ids:
                 pages.extend(routed.experts[expert_id])
             kernel.add_routed(pages)
-            bridge_capture = None
-            if (
+            writeback_requested = self._writeback is not None and (
+                self.config.vulkan_writeback_all_layers
+                or (position == 0 and layer == self.config.vulkan_bridge_layer)
+            )
+            capture_requested = (
                 self.config.vulkan_bridge_capture is not None
-                and position == 0
-                and layer == self.config.vulkan_bridge_layer
-            ):
+                and (
+                    (self.config.vulkan_writeback_all_layers and writeback_requested)
+                    or (position == 0 and layer == self.config.vulkan_bridge_layer)
+                )
+            )
+            bridge_capture = None
+            if capture_requested:
+                capture_dir = self.config.vulkan_bridge_capture
+                assert capture_dir is not None
+                if self.config.vulkan_writeback_all_layers:
+                    capture_dir = (
+                        capture_dir
+                        / f"position-{position:06d}"
+                        / f"layer-{layer:02d}"
+                    )
                 bridge_capture = _write_vulkan_bridge_capture(
-                    self.config.vulkan_bridge_capture,
+                    capture_dir,
                     layer=layer,
                     position=position,
                     token_id=input_token_id,
@@ -658,36 +687,79 @@ class FullDepthTokenWorker:
                     kernel=kernel,
                     profile=self.profile,
                 )
-            cpu_moe_branch, cpu_state = kernel.finish_layer(pending)
+            cpu_moe_branch: torch.Tensor | None = None
+            cpu_state: torch.Tensor | None = None
+            if not writeback_requested or self.config.vulkan_writeback_verify_cpu:
+                cpu_moe_branch, cpu_state = kernel.finish_layer(pending)
             writeback_evidence = None
-            if self._writeback is not None and layer == self.config.vulkan_bridge_layer:
+            if writeback_requested:
                 if bridge_capture is None:
                     raise FullDepthError("Vulkan writeback 缺少同层 capture")
                 self.stage = f"position_{position}_layer_{layer}_vulkan_writeback"
-                vulkan_moe_branch, worker_evidence = self._writeback.execute(
-                    Path(bridge_capture["manifest"])
-                )
-                comparison = verify_exact_bf16_writeback(
-                    cpu_moe_branch,
-                    vulkan_moe_branch,
-                )
-                moe_branch = vulkan_moe_branch
-                state = s14.hc_post(
-                    moe_branch,
-                    pending.post_attention_state,
-                    pending.post_ffn,
-                    pending.comb_ffn,
-                )
-                self.writeback_layers.append(layer)
-                writeback_evidence = {
-                    **worker_evidence,
-                    "comparison": comparison,
-                    "state_source": "vulkan_moe_branch_then_cpu_hc_post",
-                    "cpu_layer_output_exact": bool(torch.equal(state, cpu_state)),
-                }
-                if not writeback_evidence["cpu_layer_output_exact"]:
-                    raise FullDepthError("Vulkan writeback 后 hc_post 与 CPU 层输出不等价")
+                assert self._writeback is not None
+                try:
+                    vulkan_moe_branch, worker_evidence = self._writeback.execute(
+                        Path(bridge_capture["manifest"])
+                    )
+                except VulkanWritebackError as error:
+                    if not self.config.vulkan_writeback_cpu_fallback:
+                        raise FullDepthError(
+                            f"L{layer} Vulkan writeback 失败且禁止 CPU fallback: {error}"
+                        ) from error
+                    if cpu_moe_branch is None or cpu_state is None:
+                        cpu_moe_branch, cpu_state = kernel.finish_layer(pending)
+                    fallback = {
+                        "position": position,
+                        "layer": layer,
+                        "type": type(error).__name__,
+                        "message": str(error),
+                    }
+                    self.writeback_fallbacks.append(fallback)
+                    self._writeback = None
+                    moe_branch, state = cpu_moe_branch, cpu_state
+                    writeback_evidence = {
+                        "status": "cpu_fallback_after_vulkan_failure",
+                        "failure": fallback,
+                        "state_source": "cpu_reference",
+                    }
+                else:
+                    comparison = None
+                    if self.config.vulkan_writeback_verify_cpu:
+                        if cpu_moe_branch is None or cpu_state is None:
+                            raise FullDepthError("Vulkan verify 模式缺少 CPU reference")
+                        comparison = verify_exact_bf16_writeback(
+                            cpu_moe_branch,
+                            vulkan_moe_branch,
+                        )
+                    moe_branch = vulkan_moe_branch
+                    state = s14.hc_post(
+                        moe_branch,
+                        pending.post_attention_state,
+                        pending.post_ffn,
+                        pending.comb_ffn,
+                    )
+                    self.writeback_layers.append(layer)
+                    writeback_evidence = {
+                        **worker_evidence,
+                        "comparison": comparison,
+                        "cpu_verification_enabled": self.config.vulkan_writeback_verify_cpu,
+                        "state_source": "vulkan_moe_branch_then_cpu_hc_post",
+                        "cpu_layer_output_exact": (
+                            None
+                            if cpu_state is None
+                            else bool(torch.equal(state, cpu_state))
+                        ),
+                    }
+                    if (
+                        cpu_state is not None
+                        and not writeback_evidence["cpu_layer_output_exact"]
+                    ):
+                        raise FullDepthError(
+                            "Vulkan writeback 后 hc_post 与 CPU 层输出不等价"
+                        )
             else:
+                if cpu_moe_branch is None or cpu_state is None:
+                    raise FullDepthError("CPU 层路径缺少 reference 输出")
                 moe_branch, state = cpu_moe_branch, cpu_state
             if (
                 tuple(state.shape) != (1, 1, s14.HC_MULT, s14.HIDDEN_SIZE)
@@ -846,6 +918,9 @@ def execute(
                 "path": str(config.vulkan_writeback_worker.resolve()),
                 "hello": worker.writeback_hello,
                 "mode": "persistent_single_process",
+                "all_layers": config.vulkan_writeback_all_layers,
+                "cpu_verification": config.vulkan_writeback_verify_cpu,
+                "cpu_fallback": config.vulkan_writeback_cpu_fallback,
             }
         for _ in range(config.token_count):
             position = decoder.position
@@ -875,12 +950,21 @@ def execute(
             write_json(config.report_path, report)
 
         report["status"] = "complete"
-        report["claim_limit"] = (
-            "FullDepth43/native-top6 correctness path with one exact-BF16 Vulkan MoE "
-            "writeback layer; not a full-layer/full-token GPU, speed, or quality claim"
-            if worker.writeback_layers
-            else "CPU/PyTorch FullDepth43/native-top6 correctness path; not a speed or quality claim"
-        )
+        if set(worker.writeback_layers) == set(profile.layers):
+            report["claim_limit"] = (
+                "FullDepth43/native-top6 with all 43 MoE branches written back from Vulkan; "
+                "attention/HC/router/head remain CPU, so this is not a full-GPU token, "
+                "20/50 token/s, or quality claim"
+            )
+        elif worker.writeback_layers:
+            report["claim_limit"] = (
+                "FullDepth43/native-top6 correctness path with a subset of exact-BF16 Vulkan "
+                "MoE writeback layers; not a full-layer/full-token GPU, speed, or quality claim"
+            )
+        else:
+            report["claim_limit"] = (
+                "CPU/PyTorch FullDepth43/native-top6 correctness path; not a speed or quality claim"
+            )
     except Exception as error:
         report["status"] = "blocked"
         report["native_token_executed"] = bool(decoder.committed_tokens)
@@ -908,6 +992,7 @@ def execute(
         report["claim_limit"] = "failure before current token commit; no fake token emitted"
     finally:
         report["vulkan_writeback_layers"] = worker.writeback_layers
+        report["vulkan_writeback_fallbacks"] = worker.writeback_fallbacks
         try:
             worker.close()
         except Exception as close_error:
@@ -949,6 +1034,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--vulkan-bridge-layer", type=int, choices=range(43), default=42)
     parser.add_argument("--vulkan-writeback-worker", type=Path)
     parser.add_argument("--vulkan-writeback-timeout-seconds", type=float, default=30.0)
+    parser.add_argument("--vulkan-writeback-all-layers", action="store_true")
+    parser.add_argument("--vulkan-writeback-no-cpu-verify", action="store_true")
+    parser.add_argument("--vulkan-writeback-no-cpu-fallback", action="store_true")
     return parser
 
 
@@ -971,6 +1059,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             vulkan_bridge_layer=args.vulkan_bridge_layer,
             vulkan_writeback_worker=args.vulkan_writeback_worker,
             vulkan_writeback_timeout_seconds=args.vulkan_writeback_timeout_seconds,
+            vulkan_writeback_all_layers=args.vulkan_writeback_all_layers,
+            vulkan_writeback_verify_cpu=not args.vulkan_writeback_no_cpu_verify,
+            vulkan_writeback_cpu_fallback=not args.vulkan_writeback_no_cpu_fallback,
         )
         if args.command == "preflight":
             catalog = _load_or_build_catalog(config)

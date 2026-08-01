@@ -108,6 +108,18 @@ class FullDepthContractTests(unittest.TestCase):
             ).validate()
         with self.assertRaises(FullDepthError):
             ExecutionConfig(vulkan_writeback_worker=Path("missing.exe")).validate()
+        with self.assertRaises(FullDepthError):
+            ExecutionConfig(vulkan_writeback_all_layers=True).validate()
+        with tempfile.TemporaryDirectory() as directory:
+            worker = Path(directory) / "worker.exe"
+            worker.write_bytes(b"fixture")
+            ExecutionConfig(
+                token_count=2,
+                vulkan_bridge_capture=Path(directory) / "captures",
+                vulkan_writeback_worker=worker,
+                vulkan_writeback_all_layers=True,
+                vulkan_writeback_verify_cpu=False,
+            ).validate()
 
     def test_first_preview_forced_prefill_runs_five_inputs_before_argmax(self) -> None:
         queue = s14._load_forced_prefill(PREVIEW_FORCED_PREFILL)
