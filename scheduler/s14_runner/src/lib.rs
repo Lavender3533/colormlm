@@ -6,6 +6,7 @@
 mod abi;
 mod capability;
 mod cascade;
+mod causal_batch;
 mod contract;
 mod executor_bridge;
 mod memory;
@@ -27,6 +28,10 @@ pub use cascade::{
     ExactCascadeRequest, ExactCascadeResponse, ExactCascadeSession, NativeLayerRecord,
     NativeStateCheckpoint, StateMutationStatus, EXACT_CASCADE_BLOCK_SIZES,
     EXACT_CASCADE_PROFILE_ID,
+};
+pub use causal_batch::{
+    build_full_depth_causal_batch_plan, build_layer_causal_batch_plan, CausalBatchPlanError,
+    ExpertBatchWork, ExpertTokenDispatch, FullDepthCausalBatchPlan, LayerCausalBatchPlan,
 };
 pub use contract::{
     is_selected_layer, router_kind_for_layer, ContractError, GraphProfile, RouterKind, S14Contract,
