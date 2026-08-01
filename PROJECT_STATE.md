@@ -1101,3 +1101,26 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
 - 当前唯一主阻塞缩小为：把已验证的单层算子泛化到预注册14层、逐层用真实router取84个命中
   expert页并串到已完成的最终头，生成第一个真实S14 token。完成前不得宣称S14可用、20 token/s
   或质量接近Claude/GPT。
+
+### 2026-08-01 北极星 S14 首个真实 token 与 RX 5700 XT 专家整链
+
+- 固定 S14 的首个真实 token 已完整生成：BOS embedding 依次通过
+  `[0,1,2,6,7,14,15,22,23,30,31,40,41,42]`，每层执行原生 attention、router、
+  top-6 routed experts、shared expert 与两段 HC，最后进入真实 HC head、norm 和 BF16 全词表
+  head。14/14 层完成，argmax token ID 为 `108967`，解码为 ` Compression`。
+- 该次 correctness 运行总耗时 `714.7690811s`，精确 routed 下载 `962,592,768 B`，发生7次
+  可恢复镜像断连；没有 SHA、shape、dtype、路由、状态或算子错误。最终 logits 形状
+  `[1,129280]`，F32 little-endian SHA-256 为
+  `f414aef5894fe66d609d2650bf9b64510b3fa30ad76514180eff007c5853c3c4`。仓库内固化报告位于
+  `fast16/research/polaris_meridian_v1/s14_first_real_token/FIRST_TOKEN_REAL_REPORT.json`。
+- 首 token 只证明真实图闭环，不证明语言质量或速度；`Compression` 单 token 不能作为能力结果。
+  当前下一主阻塞已变为 token1+：必须保留每层 window KV、HC、ratio4/128 compressor/indexer
+  remainder，正确执行 position RoPE，并按当前 token 读取 L0--L2 `tid2eid`，才能形成连续输出。
+- `NativeS14Executor` 持久子进程桥已合入：JSONL 只传控制信息，BF16 hidden/state 与 F32 logits
+  走桥拥有的二进制 arena；超时、descriptor/epoch/shape 漂移与非有限值全部 poison。Rust库测试
+  20/20、Range桥7/7及Clippy `-D warnings`通过。
+- RX 5700 XT 已真实执行 L42/E126 的 GPU-resident
+  `w1/w3 -> limit-10 SwiGLU -> w2 -> route-weight mix`：平均 `0.157038 ms`，对CPU参考
+  max abs `1.072883606e-6`、RMSE `1.483723944e-7`；真实 FP8 `wq_a` 平均 `0.0838004 ms`。
+  这证明 packed 核与最小专家整链 parity，不代表完整层或整模型 token/s。下一步扩展为 top-6
+  加 shared 的批量租约、fence publication、generation-safe eviction 与 GPU accumulator。
