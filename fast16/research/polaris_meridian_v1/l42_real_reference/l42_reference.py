@@ -446,6 +446,25 @@ class _InlineForward:
         # the outer token boundary instead of taxing every matvec.
         return self._bf16_numpy(output.reshape(*array.shape[:-1], output.shape[-1]))
 
+    def _grouped_wo_a(self, array: np.ndarray, prefix: str) -> np.ndarray:
+        """Execute the official eight-group BF16-weight ``wo_a`` projection.
+
+        Keeping this operation behind a method gives the native executor one
+        narrow injection seam for a packed-FP8 Vulkan implementation while the
+        default path remains the frozen CPU reference.
+        """
+
+        if tuple(array.shape) != (1, 1, 8, 4096):
+            raise ValueError(f"{prefix} grouped input shape 漂移: {array.shape}")
+        weight = self._weight_fp8(prefix, bf16=True).reshape(8, 1024, 4096)
+        output = self._bf16_numpy(
+            np.stack([array[0, 0, group] @ weight[group].T for group in range(8)]).reshape(
+                1, 1, 8192
+            )
+        )
+        del weight
+        return output
+
     def _linear_fp4(self, array: np.ndarray, prefix: str) -> np.ndarray:
         activation = self._activation_quant(array)
         weight = self._weight_fp4(prefix)
@@ -566,11 +585,9 @@ class _InlineForward:
             output_dtype=torch.bfloat16,
         )
         grouped = attention.reshape(1, 1, 8, 4096).float().numpy()
-        wo_a = self._weight_fp8("layers.42.attn.wo_a", bf16=True).reshape(8, 1024, 4096)
-        low_output = self._bf16_numpy(
-            np.stack([grouped[0, 0, group] @ wo_a[group].T for group in range(8)]).reshape(1, 1, 8192)
-        )
-        del wo_a
+        self._capture_kernel_input("wo_a_grouped_input_bf16", grouped)
+        low_output = self._grouped_wo_a(grouped, "layers.42.attn.wo_a")
+        self._capture_kernel_input("wo_a_grouped_output_bf16", low_output)
         gc.collect()
         attention_branch = torch.from_numpy(self._linear_fp8(low_output, "layers.42.attn.wo_b")).to(
             torch.bfloat16

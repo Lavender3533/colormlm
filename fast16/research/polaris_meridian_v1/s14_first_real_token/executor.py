@@ -913,11 +913,7 @@ class NativeLayerReference(_InlineForward):
         if position:
             _apply_position_rope(attention[..., -64:], freqs_cis, inverse=True)
         grouped = attention.reshape(1, 1, 8, 4096).float().numpy()
-        wo_a = self._weight_fp8(prefix + ".attn.wo_a", bf16=True).reshape(8, 1024, 4096)
-        low_output = self._bf16_numpy(
-            np.stack([grouped[0, 0, group] @ wo_a[group].T for group in range(8)]).reshape(1, 1, 8192)
-        )
-        del wo_a
+        low_output = self._grouped_wo_a(grouped, prefix + ".attn.wo_a")
         attention_branch = torch.from_numpy(self._linear_fp8(low_output, prefix + ".attn.wo_b")).to(
             torch.bfloat16
         )

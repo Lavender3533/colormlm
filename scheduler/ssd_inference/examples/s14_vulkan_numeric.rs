@@ -18,8 +18,9 @@ use ssd_inference::buffer::GpuBuffer;
 use ssd_inference::device::VulkanContext;
 use ssd_inference::s14_vulkan::{
     validate_e4m3fn_codes, validate_ue8m0_codes, S14Bf16AccumulateDispatch, S14Fp8Dispatch,
-    S14MatvecShape, S14MoeAccumulateDispatch, S14Mxfp4Dispatch, S14NumericPipelines,
-    S14OfficialExpertPrepareDispatch, S14RouteMixDispatch, S14SwigluLimitDispatch,
+    S14GroupedMatvecShape, S14MatvecShape, S14MoeAccumulateDispatch, S14Mxfp4Dispatch,
+    S14NumericPipelines, S14OfficialExpertPrepareDispatch, S14RouteMixDispatch,
+    S14SwigluLimitDispatch,
 };
 use ssd_inference::{VerifiedPayloadCache, VerifiedPayloadCacheStats};
 use std::collections::HashMap;
@@ -46,9 +47,11 @@ const WRITEBACK_WORKER_ARG: &str = "--fulldepth43-writeback-worker";
 const PRODUCTION_WORKER_ARG: &str = "--fulldepth43-production-worker";
 const FP8_PROJECTION_WORKER_ARG: &str = "--l42-wq-a-fp8-projection-worker";
 const FP8_PROJECTION_SUITE_ARG: &str = "--l42-standard-fp8-projection-suite";
+const WO_A_GROUPED_SUITE_ARG: &str = "--l42-wo-a-grouped-suite";
 const WRITEBACK_PROTOCOL: &str = "polaris-fulldepth43-vulkan-writeback-v1";
 const FP8_PROJECTION_PROTOCOL: &str = "polaris-fulldepth43-packed-fp8-projection-v1";
 const FP8_PROJECTION_FIXTURE_DIR_ENV: &str = "POLARIS_L42_FP8_PROJECTION_FIXTURE_DIR";
+const WO_A_GROUPED_FIXTURE_DIR_ENV: &str = "POLARIS_L42_WO_A_FIXTURE_DIR";
 const WRITEBACK_OUTPUT_FILE: &str = "vulkan_moe_branch.bf16le.bin";
 const PAYLOAD_CACHE_GIB_ENV: &str = "POLARIS_VERIFIED_PAYLOAD_CACHE_GIB";
 const DEFAULT_PAYLOAD_CACHE_GIB: usize = 10;
@@ -78,6 +81,16 @@ const L42_WQ_A_INPUT_SHA256: &str =
 const L42_WQ_A_OUTPUT_SHA256: &str =
     "76469fd163f5db49de956eff9b29087afa4caa97d566be80bab9d9119facb0b8";
 const FP8_PROJECTION_ARENA_MAX_BYTES: u64 = 64 * 1024 * 1024;
+const L42_WO_A_CAPTURE_MANIFEST_SHA256: &str =
+    "f91fc9fd40a95ee04984376b7a80544db8decc88bc5f139b9a6fd382fa4bb43d";
+const L42_WO_A_WEIGHT_SHA256: &str =
+    "4986ee3f7fb2758199940aa3007d876d32d0fcb4568149a6f57c8d816f758df5";
+const L42_WO_A_SCALE_SHA256: &str =
+    "d689681d2d32663037fd4799d1c49d2c4439138d1dd97768dd2030a6d42b7ac9";
+const L42_WO_A_INPUT_SHA256: &str =
+    "eee925360c8709263a0cdfa3986c2d3ee91a38c4e4589a7220064b489ad40060";
+const L42_WO_A_OUTPUT_SHA256: &str =
+    "2be0aa3b4b67aae58f62a77d2a255d6240b5baf3d71f37c9084fd890741d2eb9";
 
 #[derive(Debug, Clone, Copy)]
 struct FrozenFp8Projection {
@@ -143,6 +156,17 @@ const L42_STANDARD_FP8_PROJECTIONS: [FrozenFp8Projection; 5] = [
         output_sha256: "84ce63ca9233b07bea99741f9982accac17bc65025b0098b7017acd7dab6db10",
     },
 ];
+
+const L42_WO_A_GROUPED_PROJECTION: FrozenFp8Projection = FrozenFp8Projection {
+    name: "layers.42.attn.wo_a",
+    file_stem: "wo_a_grouped",
+    n: 8192,
+    k: 4096,
+    weight_sha256: L42_WO_A_WEIGHT_SHA256,
+    scale_sha256: L42_WO_A_SCALE_SHA256,
+    input_sha256: L42_WO_A_INPUT_SHA256,
+    output_sha256: L42_WO_A_OUTPUT_SHA256,
+};
 
 struct DeviceBuffers {
     upload_x: GpuBuffer,
@@ -2743,7 +2767,354 @@ fn run_l42_standard_fp8_projection_suite() -> Result<()> {
     Ok(())
 }
 
+fn capture_shape(value: &serde_json::Value) -> Option<Vec<u64>> {
+    value
+        .get("shape")?
+        .as_array()?
+        .iter()
+        .map(serde_json::Value::as_u64)
+        .collect()
+}
+
+fn require_l42_wo_a_capture_entry(
+    document: &serde_json::Value,
+    name: &str,
+    file: &str,
+    shape: &[u64],
+    bytes: u64,
+    sha256: &str,
+) -> Result<()> {
+    let entries = document
+        .get("inputs")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| anyhow::anyhow!("L42 wo_a capture inputs are missing"))?;
+    let matches: Vec<&serde_json::Value> = entries
+        .iter()
+        .filter(|entry| entry.get("name").and_then(serde_json::Value::as_str) == Some(name))
+        .collect();
+    if matches.len() != 1 {
+        bail!("L42 wo_a capture must contain exactly one {name}");
+    }
+    let entry = matches[0];
+    if entry.get("file").and_then(serde_json::Value::as_str) != Some(file)
+        || entry.get("bytes").and_then(serde_json::Value::as_u64) != Some(bytes)
+        || entry
+            .get("f32_le_sha256")
+            .and_then(serde_json::Value::as_str)
+            != Some(sha256)
+        || capture_shape(entry).as_deref() != Some(shape)
+    {
+        bail!("L42 wo_a capture {name} file/shape/byte/SHA drift");
+    }
+    Ok(())
+}
+
+fn validate_l42_wo_a_capture_manifest(document: &serde_json::Value) -> Result<()> {
+    if document.get("format").and_then(serde_json::Value::as_str)
+        != Some("polaris-l42-real-vulkan-input-capture-v1")
+        || document.get("repo").and_then(serde_json::Value::as_str)
+            != Some("deepseek-ai/DeepSeek-V4-Flash-0731")
+        || document.get("revision").and_then(serde_json::Value::as_str) != Some(REVISION)
+        || document.get("layer").and_then(serde_json::Value::as_u64) != Some(42)
+        || document.get("expert_id").and_then(serde_json::Value::as_u64)
+            != Some(REAL_EXPERT_ID as u64)
+        || document
+            .pointer("/source_f32_le_sha256/ffn_input")
+            .and_then(serde_json::Value::as_str)
+            != Some("7e2d3167e3782eca8d762c3cc92d53bb9d64a65c7b18d37d16797ff39f611ad4")
+        || document
+            .pointer("/asset_integrity/hashes_checked")
+            .and_then(serde_json::Value::as_u64)
+            != Some(76)
+        || document
+            .pointer("/asset_integrity/payload_bytes")
+            .and_then(serde_json::Value::as_u64)
+            != Some(247_515_224)
+        || document
+            .pointer("/asset_integrity/payload_files")
+            .and_then(serde_json::Value::as_u64)
+            != Some(76)
+        || document
+            .pointer("/asset_integrity/manifest_sha256/base")
+            .and_then(serde_json::Value::as_str)
+            != Some("5e86fa2145c1e3b5f4f8efdcd4fdcca5b966d7cb43ca0ea592294a542ac086ed")
+        || document
+            .pointer("/asset_integrity/manifest_sha256/route")
+            .and_then(serde_json::Value::as_str)
+            != Some("feccc1b5dde256c9ad750985b4ab5446732a1f4deec796976198e95798c64b86")
+        || document
+            .pointer("/asset_integrity/manifest_sha256/s14")
+            .and_then(serde_json::Value::as_str)
+            != Some("f6ea01a0df591f272d4e5addb96e16e8eae79b6e9326a84ef6cbaab818c6a2b5")
+        || document
+            .get("inputs")
+            .and_then(serde_json::Value::as_array)
+            .map(Vec::len)
+            != Some(5)
+        || document.get("semantics").and_then(serde_json::Value::as_str)
+            != Some(
+                "Inputs captured from the hash-verified real L42 inline reference after the official UE8M0/E4M3FN activation quantization step.",
+            )
+    {
+        bail!("L42 wo_a capture manifest identity/integrity drift");
+    }
+    require_l42_wo_a_capture_entry(
+        document,
+        "wq_a",
+        "wq_a.f32le.bin",
+        &[1, 1, 4096],
+        16_384,
+        L42_WQ_A_INPUT_SHA256,
+    )?;
+    require_l42_wo_a_capture_entry(
+        document,
+        "wo_a_grouped_input_bf16",
+        "wo_a_grouped_input_bf16.f32le.bin",
+        &[1, 1, 8, 4096],
+        131_072,
+        L42_WO_A_INPUT_SHA256,
+    )?;
+    require_l42_wo_a_capture_entry(
+        document,
+        "wo_a_grouped_output_bf16",
+        "wo_a_grouped_output_bf16.f32le.bin",
+        &[1, 1, 8192],
+        32_768,
+        L42_WO_A_OUTPUT_SHA256,
+    )?;
+    require_l42_wo_a_capture_entry(
+        document,
+        "expert_126_w1_w3",
+        "expert_126_w1_w3.f32le.bin",
+        &[1, 1, 4096],
+        16_384,
+        "1a2006c1b79b31bc3db3540ef730b08547c6148e224074b0ba712e2c3b9d7c9f",
+    )?;
+    require_l42_wo_a_capture_entry(
+        document,
+        "expert_126_w2",
+        "expert_126_w2.f32le.bin",
+        &[1, 1, 2048],
+        8_192,
+        "7795b1df61092c44883579a0107d02e693303fd16e926fcbd1baa154b49a9a31",
+    )?;
+    Ok(())
+}
+
+fn read_l42_wo_a_capture_f32(
+    root: &Path,
+    filename: &str,
+    element_count: usize,
+    expected_sha256: &str,
+) -> Result<Vec<f32>> {
+    let relative = Path::new(filename);
+    if relative.components().count() != 1
+        || relative.extension().and_then(|value| value.to_str()) != Some("bin")
+    {
+        bail!("L42 wo_a capture filename contract drift");
+    }
+    let path = root.join(relative).canonicalize()?;
+    if path.parent() != Some(root) {
+        bail!("L42 wo_a capture payload escaped fixture directory");
+    }
+    let payload = std::fs::read(&path)?;
+    if payload.len() != element_count * std::mem::size_of::<f32>()
+        || sha256_bytes(&payload) != expected_sha256
+    {
+        bail!("L42 wo_a capture payload byte/SHA drift");
+    }
+    let values: Vec<f32> = payload
+        .chunks_exact(4)
+        .map(|chunk| f32::from_le_bytes(chunk.try_into().unwrap()))
+        .collect();
+    if values.len() != element_count
+        || values.iter().any(|value| !value.is_finite())
+        || values.iter().any(|value| value.to_bits() & 0xffff != 0)
+    {
+        bail!("L42 wo_a capture payload is not finite BF16-rounded F32");
+    }
+    Ok(values)
+}
+
+fn execute_l42_wo_a_grouped(
+    ctx: &VulkanContext,
+    pipelines: &S14NumericPipelines,
+    timestamp_bits: u32,
+    timestamp_period_ns: f64,
+    input: &[f32],
+    weight: &[u8],
+    scale: &[u8],
+    expected_output: &[f32],
+) -> Result<serde_json::Value> {
+    let shape = S14GroupedMatvecShape::new(8, 1024, 4096)?.validate_fp8_bf16_weight()?;
+    if input.len() * 4 != shape.fp32_input_bytes()? as usize
+        || weight.len() != shape.fp8_weight_bytes()? as usize
+        || scale.len() != shape.fp8_scale_bytes()? as usize
+        || expected_output.len() * 4 != shape.fp32_output_bytes()? as usize
+    {
+        bail!("L42 wo_a grouped tensor byte contract drift");
+    }
+    validate_e4m3fn_codes(weight)?;
+    validate_ue8m0_codes(scale)?;
+    let buffers = DeviceBuffers::new(ctx, input, weight, scale, shape.flat_n()? as usize)?;
+    let result = (|| -> Result<serde_json::Value> {
+        let upload_started = Instant::now();
+        buffers.upload(ctx)?;
+        let upload_ms = upload_started.elapsed().as_secs_f64() * 1000.0;
+        let dispatch = pipelines.bind_grouped_fp8_bf16_weight(
+            ctx,
+            shape,
+            &buffers.x,
+            &buffers.weight,
+            &buffers.scale,
+            &buffers.y,
+        )?;
+        let execution = (|| -> Result<serde_json::Value> {
+            let timing = benchmark(
+                ctx,
+                &buffers,
+                timestamp_bits,
+                timestamp_period_ns,
+                |cb| unsafe { pipelines.cmd_grouped_fp8_bf16_weight_matvec(ctx, cb, &dispatch) },
+            )?;
+            let output: Vec<f32> = buffers
+                .output(shape.flat_n()? as usize)
+                .into_iter()
+                .map(round_f32_to_bf16_f32)
+                .collect();
+            let output_sha256 = f32_le_sha256(&output);
+            let exact_elements = output
+                .iter()
+                .zip(expected_output)
+                .filter(|(actual, expected)| actual.to_bits() == expected.to_bits())
+                .count();
+            if output_sha256 != L42_WO_A_OUTPUT_SHA256 || exact_elements != expected_output.len() {
+                let first_mismatch = output
+                    .iter()
+                    .zip(expected_output)
+                    .enumerate()
+                    .find(|(_, (actual, expected))| actual.to_bits() != expected.to_bits())
+                    .map(|(index, (actual, expected))| {
+                        format!(
+                            "index={index}, actual={actual:?}/0x{:08x}, expected={expected:?}/0x{:08x}",
+                            actual.to_bits(),
+                            expected.to_bits()
+                        )
+                    })
+                    .unwrap_or_else(|| "none".to_string());
+                bail!(
+                    "L42 wo_a grouped BF16 output drift: exact={exact_elements}/{}, actual_sha256={output_sha256}, expected_sha256={}, first_mismatch=({first_mismatch})",
+                    expected_output.len(),
+                    L42_WO_A_OUTPUT_SHA256,
+                );
+            }
+            Ok(serde_json::json!({
+                "groups": shape.groups,
+                "n_per_group": shape.n_per_group,
+                "k": shape.k,
+                "input_elements": input.len(),
+                "output_elements": output.len(),
+                "bf16_elements_exact": exact_elements,
+                "input_sha256": L42_WO_A_INPUT_SHA256,
+                "weight_sha256": L42_WO_A_WEIGHT_SHA256,
+                "scale_sha256": L42_WO_A_SCALE_SHA256,
+                "output_sha256": output_sha256,
+                "upload_ms": upload_ms,
+                "iterations": timing.iterations,
+                "gpu_kernel_ms_mean": timing.gpu_kernel_ms_mean,
+                "submit_readback_sync_ms": timing.submit_readback_sync_ms,
+            }))
+        })();
+        dispatch.binder.destroy(ctx);
+        execution
+    })();
+    buffers.destroy(ctx);
+    result
+}
+
+fn run_l42_wo_a_grouped_suite() -> Result<()> {
+    let suite_started = Instant::now();
+    let root = PathBuf::from(
+        std::env::var_os(WO_A_GROUPED_FIXTURE_DIR_ENV)
+            .ok_or_else(|| anyhow::anyhow!("{WO_A_GROUPED_FIXTURE_DIR_ENV} is required"))?,
+    )
+    .canonicalize()?;
+    if !root.is_dir() {
+        bail!("L42 wo_a fixture root is not a directory");
+    }
+    let manifest_path = root.join("capture_manifest.json");
+    let manifest_bytes = std::fs::read(&manifest_path)?;
+    let manifest_sha256 = sha256_bytes(&manifest_bytes);
+    if manifest_sha256 != L42_WO_A_CAPTURE_MANIFEST_SHA256 {
+        bail!("L42 wo_a capture manifest SHA-256 drift");
+    }
+    let manifest: serde_json::Value = serde_json::from_slice(&manifest_bytes)?;
+    validate_l42_wo_a_capture_manifest(&manifest)?;
+    let input = read_l42_wo_a_capture_f32(
+        &root,
+        "wo_a_grouped_input_bf16.f32le.bin",
+        8 * 4096,
+        L42_WO_A_INPUT_SHA256,
+    )?;
+    let expected_output = read_l42_wo_a_capture_f32(
+        &root,
+        "wo_a_grouped_output_bf16.f32le.bin",
+        8192,
+        L42_WO_A_OUTPUT_SHA256,
+    )?;
+    let load_started = Instant::now();
+    let (weight, scale) = load_l42_projection_assets(L42_WO_A_GROUPED_PROJECTION)?;
+    let load_verify_ms = load_started.elapsed().as_secs_f64() * 1000.0;
+
+    let ctx = VulkanContext::init()?;
+    let properties = unsafe { ctx.instance.get_physical_device_properties(ctx.physical) };
+    if properties.vendor_id != AMD_VENDOR_ID || properties.device_id != NAVI10_DEVICE_ID {
+        bail!("L42 wo_a grouped suite requires RX 5700 XT");
+    }
+    let queue_properties = unsafe {
+        ctx.instance
+            .get_physical_device_queue_family_properties(ctx.physical)
+    };
+    let timestamp_bits = queue_properties[ctx.qf_graphics as usize].timestamp_valid_bits;
+    if timestamp_bits == 0 {
+        bail!("L42 wo_a grouped suite requires timestamp queries");
+    }
+    let timestamp_period_ns = properties.limits.timestamp_period as f64;
+    let pipelines = S14NumericPipelines::new_exact_audit(&ctx)?;
+    let result = execute_l42_wo_a_grouped(
+        &ctx,
+        &pipelines,
+        timestamp_bits,
+        timestamp_period_ns,
+        &input,
+        &weight,
+        &scale,
+        &expected_output,
+    );
+    pipelines.destroy(&ctx);
+    let mut result = result?;
+    result["load_verify_ms"] = serde_json::json!(load_verify_ms);
+    result["suite_wall_ms"] = serde_json::json!(suite_started.elapsed().as_secs_f64() * 1000.0);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "format": "polaris-l42-wo-a-grouped-packed-fp8-vulkan-suite-v1",
+            "status": "complete",
+            "device": ctx.gpu_name,
+            "revision": REVISION,
+            "fixture_manifest_sha256": manifest_sha256,
+            "numeric_mode": "grouped_packed_fp8_e4m3_ue8m0_bf16_weight_exact_audit",
+            "result": result,
+            "claim_limit": "L42 wo_a grouped exact numerical suite; full attention/token integration remains separate",
+        }))?
+    );
+    Ok(())
+}
+
 fn main() -> Result<()> {
+    if std::env::args().any(|value| value == WO_A_GROUPED_SUITE_ARG) {
+        return run_l42_wo_a_grouped_suite();
+    }
     if std::env::args().any(|value| value == FP8_PROJECTION_SUITE_ARG) {
         return run_l42_standard_fp8_projection_suite();
     }
@@ -6385,5 +6756,100 @@ mod fp8_projection_worker_tests {
             L42_STANDARD_FP8_PROJECTIONS[4]
         )
         .is_err());
+    }
+
+    #[test]
+    fn frozen_l42_wo_a_grouped_byte_and_hash_contract_is_exact() {
+        let shape = S14GroupedMatvecShape::new(8, 1024, 4096)
+            .unwrap()
+            .validate_fp8_bf16_weight()
+            .unwrap();
+        assert_eq!(shape.fp32_input_bytes().unwrap(), 131_072);
+        assert_eq!(shape.fp8_weight_bytes().unwrap(), 33_554_432);
+        assert_eq!(shape.fp8_scale_bytes().unwrap(), 2_048);
+        assert_eq!(shape.fp32_output_bytes().unwrap(), 32_768);
+        for hash in [
+            L42_WO_A_CAPTURE_MANIFEST_SHA256,
+            L42_WO_A_INPUT_SHA256,
+            L42_WO_A_WEIGHT_SHA256,
+            L42_WO_A_SCALE_SHA256,
+            L42_WO_A_OUTPUT_SHA256,
+        ] {
+            assert_eq!(hash.len(), 64);
+            assert!(hash
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)));
+        }
+    }
+
+    #[test]
+    fn l42_wo_a_capture_manifest_accepts_frozen_contract_and_rejects_output_drift() {
+        let manifest = serde_json::json!({
+            "format": "polaris-l42-real-vulkan-input-capture-v1",
+            "repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+            "revision": REVISION,
+            "layer": 42,
+            "expert_id": REAL_EXPERT_ID,
+            "source_f32_le_sha256": {
+                "ffn_input": "7e2d3167e3782eca8d762c3cc92d53bb9d64a65c7b18d37d16797ff39f611ad4"
+            },
+            "asset_integrity": {
+                "hashes_checked": 76,
+                "payload_bytes": 247_515_224,
+                "payload_files": 76,
+                "manifest_sha256": {
+                    "base": "5e86fa2145c1e3b5f4f8efdcd4fdcca5b966d7cb43ca0ea592294a542ac086ed",
+                    "route": "feccc1b5dde256c9ad750985b4ab5446732a1f4deec796976198e95798c64b86",
+                    "s14": "f6ea01a0df591f272d4e5addb96e16e8eae79b6e9326a84ef6cbaab818c6a2b5"
+                }
+            },
+            "inputs": [
+                {
+                    "name": "wq_a",
+                    "file": "wq_a.f32le.bin",
+                    "shape": [1, 1, 4096],
+                    "bytes": 16_384,
+                    "f32_le_sha256": L42_WQ_A_INPUT_SHA256
+                },
+                {
+                    "name": "wo_a_grouped_input_bf16",
+                    "file": "wo_a_grouped_input_bf16.f32le.bin",
+                    "shape": [1, 1, 8, 4096],
+                    "bytes": 131_072,
+                    "f32_le_sha256": L42_WO_A_INPUT_SHA256
+                },
+                {
+                    "name": "wo_a_grouped_output_bf16",
+                    "file": "wo_a_grouped_output_bf16.f32le.bin",
+                    "shape": [1, 1, 8192],
+                    "bytes": 32_768,
+                    "f32_le_sha256": L42_WO_A_OUTPUT_SHA256
+                },
+                {
+                    "name": "expert_126_w1_w3",
+                    "file": "expert_126_w1_w3.f32le.bin",
+                    "shape": [1, 1, 4096],
+                    "bytes": 16_384,
+                    "f32_le_sha256": "1a2006c1b79b31bc3db3540ef730b08547c6148e224074b0ba712e2c3b9d7c9f"
+                },
+                {
+                    "name": "expert_126_w2",
+                    "file": "expert_126_w2.f32le.bin",
+                    "shape": [1, 1, 2048],
+                    "bytes": 8_192,
+                    "f32_le_sha256": "7795b1df61092c44883579a0107d02e693303fd16e926fcbd1baa154b49a9a31"
+                }
+            ],
+            "semantics": "Inputs captured from the hash-verified real L42 inline reference after the official UE8M0/E4M3FN activation quantization step."
+        });
+        validate_l42_wo_a_capture_manifest(&manifest).unwrap();
+
+        let mut bad_sha = manifest.clone();
+        bad_sha["inputs"][2]["f32_le_sha256"] = serde_json::json!("0".repeat(64));
+        assert!(validate_l42_wo_a_capture_manifest(&bad_sha).is_err());
+
+        let mut bad_shape = manifest;
+        bad_shape["inputs"][2]["shape"] = serde_json::json!([1, 1, 8191]);
+        assert!(validate_l42_wo_a_capture_manifest(&bad_shape).is_err());
     }
 }

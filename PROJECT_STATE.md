@@ -1291,6 +1291,13 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
 - 泛化首跑曾在`wq_b`的32,768个元素中检出1个BF16中点漂移；根因为OpenBLAS Haswell对
   `K=1024`与宽投影的归约顺序不同。exact shader现按K冻结归约，重新运行五条全部精确通过，
   未用容差或按输出元素打补丁。Rust example测试为`18/18`。
-- 五条标准投影不再需要CPU展开完整F32权重，但尚未接入完整token热路径，最终BF16 RNE仍在
-  CPU。下一唯一L42投影阻塞是`wo_a [8,1024,4096]` grouped BF16-weight专用Vulkan内核；
-  完整L42对齐后才推广43层并跑一次两-token真实A/B。
+- `wo_a [8,1024,4096]` grouped BF16-weight专用Vulkan内核也已真实闭合。它直接消费
+  `33,554,432 B` packed E4M3权重与`2,048 B` scale；RX 5700 XT输出`8192/8192`逐位一致，
+  SHA-256为`2be0aa3b...41d2eb9`，100次短计时平均kernel为`4.1069832 ms`、整套墙钟
+  `841.8368 ms`。Rust example测试现为`20/20`。
+- 六条投影随后被接回冻结真实L42轨迹：五条position0实际调用的投影在调用点重新核对输入SHA后
+  使用已验证输出，完整层最终SHA仍命中`853b8b94...888895`；`indexer.wq_b`因position0不调用，
+  只保留独立逐位证据。验证器为
+  `fast16/research/polaris_meridian_v1/fulldepth43_native_top6/verify_l42_attention_replay.py`。
+- L42 attention原语阻塞已消除，但43层生产热路径尚未切换，最终BF16 RNE仍在CPU。下一硬门是
+  推广43层并只跑一次两-token真实A/B；在此之前不宣称完整GPU token或端到端速度晋级。

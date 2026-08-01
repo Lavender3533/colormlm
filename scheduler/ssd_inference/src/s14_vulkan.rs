@@ -32,6 +32,15 @@ pub const S14_MXFP4_MATVEC_EXACT_SPV: &[u8] =
 pub const S14_FP8_MATVEC_EXACT_SPV: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/s14_fp8_matvec_exact.spv"));
 
+/// Eight-group wo_a projection. The source remains packed E4M3+UE8M0, but
+/// each decoded weight crosses the official BF16 boundary before the dot.
+pub const S14_GROUPED_FP8_BF16_MATVEC_SPV: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/s14_grouped_fp8_bf16_matvec.spv"));
+pub const S14_GROUPED_FP8_BF16_MATVEC_EXACT_SPV: &[u8] = include_bytes!(concat!(
+    env!("OUT_DIR"),
+    "/s14_grouped_fp8_bf16_matvec_exact.spv"
+));
+
 pub const S14_SWIGLU_LIMIT_SPV: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/s14_swiglu_limit.spv"));
 
@@ -126,6 +135,67 @@ impl S14MatvecShape {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct S14GroupedMatvecShape {
+    pub groups: u32,
+    pub n_per_group: u32,
+    pub k: u32,
+}
+
+impl S14GroupedMatvecShape {
+    pub fn new(groups: u32, n_per_group: u32, k: u32) -> Result<Self> {
+        if groups == 0 || n_per_group == 0 || k == 0 {
+            bail!("S14 grouped matvec requires non-zero groups, N and K");
+        }
+        Ok(Self {
+            groups,
+            n_per_group,
+            k,
+        })
+    }
+
+    pub fn validate_fp8_bf16_weight(self) -> Result<Self> {
+        if self.k % FP8_TILE != 0 || self.n_per_group % FP8_TILE != 0 {
+            bail!(
+                "S14 grouped FP8/BF16 N={} and K={} must be multiples of {FP8_TILE}",
+                self.n_per_group,
+                self.k
+            );
+        }
+        self.flat_n()?;
+        self.fp32_input_bytes()?;
+        self.fp8_weight_bytes()?;
+        self.fp8_scale_bytes()?;
+        self.fp32_output_bytes()?;
+        Ok(self)
+    }
+
+    pub fn flat_n(self) -> Result<u32> {
+        self.groups
+            .checked_mul(self.n_per_group)
+            .ok_or_else(|| anyhow!("S14 grouped output element count overflow"))
+    }
+
+    pub fn fp32_input_bytes(self) -> Result<u64> {
+        let elements = checked_product(self.groups, self.k, "S14 grouped input")?;
+        checked_bytes(elements, 4, "S14 grouped input")
+    }
+
+    pub fn fp8_weight_bytes(self) -> Result<u64> {
+        checked_product(self.flat_n()?, self.k, "S14 grouped FP8 weight")
+    }
+
+    pub fn fp8_scale_bytes(self) -> Result<u64> {
+        let n_tiles = self.flat_n()?.div_ceil(FP8_TILE);
+        let k_tiles = self.k.div_ceil(FP8_TILE);
+        checked_product(n_tiles, k_tiles, "S14 grouped FP8 scale")
+    }
+
+    pub fn fp32_output_bytes(self) -> Result<u64> {
+        checked_bytes(self.flat_n()? as u64, 4, "S14 grouped output")
+    }
+}
+
 fn checked_product(a: u32, b: u32, label: &str) -> Result<u64> {
     (a as u64)
         .checked_mul(b as u64)
@@ -178,6 +248,11 @@ pub struct S14Fp8Dispatch {
     pub shape: S14MatvecShape,
 }
 
+pub struct S14GroupedFp8Bf16Dispatch {
+    pub binder: DescriptorBinder,
+    pub shape: S14GroupedMatvecShape,
+}
+
 pub struct S14SwigluLimitDispatch {
     pub binder: DescriptorBinder,
     pub n: u32,
@@ -211,6 +286,7 @@ pub struct S14Bf16AccumulateDispatch {
 pub struct S14NumericPipelines {
     mxfp4_matvec: ComputePipeline,
     fp8_matvec: ComputePipeline,
+    grouped_fp8_bf16_matvec: ComputePipeline,
     swiglu_limit: ComputePipeline,
     route_mix: ComputePipeline,
     moe_accumulate: ComputePipeline,
@@ -220,23 +296,35 @@ pub struct S14NumericPipelines {
 
 impl S14NumericPipelines {
     pub fn new(ctx: &VulkanContext) -> Result<Self> {
-        Self::new_with_matvec_spv(ctx, S14_MXFP4_MATVEC_SPV, S14_FP8_MATVEC_SPV)
+        Self::new_with_matvec_spv(
+            ctx,
+            S14_MXFP4_MATVEC_SPV,
+            S14_FP8_MATVEC_SPV,
+            S14_GROUPED_FP8_BF16_MATVEC_SPV,
+        )
     }
 
     /// Construct the slow, deterministic audit pipeline used by the
     /// FullDepth43 exact-writeback worker. Production callers use `new`.
     pub fn new_exact_audit(ctx: &VulkanContext) -> Result<Self> {
-        Self::new_with_matvec_spv(ctx, S14_MXFP4_MATVEC_EXACT_SPV, S14_FP8_MATVEC_EXACT_SPV)
+        Self::new_with_matvec_spv(
+            ctx,
+            S14_MXFP4_MATVEC_EXACT_SPV,
+            S14_FP8_MATVEC_EXACT_SPV,
+            S14_GROUPED_FP8_BF16_MATVEC_EXACT_SPV,
+        )
     }
 
     fn new_with_matvec_spv(
         ctx: &VulkanContext,
         mxfp4_matvec_spv: &[u8],
         fp8_matvec_spv: &[u8],
+        grouped_fp8_bf16_matvec_spv: &[u8],
     ) -> Result<Self> {
         Ok(Self {
             mxfp4_matvec: ComputePipeline::new(ctx, mxfp4_matvec_spv, 4, 8)?,
             fp8_matvec: ComputePipeline::new(ctx, fp8_matvec_spv, 4, 8)?,
+            grouped_fp8_bf16_matvec: ComputePipeline::new(ctx, grouped_fp8_bf16_matvec_spv, 4, 12)?,
             swiglu_limit: ComputePipeline::new(ctx, S14_SWIGLU_LIMIT_SPV, 3, 4)?,
             route_mix: ComputePipeline::new(ctx, S14_ROUTE_MIX_SPV, 2, 8)?,
             moe_accumulate: ComputePipeline::new(ctx, S14_MOE_ACCUMULATE_SPV, 2, 8)?,
@@ -310,6 +398,37 @@ impl S14NumericPipelines {
             ],
         )?;
         Ok(S14Fp8Dispatch { binder, shape })
+    }
+
+    pub fn bind_grouped_fp8_bf16_weight(
+        &self,
+        ctx: &VulkanContext,
+        shape: S14GroupedMatvecShape,
+        x: &GpuBuffer,
+        weight: &GpuBuffer,
+        weight_scale: &GpuBuffer,
+        y: &GpuBuffer,
+    ) -> Result<S14GroupedFp8Bf16Dispatch> {
+        let shape = shape.validate_fp8_bf16_weight()?;
+        let x_bytes = shape.fp32_input_bytes()?;
+        let weight_bytes = storage_bytes(shape.fp8_weight_bytes()?);
+        let scale_bytes = storage_bytes(shape.fp8_scale_bytes()?);
+        let y_bytes = shape.fp32_output_bytes()?;
+        require_capacity(x, x_bytes, "S14 grouped FP8/BF16 input")?;
+        require_capacity(weight, weight_bytes, "S14 grouped FP8/BF16 weight")?;
+        require_capacity(weight_scale, scale_bytes, "S14 grouped FP8/BF16 scale")?;
+        require_capacity(y, y_bytes, "S14 grouped FP8/BF16 output")?;
+        let binder = DescriptorBinder::new(
+            ctx,
+            &self.grouped_fp8_bf16_matvec,
+            &[
+                (x, x_bytes),
+                (weight, weight_bytes),
+                (weight_scale, scale_bytes),
+                (y, y_bytes),
+            ],
+        )?;
+        Ok(S14GroupedFp8Bf16Dispatch { binder, shape })
     }
 
     pub fn bind_swiglu_limit(
@@ -465,6 +584,21 @@ impl S14NumericPipelines {
         );
     }
 
+    pub unsafe fn cmd_grouped_fp8_bf16_weight_matvec(
+        &self,
+        ctx: &VulkanContext,
+        command_buffer: vk::CommandBuffer,
+        dispatch: &S14GroupedFp8Bf16Dispatch,
+    ) {
+        record_grouped_matvec(
+            ctx,
+            command_buffer,
+            &self.grouped_fp8_bf16_matvec,
+            dispatch.binder.set,
+            dispatch.shape,
+        );
+    }
+
     pub unsafe fn cmd_swiglu_limit(
         &self,
         ctx: &VulkanContext,
@@ -556,6 +690,7 @@ impl S14NumericPipelines {
         self.moe_accumulate.destroy(ctx);
         self.route_mix.destroy(ctx);
         self.swiglu_limit.destroy(ctx);
+        self.grouped_fp8_bf16_matvec.destroy(ctx);
         self.fp8_matvec.destroy(ctx);
         self.mxfp4_matvec.destroy(ctx);
     }
@@ -633,6 +768,41 @@ unsafe fn record_matvec(
         &push,
     );
     ctx.device.cmd_dispatch(command_buffer, shape.n, 1, 1);
+}
+
+unsafe fn record_grouped_matvec(
+    ctx: &VulkanContext,
+    command_buffer: vk::CommandBuffer,
+    pipeline: &ComputePipeline,
+    set: vk::DescriptorSet,
+    shape: S14GroupedMatvecShape,
+) {
+    ctx.device.cmd_bind_pipeline(
+        command_buffer,
+        vk::PipelineBindPoint::COMPUTE,
+        pipeline.pipeline,
+    );
+    ctx.device.cmd_bind_descriptor_sets(
+        command_buffer,
+        vk::PipelineBindPoint::COMPUTE,
+        pipeline.layout,
+        0,
+        &[set],
+        &[],
+    );
+    let mut push = [0u8; 12];
+    push[..4].copy_from_slice(&shape.groups.to_le_bytes());
+    push[4..8].copy_from_slice(&shape.n_per_group.to_le_bytes());
+    push[8..].copy_from_slice(&shape.k.to_le_bytes());
+    ctx.device.cmd_push_constants(
+        command_buffer,
+        pipeline.layout,
+        vk::ShaderStageFlags::COMPUTE,
+        0,
+        &push,
+    );
+    ctx.device
+        .cmd_dispatch(command_buffer, shape.groups * shape.n_per_group, 1, 1);
 }
 
 #[derive(Debug)]
@@ -991,6 +1161,16 @@ mod numeric_tests {
             .unwrap();
         assert_eq!(wq_a.fp8_weight_bytes().unwrap(), 4_194_304);
         assert_eq!(wq_a.fp8_scale_bytes().unwrap(), 256);
+
+        let wo_a = S14GroupedMatvecShape::new(8, 1024, 4096)
+            .unwrap()
+            .validate_fp8_bf16_weight()
+            .unwrap();
+        assert_eq!(wo_a.flat_n().unwrap(), 8192);
+        assert_eq!(wo_a.fp32_input_bytes().unwrap(), 131_072);
+        assert_eq!(wo_a.fp8_weight_bytes().unwrap(), 33_554_432);
+        assert_eq!(wo_a.fp8_scale_bytes().unwrap(), 2_048);
+        assert_eq!(wo_a.fp32_output_bytes().unwrap(), 32_768);
     }
 
     #[test]

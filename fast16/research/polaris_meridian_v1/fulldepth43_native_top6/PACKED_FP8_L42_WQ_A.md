@@ -4,8 +4,9 @@
 
 ## 结论
 
-北极星已在 RX 5700 XT 上完成五条标准 FullDepth43 packed-FP8 attention 投影闭环。最先闭合的
-`wq_a` 使用如下持久执行路径，其余四条复用同一个可变 shape、严格 SHA 的 GPU slot：
+北极星已在 RX 5700 XT 上完成五条标准 FullDepth43 packed-FP8 attention 投影与一条 grouped
+`wo_a` 投影闭环。最先闭合的 `wq_a` 使用如下持久执行路径，其余标准投影复用同一个可变 shape、
+严格 SHA 的 GPU slot；`wo_a` 使用 8 组独立 BF16-weight matvec：
 
 ```text
 CPU F32 activation [1,1,4096]
@@ -25,7 +26,7 @@ CPU F32 activation [1,1,4096]
 
 两个输出逐位完全一致。随后 `wkv/wq_b/indexer.wq_b/wo_b` 也全部命中各自冻结输出 SHA；五条
 合计 46,592 个 BF16 元素逐位一致。这证明标准 attention 投影已经不必在 CPU 展开完整 F32
-权重，但尚未接入43层完整token热路径。
+权重。六条结果已回放到完整真实 L42，最终层输出仍精确不变；尚未推广到43层完整token热路径。
 
 ## 冻结身份
 
@@ -63,12 +64,32 @@ CPU F32 activation [1,1,4096]
   输出SHA门；平均`3.0521 ms`、中位`2.9935 ms`、范围`2.7673--3.8129 ms`。这是完整协议
   往返时间，不是孤立kernel时间，也不能直接乘投影数外推整token速度。
 
+## Grouped `wo_a` 与完整 L42 回接
+
+专用内核直接消费 `[8192,4096]` packed E4M3 weight、`[64,32]` UE8M0 scale 和
+`[8,4096]` BF16-carrying F32 输入。每组只读取自己的 1024 行；解码权重先经过 BF16 RNE，
+K=4096 exact 归约固定为 `0,1,3,4,6,2,5,7`，最终输出再经过 BF16 RNE。
+
+- RX 5700 XT：`8192/8192` 个输出逐位一致。
+- 输出 SHA-256：`2be0aa3b4b67aae58f62a77d2a255d6240b5baf3d71f37c9084fd890741d2eb9`。
+- 100 次短计时平均 kernel `4.1069832 ms`；整套墙钟 `841.8368 ms`。
+- Rust example 测试：`20/20`。
+
+`verify_l42_attention_replay.py` 会在完整 L42 的每个实际调用点重新核对投影输入 SHA，再替换为
+GPU 已逐位证明的输出。实际执行的 `wq_a/wq_b/wkv/wo_a/wo_b` 全部命中，最终 L42 输出仍为：
+
+```text
+853b8b947a3f7a275cf748d7e97a311ebb22323cd0c2f3e5e973f27b04388895
+```
+
+`indexer.wq_b` 已在同一标准套件独立闭合，但 L42 position0 参考不会调用 indexer，因此没有伪装成
+该次完整层回放中的已执行节点。
+
 ## 边界与下一步
 
-当前已闭合 L42 五条标准 packed-FP8 投影，但最终 BF16 RNE 仍在 CPU 完成，`wo_a` 的 grouped
-BF16-weight 语义也尚未实现；不能据此宣称完整 attention、完整 GPU token 或端到端加速已经完成。
-下一步只做 `wo_a [8,1024,4096]` 的专用 grouped 内核；完整 L42 对齐后才推广到43层并跑一次
-两-token A/B。
+当前证明范围是 L42 六条 attention 投影的真实 GPU 数值闭合，以及它们在冻结完整 L42 轨迹上的
+组合等价。最终 BF16 RNE仍在CPU完成，43层生产执行器尚未消费这些内核；不能据此宣称完整GPU
+token或端到端加速已经完成。下一步是把同一 packed 权重路径推广到43层，再跑一次两-token A/B。
 
 ## 标准投影 fixture 与真实 GPU 结果
 
