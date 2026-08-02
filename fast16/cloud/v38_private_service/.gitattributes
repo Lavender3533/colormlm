@@ -1,0 +1,6 @@
+*.sh text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.patch -text
+*.bin -text
+runtime-v1/policy.json -text -eol
