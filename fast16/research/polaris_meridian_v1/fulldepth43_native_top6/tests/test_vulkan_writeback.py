@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import json
 import tempfile
 import textwrap
 import unittest
@@ -22,6 +23,26 @@ import sys
 from pathlib import Path
 
 protocol = "polaris-fulldepth43-vulkan-writeback-v1"
+
+def verification_receipt(payloads):
+    payloads = sorted(payloads, key=lambda payload: payload["tensor"])
+    digest = hashlib.sha256()
+    digest.update(b"polaris-rust-vulkan-payload-identity-v1\0")
+    for item in payloads:
+        tensor = item["tensor"].encode("utf-8")
+        digest.update(len(tensor).to_bytes(8, "little"))
+        digest.update(tensor)
+        digest.update(item["bytes"].to_bytes(8, "little"))
+        digest.update(item["sha256"].encode("ascii"))
+    return {
+        "verification_owner": "rust_vulkan_worker",
+        "verified_count": len(payloads),
+        "verified_bytes": sum(item["bytes"] for item in payloads),
+        "payload_identity_sha256": digest.hexdigest(),
+        "payload_identity_contract": "sha256(v1_nul || sorted(length_le64(tensor),tensor,bytes_le64,expected_sha256_ascii))",
+        "verified_before_compute": True,
+        "verification_scope": "all_listed_payloads_before_corresponding_gpu_compute",
+    }
 print(json.dumps({
     "protocol": protocol,
     "op": "hello",
@@ -58,6 +79,7 @@ for line in sys.stdin:
         "boundaries": ["fixture"],
         "expansion_status": "single_real_layer_writeback_only",
         "claim_limit": "fixture",
+        **verification_receipt(manifest_document["payloads"]),
     }), flush=True)
 """
 
@@ -68,8 +90,28 @@ class VulkanWritebackTests(unittest.TestCase):
         root.mkdir(parents=True, exist_ok=True)
         manifest = root / "bridge_manifest.json"
         manifest.write_text(
-            '{"position":%d,"layer":%d,"input_token_id":%d}\n'
-            % (position, layer, token_id),
+            json.dumps(
+                {
+                    "position": position,
+                    "layer": layer,
+                    "input_token_id": token_id,
+                    "payloads": [
+                        {
+                            "tensor": f"layers.{layer}.fixture.scale",
+                            "bytes": 1,
+                            "sha256": "1" * 64,
+                        },
+                        {
+                            "tensor": f"layers.{layer}.fixture.weight",
+                            "bytes": 2,
+                            "sha256": "2" * 64,
+                        },
+                    ],
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            + "\n",
             encoding="utf-8",
             newline="\n",
         )

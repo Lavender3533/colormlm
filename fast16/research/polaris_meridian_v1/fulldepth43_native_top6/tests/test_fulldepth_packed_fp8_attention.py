@@ -49,6 +49,26 @@ print(json.dumps(hello), flush=True)
 if mode == "bad_hello_key":
     raise SystemExit(2)
 
+def verification_receipt(payloads):
+    payloads = sorted(payloads, key=lambda payload: payload["tensor"])
+    digest = hashlib.sha256()
+    digest.update(b"polaris-rust-vulkan-payload-identity-v1\0")
+    for payload in payloads:
+        tensor = payload["tensor"].encode("utf-8")
+        digest.update(len(tensor).to_bytes(8, "little"))
+        digest.update(tensor)
+        digest.update(payload["bytes"].to_bytes(8, "little"))
+        digest.update(payload["sha256"].encode("ascii"))
+    return {
+        "verification_owner": "rust_vulkan_worker",
+        "verified_count": len(payloads),
+        "verified_bytes": sum(payload["bytes"] for payload in payloads),
+        "payload_identity_sha256": digest.hexdigest(),
+        "payload_identity_contract": "sha256(v1_nul || sorted(length_le64(tensor),tensor,bytes_le64,expected_sha256_ascii))",
+        "verified_before_compute": True,
+        "verification_scope": "all_listed_payloads_before_corresponding_gpu_compute",
+    }
+
 expected_epoch = 0
 for line in sys.stdin:
     request = json.loads(line)
@@ -96,6 +116,7 @@ for line in sys.stdin:
                     else "packed_fp8_e4m3_ue8m0_bf16_output"
                 ),
                 "output_rounding": "bf16_rne_then_f32_le",
+                **verification_receipt([item["weight"], item["scale"]]),
             })
         if mode == "chain_bad_slot_order":
             slots.reverse()
@@ -120,6 +141,11 @@ for line in sys.stdin:
             "gpu_slot_cache_entries": 2,
             "numeric_mode": "grouped_wo_a_then_e4m3fn_group128_then_wo_b",
             "output_rounding": "bf16_rne_then_f32_le",
+            **verification_receipt([
+                payload
+                for item in request["projections"]
+                for payload in (item["weight"], item["scale"])
+            ]),
         }
         if mode == "chain_bad_requant_sha":
             response["requantized_activation_sha256"] = "not-a-sha"
@@ -155,6 +181,7 @@ for line in sys.stdin:
                 ),
                 "numeric_mode": "packed_fp8_e4m3_ue8m0_bf16_output",
                 "output_rounding": "bf16_rne_then_f32_le",
+                **verification_receipt([item["weight"], item["scale"]]),
             })
         if mode == "batch_bad_order":
             outputs.reverse()
@@ -177,6 +204,11 @@ for line in sys.stdin:
             "catalog_sha256": catalog_sha,
             "gpu_slot_cache_entries": len(outputs),
             "activation_uploaded_bytes": request["input"]["bytes"],
+            **verification_receipt([
+                payload
+                for item in request["projections"]
+                for payload in (item["weight"], item["scale"])
+            ]),
         }
         print(json.dumps(response), flush=True)
         expected_epoch += 1
@@ -226,6 +258,7 @@ for line in sys.stdin:
             else "packed_fp8_e4m3_ue8m0_bf16_output"
         ),
         "output_rounding": "bf16_rne_then_f32_le",
+        **verification_receipt([request["weight"], request["scale"]]),
     }
     if mode == "bad_response_key":
         response["unexpected"] = True

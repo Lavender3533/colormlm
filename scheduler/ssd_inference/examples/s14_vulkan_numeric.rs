@@ -1458,6 +1458,82 @@ struct WritebackOutput {
     sha256: String,
 }
 
+#[derive(Clone, Copy)]
+struct VerifiedPayloadIdentity<'a> {
+    tensor: &'a str,
+    bytes: u64,
+    sha256: &'a str,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct PayloadVerificationReceipt {
+    verification_owner: &'static str,
+    verified_count: usize,
+    verified_bytes: u64,
+    payload_identity_sha256: String,
+    payload_identity_contract: &'static str,
+    verified_before_compute: bool,
+    verification_scope: &'static str,
+}
+
+fn payload_verification_receipt<'a>(
+    payloads: impl IntoIterator<Item = VerifiedPayloadIdentity<'a>>,
+) -> Result<PayloadVerificationReceipt> {
+    let mut payloads: Vec<_> = payloads.into_iter().collect();
+    if payloads.is_empty() {
+        bail!("payload verification receipt cannot be empty");
+    }
+    payloads.sort_unstable_by(|left, right| left.tensor.cmp(right.tensor));
+    let mut verified_bytes = 0u64;
+    let mut previous_tensor: Option<&str> = None;
+    let mut identity = Sha256::new();
+    identity.update(b"polaris-rust-vulkan-payload-identity-v1\0");
+    for payload in &payloads {
+        if payload.tensor.is_empty()
+            || payload.bytes == 0
+            || payload.sha256.len() != 64
+            || !payload
+                .sha256
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            bail!(
+                "invalid payload verification identity for {}",
+                payload.tensor
+            );
+        }
+        if previous_tensor == Some(payload.tensor) {
+            bail!(
+                "duplicate payload verification identity for {}",
+                payload.tensor
+            );
+        }
+        previous_tensor = Some(payload.tensor);
+        verified_bytes = verified_bytes
+            .checked_add(payload.bytes)
+            .ok_or_else(|| anyhow::anyhow!("verified payload byte total overflow"))?;
+
+        let tensor_bytes = payload.tensor.as_bytes();
+        let tensor_len = u64::try_from(tensor_bytes.len())
+            .context("payload identity tensor name length overflow")?;
+        identity.update(tensor_len.to_le_bytes());
+        identity.update(tensor_bytes);
+        identity.update(payload.bytes.to_le_bytes());
+        identity.update(payload.sha256.as_bytes());
+    }
+
+    Ok(PayloadVerificationReceipt {
+        verification_owner: "rust_vulkan_worker",
+        verified_count: payloads.len(),
+        verified_bytes,
+        payload_identity_sha256: format!("{:x}", identity.finalize()),
+        payload_identity_contract:
+            "sha256(v1_nul || sorted(length_le64(tensor),tensor,bytes_le64,expected_sha256_ascii))",
+        verified_before_compute: true,
+        verification_scope: "all_listed_payloads_before_corresponding_gpu_compute",
+    })
+}
+
 #[derive(Serialize)]
 struct WritebackResponse {
     protocol: &'static str,
@@ -1468,6 +1544,8 @@ struct WritebackResponse {
     layer: u32,
     position: u32,
     input_token_id: u32,
+    #[serde(flatten)]
+    payload_verification: PayloadVerificationReceipt,
     output: WritebackOutput,
     gpu_kernel_ms: f64,
     wall_ms: f64,
@@ -2028,6 +2106,8 @@ struct FullDepthFp8AttentionResponse {
     scale_sha256: String,
     catalog_sha256: &'static str,
     payload_hash_verified: bool,
+    #[serde(flatten)]
+    payload_verification: PayloadVerificationReceipt,
     gpu_slot_cache_hit: bool,
     gpu_slot_cache_entries: usize,
     gpu_slot_resident_bytes: u64,
@@ -2045,6 +2125,8 @@ struct FullDepthFp8AttentionBatchItemResponse {
     weight_sha256: String,
     scale_sha256: String,
     payload_hash_verified: bool,
+    #[serde(flatten)]
+    payload_verification: PayloadVerificationReceipt,
     gpu_slot_cache_hit: bool,
     gpu_slot_resident_bytes: u64,
     payload_uploaded_bytes: u64,
@@ -2066,6 +2148,8 @@ struct FullDepthFp8AttentionBatchResponse {
     input_sha256: String,
     outputs: Vec<FullDepthFp8AttentionBatchItemResponse>,
     catalog_sha256: &'static str,
+    #[serde(flatten)]
+    payload_verification: PayloadVerificationReceipt,
     gpu_slot_cache_entries: usize,
     activation_uploaded_bytes: u64,
 }
@@ -2076,6 +2160,8 @@ struct FullDepthFp8AttentionOutputChainSlotResponse {
     weight_sha256: String,
     scale_sha256: String,
     payload_hash_verified: bool,
+    #[serde(flatten)]
+    payload_verification: PayloadVerificationReceipt,
     gpu_slot_cache_hit: bool,
     gpu_slot_cache_entries: usize,
     gpu_slot_resident_bytes: u64,
@@ -2104,6 +2190,8 @@ struct FullDepthFp8AttentionOutputChainResponse {
     requantization: FullDepthFp8AttentionOutputChainRequantization,
     slots: Vec<FullDepthFp8AttentionOutputChainSlotResponse>,
     catalog_sha256: &'static str,
+    #[serde(flatten)]
+    payload_verification: PayloadVerificationReceipt,
     gpu_slot_cache_entries: usize,
     numeric_mode: &'static str,
     output_rounding: &'static str,
@@ -3857,6 +3945,7 @@ fn write_fulldepth_fp8_attention_error(
 
 struct FullDepthFp8SlotExecution {
     output: Vec<f32>,
+    payload_verification: PayloadVerificationReceipt,
     gpu_slot_cache_hit: bool,
     gpu_slot_cache_entries: usize,
     gpu_slot_resident_bytes: u64,
@@ -3876,6 +3965,18 @@ fn execute_fulldepth_fp8_with_slot_cache<'ctx>(
     kernel: FullDepthFp8Kernel,
     input: &[f32],
 ) -> Result<FullDepthFp8SlotExecution> {
+    let payload_verification = payload_verification_receipt([
+        VerifiedPayloadIdentity {
+            tensor: &request.weight.tensor,
+            bytes: request.weight.bytes,
+            sha256: &request.weight.sha256,
+        },
+        VerifiedPayloadIdentity {
+            tensor: &request.scale.tensor,
+            bytes: request.scale.bytes,
+            sha256: &request.scale.sha256,
+        },
+    ])?;
     let slot_key = fulldepth_fp8_slot_key(kernel, request);
     let (output, gpu_slot_cache_hit, payload_uploaded_bytes) = match kernel {
         FullDepthFp8Kernel::Standard(shape) => {
@@ -3970,11 +4071,32 @@ fn execute_fulldepth_fp8_with_slot_cache<'ctx>(
     };
     Ok(FullDepthFp8SlotExecution {
         output,
+        payload_verification,
         gpu_slot_cache_hit,
         gpu_slot_cache_entries: standard_slots.len() + grouped_slots.len(),
         gpu_slot_resident_bytes: *gpu_slot_resident_bytes,
         payload_uploaded_bytes,
     })
+}
+
+fn fulldepth_fp8_payload_verification_receipt(
+    requests: &[&FullDepthFp8AttentionRequest],
+) -> Result<PayloadVerificationReceipt> {
+    let payloads = requests.iter().flat_map(|request| {
+        [
+            VerifiedPayloadIdentity {
+                tensor: request.weight.tensor.as_str(),
+                bytes: request.weight.bytes,
+                sha256: request.weight.sha256.as_str(),
+            },
+            VerifiedPayloadIdentity {
+                tensor: request.scale.tensor.as_str(),
+                bytes: request.scale.bytes,
+                sha256: request.scale.sha256.as_str(),
+            },
+        ]
+    });
+    payload_verification_receipt(payloads)
 }
 
 fn run_fulldepth_fp8_attention_loop(
@@ -4092,6 +4214,7 @@ fn run_fulldepth_fp8_attention_loop(
                             scale_sha256: request.scale.sha256,
                             catalog_sha256: FULLDEPTH43_CATALOG_SHA256,
                             payload_hash_verified: true,
+                            payload_verification: execution.payload_verification,
                             gpu_slot_cache_hit: execution.gpu_slot_cache_hit,
                             gpu_slot_cache_entries: execution.gpu_slot_cache_entries,
                             gpu_slot_resident_bytes: execution.gpu_slot_resident_bytes,
@@ -4185,6 +4308,8 @@ fn run_fulldepth_fp8_attention_loop(
                         &second_execution.output,
                         second_kernel,
                     )?;
+                    let payload_verification =
+                        fulldepth_fp8_payload_verification_receipt(&[&first, &second])?;
                     let shared_activation_bytes = request.input.bytes;
                     let outputs = vec![
                         FullDepthFp8AttentionBatchItemResponse {
@@ -4194,6 +4319,7 @@ fn run_fulldepth_fp8_attention_loop(
                             weight_sha256: first.weight.sha256,
                             scale_sha256: first.scale.sha256,
                             payload_hash_verified: true,
+                            payload_verification: first_execution.payload_verification,
                             gpu_slot_cache_hit: first_execution.gpu_slot_cache_hit,
                             gpu_slot_resident_bytes: first_execution.gpu_slot_resident_bytes,
                             payload_uploaded_bytes: first_execution.payload_uploaded_bytes,
@@ -4207,6 +4333,7 @@ fn run_fulldepth_fp8_attention_loop(
                             weight_sha256: second.weight.sha256,
                             scale_sha256: second.scale.sha256,
                             payload_hash_verified: true,
+                            payload_verification: second_execution.payload_verification,
                             gpu_slot_cache_hit: second_execution.gpu_slot_cache_hit,
                             gpu_slot_resident_bytes: second_execution.gpu_slot_resident_bytes,
                             payload_uploaded_bytes: second_execution.payload_uploaded_bytes,
@@ -4228,6 +4355,7 @@ fn run_fulldepth_fp8_attention_loop(
                             input_sha256: request.input_sha256,
                             outputs,
                             catalog_sha256: FULLDEPTH43_CATALOG_SHA256,
+                            payload_verification,
                             gpu_slot_cache_entries: second_execution.gpu_slot_cache_entries,
                             activation_uploaded_bytes: shared_activation_bytes,
                         },
@@ -4322,6 +4450,8 @@ fn run_fulldepth_fp8_attention_loop(
                     if written_sha256 != output_sha256 {
                         bail!("FullDepth43 output-chain final write SHA-256 drift");
                     }
+                    let payload_verification =
+                        fulldepth_fp8_payload_verification_receipt(&[&wo_a, &wo_b])?;
 
                     let slots = vec![
                         FullDepthFp8AttentionOutputChainSlotResponse {
@@ -4329,6 +4459,7 @@ fn run_fulldepth_fp8_attention_loop(
                             weight_sha256: wo_a.weight.sha256,
                             scale_sha256: wo_a.scale.sha256,
                             payload_hash_verified: true,
+                            payload_verification: wo_a_execution.payload_verification,
                             gpu_slot_cache_hit: wo_a_execution.gpu_slot_cache_hit,
                             gpu_slot_cache_entries: wo_a_execution.gpu_slot_cache_entries,
                             gpu_slot_resident_bytes: wo_a_execution.gpu_slot_resident_bytes,
@@ -4347,6 +4478,7 @@ fn run_fulldepth_fp8_attention_loop(
                             weight_sha256: wo_b.weight.sha256,
                             scale_sha256: wo_b.scale.sha256,
                             payload_hash_verified: true,
+                            payload_verification: wo_b_execution.payload_verification,
                             gpu_slot_cache_hit: wo_b_execution.gpu_slot_cache_hit,
                             gpu_slot_cache_entries: wo_b_execution.gpu_slot_cache_entries,
                             gpu_slot_resident_bytes: wo_b_execution.gpu_slot_resident_bytes,
@@ -4380,6 +4512,7 @@ fn run_fulldepth_fp8_attention_loop(
                             requantization: request.requantization,
                             slots,
                             catalog_sha256: FULLDEPTH43_CATALOG_SHA256,
+                            payload_verification,
                             gpu_slot_cache_entries: wo_b_execution.gpu_slot_cache_entries,
                             numeric_mode: "grouped_wo_a_then_e4m3fn_group128_then_wo_b",
                             output_rounding: "bf16_rne_then_f32_le",
@@ -5391,6 +5524,22 @@ fn execute_writeback_request(
         w2,
         s2,
     };
+    // Every payload Arc above is returned only after VerifiedPayloadCache has
+    // matched the complete file bytes to the manifest SHA-256.  Freeze the
+    // exact verified identity set before the first Vulkan MoE dispatch.
+    let payload_verification =
+        payload_verification_receipt(manifest.payloads.iter().map(|payload| {
+            VerifiedPayloadIdentity {
+                tensor: &payload.tensor,
+                bytes: payload.bytes,
+                sha256: &payload.sha256,
+            }
+        }))?;
+    if payload_verification.verified_count != manifest.payload_count
+        || payload_verification.verified_bytes != manifest.payload_bytes
+    {
+        bail!("writeback payload verification receipt drift");
+    }
     let diagnostic_dir = std::env::var_os(WRITEBACK_DIAGNOSTIC_DIR_ENV).map(PathBuf::from);
     let result = run_official_top6_shared_moe_batch(
         ctx,
@@ -5490,6 +5639,7 @@ fn execute_writeback_request(
         layer: manifest.layer,
         position: manifest.position,
         input_token_id: manifest.input_token_id,
+        payload_verification,
         output: WritebackOutput {
             path: output_path,
             dtype: "bf16_le",
@@ -8168,6 +8318,97 @@ mod writeback_payload_cache_tests {
             w2: bytes(layout.w2),
             s2: bytes(layout.s2),
         }
+    }
+
+    #[test]
+    fn payload_verification_receipt_is_order_independent_and_strong() {
+        let a_sha = "a".repeat(64);
+        let b_sha = "b".repeat(64);
+        let a = VerifiedPayloadIdentity {
+            tensor: "layers.0.attn.wq_a.scale",
+            bytes: 32,
+            sha256: &a_sha,
+        };
+        let b = VerifiedPayloadIdentity {
+            tensor: "layers.0.attn.wq_a.weight",
+            bytes: 256,
+            sha256: &b_sha,
+        };
+        let forward = payload_verification_receipt([a, b]).unwrap();
+        let reverse = payload_verification_receipt([b, a]).unwrap();
+
+        assert_eq!(forward, reverse);
+        assert_eq!(forward.verification_owner, "rust_vulkan_worker");
+        assert_eq!(forward.verified_count, 2);
+        assert_eq!(forward.verified_bytes, 288);
+        assert_eq!(forward.payload_identity_sha256.len(), 64);
+        assert!(forward.verified_before_compute);
+        assert_eq!(
+            forward.verification_scope,
+            "all_listed_payloads_before_corresponding_gpu_compute"
+        );
+
+        let json = serde_json::to_value(&forward).unwrap();
+        assert_eq!(json["verified_count"], 2);
+        assert_eq!(json["verified_bytes"], 288);
+        assert_eq!(json["verified_before_compute"], true);
+        assert_eq!(
+            json["payload_identity_sha256"],
+            forward.payload_identity_sha256
+        );
+    }
+
+    #[test]
+    fn payload_verification_receipt_binds_tensor_bytes_and_sha() {
+        let sha = "c".repeat(64);
+        let changed_sha = "d".repeat(64);
+        let base = payload_verification_receipt([VerifiedPayloadIdentity {
+            tensor: "layers.0.ffn.experts.1.w1.weight",
+            bytes: 64,
+            sha256: &sha,
+        }])
+        .unwrap();
+        let changed_bytes = payload_verification_receipt([VerifiedPayloadIdentity {
+            tensor: "layers.0.ffn.experts.1.w1.weight",
+            bytes: 65,
+            sha256: &sha,
+        }])
+        .unwrap();
+        let changed_identity = payload_verification_receipt([VerifiedPayloadIdentity {
+            tensor: "layers.0.ffn.experts.1.w1.weight",
+            bytes: 64,
+            sha256: &changed_sha,
+        }])
+        .unwrap();
+
+        assert_ne!(
+            base.payload_identity_sha256,
+            changed_bytes.payload_identity_sha256
+        );
+        assert_ne!(
+            base.payload_identity_sha256,
+            changed_identity.payload_identity_sha256
+        );
+    }
+
+    #[test]
+    fn payload_verification_receipt_rejects_ambiguous_or_invalid_identity() {
+        let sha = "e".repeat(64);
+        let duplicate = VerifiedPayloadIdentity {
+            tensor: "layers.0.ffn.shared_experts.w1.weight",
+            bytes: 64,
+            sha256: &sha,
+        };
+        assert!(payload_verification_receipt([duplicate, duplicate]).is_err());
+
+        let uppercase_sha = "F".repeat(64);
+        assert!(payload_verification_receipt([VerifiedPayloadIdentity {
+            tensor: "layers.0.ffn.shared_experts.w1.scale",
+            bytes: 64,
+            sha256: &uppercase_sha,
+        }])
+        .is_err());
+        assert!(payload_verification_receipt(std::iter::empty()).is_err());
     }
 
     #[test]

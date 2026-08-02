@@ -67,6 +67,24 @@ class FullDepthError(RuntimeError):
     pass
 
 
+def _gpu_verification_owner(entry: Mapping[str, Any]) -> str | None:
+    """只把正式GPU独占消费的页交给对应worker做唯一一次内容SHA。"""
+
+    tensor = entry.get("tensor")
+    kind = entry.get("kind")
+    dtype = entry.get("dtype")
+    if (
+        kind == "non_expert"
+        and isinstance(tensor, str)
+        and ".attn." in tensor
+        and dtype in {"F8_E4M3", "F8_E8M0"}
+    ):
+        return "vulkan_attention_worker"
+    if kind in {"routed_expert", "shared"}:
+        return "vulkan_moe_worker"
+    return None
+
+
 class SessionPhase(str, Enum):
     INIT = "init"
     AWAITING_LAYER = "awaiting_layer"
@@ -386,6 +404,7 @@ class FullDepthNativeLayerReference(s14.NativeLayerReference):
         attention_verify_cpu: bool = False,
         attention_shared_batch: bool = False,
         attention_output_chain: bool = False,
+        gpu_verifier_ownership: bool = False,
     ) -> None:
         profile.validate()
         if attention_worker is not None and (
@@ -399,6 +418,7 @@ class FullDepthNativeLayerReference(s14.NativeLayerReference):
         self.attention_verify_cpu = attention_verify_cpu
         self.attention_shared_batch = attention_shared_batch
         self.attention_output_chain = attention_output_chain
+        self.gpu_verifier_ownership = gpu_verifier_ownership
         self.attention_vulkan_evidence: list[dict[str, Any]] = []
         self._attention_batch_cache: dict[str, Any] = {}
         super().__init__(
@@ -410,6 +430,15 @@ class FullDepthNativeLayerReference(s14.NativeLayerReference):
 
     def _packed_asset(self, tensor: str) -> PackedFp8Asset:
         source = self.store.source(tensor)
+        if self.gpu_verifier_ownership:
+            if source.content_verified or source.verification_owner != "vulkan_attention_worker":
+                raise FullDepthError(
+                    f"{tensor} 未按合同交给 Vulkan attention worker 做唯一内容验证"
+                )
+        elif not source.content_verified:
+            raise FullDepthError(
+                f"{tensor} 内容尚未验证，禁止进入未启用 GPU verifier ownership 的路径"
+            )
         return PackedFp8Asset.from_mapping(
             {
                 "tensor": tensor,
@@ -720,6 +749,7 @@ class ExecutionConfig:
     range_attempts: int = 4
     range_workers: int = 3
     range_static_prefetch: bool = False
+    range_gpu_verifier_ownership: bool = False
     forced_prefill_path: Path | None = None
     vulkan_bridge_capture: Path | None = None
     vulkan_bridge_layer: int = 42
@@ -794,6 +824,31 @@ class ExecutionConfig:
             raise FullDepthError("Vulkan attention worker 不存在")
         if self.vulkan_attention_timeout_seconds <= 0:
             raise FullDepthError("Vulkan attention timeout 必须为正数")
+        if self.range_gpu_verifier_ownership:
+            if self.allow_fetch or self.download_budget_bytes != 0:
+                raise FullDepthError(
+                    "GPU verifier ownership 仅允许零下载的既有 Range cache hit"
+                )
+            if self.vulkan_attention_worker is None:
+                raise FullDepthError(
+                    "GPU verifier ownership 要求全层 Vulkan attention worker"
+                )
+            if self.vulkan_attention_verify_cpu:
+                raise FullDepthError(
+                    "GPU verifier ownership 禁止 Vulkan attention CPU verify"
+                )
+            if (
+                self.vulkan_writeback_worker is None
+                or not self.vulkan_writeback_all_layers
+                or not self.vulkan_writeback_fast_production
+            ):
+                raise FullDepthError(
+                    "GPU verifier ownership 要求全层 fast-production Vulkan MoE"
+                )
+            if self.vulkan_writeback_verify_cpu or self.vulkan_writeback_cpu_fallback:
+                raise FullDepthError(
+                    "GPU verifier ownership 禁止 MoE CPU verify/fallback"
+                )
 
     def resolved_vulkan_final_head_worker(self) -> Path:
         worker = self.vulkan_final_head_worker or DEFAULT_VULKAN_FINAL_HEAD_WORKER
@@ -822,11 +877,110 @@ def _sha256_bytes(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def _gpu_verifier_receipt_closure(
+    report: Mapping[str, Any],
+    range_telemetry: Mapping[str, Any],
+) -> dict[str, Any]:
+    """把 Python 延迟所有权逐项闭合到 Rust 计算前强验证回执。"""
+
+    observed = {
+        "vulkan_attention_worker": {"ranges": 0, "bytes": 0},
+        "vulkan_moe_worker": {"ranges": 0, "bytes": 0},
+    }
+    receipt_count = 0
+    invalid_receipts: list[dict[str, Any]] = []
+
+    def consume(owner: str, receipt: object, *, position: Any, layer: Any) -> None:
+        nonlocal receipt_count
+        receipt_count += 1
+        if not isinstance(receipt, Mapping):
+            invalid_receipts.append(
+                {"owner": owner, "position": position, "layer": layer, "reason": "missing"}
+            )
+            return
+        count = receipt.get("verified_count")
+        byte_count = receipt.get("verified_bytes")
+        if (
+            receipt.get("verification_owner") != "rust_vulkan_worker"
+            or receipt.get("verified_before_compute") is not True
+            or isinstance(count, bool)
+            or not isinstance(count, int)
+            or count <= 0
+            or isinstance(byte_count, bool)
+            or not isinstance(byte_count, int)
+            or byte_count <= 0
+        ):
+            invalid_receipts.append(
+                {"owner": owner, "position": position, "layer": layer, "reason": "contract"}
+            )
+            return
+        observed[owner]["ranges"] += count
+        observed[owner]["bytes"] += byte_count
+
+    for token in report.get("tokens", ()):
+        if not isinstance(token, Mapping):
+            continue
+        position = token.get("position")
+        for layer_row in token.get("layers", ()):
+            if not isinstance(layer_row, Mapping):
+                continue
+            layer = layer_row.get("layer")
+            for projection in layer_row.get("vulkan_attention", ()):
+                consume(
+                    "vulkan_attention_worker",
+                    projection,
+                    position=position,
+                    layer=layer,
+                )
+            writeback = layer_row.get("vulkan_writeback")
+            receipt = (
+                writeback.get("payload_verification")
+                if isinstance(writeback, Mapping)
+                else None
+            )
+            consume(
+                "vulkan_moe_worker",
+                receipt,
+                position=position,
+                layer=layer,
+            )
+
+    raw_expected = range_telemetry.get("deferred_by_owner")
+    expected = {
+        owner: {
+            "ranges": int(
+                raw_expected.get(owner, {}).get("ranges", -1)
+                if isinstance(raw_expected, Mapping)
+                else -1
+            ),
+            "bytes": int(
+                raw_expected.get(owner, {}).get("bytes", -1)
+                if isinstance(raw_expected, Mapping)
+                else -1
+            ),
+        }
+        for owner in observed
+    }
+    closed = not invalid_receipts and observed == expected
+    return {
+        "closed": closed,
+        "receipt_count": receipt_count,
+        "expected_deferred": expected,
+        "rust_verified_before_compute": observed,
+        "invalid_receipts": invalid_receipts,
+        "contract": (
+            "sum(Rust per-compute verified_count/bytes) == "
+            "sum(Python deferred ownership count/bytes)"
+        ),
+    }
+
+
 def _bridge_payload_entry(
     cached: online_range.CachedRange,
     *,
     kind: str,
     expert_id: int | None,
+    gpu_verifier_ownership: bool = False,
 ) -> dict[str, Any]:
     entry = dict(cached.entry)
     tensor = entry.get("tensor")
@@ -838,6 +992,15 @@ def _bridge_payload_entry(
         raise FullDepthError(f"Vulkan bridge payload 缺少 SHA proof: {tensor}")
     if not path.is_file() or path.stat().st_size != entry.get("bytes"):
         raise FullDepthError(f"Vulkan bridge payload 字节漂移: {tensor}")
+    if gpu_verifier_ownership:
+        if cached.content_verified or cached.verification_owner != "vulkan_moe_worker":
+            raise FullDepthError(
+                f"{tensor} 未按合同交给 Vulkan MoE worker 做唯一内容验证"
+            )
+    elif not cached.content_verified:
+        raise FullDepthError(
+            f"{tensor} 内容尚未验证，禁止进入未启用 GPU verifier ownership 的路径"
+        )
     return {
         "tensor": tensor,
         "kind": kind,
@@ -863,6 +1026,7 @@ def _write_vulkan_bridge_capture(
     routed: RoutedLayer,
     kernel: FullDepthNativeLayerReference,
     profile: ExecutionProfile,
+    gpu_verifier_ownership: bool = False,
 ) -> dict[str, Any]:
     capture_dir = capture_dir.resolve()
     if capture_dir.exists():
@@ -887,12 +1051,24 @@ def _write_vulkan_bridge_capture(
         if len(pages) != 6:
             raise FullDepthError(f"Vulkan bridge E{expert_id} 不是完整 6 payload")
         payloads.extend(
-            _bridge_payload_entry(page, kind="routed", expert_id=expert_id) for page in pages
+            _bridge_payload_entry(
+                page,
+                kind="routed",
+                expert_id=expert_id,
+                gpu_verifier_ownership=gpu_verifier_ownership,
+            )
+            for page in pages
         )
     if len(routed.shared) != 6:
         raise FullDepthError("Vulkan bridge shared expert 不是完整 6 payload")
     payloads.extend(
-        _bridge_payload_entry(page, kind="shared", expert_id=None) for page in routed.shared
+        _bridge_payload_entry(
+            page,
+            kind="shared",
+            expert_id=None,
+            gpu_verifier_ownership=gpu_verifier_ownership,
+        )
+        for page in routed.shared
     )
     if len(payloads) != 42:
         raise FullDepthError("Vulkan bridge top6+shared 必须精确包含 42 payload")
@@ -1356,6 +1532,7 @@ class FullDepthTokenWorker:
                 attention_verify_cpu=self.config.vulkan_attention_verify_cpu,
                 attention_shared_batch=self.config.vulkan_attention_shared_batch,
                 attention_output_chain=self.config.vulkan_attention_output_chain,
+                gpu_verifier_ownership=self.config.range_gpu_verifier_ownership,
             )
 
             self.stage = f"position_{position}_layer_{layer}_native_route"
@@ -1411,6 +1588,7 @@ class FullDepthTokenWorker:
                     routed=routed,
                     kernel=kernel,
                     profile=self.profile,
+                    gpu_verifier_ownership=self.config.range_gpu_verifier_ownership,
                 )
             cpu_moe_branch: torch.Tensor | None = None
             cpu_state: torch.Tensor | None = None
@@ -1628,6 +1806,7 @@ def execute(
         "download_authorized": config.allow_fetch,
         "download_budget_bytes": config.download_budget_bytes,
         "range_static_prefetch_enabled": config.range_static_prefetch,
+        "range_gpu_verifier_ownership_enabled": config.range_gpu_verifier_ownership,
         "forced_prefill_path": (
             None
             if config.forced_prefill_path is None
@@ -1669,6 +1848,11 @@ def execute(
         allow_fetch=config.allow_fetch,
         download_budget_bytes=config.download_budget_bytes,
         timeout=300.0,
+        deferred_verifier=(
+            _gpu_verification_owner
+            if config.range_gpu_verifier_ownership
+            else None
+        ),
     )
     try:
         if config.resume_checkpoint_path is not None:
@@ -1760,6 +1944,7 @@ def execute(
                 "cpu_verification": config.vulkan_attention_verify_cpu,
                 "shared_input_batch": config.vulkan_attention_shared_batch,
                 "output_chain": config.vulkan_attention_output_chain,
+                "range_gpu_verifier_ownership": config.range_gpu_verifier_ownership,
             }
         for _ in range(config.token_count):
             position = decoder.position
@@ -1910,6 +2095,26 @@ def execute(
                     "Vulkan worker cleanup failed; execution report retained but run is not promotable"
                 )
     report["range_proof_cache"] = getattr(cache, "proof_cache_telemetry", None)
+    if (
+        config.range_gpu_verifier_ownership
+        and report.get("status") == "complete"
+        and isinstance(report["range_proof_cache"], Mapping)
+    ):
+        closure = _gpu_verifier_receipt_closure(
+            report,
+            report["range_proof_cache"],
+        )
+        report["gpu_verifier_ownership_closure"] = closure
+        if closure["closed"] is not True:
+            report["status"] = "blocked"
+            report["error"] = {
+                "stage": "gpu_verifier_ownership_closure",
+                "type": "FullDepthError",
+                "message": "Python 延迟所有权与 Rust 计算前验证回执未闭合",
+            }
+            report["claim_limit"] = (
+                "token computation completed but verifier ownership audit failed; run is not promotable"
+            )
     report["execution_seconds"] = time.perf_counter() - execution_started
     write_json(config.report_path, report)
     return report
@@ -1936,6 +2141,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--range-attempts", type=int, default=4)
     parser.add_argument("--range-workers", type=int, choices=range(1, 9), default=3)
     parser.add_argument("--range-static-prefetch", action="store_true")
+    parser.add_argument("--range-gpu-verifier-ownership", action="store_true")
     parser.add_argument("--vulkan-bridge-capture", type=Path)
     parser.add_argument("--vulkan-bridge-layer", type=int, choices=range(43), default=42)
     parser.add_argument("--vulkan-writeback-worker", type=Path)
@@ -1986,6 +2192,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             range_attempts=args.range_attempts,
             range_workers=args.range_workers,
             range_static_prefetch=args.range_static_prefetch,
+            range_gpu_verifier_ownership=args.range_gpu_verifier_ownership,
             forced_prefill_path=args.forced_prefill,
             vulkan_bridge_capture=args.vulkan_bridge_capture,
             vulkan_bridge_layer=args.vulkan_bridge_layer,

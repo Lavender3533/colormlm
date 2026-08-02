@@ -1,0 +1,87 @@
+{
+  "format": "polaris-fulldepth43-gpu-verifier-ownership-ab-v1",
+  "date": "2026-08-02",
+  "status": "passed",
+  "single_variable": "range_gpu_verifier_ownership",
+  "baseline": {
+    "enabled": false,
+    "execution_seconds": 60.45634869999776,
+    "per_token_wall_seconds": [
+      36.583102000004146,
+      21.940565199998673
+    ],
+    "effective_tokens_per_second": 0.03308172000139456,
+    "python_full_hashes": 4487,
+    "python_bytes_hashed": 14297784540,
+    "python_bytes_deferred": 0
+  },
+  "candidate": {
+    "enabled": true,
+    "execution_seconds": 58.44149079998897,
+    "per_token_wall_seconds": [
+      36.920986700002686,
+      19.6640505999967
+    ],
+    "effective_tokens_per_second": 0.03422226183183502,
+    "python_full_hashes": 835,
+    "python_bytes_hashed": 1929210972,
+    "python_bytes_deferred": 18613987584,
+    "deferred_by_owner": {
+      "vulkan_attention_worker": {
+        "ranges": 944,
+        "bytes": 9551013120
+      },
+      "vulkan_moe_worker": {
+        "ranges": 3612,
+        "bytes": 9062974464
+      }
+    },
+    "rust_verified_before_compute": {
+      "vulkan_attention_worker": {
+        "ranges": 944,
+        "bytes": 9551013120
+      },
+      "vulkan_moe_worker": {
+        "ranges": 3612,
+        "bytes": 9062974464
+      }
+    },
+    "receipt_count": 558,
+    "ownership_closed": true
+  },
+  "delta": {
+    "wall_seconds_saved": 2.014857900008792,
+    "wall_reduction_percent": 3.332748244534435,
+    "throughput_improvement_percent": 3.4476497304021025,
+    "python_bytes_hashed_avoided": 12368573568,
+    "range_fetch_routed_seconds": {
+      "baseline": 15.409018299891613,
+      "candidate": 5.765414499968756,
+      "saved": 9.643603799922857
+    },
+    "python_rust_vulkan_seconds": {
+      "baseline": 12.638792699959595,
+      "candidate": 17.249148400049307,
+      "increase": 4.610355700089713
+    },
+    "attention_exclusive_seconds": {
+      "baseline": 15.292945999957738,
+      "candidate": 17.775094100041315,
+      "increase": 2.4821481000835774
+    }
+  },
+  "hard_gates": {
+    "status_complete_both": true,
+    "output_token_ids_equal": true,
+    "output_token_ids": [5, 223],
+    "layers": "86/86",
+    "attention_projections": "472/472",
+    "vulkan_moe_writebacks": "86/86",
+    "cpu_fallbacks": 0,
+    "position_1_attention_slot_hits": "236/236",
+    "position_1_static_payload_uploaded_bytes": 0,
+    "static_prefetch_futures_consumed": "84/84",
+    "candidate_error": null
+  },
+  "claim_limit": "这是相邻两-token端到端速度门；3.33%是完整墙钟收益。跳过12.369GB Python重复读取不等于同量墙钟收益，Rust冷读取和其他阶段争用抵消了大部分理论上限；本实验不证明模型质量、长上下文或Claude/GPT能力。"
+}

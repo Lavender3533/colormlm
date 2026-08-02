@@ -210,9 +210,16 @@ python -X utf8 -m `
   --vulkan-final-head-worker scheduler/target/release/examples/s14_bf16_head.exe `
   --vulkan-final-head-scratch <scratch-dir> `
   --output-root <fresh-output-dir> `
-  --token-count 2
+  --token-count 2 `
+  --range-static-prefetch `
+  --range-gpu-verifier-ownership
 ```
 
 Vulkan与NumPy/OpenBLAS的归约顺序存在最高`6.103515625e-05`的已知投影差异，短轨最终输出不变，
 但不能声称所有层逐位等价。实现、数值边界和A/B证据见`FULLDEPTH43_VULKAN_ATTENTION.md`与
 `FULLDEPTH43_VULKAN_ATTENTION_AB.json`。这个入口仍是新架构连续性与剖析工具，不是可交互聊天服务。
+
+`--range-gpu-verifier-ownership`只允许在零下载、全层Vulkan Attention与MoE、关闭CPU verify和
+fallback的正式候选上使用。它让GPU专属页由Rust worker在计算前做唯一内容SHA；Python仍完整验证
+所有CPU页，cache miss也仍走完整SHA。真实两-token门为`60.4563s→58.4415s`（-3.33%），
+输出与所有权闭环保持；详见`FULLDEPTH43_GPU_VERIFIER_OWNERSHIP.md`。

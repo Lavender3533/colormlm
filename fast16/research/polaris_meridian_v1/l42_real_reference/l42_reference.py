@@ -348,7 +348,16 @@ class _InlineForward:
     def _path(self, name: str) -> Path:
         return Path(self._entry(name)["path"])
 
+    def _require_content_verified(self, name: str) -> None:
+        entry = self._entry(name)
+        if entry.get("content_verified", True) is not True:
+            owner = entry.get("verification_owner")
+            raise ValueError(
+                f"{name} 的内容SHA延迟给 {owner}，禁止CPU数值路径读取"
+            )
+
     def _load_tensor(self, name: str) -> torch.Tensor:
+        self._require_content_verified(name)
         dtype_name, shape = self.bundle.specs[name]
         if dtype_name not in {"F32", "BF16"}:
             raise TypeError(f"{name} 不是普通浮点 tensor")
@@ -364,6 +373,8 @@ class _InlineForward:
     def _weight_fp8(self, prefix: str, *, bf16: bool = False) -> np.ndarray:
         weight_name = prefix + ".weight"
         scale_name = prefix + ".scale"
+        self._require_content_verified(weight_name)
+        self._require_content_verified(scale_name)
         weight_shape = self.bundle.specs[weight_name][1]
         scale_shape = self.bundle.specs[scale_name][1]
         weight_path = self._path(weight_name).resolve(strict=True)
@@ -405,6 +416,8 @@ class _InlineForward:
     def _weight_fp4(self, prefix: str) -> np.ndarray:
         weight_name = prefix + ".weight"
         scale_name = prefix + ".scale"
+        self._require_content_verified(weight_name)
+        self._require_content_verified(scale_name)
         weight_shape = self.bundle.specs[weight_name][1]
         scale_shape = self.bundle.specs[scale_name][1]
         packed = np.memmap(self._path(weight_name), dtype=np.uint8, mode="r", shape=weight_shape)

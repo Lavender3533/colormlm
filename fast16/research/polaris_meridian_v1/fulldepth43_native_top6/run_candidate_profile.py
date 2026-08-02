@@ -53,6 +53,7 @@ def run_profiled_candidate(
     download_budget_bytes: int = 0,
     token_count: int = 1,
     range_static_prefetch: bool = False,
+    range_gpu_verifier_ownership: bool = False,
     vulkan_attention_worker: Path | None = None,
     vulkan_attention_scratch: Path | None = None,
     vulkan_attention_shared_batch: bool = False,
@@ -100,6 +101,7 @@ def run_profiled_candidate(
                     allow_fetch=download_budget_bytes > 0,
                     download_budget_bytes=download_budget_bytes,
                     range_static_prefetch=range_static_prefetch,
+                    range_gpu_verifier_ownership=range_gpu_verifier_ownership,
                     vulkan_bridge_capture=output_root / "captures",
                     vulkan_writeback_worker=worker,
                     vulkan_writeback_timeout_seconds=timeout_seconds,
@@ -175,6 +177,10 @@ def run_profiled_candidate(
         "vulkan_boundary": runtime_profile["vulkan_boundary"],
         "materialized_fp8_cache": runtime_profile["materialized_fp8_cache"],
         "range_proof_cache": model_report.get("range_proof_cache"),
+        "range_gpu_verifier_ownership": range_gpu_verifier_ownership,
+        "gpu_verifier_ownership_closure": model_report.get(
+            "gpu_verifier_ownership_closure"
+        ),
         "reports": {
             "model": str((output_root / "model_report.json").resolve()),
             "runtime_profile": str((output_root / "runtime_profile.json").resolve()),
@@ -205,6 +211,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--fp8-cache-gib", type=float, default=0.0)
     parser.add_argument("--download-budget-gib", type=float, default=0.0)
     parser.add_argument("--range-static-prefetch", action="store_true")
+    parser.add_argument("--range-gpu-verifier-ownership", action="store_true")
     args = parser.parse_args(argv)
     if not 0.0 <= args.fp8_cache_gib <= 12.0:
         parser.error("--fp8-cache-gib 必须在 0..12")
@@ -220,6 +227,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         download_budget_bytes=int(args.download_budget_gib * 1024**3),
         token_count=args.token_count,
         range_static_prefetch=args.range_static_prefetch,
+        range_gpu_verifier_ownership=args.range_gpu_verifier_ownership,
         vulkan_attention_worker=args.vulkan_attention_worker,
         vulkan_attention_scratch=args.vulkan_attention_scratch,
         vulkan_attention_shared_batch=args.vulkan_attention_shared_batch,

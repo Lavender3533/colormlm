@@ -1391,3 +1391,26 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
 - 下一速度主线进入有界生命周期sealed payload：首次读取同时完成SHA与当前层数值消费，验证完成
   前不得发布buffer；随后才清理proof-hit控制面。当前仍约30秒/token，尚无质量、长上下文、
   Kimi前端能力或Claude/GPT水平的晋级证据。
+
+## 2026-08-02：GPU单一验证者通过真实门
+
+- sealed Python bytes方案经只读审计后撤回：Rust worker仍需按路径读取，Python保留数GB payload
+  不仅增加主机复制，也不能消除Python SHA与Rust SHA重复。正式实现改为GPU专属页由Rust Vulkan
+  worker做唯一内容验证；Python只验路径、metadata、大小和既有SHA身份。
+- `--range-gpu-verifier-ownership`默认关闭且严格限制为零下载、全层Vulkan Attention、全层
+  fast-production Vulkan MoE、关闭Attention/MoE CPU verify与MoE fallback。cache miss继续走Python
+  完整SHA；CPU tensor/FP8/FP4/I64读取函数会拒绝任何延迟页。
+- Rust worker在每次对应GPU计算前返回强回执，身份摘要绑定排序后的
+  `(tensor, bytes, expected_sha256)`。真实两-token候选中，Python延迟4556段/
+  `18,613,987,584 B`；558个Rust回执逐项闭合为完全相同的数量和字节，且均为
+  `verified_before_compute=true`。
+- 同配置相邻两-token A/B仅切换该开关：`60.4563s→58.4415s`，完整墙钟下降`3.33%`、
+  有效吞吐提高`3.45%`。输出保持`[5,223]`，86/86层、472个Attention投影、86次Vulkan MoE、
+  零fallback、84/84预取Future、position 1的236/236 slot hit与0 B静态上传全部保持。
+- Python完整哈希从4487次/`14,297,784,540 B`降至835次/`1,929,210,972 B`，避免重复读取
+  `12,368,573,568 B`；但Rust边界增加约4.61s、Attention exclusive增加约2.48s，抵消大部分
+  上限。只能晋级完整墙钟3.33%，不能用减少的字节数宣称13--20秒收益。
+- 正式证据见`fast16/research/polaris_meridian_v1/fulldepth43_native_top6/FULLDEPTH43_GPU_VERIFIER_OWNERSHIP.md`
+  及同目录AB JSON。下一速度硬门是Rust当前层计算期间预取并
+  验证下一层GPU payload，再消除逐层capture manifest控制面；当前约`0.0342 token/s`，仍远非
+  20--50 token/s，也没有新增质量、长上下文、Kimi前端或Claude/GPT能力证据。

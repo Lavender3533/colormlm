@@ -23,7 +23,7 @@ import uuid
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path, PurePosixPath
-from typing import Any, Iterable, Mapping, Protocol
+from typing import Any, Callable, Iterable, Mapping, Protocol
 
 try:
     from . import range_pack as rp
@@ -698,6 +698,8 @@ class CachedRange:
     path: Path
     proof: Mapping[str, Any]
     cache_hit: bool
+    content_verified: bool = True
+    verification_owner: str = "python_range_cache"
 
 
 @dataclass(frozen=True)
@@ -774,6 +776,7 @@ class RangeCache:
         require_authoritative: bool = False,
         timeout: float = 300.0,
         chunk_bytes: int = 8 << 20,
+        deferred_verifier: Callable[[Mapping[str, Any]], str | None] | None = None,
     ) -> None:
         endpoint = endpoint.rstrip("/")
         _require_https(endpoint)
@@ -795,6 +798,7 @@ class RangeCache:
         self.require_authoritative = require_authoritative
         self.timeout = timeout
         self.chunk_bytes = chunk_bytes
+        self.deferred_verifier = deferred_verifier
         self._budget_lock = threading.Lock()
         self._download_used = 0
         self._download_reserved = 0
@@ -815,6 +819,9 @@ class RangeCache:
         self._proof_full_hashes = 0
         self._proof_bytes_saved = 0
         self._proof_bytes_hashed = 0
+        self._proof_deferred = 0
+        self._proof_bytes_deferred = 0
+        self._proof_deferred_by_owner: dict[str, dict[str, int]] = {}
 
     @property
     def downloaded_bytes(self) -> int:
@@ -831,10 +838,87 @@ class RangeCache:
                 "full_hashes": self._proof_full_hashes,
                 "bytes_saved": self._proof_bytes_saved,
                 "bytes_hashed": self._proof_bytes_hashed,
+                "deferred": self._proof_deferred,
+                "bytes_deferred": self._proof_bytes_deferred,
+                "deferred_by_owner": {
+                    owner: dict(values)
+                    for owner, values in self._proof_deferred_by_owner.items()
+                },
                 "entries": len(self._verified_proofs),
                 "scope": "current RangeCache process lifetime only",
                 "identity_fields": ["content_key", "absolute_path", "size", "mtime_ns"],
             }
+
+    def _load_deferred_hit(
+        self,
+        *,
+        key: str,
+        identity: Mapping[str, Any],
+        payload: Path,
+        meta_path: Path,
+        expected: str | None,
+        verification_owner: str,
+    ) -> CachedRange | None:
+        """只验身份与既有proof；内容SHA必须由指定GPU worker在计算前完成。"""
+
+        if not payload.exists() and not meta_path.exists():
+            return None
+        if not payload.is_file():
+            raise CacheEntryCorruption("cache metadata 存在但 payload 缺失")
+        if not meta_path.is_file():
+            # 崩溃恢复或首次下载仍走Python完整SHA，禁止凭空创建延迟proof。
+            return None
+        if not isinstance(verification_owner, str) or not verification_owner:
+            raise rp.ContractError("延迟内容验证必须声明非空验证者")
+        size = int(identity["end"]) - int(identity["start"]) + 1
+        before = self._proof_fingerprint(key, payload)
+        if before.size != size:
+            raise CacheEntryCorruption("cache payload 长度错误")
+        try:
+            meta = rp.read_json(meta_path)
+        except Exception as exc:
+            raise CacheEntryCorruption("cache metadata 无法解析") from exc
+        if meta.get("format") != CACHE_META_FORMAT or meta.get("cache_key") != key:
+            raise CacheEntryCorruption("cache metadata format/key 错误")
+        if meta.get("identity") != dict(identity) or int(meta.get("bytes", -1)) != size:
+            raise CacheEntryCorruption("cache metadata 身份漂移")
+        observed = meta.get("observed_sha256")
+        if not isinstance(observed, str) or not SHA256_RE.fullmatch(observed):
+            raise CacheEntryCorruption("cache metadata 缺少合法 observed SHA-256")
+        authoritative = meta.get("authoritative") is True
+        if authoritative:
+            if (
+                meta.get("hash_authority") != "official_lock"
+                or meta.get("expected_sha256") != observed
+            ):
+                raise CacheEntryCorruption("cache authoritative proof 自相矛盾")
+        elif meta.get("hash_authority") != "tofu" or meta.get("expected_sha256") is not None:
+            raise CacheEntryCorruption("cache TOFU proof 试图冒充权威")
+        if expected is not None:
+            if observed != expected or not authoritative:
+                raise CacheEntryCorruption("延迟验证页与 authoritative hash lock 不一致")
+        elif self.require_authoritative and not authoritative:
+            raise rp.ContractError("正式复现模式拒绝 TOFU cache entry")
+        after = self._proof_fingerprint(key, payload)
+        if before != after:
+            raise CacheEntryCorruption("cache payload 在延迟proof读取期间身份变化")
+        with self._proof_cache_lock:
+            self._proof_deferred += 1
+            self._proof_bytes_deferred += size
+            owner_stats = self._proof_deferred_by_owner.setdefault(
+                verification_owner,
+                {"ranges": 0, "bytes": 0},
+            )
+            owner_stats["ranges"] += 1
+            owner_stats["bytes"] += size
+        return CachedRange(
+            entry={},
+            path=payload,
+            proof=meta,
+            cache_hit=True,
+            content_verified=False,
+            verification_owner=verification_owner,
+        )
 
     @staticmethod
     def _proof_fingerprint(content_key: str, payload: Path) -> _VerifiedProof:
@@ -1092,24 +1176,49 @@ class RangeCache:
         identity = self._identity(entry)
         key, payload, partial, meta_path = self._paths(identity)
         expected = self.authoritative_hashes.get(str(entry["range_key"]))
+        verification_owner = (
+            None if self.deferred_verifier is None else self.deferred_verifier(entry)
+        )
+        if verification_owner is not None and (
+            not isinstance(verification_owner, str) or not verification_owner
+        ):
+            raise rp.ContractError("deferred_verifier 必须返回非空验证者名称或 None")
         if self.require_authoritative and expected is None:
             raise rp.ContractError(f"正式复现缺少 authoritative range lock：{entry['range_key']}")
         with _key_lock(self.root, key), _process_key_lock(self.root, key):
             try:
-                hit = self._load_hit(
-                    key=key,
-                    identity=identity,
-                    payload=payload,
-                    meta_path=meta_path,
-                    expected=expected,
-                )
+                hit = None
+                if verification_owner is not None:
+                    hit = self._load_deferred_hit(
+                        key=key,
+                        identity=identity,
+                        payload=payload,
+                        meta_path=meta_path,
+                        expected=expected,
+                        verification_owner=verification_owner,
+                    )
+                if hit is None:
+                    hit = self._load_hit(
+                        key=key,
+                        identity=identity,
+                        payload=payload,
+                        meta_path=meta_path,
+                        expected=expected,
+                    )
             except CacheEntryCorruption:
                 self._quarantine(key, payload, meta_path, partial)
                 if not self.allow_fetch:
                     raise
                 hit = None
             if hit is not None:
-                return CachedRange(entry=dict(entry), path=hit.path, proof=hit.proof, cache_hit=True)
+                return CachedRange(
+                    entry=dict(entry),
+                    path=hit.path,
+                    proof=hit.proof,
+                    cache_hit=True,
+                    content_verified=hit.content_verified,
+                    verification_owner=hit.verification_owner,
+                )
             if not self.allow_fetch:
                 raise rp.ContractError("cache miss；必须显式 allow_fetch=True 才能发起 Range")
             size = int(entry["bytes"])

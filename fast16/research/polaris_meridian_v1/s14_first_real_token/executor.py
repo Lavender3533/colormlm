@@ -376,6 +376,8 @@ class TensorSource:
     path: Path
     proof: Mapping[str, Any]
     cache_hit: bool
+    content_verified: bool
+    verification_owner: str
 
 
 class TensorStore:
@@ -411,13 +413,25 @@ class TensorStore:
             digest = proof.get("observed_sha256")
             if not isinstance(digest, str) or len(digest) != 64:
                 raise ContractError(f"tensor 缺少 Range SHA proof: {name}")
-            self.sources[name] = TensorSource(entry, path, proof, cached.cache_hit)
+            self.sources[name] = TensorSource(
+                entry,
+                path,
+                proof,
+                cached.cache_hit,
+                cached.content_verified,
+                cached.verification_owner,
+            )
 
     def bundle(self) -> SimpleNamespace:
         entries: dict[str, dict[str, Any]] = {}
         specs: dict[str, tuple[str, tuple[int, ...]]] = {}
         for name, source in self.sources.items():
-            entries[name] = {**source.entry, "path": str(source.path)}
+            entries[name] = {
+                **source.entry,
+                "path": str(source.path),
+                "content_verified": source.content_verified,
+                "verification_owner": source.verification_owner,
+            }
             specs[name] = (str(source.entry["dtype"]), tuple(source.entry["shape"]))
         return SimpleNamespace(entries=entries, specs=specs)
 
@@ -433,6 +447,8 @@ class TensorStore:
             "payload_bytes": sum(int(source.entry["bytes"]) for source in self.sources.values()),
             "cache_hits": sum(source.cache_hit for source in self.sources.values()),
             "sha_proofs_checked": len(self.sources),
+            "content_verified": sum(source.content_verified for source in self.sources.values()),
+            "content_deferred": sum(not source.content_verified for source in self.sources.values()),
             "hash_authorities": sorted({str(source.proof.get("hash_authority")) for source in self.sources.values()}),
         }
 
@@ -663,6 +679,7 @@ class NativeLayerReference(_InlineForward):
         return f"layers.{self.layer}.{suffix}"
 
     def _load_i64(self, name: str) -> torch.Tensor:
+        self._require_content_verified(name)
         dtype_name, shape = self.bundle.specs[name]
         if dtype_name != "I64":
             raise ContractError(f"{name} 物理 dtype 必须是 I64，实际为 {dtype_name}")
@@ -1218,6 +1235,8 @@ def _initial_state(embedding: online_range.CachedRange, token_id: int = BOS_TOKE
         raise ContractError("embedding row tensor/dtype 漂移")
     if entry.get("shape") != [1, HIDDEN_SIZE] or entry.get("bytes") != HIDDEN_SIZE * 2:
         raise ContractError("embedding row 必须是 BF16 [1,4096]")
+    if not embedding.content_verified:
+        raise ContractError("embedding row 禁止使用延迟内容验证")
     payload = bytearray(embedding.path.read_bytes())
     row = torch.frombuffer(payload, dtype=torch.bfloat16).reshape(HIDDEN_SIZE).clone()
     if not bool(torch.isfinite(row).all().item()):

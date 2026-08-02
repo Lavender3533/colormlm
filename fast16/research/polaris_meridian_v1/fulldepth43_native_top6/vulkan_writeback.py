@@ -18,6 +18,19 @@ import torch
 
 PROTOCOL = "polaris-fulldepth43-vulkan-writeback-v1"
 OUTPUT_FILE = "vulkan_moe_branch.bf16le.bin"
+PAYLOAD_IDENTITY_CONTRACT = (
+    "sha256(v1_nul || sorted(length_le64(tensor),tensor,bytes_le64,expected_sha256_ascii))"
+)
+PAYLOAD_VERIFICATION_SCOPE = "all_listed_payloads_before_corresponding_gpu_compute"
+PAYLOAD_VERIFICATION_KEYS = (
+    "verification_owner",
+    "verified_count",
+    "verified_bytes",
+    "payload_identity_sha256",
+    "payload_identity_contract",
+    "verified_before_compute",
+    "verification_scope",
+)
 
 
 class VulkanWritebackError(RuntimeError):
@@ -57,6 +70,70 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _is_sha256(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _expected_payload_verification(payloads: object) -> dict[str, object]:
+    if not isinstance(payloads, list) or not payloads:
+        raise VulkanWritebackError("Vulkan manifest payload verification 不能为空")
+    identities: list[tuple[str, int, str]] = []
+    for payload in payloads:
+        if not isinstance(payload, Mapping):
+            raise VulkanWritebackError("Vulkan manifest payload 身份必须是对象")
+        tensor = payload.get("tensor")
+        byte_count = payload.get("bytes")
+        sha256 = payload.get("sha256")
+        if (
+            not isinstance(tensor, str)
+            or not tensor
+            or isinstance(byte_count, bool)
+            or not isinstance(byte_count, int)
+            or byte_count <= 0
+            or not _is_sha256(sha256)
+        ):
+            raise VulkanWritebackError("Vulkan manifest payload 验证身份非法")
+        assert isinstance(sha256, str)
+        identities.append((tensor, byte_count, sha256))
+    identities.sort(key=lambda item: item[0])
+    names = [item[0] for item in identities]
+    if len(names) != len(set(names)):
+        raise VulkanWritebackError("Vulkan manifest payload 含重复 tensor")
+    digest = hashlib.sha256()
+    digest.update(b"polaris-rust-vulkan-payload-identity-v1\0")
+    verified_bytes = 0
+    for tensor, byte_count, sha256 in identities:
+        encoded = tensor.encode("utf-8")
+        digest.update(len(encoded).to_bytes(8, "little", signed=False))
+        digest.update(encoded)
+        digest.update(byte_count.to_bytes(8, "little", signed=False))
+        digest.update(sha256.encode("ascii"))
+        verified_bytes += byte_count
+    return {
+        "verification_owner": "rust_vulkan_worker",
+        "verified_count": len(identities),
+        "verified_bytes": verified_bytes,
+        "payload_identity_sha256": digest.hexdigest(),
+        "payload_identity_contract": PAYLOAD_IDENTITY_CONTRACT,
+        "verified_before_compute": True,
+        "verification_scope": PAYLOAD_VERIFICATION_SCOPE,
+    }
+
+
+def _require_payload_verification(
+    response: Mapping[str, Any], payloads: object
+) -> dict[str, object]:
+    expected = _expected_payload_verification(payloads)
+    observed = {key: response.get(key) for key in PAYLOAD_VERIFICATION_KEYS}
+    if observed != expected:
+        raise VulkanWritebackError("Vulkan worker GPU计算前 payload 验证回执漂移")
+    return observed
 
 
 class PersistentVulkanWriteback:
@@ -229,6 +306,13 @@ class PersistentVulkanWriteback:
             or response.get("expansion_status") != "single_real_layer_writeback_only"
         ):
             self._fail("Vulkan worker response 身份/SHA 漂移")
+        try:
+            payload_verification = _require_payload_verification(
+                response,
+                manifest.get("payloads"),
+            )
+        except VulkanWritebackError as error:
+            self._fail(str(error))
         output = response.get("output")
         if not isinstance(output, Mapping) or (
             output.get("dtype") != "bf16_le"
@@ -265,6 +349,7 @@ class PersistentVulkanWriteback:
             "payload_cache": response.get("payload_cache"),
             "gpu_payload_cache": response.get("gpu_payload_cache"),
             "reusable_gpu_slot": response.get("reusable_gpu_slot"),
+            "payload_verification": payload_verification,
             "boundaries": response.get("boundaries"),
             "persistent_context": True,
         }

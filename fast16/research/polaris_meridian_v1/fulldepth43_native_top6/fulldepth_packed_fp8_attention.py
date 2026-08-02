@@ -40,6 +40,19 @@ OUTPUT_CHAIN_REQUANTIZATION = {
     "amax_floor": 1.0e-4,
     "max_finite": 448.0,
 }
+PAYLOAD_IDENTITY_CONTRACT = (
+    "sha256(v1_nul || sorted(length_le64(tensor),tensor,bytes_le64,expected_sha256_ascii))"
+)
+PAYLOAD_VERIFICATION_SCOPE = "all_listed_payloads_before_corresponding_gpu_compute"
+_PAYLOAD_VERIFICATION_KEYS = {
+    "verification_owner",
+    "verified_count",
+    "verified_bytes",
+    "payload_identity_sha256",
+    "payload_identity_contract",
+    "verified_before_compute",
+    "verification_scope",
+}
 
 
 class FullDepthPackedFp8Error(RuntimeError):
@@ -56,6 +69,49 @@ def _is_sha256(value: object) -> bool:
         and len(value) == 64
         and all(character in "0123456789abcdef" for character in value)
     )
+
+
+def _expected_payload_verification(
+    assets: Sequence["PackedFp8Asset"],
+) -> dict[str, Any]:
+    if not assets:
+        raise FullDepthPackedFp8Error("payload verification 不能为空")
+    ordered = sorted(assets, key=lambda asset: asset.tensor)
+    names = [asset.tensor for asset in ordered]
+    if len(names) != len(set(names)):
+        raise FullDepthPackedFp8Error("payload verification 含重复 tensor")
+    digest = hashlib.sha256()
+    digest.update(b"polaris-rust-vulkan-payload-identity-v1\0")
+    verified_bytes = 0
+    for asset in ordered:
+        if not asset.tensor or asset.bytes <= 0 or not _is_sha256(asset.sha256):
+            raise FullDepthPackedFp8Error("payload verification 身份非法")
+        encoded = asset.tensor.encode("utf-8")
+        digest.update(len(encoded).to_bytes(8, "little", signed=False))
+        digest.update(encoded)
+        digest.update(asset.bytes.to_bytes(8, "little", signed=False))
+        digest.update(asset.sha256.encode("ascii"))
+        verified_bytes += asset.bytes
+    return {
+        "verification_owner": "rust_vulkan_worker",
+        "verified_count": len(ordered),
+        "verified_bytes": verified_bytes,
+        "payload_identity_sha256": digest.hexdigest(),
+        "payload_identity_contract": PAYLOAD_IDENTITY_CONTRACT,
+        "verified_before_compute": True,
+        "verification_scope": PAYLOAD_VERIFICATION_SCOPE,
+    }
+
+
+def _require_payload_verification(
+    document: Mapping[str, Any],
+    assets: Sequence["PackedFp8Asset"],
+    label: str,
+) -> None:
+    expected = _expected_payload_verification(assets)
+    observed = {key: document.get(key) for key in _PAYLOAD_VERIFICATION_KEYS}
+    if observed != expected:
+        raise FullDepthPackedFp8Error(f"{label} GPU计算前 payload 验证回执漂移")
 
 
 def _strict_json(line: str) -> dict[str, Any]:
@@ -369,31 +425,31 @@ class PersistentFullDepthPackedFp8Attention:
         "payload_hash_verified", "gpu_slot_cache_hit", "gpu_slot_cache_entries",
         "gpu_slot_resident_bytes", "payload_uploaded_bytes",
         "activation_uploaded_bytes", "numeric_mode", "output_rounding",
-    }
+    } | _PAYLOAD_VERIFICATION_KEYS
     _BATCH_RESPONSE_KEYS = {
         "protocol", "request_id", "ok", "revision", "profile", "layer",
         "position", "arena_epoch", "input", "input_sha256", "outputs",
         "catalog_sha256", "gpu_slot_cache_entries", "activation_uploaded_bytes",
-    }
+    } | _PAYLOAD_VERIFICATION_KEYS
     _BATCH_OUTPUT_KEYS = {
         "projection", "output_written", "output_sha256", "weight_sha256",
         "scale_sha256", "payload_hash_verified", "gpu_slot_cache_hit",
         "gpu_slot_resident_bytes", "payload_uploaded_bytes", "numeric_mode",
         "output_rounding",
-    }
+    } | _PAYLOAD_VERIFICATION_KEYS
     _OUTPUT_CHAIN_RESPONSE_KEYS = {
         "protocol", "request_id", "ok", "revision", "profile", "layer",
         "position", "arena_epoch", "input", "output_written", "input_sha256",
         "wo_a_output_sha256", "requantized_activation_sha256", "output_sha256",
         "requantization", "slots", "catalog_sha256", "gpu_slot_cache_entries",
         "numeric_mode", "output_rounding",
-    }
+    } | _PAYLOAD_VERIFICATION_KEYS
     _OUTPUT_CHAIN_SLOT_KEYS = {
         "projection", "weight_sha256", "scale_sha256", "payload_hash_verified",
         "gpu_slot_cache_hit", "gpu_slot_cache_entries", "gpu_slot_resident_bytes",
         "payload_uploaded_bytes", "activation_uploaded_bytes", "numeric_mode",
         "output_rounding",
-    }
+    } | _PAYLOAD_VERIFICATION_KEYS
 
     def __init__(
         self,
@@ -650,6 +706,14 @@ class PersistentFullDepthPackedFp8Attention:
             or len(response_outputs) != len(ordered_suffixes)
         ):
             self._fail("FullDepth43 batch response 顶层身份/数量合同漂移")
+        try:
+            _require_payload_verification(
+                response,
+                [asset for pair in ordered_assets for asset in pair],
+                "FullDepth43 batch response",
+            )
+        except FullDepthPackedFp8Error as error:
+            self._fail(str(error))
 
         outputs: dict[str, torch.Tensor] = {}
         assert isinstance(response_outputs, list)
@@ -686,6 +750,14 @@ class PersistentFullDepthPackedFp8Attention:
                 or not _is_sha256(item.get("output_sha256"))
             ):
                 self._fail("FullDepth43 batch output 顺序/身份/SHA 合同漂移")
+            try:
+                _require_payload_verification(
+                    item,
+                    [weight, scale],
+                    "FullDepth43 batch output",
+                )
+            except FullDepthPackedFp8Error as error:
+                self._fail(str(error))
             outputs[suffix] = self.arena.read_output(
                 output_view, item["output_sha256"]
             )
@@ -824,6 +896,14 @@ class PersistentFullDepthPackedFp8Attention:
             or len(slots) != 2
         ):
             self._fail("FullDepth43 output-chain 顶层身份/SHA 合同漂移")
+        try:
+            _require_payload_verification(
+                response,
+                [asset for pair in ordered_assets for asset in pair],
+                "FullDepth43 output-chain response",
+            )
+        except FullDepthPackedFp8Error as error:
+            self._fail(str(error))
 
         assert isinstance(slots, list)
         expected_activation_bytes = (8 * 4096 * 4, 8192 * 4)
@@ -864,6 +944,14 @@ class PersistentFullDepthPackedFp8Attention:
                 or slot.get("output_rounding") != OUTPUT_ROUNDING
             ):
                 self._fail("FullDepth43 output-chain slot 顺序/身份合同漂移")
+            try:
+                _require_payload_verification(
+                    slot,
+                    [weight, scale],
+                    "FullDepth43 output-chain slot",
+                )
+            except FullDepthPackedFp8Error as error:
+                self._fail(str(error))
         output = self.arena.read_output(output_view, response["output_sha256"])
         self.epoch += 1
         return output, dict(response)
@@ -955,6 +1043,14 @@ class PersistentFullDepthPackedFp8Attention:
             or not _is_sha256(response.get("output_sha256"))
         ):
             self._fail("FullDepth43 response 身份/SHA 合同漂移")
+        try:
+            _require_payload_verification(
+                response,
+                [weight, scale],
+                "FullDepth43 response",
+            )
+        except FullDepthPackedFp8Error as error:
+            self._fail(str(error))
         output = self.arena.read_output(output_view, response["output_sha256"])
         evidence = dict(response)
         self.epoch += 1
