@@ -1,0 +1,53 @@
+{
+  "format": "polaris-fulldepth43-inline-manifest-ab-v1",
+  "date": "2026-08-02",
+  "status": "implemented_but_not_promoted",
+  "single_variable": "vulkan_writeback_inline_manifest",
+  "forward_adjacent_pair": {
+    "baseline": {
+      "enabled": false,
+      "execution_seconds": 50.351459000012255,
+      "effective_tokens_per_second": 0.03972079537952442,
+      "python_ipc_and_validation_seconds": 0.32038919992435844,
+      "bridge_manifest_files": 86
+    },
+    "candidate": {
+      "enabled": true,
+      "execution_seconds": 52.59430299999076,
+      "effective_tokens_per_second": 0.038026932308625735,
+      "python_ipc_and_validation_seconds": 0.25398970002046894,
+      "bridge_manifest_files": 0
+    },
+    "delta": {
+      "wall_seconds": 2.242843999978504,
+      "wall_percent": 4.4543773795670205,
+      "throughput_percent": -4.264423848299503,
+      "python_ipc_seconds_saved": 0.06639949990388949,
+      "python_ipc_reduction_percent": 20.724637384645284
+    }
+  },
+  "reverse_adjacent_confirmation": {
+    "candidate_execution_seconds": 52.59430299999076,
+    "following_baseline_execution_seconds": 54.61097589999554,
+    "candidate_wall_seconds_saved": 2.016672900004778,
+    "candidate_wall_reduction_percent": 3.6927977696237124,
+    "candidate_throughput_improvement_percent": 3.8343941928560943
+  },
+  "hard_gates": {
+    "output_token_ids_equal": true,
+    "output_token_ids": [5, 223],
+    "layers": "86/86",
+    "vulkan_moe_writebacks": "86/86",
+    "cpu_fallbacks": 0,
+    "gpu_verifier_ownership_closed": true,
+    "candidate_manifest_transports": "86/86 inline_json",
+    "candidate_bridge_manifest_files": 0
+  },
+  "source_runs": {
+    "baseline": ".tmp-polaris-runs/inline-manifest-ab-baseline-20260802",
+    "candidate": ".tmp-polaris-runs/inline-manifest-ab-candidate-20260802",
+    "reverse_baseline": ".tmp-polaris-runs/inline-manifest-ab-reverse-baseline-20260802"
+  },
+  "decision": "Keep the strict inline protocol as an explicit research switch, default off. The local IPC submetric improved, but the forward and reverse whole-token comparisons disagree, so no end-to-end speed promotion is justified.",
+  "next_bottleneck": "The two-token path still reads and SHA-verifies 7593067008 payload bytes; optimize cross-token GPU residency or reduce active expert traffic instead of spending more time on manifest files."
+}

@@ -55,6 +55,7 @@ def run_profiled_candidate(
     range_static_prefetch: bool = False,
     range_gpu_verifier_ownership: bool = False,
     vulkan_writeback_batch_verify_payloads: bool = False,
+    vulkan_writeback_inline_manifest: bool = False,
     vulkan_attention_worker: Path | None = None,
     vulkan_attention_scratch: Path | None = None,
     vulkan_attention_shared_batch: bool = False,
@@ -105,6 +106,9 @@ def run_profiled_candidate(
                     range_gpu_verifier_ownership=range_gpu_verifier_ownership,
                     vulkan_writeback_batch_verify_payloads=(
                         vulkan_writeback_batch_verify_payloads
+                    ),
+                    vulkan_writeback_inline_manifest=(
+                        vulkan_writeback_inline_manifest
                     ),
                     vulkan_bridge_capture=output_root / "captures",
                     vulkan_writeback_worker=worker,
@@ -185,6 +189,7 @@ def run_profiled_candidate(
         "vulkan_writeback_batch_verify_payloads": (
             vulkan_writeback_batch_verify_payloads
         ),
+        "vulkan_writeback_inline_manifest": vulkan_writeback_inline_manifest,
         "gpu_verifier_ownership_closure": model_report.get(
             "gpu_verifier_ownership_closure"
         ),
@@ -223,6 +228,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--vulkan-writeback-batch-verify-payloads",
         action="store_true",
     )
+    parser.add_argument(
+        "--vulkan-writeback-inline-manifest",
+        action="store_true",
+    )
     args = parser.parse_args(argv)
     if not 0.0 <= args.fp8_cache_gib <= 12.0:
         parser.error("--fp8-cache-gib 必须在 0..12")
@@ -242,6 +251,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         vulkan_writeback_batch_verify_payloads=(
             args.vulkan_writeback_batch_verify_payloads
         ),
+        vulkan_writeback_inline_manifest=args.vulkan_writeback_inline_manifest,
         vulkan_attention_worker=args.vulkan_attention_worker,
         vulkan_attention_scratch=args.vulkan_attention_scratch,
         vulkan_attention_shared_batch=args.vulkan_attention_shared_batch,

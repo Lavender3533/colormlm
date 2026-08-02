@@ -69,6 +69,9 @@ const GPU_PAYLOAD_CACHE_GIB_ENV: &str = "POLARIS_GPU_PAYLOAD_CACHE_GIB";
 const DEFAULT_GPU_PAYLOAD_CACHE_GIB: usize = 0;
 const MIN_GPU_PAYLOAD_CACHE_GIB: usize = 1;
 const MAX_GPU_PAYLOAD_CACHE_GIB: usize = 7;
+const SHARED_GPU_PAYLOAD_CACHE_GIB_ENV: &str = "POLARIS_SHARED_GPU_PAYLOAD_CACHE_GIB";
+const DEFAULT_SHARED_GPU_PAYLOAD_CACHE_GIB: usize = 0;
+const SHARED_GPU_PAYLOAD_CACHE_GIB: usize = 2;
 const GPU_VRAM_HARD_LIMIT_GIB: usize = 8;
 const OFFICIAL_ROUTED_EXPERT_COUNT: usize = 6;
 const REUSABLE_GPU_SLOT_MAX_LOGICAL_BYTES: u64 = 128 * 1024 * 1024;
@@ -1122,6 +1125,7 @@ impl ReusableOfficialMoeSlot {
         x: &[f32],
         routed: &[MoePayload],
         shared: &MoePayload,
+        upload_shared: bool,
     ) -> Result<()> {
         if x.len() != 4096
             || routed.len() != OFFICIAL_ROUTED_EXPERT_COUNT
@@ -1138,7 +1142,9 @@ impl ReusableOfficialMoeSlot {
             slot.rewrite_staging(payload, &format!("routed[{index}]"))?;
         }
         require_exact_moe_weight_layout(shared, shared_layout, "shared")?;
-        self.shared.rewrite_staging(shared, "shared")?;
+        if upload_shared {
+            self.shared.rewrite_staging(shared, "shared")?;
+        }
 
         unsafe {
             let pool = make_command_pool(ctx)?;
@@ -1152,7 +1158,9 @@ impl ReusableOfficialMoeSlot {
             for weights in &self.routed {
                 weights.cmd_upload(ctx, cb);
             }
-            self.shared.cmd_upload(ctx, cb);
+            if upload_shared {
+                self.shared.cmd_upload(ctx, cb);
+            }
             let barrier = vk::MemoryBarrier::default()
                 .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
                 .dst_access_mask(vk::AccessFlags::SHADER_READ);
@@ -1392,6 +1400,7 @@ struct CaptureInput {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct FullDepthBridgeManifest {
     format: String,
     revision: String,
@@ -1450,7 +1459,10 @@ struct WritebackRequest {
     protocol: String,
     op: String,
     request_id: String,
-    manifest: PathBuf,
+    manifest: Option<PathBuf>,
+    capture_root: Option<PathBuf>,
+    manifest_json: Option<String>,
+    manifest_sha256: Option<String>,
     #[serde(default)]
     batch_verify_payloads: bool,
 }
@@ -1611,6 +1623,7 @@ struct WritebackResponse {
     ok: bool,
     device: String,
     manifest_sha256: String,
+    manifest_transport: &'static str,
     layer: u32,
     position: u32,
     input_token_id: u32,
@@ -1622,6 +1635,7 @@ struct WritebackResponse {
     wall_ms: f64,
     payload_cache: WritebackPayloadCacheTelemetry,
     gpu_payload_cache: WritebackGpuPayloadCacheTelemetry,
+    shared_gpu_payload_cache: WritebackGpuPayloadCacheTelemetry,
     reusable_gpu_slot: WritebackReusableGpuSlotTelemetry,
     boundaries: [&'static str; 5],
     expansion_status: &'static str,
@@ -1675,15 +1689,21 @@ struct WritebackReusableGpuSlotTelemetry {
     workspace_reused: bool,
     strict_fixed_shapes: bool,
     resident_cache_isolated: bool,
+    shared_resident_cache_hybrid: bool,
 }
 
 impl WritebackReusableGpuSlotTelemetry {
     fn for_successful_request(
         slot_logical_bytes: Option<(u64, u64)>,
         resident_cache_enabled: bool,
+        shared_resident_cache_enabled: bool,
     ) -> Result<Self> {
-        match (slot_logical_bytes, resident_cache_enabled) {
-            (Some((logical_device_bytes, logical_staging_bytes)), false) => Ok(Self {
+        match (
+            slot_logical_bytes,
+            resident_cache_enabled,
+            shared_resident_cache_enabled,
+        ) {
+            (Some((logical_device_bytes, logical_staging_bytes)), false, false) => Ok(Self {
                 enabled: true,
                 logical_device_bytes,
                 logical_staging_bytes,
@@ -1693,8 +1713,27 @@ impl WritebackReusableGpuSlotTelemetry {
                 workspace_reused: true,
                 strict_fixed_shapes: true,
                 resident_cache_isolated: true,
+                shared_resident_cache_hybrid: false,
             }),
-            (None, true) => Ok(Self {
+            (Some((logical_device_bytes, logical_staging_bytes)), false, true) => {
+                let (_, shared_layout) = official_moe_weight_layouts()?;
+                let uploaded_bytes = logical_staging_bytes
+                    .checked_sub(shared_layout.total()?)
+                    .ok_or_else(|| anyhow::anyhow!("hybrid reusable upload byte underflow"))?;
+                Ok(Self {
+                    enabled: true,
+                    logical_device_bytes,
+                    logical_staging_bytes,
+                    request_uploads: 1,
+                    request_uploaded_bytes: uploaded_bytes,
+                    weight_tensor_slots_reused: OFFICIAL_ROUTED_EXPERT_COUNT * 6,
+                    workspace_reused: true,
+                    strict_fixed_shapes: true,
+                    resident_cache_isolated: true,
+                    shared_resident_cache_hybrid: true,
+                })
+            }
+            (None, true, false) => Ok(Self {
                 enabled: false,
                 logical_device_bytes: 0,
                 logical_staging_bytes: 0,
@@ -1704,6 +1743,7 @@ impl WritebackReusableGpuSlotTelemetry {
                 workspace_reused: false,
                 strict_fixed_shapes: true,
                 resident_cache_isolated: true,
+                shared_resident_cache_hybrid: false,
             }),
             _ => bail!("GPU resident cache and reusable upload slot telemetry mode drift"),
         }
@@ -5371,6 +5411,13 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
     let mut gpu_payload_cache = gpu_payload_cache_capacity
         .map(GpuPayloadCache::new)
         .transpose()?;
+    let shared_gpu_payload_cache_capacity = shared_gpu_payload_cache_capacity_bytes()?;
+    if gpu_payload_cache_capacity.is_some() && shared_gpu_payload_cache_capacity.is_some() {
+        bail!("general and shared-only GPU payload caches are mutually exclusive");
+    }
+    let mut shared_gpu_payload_cache = shared_gpu_payload_cache_capacity
+        .map(GpuPayloadCache::new)
+        .transpose()?;
     // The two GPU weight modes are deliberately disjoint. Default operation
     // owns one bounded upload slot; explicit resident-cache operation owns no
     // reusable slot, so stale slot contents can never masquerade as a hit.
@@ -5392,11 +5439,14 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
             "persistent_context": true,
             "official_boundary_graph": true,
             "verified_payload_cache": true,
+            "inline_manifest_json": true,
             "batch_payload_verification": true,
             "batch_payload_verification_concurrency_limit": VERIFIED_PAYLOAD_BATCH_MAX_TASKS,
             "payload_cache_capacity_bytes": payload_cache_capacity,
             "gpu_payload_cache": gpu_payload_cache.is_some(),
             "gpu_payload_cache_capacity_bytes": gpu_payload_cache_capacity.unwrap_or(0),
+            "shared_gpu_payload_cache": shared_gpu_payload_cache.is_some(),
+            "shared_gpu_payload_cache_capacity_bytes": shared_gpu_payload_cache_capacity.unwrap_or(0),
             "reusable_gpu_upload_slot": reusable_gpu_slot.is_some(),
             "reusable_gpu_upload_slot_device_bytes": reusable_gpu_slot
                 .as_ref()
@@ -5441,6 +5491,9 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
                 if let Some(cache) = gpu_payload_cache.as_mut() {
                     cache.destroy(&ctx);
                 }
+                if let Some(cache) = shared_gpu_payload_cache.as_mut() {
+                    cache.destroy(&ctx);
+                }
                 if let Some(slot) = reusable_gpu_slot.as_ref() {
                     slot.destroy(&ctx);
                 }
@@ -5449,7 +5502,10 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
             }
         };
         if request.protocol != WRITEBACK_PROTOCOL
-            || request.op != "execute_single_layer"
+            || !matches!(
+                request.op.as_str(),
+                "execute_single_layer" | "execute_single_layer_inline_manifest"
+            )
             || request.request_id.is_empty()
             || request.request_id.len() > 128
             || !request
@@ -5472,6 +5528,9 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
             if let Some(cache) = gpu_payload_cache.as_mut() {
                 cache.destroy(&ctx);
             }
+            if let Some(cache) = shared_gpu_payload_cache.as_mut() {
+                cache.destroy(&ctx);
+            }
             if let Some(slot) = reusable_gpu_slot.as_ref() {
                 slot.destroy(&ctx);
             }
@@ -5487,6 +5546,7 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
             timestamp_period_ns,
             &mut payload_cache,
             &mut gpu_payload_cache,
+            &mut shared_gpu_payload_cache,
             reusable_gpu_slot.as_ref(),
             request,
         ) {
@@ -5511,6 +5571,9 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
                 if let Some(cache) = gpu_payload_cache.as_mut() {
                     cache.destroy(&ctx);
                 }
+                if let Some(cache) = shared_gpu_payload_cache.as_mut() {
+                    cache.destroy(&ctx);
+                }
                 if let Some(slot) = reusable_gpu_slot.as_ref() {
                     slot.destroy(&ctx);
                 }
@@ -5520,6 +5583,9 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
         }
     }
     if let Some(cache) = gpu_payload_cache.as_mut() {
+        cache.destroy(&ctx);
+    }
+    if let Some(cache) = shared_gpu_payload_cache.as_mut() {
         cache.destroy(&ctx);
     }
     if let Some(slot) = reusable_gpu_slot.as_ref() {
@@ -5655,26 +5721,78 @@ fn execute_writeback_request(
     timestamp_period_ns: f64,
     payload_cache: &mut VerifiedPayloadCache,
     gpu_payload_cache: &mut Option<GpuPayloadCache>,
+    shared_gpu_payload_cache: &mut Option<GpuPayloadCache>,
     reusable_gpu_slot: Option<&ReusableOfficialMoeSlot>,
     request: WritebackRequest,
 ) -> Result<WritebackResponse> {
     let started = Instant::now();
     let cache_before = payload_cache.stats();
     let gpu_cache_before = gpu_payload_cache.as_ref().map(GpuPayloadCache::stats);
-    let batch_verify_enabled = writeback_batch_verify_enabled(request.batch_verify_payloads)?;
-    let manifest_path = request
-        .manifest
-        .canonicalize()
-        .with_context(|| format!("resolve writeback manifest {}", request.manifest.display()))?;
-    if manifest_path.file_name().and_then(|value| value.to_str()) != Some("bridge_manifest.json") {
-        bail!("writeback manifest filename drift");
-    }
-    let capture_root = manifest_path
-        .parent()
-        .ok_or_else(|| anyhow::anyhow!("writeback manifest has no parent"))?
-        .canonicalize()?;
-    let manifest_bytes = std::fs::read(&manifest_path)?;
-    let manifest_sha256 = sha256_bytes(&manifest_bytes);
+    let shared_gpu_cache_before = shared_gpu_payload_cache
+        .as_ref()
+        .map(GpuPayloadCache::stats);
+    let WritebackRequest {
+        protocol: _,
+        op,
+        request_id,
+        manifest: manifest_path,
+        capture_root: requested_capture_root,
+        manifest_json,
+        manifest_sha256: requested_manifest_sha256,
+        batch_verify_payloads,
+    } = request;
+    let batch_verify_enabled = writeback_batch_verify_enabled(batch_verify_payloads)?;
+    let (capture_root, manifest_bytes, manifest_sha256, manifest_transport) = match op.as_str() {
+        "execute_single_layer" => {
+            if requested_capture_root.is_some()
+                || manifest_json.is_some()
+                || requested_manifest_sha256.is_some()
+            {
+                bail!("file writeback request mixed inline manifest fields");
+            }
+            let requested_path = manifest_path
+                .ok_or_else(|| anyhow::anyhow!("file writeback request missing manifest"))?;
+            let resolved_path = requested_path.canonicalize().with_context(|| {
+                format!("resolve writeback manifest {}", requested_path.display())
+            })?;
+            if resolved_path.file_name().and_then(|value| value.to_str())
+                != Some("bridge_manifest.json")
+            {
+                bail!("writeback manifest filename drift");
+            }
+            let root = resolved_path
+                .parent()
+                .ok_or_else(|| anyhow::anyhow!("writeback manifest has no parent"))?
+                .canonicalize()?;
+            let bytes = std::fs::read(&resolved_path)?;
+            let digest = sha256_bytes(&bytes);
+            (root, bytes, digest, "capture_file")
+        }
+        "execute_single_layer_inline_manifest" => {
+            if manifest_path.is_some() {
+                bail!("inline writeback request mixed file manifest field");
+            }
+            let root = requested_capture_root
+                .ok_or_else(|| anyhow::anyhow!("inline writeback request missing capture_root"))?
+                .canonicalize()
+                .context("resolve inline writeback capture_root")?;
+            if !root.is_dir() {
+                bail!("inline writeback capture_root is not a directory");
+            }
+            let json = manifest_json
+                .ok_or_else(|| anyhow::anyhow!("inline writeback request missing manifest_json"))?;
+            let expected = requested_manifest_sha256.ok_or_else(|| {
+                anyhow::anyhow!("inline writeback request missing manifest_sha256")
+            })?;
+            let bytes = json.into_bytes();
+            let digest = sha256_bytes(&bytes);
+            if expected.len() != 64 || expected != digest {
+                bail!("inline writeback manifest SHA-256 drift");
+            }
+            (root, bytes, digest, "inline_json")
+        }
+        _ => bail!("unsupported writeback request op"),
+    };
     let manifest: FullDepthBridgeManifest =
         serde_json::from_slice(&manifest_bytes).context("parse FullDepth43 writeback manifest")?;
     validate_writeback_manifest(&manifest)?;
@@ -5753,6 +5871,7 @@ fn execute_writeback_request(
         &routed,
         &shared,
         gpu_payload_cache.as_mut(),
+        shared_gpu_payload_cache.as_mut(),
         reusable_gpu_slot,
         diagnostic_dir.is_some(),
     )?;
@@ -5829,16 +5948,26 @@ fn execute_writeback_request(
         (None, None) => WritebackGpuPayloadCacheTelemetry::disabled(),
         _ => bail!("GPU payload cache enablement changed within one request"),
     };
+    let shared_gpu_payload_cache_telemetry =
+        match (shared_gpu_payload_cache.as_ref(), shared_gpu_cache_before) {
+            (Some(cache), Some(before)) => {
+                WritebackGpuPayloadCacheTelemetry::between(cache, before, cache.stats())?
+            }
+            (None, None) => WritebackGpuPayloadCacheTelemetry::disabled(),
+            _ => bail!("shared GPU payload cache enablement changed within one request"),
+        };
     let reusable_gpu_slot_telemetry = WritebackReusableGpuSlotTelemetry::for_successful_request(
         reusable_gpu_slot.map(|slot| (slot.logical_device_bytes, slot.logical_staging_bytes)),
         gpu_payload_cache.is_some(),
+        shared_gpu_payload_cache.is_some(),
     )?;
     Ok(WritebackResponse {
         protocol: WRITEBACK_PROTOCOL,
-        request_id: request.request_id,
+        request_id,
         ok: true,
         device: ctx.gpu_name.clone(),
         manifest_sha256,
+        manifest_transport,
         layer: manifest.layer,
         position: manifest.position,
         input_token_id: manifest.input_token_id,
@@ -5855,6 +5984,7 @@ fn execute_writeback_request(
         wall_ms: started.elapsed().as_secs_f64() * 1000.0,
         payload_cache: payload_cache_telemetry,
         gpu_payload_cache: gpu_payload_cache_telemetry,
+        shared_gpu_payload_cache: shared_gpu_payload_cache_telemetry,
         reusable_gpu_slot: reusable_gpu_slot_telemetry,
         boundaries: [
             "w1_w3_output_round_to_bf16",
@@ -5904,6 +6034,35 @@ fn gpu_payload_cache_capacity_bytes() -> Result<Option<u64>> {
     let bytes = (gib as u64)
         .checked_mul(1024 * 1024 * 1024)
         .ok_or_else(|| anyhow::anyhow!("GPU payload cache byte capacity overflow"))?;
+    Ok(Some(bytes))
+}
+
+fn shared_gpu_payload_cache_capacity_bytes() -> Result<Option<u64>> {
+    match std::env::var(SHARED_GPU_PAYLOAD_CACHE_GIB_ENV) {
+        Ok(value) => shared_gpu_payload_cache_capacity_bytes_from(Some(&value)),
+        Err(std::env::VarError::NotPresent) => shared_gpu_payload_cache_capacity_bytes_from(None),
+        Err(error) => Err(error).context(SHARED_GPU_PAYLOAD_CACHE_GIB_ENV),
+    }
+}
+
+fn shared_gpu_payload_cache_capacity_bytes_from(value: Option<&str>) -> Result<Option<u64>> {
+    let gib = match value {
+        Some(value) => value
+            .parse::<usize>()
+            .with_context(|| format!("parse {SHARED_GPU_PAYLOAD_CACHE_GIB_ENV}={value:?}"))?,
+        None => DEFAULT_SHARED_GPU_PAYLOAD_CACHE_GIB,
+    };
+    if gib == 0 {
+        return Ok(None);
+    }
+    if gib != SHARED_GPU_PAYLOAD_CACHE_GIB {
+        bail!(
+            "{SHARED_GPU_PAYLOAD_CACHE_GIB_ENV} must be exactly 0 or {SHARED_GPU_PAYLOAD_CACHE_GIB} GiB"
+        );
+    }
+    let bytes = (gib as u64)
+        .checked_mul(1024 * 1024 * 1024)
+        .ok_or_else(|| anyhow::anyhow!("shared GPU payload cache byte capacity overflow"))?;
     Ok(Some(bytes))
 }
 
@@ -5980,11 +6139,16 @@ fn run_official_top6_shared_moe_batch(
     routed: &[MoePayload],
     shared: &MoePayload,
     gpu_payload_cache: Option<&mut GpuPayloadCache>,
+    shared_gpu_payload_cache: Option<&mut GpuPayloadCache>,
     reusable_gpu_slot: Option<&ReusableOfficialMoeSlot>,
     capture_shared_diagnostics: bool,
 ) -> Result<OfficialMoeResult> {
-    match (gpu_payload_cache, reusable_gpu_slot) {
-        (Some(cache), None) => run_official_top6_shared_moe_batch_cached(
+    match (
+        gpu_payload_cache,
+        shared_gpu_payload_cache,
+        reusable_gpu_slot,
+    ) {
+        (Some(cache), None, None) => run_official_top6_shared_moe_batch_cached(
             ctx,
             pipelines,
             timestamp_bits,
@@ -5995,7 +6159,7 @@ fn run_official_top6_shared_moe_batch(
             cache,
             capture_shared_diagnostics,
         ),
-        (None, Some(slot)) => run_official_top6_shared_moe_batch_reusable(
+        (None, None, Some(slot)) => run_official_top6_shared_moe_batch_reusable(
             ctx,
             pipelines,
             timestamp_bits,
@@ -6004,8 +6168,29 @@ fn run_official_top6_shared_moe_batch(
             routed,
             shared,
             slot,
+            None,
             capture_shared_diagnostics,
         ),
+        (None, Some(shared_cache), Some(slot)) => {
+            shared_cache.ensure(ctx, shared)?;
+            let identity = shared
+                .gpu_identity
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("shared GPU payload lost strict SHA identity"))?;
+            let resident = shared_cache.get(identity)?;
+            run_official_top6_shared_moe_batch_reusable(
+                ctx,
+                pipelines,
+                timestamp_bits,
+                timestamp_period_ns,
+                x,
+                routed,
+                shared,
+                slot,
+                Some(resident),
+                capture_shared_diagnostics,
+            )
+        }
         _ => bail!("GPU resident cache and reusable upload slot mode drift"),
     }
 }
@@ -6224,6 +6409,7 @@ fn run_official_top6_shared_moe_batch_reusable(
     routed: &[MoePayload],
     shared: &MoePayload,
     buffers: &ReusableOfficialMoeSlot,
+    resident_shared_weights: Option<&GpuMoeWeights>,
     capture_shared_diagnostics: bool,
 ) -> Result<OfficialMoeResult> {
     if x.len() != 4096 || routed.len() != 6 || shared.expert_id.is_some() {
@@ -6255,7 +6441,7 @@ fn run_official_top6_shared_moe_batch_reusable(
     // of activation and weight staging is rewritten and uploaded on every
     // request. It therefore removes allocator churn without becoming a
     // resident payload cache or retaining layer identity.
-    buffers.rewrite_and_upload(ctx, x, routed, shared)?;
+    buffers.rewrite_and_upload(ctx, x, routed, shared, resident_shared_weights.is_none())?;
     let routed_dispatches = buffers
         .routed
         .iter()
@@ -6303,21 +6489,40 @@ fn run_official_top6_shared_moe_batch_reusable(
             })
         })
         .collect::<Result<Vec<_>>>()?;
+    let (shared_w1, shared_s1, shared_w3, shared_s3, shared_w2, shared_s2) =
+        match resident_shared_weights {
+            Some(weights) => (
+                &weights.w1.device,
+                &weights.s1.device,
+                &weights.w3.device,
+                &weights.s3.device,
+                &weights.w2.device,
+                &weights.s2.device,
+            ),
+            None => (
+                &buffers.shared.w1.device,
+                &buffers.shared.s1.device,
+                &buffers.shared.w3.device,
+                &buffers.shared.s3.device,
+                &buffers.shared.w2.device,
+                &buffers.shared.s2.device,
+            ),
+        };
     let shared_dispatch = SharedOfficialDispatch {
         w1: pipelines.bind_fp8(
             ctx,
             shared_up_shape,
             &buffers.x.device,
-            &buffers.shared.w1.device,
-            &buffers.shared.s1.device,
+            shared_w1,
+            shared_s1,
             &buffers.gate,
         )?,
         w3: pipelines.bind_fp8(
             ctx,
             shared_up_shape,
             &buffers.x.device,
-            &buffers.shared.w3.device,
-            &buffers.shared.s3.device,
+            shared_w3,
+            shared_s3,
             &buffers.up,
         )?,
         prepare: pipelines.bind_official_expert_prepare(
@@ -6332,8 +6537,8 @@ fn run_official_top6_shared_moe_batch_reusable(
             ctx,
             shared_down_shape,
             &buffers.hidden,
-            &buffers.shared.w2.device,
-            &buffers.shared.s2.device,
+            shared_w2,
+            shared_s2,
             &buffers.down,
         )?,
         accumulate: pipelines.bind_bf16_accumulate(
@@ -8812,6 +9017,7 @@ mod writeback_payload_cache_tests {
         let reusable = WritebackReusableGpuSlotTelemetry::for_successful_request(
             Some((device_bytes, staging_bytes)),
             false,
+            false,
         )
         .unwrap();
         assert!(reusable.enabled);
@@ -8820,17 +9026,32 @@ mod writeback_payload_cache_tests {
         assert_eq!(reusable.weight_tensor_slots_reused, 42);
         assert!(reusable.workspace_reused);
         assert!(reusable.resident_cache_isolated);
+        assert!(!reusable.shared_resident_cache_hybrid);
+
+        let hybrid = WritebackReusableGpuSlotTelemetry::for_successful_request(
+            Some((device_bytes, staging_bytes)),
+            false,
+            true,
+        )
+        .unwrap();
+        assert!(hybrid.enabled);
+        assert_eq!(hybrid.request_uploaded_bytes, 80_232_448);
+        assert_eq!(hybrid.weight_tensor_slots_reused, 36);
+        assert!(hybrid.shared_resident_cache_hybrid);
 
         let resident =
-            WritebackReusableGpuSlotTelemetry::for_successful_request(None, true).unwrap();
+            WritebackReusableGpuSlotTelemetry::for_successful_request(None, true, false).unwrap();
         assert!(!resident.enabled);
         assert_eq!(resident.request_uploaded_bytes, 0);
         assert!(WritebackReusableGpuSlotTelemetry::for_successful_request(
             Some((device_bytes, staging_bytes)),
             true,
+            false,
         )
         .is_err());
-        assert!(WritebackReusableGpuSlotTelemetry::for_successful_request(None, false).is_err());
+        assert!(
+            WritebackReusableGpuSlotTelemetry::for_successful_request(None, false, false,).is_err()
+        );
     }
 
     #[test]
@@ -8882,6 +9103,26 @@ mod writeback_payload_cache_tests {
         assert_eq!(telemetry.capacity_bytes, 0);
         assert_eq!(telemetry.entries, 0);
         assert_eq!(telemetry.total_uploaded_bytes, 0);
+    }
+
+    #[test]
+    fn shared_gpu_payload_cache_is_explicit_and_fixed_to_two_gib() {
+        assert_eq!(DEFAULT_SHARED_GPU_PAYLOAD_CACHE_GIB, 0);
+        assert_eq!(
+            shared_gpu_payload_cache_capacity_bytes_from(None).unwrap(),
+            None
+        );
+        assert_eq!(
+            shared_gpu_payload_cache_capacity_bytes_from(Some("0")).unwrap(),
+            None
+        );
+        assert_eq!(
+            shared_gpu_payload_cache_capacity_bytes_from(Some("2")).unwrap(),
+            Some(2_u64 * 1024 * 1024 * 1024)
+        );
+        assert!(shared_gpu_payload_cache_capacity_bytes_from(Some("1")).is_err());
+        assert!(shared_gpu_payload_cache_capacity_bytes_from(Some("3")).is_err());
+        assert!(shared_gpu_payload_cache_capacity_bytes_from(Some("two")).is_err());
     }
 
     #[test]

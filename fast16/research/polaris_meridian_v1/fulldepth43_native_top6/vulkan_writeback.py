@@ -291,6 +291,7 @@ class PersistentVulkanWriteback:
             or hello.get("ready") is not True
             or hello.get("persistent_context") is not True
             or hello.get("official_boundary_graph") is not True
+            or hello.get("inline_manifest_json") is not True
             or hello.get("batch_payload_verification") is not True
             or hello.get("batch_payload_verification_concurrency_limit")
             != BATCH_PAYLOAD_VERIFICATION_CONCURRENCY
@@ -338,15 +339,54 @@ class PersistentVulkanWriteback:
                 except OSError:
                     pass
 
-    def execute(self, manifest_path: Path) -> tuple[torch.Tensor, dict[str, Any]]:
+    def execute(
+        self,
+        manifest_source: Path | Mapping[str, Any],
+        *,
+        capture_root: Path | None = None,
+    ) -> tuple[torch.Tensor, dict[str, Any]]:
         if self.poisoned or self.process is None or self.process.poll() is not None:
             raise VulkanWritebackError("Vulkan worker 已 poisoned/退出")
-        manifest_path = manifest_path.resolve(strict=True)
-        if manifest_path.name != "bridge_manifest.json":
-            self._fail("Vulkan manifest 文件名漂移")
-        capture_root = manifest_path.parent.resolve(strict=True)
-        expected_manifest_sha = _sha256(manifest_path)
-        manifest = _strict_json(manifest_path.read_text(encoding="utf-8", errors="strict"))
+        if isinstance(manifest_source, Mapping):
+            if capture_root is None:
+                self._fail("inline Vulkan manifest 缺少 capture_root")
+            capture_root = capture_root.resolve(strict=True)
+            if not capture_root.is_dir():
+                self._fail("inline Vulkan capture_root 不是目录")
+            try:
+                manifest_json = json.dumps(
+                    manifest_source,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                )
+            except (TypeError, ValueError) as exc:
+                self._fail(f"inline Vulkan manifest 无法规范序列化: {exc}")
+            manifest_bytes = manifest_json.encode("utf-8", errors="strict")
+            expected_manifest_sha = hashlib.sha256(manifest_bytes).hexdigest()
+            manifest = _strict_json(manifest_json)
+            manifest_transport = "inline_json"
+            request_manifest_fields: dict[str, Any] = {
+                "capture_root": str(capture_root),
+                "manifest_json": manifest_json,
+                "manifest_sha256": expected_manifest_sha,
+            }
+            request_op = "execute_single_layer_inline_manifest"
+        else:
+            if capture_root is not None:
+                self._fail("文件 Vulkan manifest 禁止额外 capture_root")
+            manifest_path = Path(manifest_source).resolve(strict=True)
+            if manifest_path.name != "bridge_manifest.json":
+                self._fail("Vulkan manifest 文件名漂移")
+            capture_root = manifest_path.parent.resolve(strict=True)
+            expected_manifest_sha = _sha256(manifest_path)
+            manifest = _strict_json(
+                manifest_path.read_text(encoding="utf-8", errors="strict")
+            )
+            manifest_transport = "capture_file"
+            request_manifest_fields = {"manifest": str(manifest_path)}
+            request_op = "execute_single_layer"
         manifest_position = manifest.get("position")
         manifest_layer = manifest.get("layer")
         manifest_input_token_id = manifest.get("input_token_id")
@@ -375,16 +415,22 @@ class PersistentVulkanWriteback:
         request_id = f"py-{os.getpid()}-{self.counter}"
         request = {
             "protocol": PROTOCOL,
-            "op": "execute_single_layer",
+            "op": request_op,
             "request_id": request_id,
-            "manifest": str(manifest_path),
             "batch_verify_payloads": self.batch_verify_payloads,
+            **request_manifest_fields,
         }
+        request_line = json.dumps(
+            request,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        if len(request_line.encode("utf-8", errors="strict")) > 65_536:
+            self._fail("Vulkan worker 请求超过 64 KiB")
         assert self.process.stdin is not None
         try:
-            self.process.stdin.write(
-                json.dumps(request, ensure_ascii=False, separators=(",", ":")) + "\n"
-            )
+            self.process.stdin.write(request_line + "\n")
             self.process.stdin.flush()
         except (BrokenPipeError, OSError) as exc:
             self._fail(f"写入 Vulkan worker 失败: {exc}")
@@ -396,6 +442,7 @@ class PersistentVulkanWriteback:
             response.get("protocol") != PROTOCOL
             or response.get("request_id") != request_id
             or response.get("manifest_sha256") != expected_manifest_sha
+            or response.get("manifest_transport") != manifest_transport
             or response.get("position") != manifest_position
             or response.get("layer") != manifest_layer
             or response.get("input_token_id") != manifest_input_token_id
@@ -447,11 +494,13 @@ class PersistentVulkanWriteback:
             "protocol": PROTOCOL,
             "device": response.get("device"),
             "manifest_sha256": expected_manifest_sha,
+            "manifest_transport": manifest_transport,
             "output_sha256": expected_output_sha,
             "gpu_kernel_ms": response.get("gpu_kernel_ms"),
             "worker_wall_ms": response.get("wall_ms"),
             "payload_cache": response.get("payload_cache"),
             "gpu_payload_cache": response.get("gpu_payload_cache"),
+            "shared_gpu_payload_cache": response.get("shared_gpu_payload_cache"),
             "reusable_gpu_slot": response.get("reusable_gpu_slot"),
             "payload_verification": payload_verification,
             "batch_payload_verification": batch_payload_verification,

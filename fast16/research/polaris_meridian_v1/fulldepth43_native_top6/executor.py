@@ -764,6 +764,7 @@ class ExecutionConfig:
     vulkan_writeback_cpu_fallback: bool = True
     vulkan_writeback_fast_production: bool = False
     vulkan_writeback_batch_verify_payloads: bool = False
+    vulkan_writeback_inline_manifest: bool = False
     vulkan_final_head_worker: Path | None = None
     vulkan_final_head_timeout_seconds: float = 60.0
     vulkan_final_head_scratch: Path | None = None
@@ -820,6 +821,14 @@ class ExecutionConfig:
         ):
             raise FullDepthError(
                 "batch payload 验证要求全层 fast-production Vulkan MoE worker"
+            )
+        if self.vulkan_writeback_inline_manifest and (
+            self.vulkan_writeback_worker is None
+            or not self.vulkan_writeback_all_layers
+            or not self.vulkan_writeback_fast_production
+        ):
+            raise FullDepthError(
+                "inline manifest 要求全层 fast-production Vulkan MoE worker"
             )
         if (
             self.vulkan_final_head_worker is not None
@@ -1143,6 +1152,15 @@ def _bridge_payload_entry(
     }
 
 
+@dataclass(frozen=True)
+class VulkanBridgeCapture:
+    """单层 Vulkan 回写输入；正式路径的 manifest 只保留在内存。"""
+
+    capture_root: Path
+    manifest: Mapping[str, Any]
+    report: Mapping[str, Any]
+
+
 def _write_vulkan_bridge_capture(
     capture_dir: Path,
     *,
@@ -1155,7 +1173,8 @@ def _write_vulkan_bridge_capture(
     kernel: FullDepthNativeLayerReference,
     profile: ExecutionProfile,
     gpu_verifier_ownership: bool = False,
-) -> dict[str, Any]:
+    persist_manifest: bool = True,
+) -> VulkanBridgeCapture:
     capture_dir = capture_dir.resolve()
     if capture_dir.exists():
         raise FullDepthError(f"Vulkan bridge capture 目录已存在: {capture_dir}")
@@ -1231,15 +1250,34 @@ def _write_vulkan_bridge_capture(
             "E4M3FN group-128 activation requantization."
         ).format(layer=layer),
     }
-    manifest_path = capture_dir / "bridge_manifest.json"
-    write_json(manifest_path, document)
-    return {
-        "manifest": str(manifest_path),
+    manifest_json = json.dumps(
+        document,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    manifest_sha256 = _sha256_bytes(manifest_json.encode("utf-8", errors="strict"))
+    manifest_path: Path | None = None
+    if persist_manifest:
+        manifest_path = capture_dir / "bridge_manifest.json"
+        write_json(manifest_path, document)
+        manifest_sha256 = _sha256_bytes(manifest_path.read_bytes())
+    report = {
+        "manifest": None if manifest_path is None else str(manifest_path),
+        "manifest_transport": "capture_file" if persist_manifest else "inline_json",
+        "manifest_sha256": manifest_sha256,
+        "capture_root": str(capture_dir),
         "input_f32_le_sha256": document["input"]["f32_le_sha256"],
         "source_ffn_input_f32_le_sha256": document["source_ffn_input_f32_le_sha256"],
         "payload_count": len(payloads),
         "payload_bytes": document["payload_bytes"],
     }
+    return VulkanBridgeCapture(
+        capture_root=capture_dir,
+        manifest=document,
+        report=report,
+    )
 
 
 @dataclass
@@ -1720,6 +1758,10 @@ class FullDepthTokenWorker:
                     kernel=kernel,
                     profile=self.profile,
                     gpu_verifier_ownership=self.config.range_gpu_verifier_ownership,
+                    persist_manifest=not (
+                        writeback_requested
+                        and self.config.vulkan_writeback_inline_manifest
+                    ),
                 )
             cpu_moe_branch: torch.Tensor | None = None
             cpu_state: torch.Tensor | None = None
@@ -1732,9 +1774,18 @@ class FullDepthTokenWorker:
                 self.stage = f"position_{position}_layer_{layer}_vulkan_writeback"
                 assert self._writeback is not None
                 try:
-                    vulkan_moe_branch, worker_evidence = self._writeback.execute(
-                        Path(bridge_capture["manifest"])
-                    )
+                    if self.config.vulkan_writeback_inline_manifest:
+                        vulkan_moe_branch, worker_evidence = self._writeback.execute(
+                            bridge_capture.manifest,
+                            capture_root=bridge_capture.capture_root,
+                        )
+                    else:
+                        manifest_path = bridge_capture.report.get("manifest")
+                        if not isinstance(manifest_path, str):
+                            raise FullDepthError("文件 manifest 路径缺失")
+                        vulkan_moe_branch, worker_evidence = self._writeback.execute(
+                            Path(manifest_path)
+                        )
                 except VulkanWritebackError as error:
                     if not self.config.vulkan_writeback_cpu_fallback:
                         raise FullDepthError(
@@ -1865,7 +1916,9 @@ class FullDepthTokenWorker:
                     "moe_branch": kernel._summary_tensor(moe_branch),
                     "layer_output": kernel._summary_tensor(state),
                     "elapsed_seconds": time.perf_counter() - layer_started,
-                    "vulkan_bridge_capture": bridge_capture,
+                    "vulkan_bridge_capture": (
+                        None if bridge_capture is None else bridge_capture.report
+                    ),
                     "vulkan_writeback": writeback_evidence,
                     "vulkan_attention": attention_vulkan,
                 }
@@ -2062,6 +2115,7 @@ def execute(
                 "batch_verify_payloads": (
                     config.vulkan_writeback_batch_verify_payloads
                 ),
+                "inline_manifest": config.vulkan_writeback_inline_manifest,
             }
         attention_hello = getattr(worker, "attention_hello", None)
         if attention_hello is not None:

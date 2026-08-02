@@ -228,3 +228,15 @@ fallback的正式候选上使用。它让GPU专属页由Rust worker在计算前�
 `--vulkan-writeback-batch-verify-payloads`，由Rust做最多8路并行读取/SHA并在全部成功后原子发布。
 正反相邻门中完整墙钟收益分别为17.54%和9.41%，输出仍为`[5,223]`；详见
 `FULLDEPTH43_BATCH_PAYLOAD_VERIFICATION.md`。
+
+逐层 manifest 也可用 `--vulkan-writeback-inline-manifest` 改为规范 JSON + SHA-256 的
+内存直传。该路径真实消除了86/86个 `bridge_manifest.json`，并把Python IPC/响应校验
+从`0.32039s`降至`0.25399s`；但完整两-token正向门回归4.45%，反向门又改善3.69%，
+方向不一致。故它保留为默认关闭的研究开关，不晋级；完整负门见
+`FULLDEPTH43_INLINE_MANIFEST_AB.md`及同目录JSON。
+
+只常驻43层shared experts的实验入口为
+`POLARIS_SHARED_GPU_PAYLOAD_CACHE_GIB=2`。第二token真实达到43/43 GPU hit和0 B shared重传，
+但正反完整墙钟方向仍不一致，因此默认保持0；详见
+`FULLDEPTH43_SHARED_GPU_CACHE_AB.md`。该负门说明下一阶段必须迁移到单一持久整token/多token
+Rust/Vulkan执行块，不能继续靠小LRU逼近交互速度。

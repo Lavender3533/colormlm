@@ -1436,3 +1436,31 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
 - 当前最佳完整观测为`0.03767 token/s`，比本轮第一个基线快但仍远非交互速度，
   不构成20–50 token/s、质量、长上下文、Kimi前端或Claude/GPT追赶完成证据。下一速度主线是
   消除逐层`bridge_manifest.json`文件控制面，直接向持久Rust worker发送同一份严格manifest。
+
+## 2026-08-02：inline manifest完成正确性门，但未通过完整速度晋级门
+
+- 新显式开关`--vulkan-writeback-inline-manifest`把规范UTF-8 manifest字符串、精确SHA-256
+  与capture root直接送入持久Rust worker；候选86/86层均为`inline_json`、0 fallback、
+  输出仍为`[5,223]`，且运行目录不再生成86个`bridge_manifest.json`。
+- Python IPC/响应验证由`0.32039s`降为`0.25399s`（-20.72%），但完整两-token正向相邻门
+  `50.3515s→52.5943s`（回归4.45%）；候选后的反向文件基线为`54.6110s`，候选相对它
+  又快3.69%。正反方向不一致，不能证明完整token稳定加速。
+- 该协议保留为默认关闭的研究开关，不替换当前正式路径。证据见
+  `FULLDEPTH43_INLINE_MANIFEST_AB.md`及同目录JSON。
+- 下一速度主线改为MoE数据面：当前10GiB Rust verified cache已无eviction，但两-token仍需首次
+  读取/SHA `7,593,067,008 B`；每token本身还需约1.008GiB shared和3.212GiB routed权重进入
+  MoE GPU路径。优先研究只常驻跨token必复用的shared experts，避免通用LRU顺序抖动。
+
+## 2026-08-02：shared-only GPU常驻机制成立，但速度未晋级
+
+- 显式实验`POLARIS_SHARED_GPU_PAYLOAD_CACHE_GIB=2`只允许43层shared experts进入GPU缓存，
+  routed experts仍走原固定上传槽；它与旧通用GPU LRU互斥，默认关闭。
+- 第一token上传43组shared共`1,082,196,480 B`；第二token精确43/43 hit、0 miss、0 B shared
+  重传，0 eviction。routed固定槽每层上传由`105,399,808 B`降为`80,232,448 B`。
+- 输出仍为`[5,223]`、86/86 Vulkan MoE、0 fallback且GPU所有权闭合；机制门通过。
+- 完整两-token候选`52.4784s`：相对前置基线`54.6110s`快3.91%，但相对后置基线
+  `50.8944s`慢3.11%。方向反转，故不晋级、不宣称速度提升。证据见
+  `FULLDEPTH43_SHARED_GPU_CACHE_AB.md`及同目录JSON。
+- profile约49.02s中attention exclusive约18.00s、Python→Rust MoE约8.89s、Range routed获取
+  约5.97s、capture I/O约3.82s、Range proof index约3.93s。下一主线正式改为单一持久
+  whole-token / speculative-block Rust+Vulkan runtime；不再把小缓存当作20–50 token/s路线。

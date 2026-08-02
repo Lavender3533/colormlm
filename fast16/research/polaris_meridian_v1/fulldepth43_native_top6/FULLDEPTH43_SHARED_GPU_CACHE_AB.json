@@ -1,0 +1,53 @@
+{
+  "format": "polaris-fulldepth43-shared-gpu-cache-ab-v1",
+  "date": "2026-08-02",
+  "status": "mechanism_passed_speed_not_promoted",
+  "switch": "POLARIS_SHARED_GPU_PAYLOAD_CACHE_GIB=2",
+  "candidate": {
+    "execution_seconds": 52.47836389999429,
+    "effective_tokens_per_second": 0.03811094423239474,
+    "per_token_wall_seconds": [32.59230409999145, 17.636949599997024],
+    "shared_cache_capacity_bytes": 2147483648,
+    "position_0": {
+      "hits": 0,
+      "misses": 43,
+      "uploaded_bytes": 1082196480
+    },
+    "position_1": {
+      "hits": 43,
+      "misses": 0,
+      "uploaded_bytes": 0
+    },
+    "resident_entries": 43,
+    "resident_bytes": 1082196480,
+    "reusable_slot_uploaded_bytes_per_layer": 80232448
+  },
+  "preceding_baseline": {
+    "execution_seconds": 54.61097589999554,
+    "candidate_wall_reduction_percent": 3.9050977662558495,
+    "candidate_throughput_improvement_percent": 4.06379285006917
+  },
+  "following_baseline": {
+    "execution_seconds": 50.894442099990556,
+    "candidate_wall_regression_percent": 3.112170474119469,
+    "candidate_throughput_change_percent": -3.0182377694208395
+  },
+  "hard_gates": {
+    "output_token_ids_equal": true,
+    "output_token_ids": [5, 223],
+    "layers": "86/86",
+    "vulkan_moe_writebacks": "86/86",
+    "cpu_fallbacks": 0,
+    "gpu_verifier_ownership_closed": true,
+    "shared_second_token_hits": "43/43",
+    "shared_second_token_uploaded_bytes": 0,
+    "evictions": 0
+  },
+  "source_runs": {
+    "preceding_baseline": ".tmp-polaris-runs/inline-manifest-ab-reverse-baseline-20260802",
+    "candidate": ".tmp-polaris-runs/shared-gpu-cache-smoke-20260802",
+    "following_baseline": ".tmp-polaris-runs/shared-gpu-cache-reverse-baseline-20260802"
+  },
+  "decision": "The selective shared-resident mechanism is correct but the adjacent whole-token direction reverses. Keep it explicit and default off; do not claim a speed promotion.",
+  "architecture_conclusion": "Per-token traffic reduction alone is insufficient in the current 43-layer multi-process executor. Move attention, routing, payload scheduling and MoE into a persistent whole-token or speculative-block Rust/Vulkan runtime."
+}
