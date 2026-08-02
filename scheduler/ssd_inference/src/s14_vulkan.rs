@@ -32,6 +32,19 @@ pub const S14_MXFP4_MATVEC_EXACT_SPV: &[u8] =
 pub const S14_FP8_MATVEC_EXACT_SPV: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/s14_fp8_matvec_exact.spv"));
 
+/// Ragged branch kernels select w1/w3/w2 slices from one shared byte arena.
+/// The audit variants preserve the exact single-row reduction order.
+pub const S14_RAGGED_MXFP4_MATVEC_SPV: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/s14_ragged_mxfp4_matvec.spv"));
+pub const S14_RAGGED_MXFP4_MATVEC_EXACT_SPV: &[u8] = include_bytes!(concat!(
+    env!("OUT_DIR"),
+    "/s14_ragged_mxfp4_matvec_exact.spv"
+));
+pub const S14_RAGGED_FP8_MATVEC_SPV: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/s14_ragged_fp8_matvec.spv"));
+pub const S14_RAGGED_FP8_MATVEC_EXACT_SPV: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/s14_ragged_fp8_matvec_exact.spv"));
+
 /// Eight-group wo_a projection. The source remains packed E4M3+UE8M0, but
 /// each decoded weight crosses the official BF16 boundary before the dot.
 pub const S14_GROUPED_FP8_BF16_MATVEC_SPV: &[u8] =
@@ -55,8 +68,21 @@ pub const S14_OFFICIAL_EXPERT_PREPARE_SPV: &[u8] =
 pub const S14_BF16_ACCUMULATE_SPV: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/s14_bf16_accumulate.spv"));
 
+pub const S14_BATCHED_OFFICIAL_EXPERT_PREPARE_SPV: &[u8] = include_bytes!(concat!(
+    env!("OUT_DIR"),
+    "/s14_batched_official_expert_prepare.spv"
+));
+
+pub const S14_EXACT_ORDER_BLOCK_REDUCE_SPV: &[u8] = include_bytes!(concat!(
+    env!("OUT_DIR"),
+    "/s14_exact_order_block_reduce.spv"
+));
+
 const FP4_GROUP_SIZE: u32 = 32;
 const FP8_TILE: u32 = 128;
+pub const S14_ROUTED_EXPERTS_PER_POSITION: u32 = 6;
+pub const S14_BLOCK_HIDDEN: u32 = 4096;
+pub const S14_RAGGED_METADATA_WORDS: u64 = 6;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct S14MatvecShape {
@@ -132,6 +158,226 @@ impl S14MatvecShape {
         let n_tiles = self.n.div_ceil(FP8_TILE);
         let k_tiles = self.k.div_ceil(FP8_TILE);
         checked_product(n_tiles, k_tiles, "S14 FP8 scale")
+    }
+}
+
+/// Selects the pair of byte offsets used by a ragged branch dispatch.
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum S14RaggedProjection {
+    W1 = 0,
+    W3 = 1,
+    W2 = 2,
+}
+
+impl TryFrom<u32> for S14RaggedProjection {
+    type Error = anyhow::Error;
+
+    fn try_from(value: u32) -> Result<Self> {
+        match value {
+            0 => Ok(Self::W1),
+            1 => Ok(Self::W3),
+            2 => Ok(Self::W2),
+            _ => bail!("S14 ragged projection {value} is not w1(0), w3(1), or w2(2)"),
+        }
+    }
+}
+
+/// GPU metadata ABI: six little-endian u32 byte offsets per branch.
+///
+/// u32 keeps the shader independent from optional Vulkan int64 features.
+/// The host consequently rejects arenas larger than 4 GiB. All offsets must
+/// be four-byte aligned because the shader reads the arena through uint words.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct S14RaggedBranchOffsets {
+    pub w1: u32,
+    pub s1: u32,
+    pub w3: u32,
+    pub s3: u32,
+    pub w2: u32,
+    pub s2: u32,
+}
+
+impl S14RaggedBranchOffsets {
+    pub fn words(self) -> [u32; 6] {
+        [self.w1, self.s1, self.w3, self.s3, self.w2, self.s2]
+    }
+
+    pub fn projection_offsets(self, projection: S14RaggedProjection) -> (u64, u64) {
+        let (weight, scale) = match projection {
+            S14RaggedProjection::W1 => (self.w1, self.s1),
+            S14RaggedProjection::W3 => (self.w3, self.s3),
+            S14RaggedProjection::W2 => (self.w2, self.s2),
+        };
+        (weight as u64, scale as u64)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct S14RaggedMatvecShape {
+    pub branches: u32,
+    pub branches_per_input: u32,
+    pub n: u32,
+    pub k: u32,
+    pub projection: S14RaggedProjection,
+}
+
+impl S14RaggedMatvecShape {
+    pub fn new(
+        branches: u32,
+        branches_per_input: u32,
+        n: u32,
+        k: u32,
+        projection: S14RaggedProjection,
+    ) -> Result<Self> {
+        let shape = Self {
+            branches,
+            branches_per_input,
+            n,
+            k,
+            projection,
+        };
+        shape.validate_common()?;
+        Ok(shape)
+    }
+
+    fn validate_common(self) -> Result<Self> {
+        if self.branches == 0 || self.branches_per_input == 0 || self.n == 0 || self.k == 0 {
+            bail!("S14 ragged matvec requires non-zero branches, branches_per_input, N and K");
+        }
+        self.input_rows()?;
+        self.input_elements()?;
+        self.output_elements()?;
+        self.metadata_bytes()?;
+        Ok(self)
+    }
+
+    pub fn input_rows(self) -> Result<u32> {
+        self.branches
+            .checked_add(self.branches_per_input - 1)
+            .ok_or_else(|| anyhow!("S14 ragged input-row count overflow"))
+            .map(|value| value / self.branches_per_input)
+    }
+
+    pub fn input_elements(self) -> Result<u32> {
+        self.input_rows()?
+            .checked_mul(self.k)
+            .ok_or_else(|| anyhow!("S14 ragged input index overflow"))
+    }
+
+    pub fn output_elements(self) -> Result<u32> {
+        self.branches
+            .checked_mul(self.n)
+            .ok_or_else(|| anyhow!("S14 ragged output index overflow"))
+    }
+
+    pub fn fp32_input_bytes(self) -> Result<u64> {
+        checked_bytes(self.input_elements()? as u64, 4, "S14 ragged input")
+    }
+
+    pub fn fp32_output_bytes(self) -> Result<u64> {
+        checked_bytes(self.output_elements()? as u64, 4, "S14 ragged output")
+    }
+
+    pub fn metadata_bytes(self) -> Result<u64> {
+        let words = (self.branches as u64)
+            .checked_mul(S14_RAGGED_METADATA_WORDS)
+            .ok_or_else(|| anyhow!("S14 ragged metadata word count overflow"))?;
+        checked_bytes(words, 4, "S14 ragged metadata")
+    }
+
+    pub fn validate_mxfp4(
+        self,
+        arena_logical_bytes: u64,
+        metadata: &[S14RaggedBranchOffsets],
+    ) -> Result<Self> {
+        self.validate_common()?;
+        let matvec = S14MatvecShape {
+            n: self.n,
+            k: self.k,
+        }
+        .validate_mxfp4()?;
+        self.validate_metadata(
+            arena_logical_bytes,
+            metadata,
+            storage_bytes(matvec.mxfp4_weight_bytes()?),
+            storage_bytes(matvec.mxfp4_scale_bytes()?),
+        )?;
+        Ok(self)
+    }
+
+    pub fn validate_fp8(
+        self,
+        arena_logical_bytes: u64,
+        metadata: &[S14RaggedBranchOffsets],
+    ) -> Result<Self> {
+        self.validate_common()?;
+        let matvec = S14MatvecShape {
+            n: self.n,
+            k: self.k,
+        }
+        .validate_fp8()?;
+        self.validate_metadata(
+            arena_logical_bytes,
+            metadata,
+            storage_bytes(matvec.fp8_weight_bytes()?),
+            storage_bytes(matvec.fp8_scale_bytes()?),
+        )?;
+        Ok(self)
+    }
+
+    fn validate_metadata(
+        self,
+        arena_logical_bytes: u64,
+        metadata: &[S14RaggedBranchOffsets],
+        weight_bytes: u64,
+        scale_bytes: u64,
+    ) -> Result<()> {
+        const U32_ADDRESS_SPACE_BYTES: u64 = u32::MAX as u64 + 1;
+        if arena_logical_bytes == 0
+            || arena_logical_bytes > U32_ADDRESS_SPACE_BYTES
+            || arena_logical_bytes % 4 != 0
+        {
+            bail!(
+                "S14 ragged arena logical capacity {arena_logical_bytes} B must be non-zero, four-byte aligned, and at most 4 GiB"
+            );
+        }
+        if metadata.len() != self.branches as usize {
+            bail!(
+                "S14 ragged metadata has {} branches, expected {}",
+                metadata.len(),
+                self.branches
+            );
+        }
+        for (branch, offsets) in metadata.iter().copied().enumerate() {
+            for (word, offset) in offsets.words().into_iter().enumerate() {
+                if offset % 4 != 0 {
+                    bail!(
+                        "S14 ragged branch {branch} metadata word {word} offset {offset} is not four-byte aligned"
+                    );
+                }
+                if offset as u64 >= arena_logical_bytes {
+                    bail!(
+                        "S14 ragged branch {branch} metadata word {word} offset {offset} exceeds arena capacity {arena_logical_bytes} B"
+                    );
+                }
+            }
+            let (weight_offset, scale_offset) = offsets.projection_offsets(self.projection);
+            require_logical_subrange(
+                arena_logical_bytes,
+                weight_offset,
+                weight_bytes,
+                &format!("S14 ragged branch {branch} weight"),
+            )?;
+            require_logical_subrange(
+                arena_logical_bytes,
+                scale_offset,
+                scale_bytes,
+                &format!("S14 ragged branch {branch} scale"),
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -212,12 +458,63 @@ fn storage_bytes(logical_bytes: u64) -> u64 {
     logical_bytes.div_ceil(4) * 4
 }
 
+/// Return `(matrix_bytes, route_weight_bytes)` for the batched prepare ABI.
+pub fn s14_batched_official_prepare_buffer_bytes(branches: u32, n: u32) -> Result<(u64, u64)> {
+    if branches == 0 || n == 0 || n % FP8_TILE != 0 {
+        bail!("S14 batched official prepare requires non-zero branches and positive 128-aligned N");
+    }
+    let elements = branches
+        .checked_mul(n)
+        .ok_or_else(|| anyhow!("S14 batched official prepare index overflow"))?;
+    Ok((
+        checked_bytes(elements as u64, 4, "S14 batched official prepare")?,
+        checked_bytes(
+            branches as u64,
+            4,
+            "S14 batched official prepare route weights",
+        )?,
+    ))
+}
+
+/// Return `(routed_bytes, shared_or_output_bytes)` for the fixed top-6 block.
+pub fn s14_exact_order_block_reduce_buffer_bytes(positions: u32) -> Result<(u64, u64)> {
+    if positions == 0 {
+        bail!("S14 exact-order block reduce requires non-zero positions");
+    }
+    let output_elements = positions
+        .checked_mul(S14_BLOCK_HIDDEN)
+        .ok_or_else(|| anyhow!("S14 exact-order block output index overflow"))?;
+    let routed_elements = positions
+        .checked_mul(S14_ROUTED_EXPERTS_PER_POSITION)
+        .and_then(|value| value.checked_mul(S14_BLOCK_HIDDEN))
+        .ok_or_else(|| anyhow!("S14 exact-order routed-down index overflow"))?;
+    Ok((
+        checked_bytes(routed_elements as u64, 4, "S14 exact-order routed-down")?,
+        checked_bytes(output_elements as u64, 4, "S14 exact-order shared/output")?,
+    ))
+}
+
 fn require_capacity(buffer: &GpuBuffer, required: u64, label: &str) -> Result<()> {
     if buffer.size() < required {
         bail!(
             "{label} buffer is {} B, requires at least {required} B",
             buffer.size()
         );
+    }
+    Ok(())
+}
+
+fn require_logical_subrange(
+    logical_capacity: u64,
+    offset: u64,
+    required: u64,
+    label: &str,
+) -> Result<()> {
+    let end = offset
+        .checked_add(required)
+        .ok_or_else(|| anyhow!("{label} subrange overflow"))?;
+    if end > logical_capacity {
+        bail!("{label} subrange [{offset}, {end}) exceeds logical capacity {logical_capacity} B");
     }
     Ok(())
 }
@@ -235,13 +532,7 @@ fn require_subrange_capacity(
             buffer.size()
         );
     }
-    let end = offset
-        .checked_add(required)
-        .ok_or_else(|| anyhow!("{label} subrange overflow"))?;
-    if end > logical_capacity {
-        bail!("{label} subrange [{offset}, {end}) exceeds logical capacity {logical_capacity} B");
-    }
-    Ok(())
+    require_logical_subrange(logical_capacity, offset, required, label)
 }
 
 fn require_storage_offset_alignment(ctx: &VulkanContext, offset: u64, label: &str) -> Result<()> {
@@ -284,6 +575,16 @@ pub struct S14Fp8Dispatch {
     pub shape: S14MatvecShape,
 }
 
+pub struct S14RaggedMxfp4Dispatch {
+    pub binder: DescriptorBinder,
+    pub shape: S14RaggedMatvecShape,
+}
+
+pub struct S14RaggedFp8Dispatch {
+    pub binder: DescriptorBinder,
+    pub shape: S14RaggedMatvecShape,
+}
+
 pub struct S14GroupedFp8Bf16Dispatch {
     pub binder: DescriptorBinder,
     pub shape: S14GroupedMatvecShape,
@@ -317,17 +618,32 @@ pub struct S14Bf16AccumulateDispatch {
     pub n: u32,
 }
 
+pub struct S14BatchedOfficialExpertPrepareDispatch {
+    pub binder: DescriptorBinder,
+    pub branches: u32,
+    pub n: u32,
+}
+
+pub struct S14ExactOrderBlockReduceDispatch {
+    pub binder: DescriptorBinder,
+    pub positions: u32,
+}
+
 /// Pipelines used by the native S14 graph. They are independent from the GGUF
 /// Q4_K pipelines because the Polaris checkpoint has a different byte ABI.
 pub struct S14NumericPipelines {
     mxfp4_matvec: ComputePipeline,
     fp8_matvec: ComputePipeline,
+    ragged_mxfp4_matvec: ComputePipeline,
+    ragged_fp8_matvec: ComputePipeline,
     grouped_fp8_bf16_matvec: ComputePipeline,
     swiglu_limit: ComputePipeline,
     route_mix: ComputePipeline,
     moe_accumulate: ComputePipeline,
     official_expert_prepare: ComputePipeline,
     bf16_accumulate: ComputePipeline,
+    batched_official_expert_prepare: ComputePipeline,
+    exact_order_block_reduce: ComputePipeline,
 }
 
 impl S14NumericPipelines {
@@ -336,6 +652,8 @@ impl S14NumericPipelines {
             ctx,
             S14_MXFP4_MATVEC_SPV,
             S14_FP8_MATVEC_SPV,
+            S14_RAGGED_MXFP4_MATVEC_SPV,
+            S14_RAGGED_FP8_MATVEC_SPV,
             S14_GROUPED_FP8_BF16_MATVEC_SPV,
         )
     }
@@ -347,6 +665,8 @@ impl S14NumericPipelines {
             ctx,
             S14_MXFP4_MATVEC_EXACT_SPV,
             S14_FP8_MATVEC_EXACT_SPV,
+            S14_RAGGED_MXFP4_MATVEC_EXACT_SPV,
+            S14_RAGGED_FP8_MATVEC_EXACT_SPV,
             S14_GROUPED_FP8_BF16_MATVEC_EXACT_SPV,
         )
     }
@@ -355,11 +675,15 @@ impl S14NumericPipelines {
         ctx: &VulkanContext,
         mxfp4_matvec_spv: &[u8],
         fp8_matvec_spv: &[u8],
+        ragged_mxfp4_matvec_spv: &[u8],
+        ragged_fp8_matvec_spv: &[u8],
         grouped_fp8_bf16_matvec_spv: &[u8],
     ) -> Result<Self> {
         Ok(Self {
             mxfp4_matvec: ComputePipeline::new(ctx, mxfp4_matvec_spv, 4, 8)?,
             fp8_matvec: ComputePipeline::new(ctx, fp8_matvec_spv, 4, 8)?,
+            ragged_mxfp4_matvec: ComputePipeline::new(ctx, ragged_mxfp4_matvec_spv, 4, 16)?,
+            ragged_fp8_matvec: ComputePipeline::new(ctx, ragged_fp8_matvec_spv, 4, 16)?,
             grouped_fp8_bf16_matvec: ComputePipeline::new(ctx, grouped_fp8_bf16_matvec_spv, 4, 12)?,
             swiglu_limit: ComputePipeline::new(ctx, S14_SWIGLU_LIMIT_SPV, 3, 4)?,
             route_mix: ComputePipeline::new(ctx, S14_ROUTE_MIX_SPV, 2, 8)?,
@@ -371,6 +695,18 @@ impl S14NumericPipelines {
                 8,
             )?,
             bf16_accumulate: ComputePipeline::new(ctx, S14_BF16_ACCUMULATE_SPV, 2, 4)?,
+            batched_official_expert_prepare: ComputePipeline::new(
+                ctx,
+                S14_BATCHED_OFFICIAL_EXPERT_PREPARE_SPV,
+                4,
+                8,
+            )?,
+            exact_order_block_reduce: ComputePipeline::new(
+                ctx,
+                S14_EXACT_ORDER_BLOCK_REDUCE_SPV,
+                3,
+                4,
+            )?,
         })
     }
 
@@ -535,6 +871,75 @@ impl S14NumericPipelines {
         Ok(S14Fp8Dispatch { binder, shape })
     }
 
+    /// Bind a multi-branch MXFP4 dispatch over one shared arena. `metadata`
+    /// is the CPU mirror of `metadata_buffer`; validating it here prevents a
+    /// malformed GPU offset from escaping the logical arena. The caller must
+    /// upload these exact six-word records before recording the dispatch.
+    pub fn bind_ragged_mxfp4_weight_arena(
+        &self,
+        ctx: &VulkanContext,
+        shape: S14RaggedMatvecShape,
+        x: &GpuBuffer,
+        arena: &GpuBuffer,
+        arena_logical_bytes: u64,
+        metadata_buffer: &GpuBuffer,
+        metadata: &[S14RaggedBranchOffsets],
+        y: &GpuBuffer,
+    ) -> Result<S14RaggedMxfp4Dispatch> {
+        let shape = shape.validate_mxfp4(arena_logical_bytes, metadata)?;
+        let x_bytes = shape.fp32_input_bytes()?;
+        let metadata_bytes = shape.metadata_bytes()?;
+        let y_bytes = shape.fp32_output_bytes()?;
+        require_capacity(x, x_bytes, "S14 ragged MXFP4 input")?;
+        require_capacity(arena, arena_logical_bytes, "S14 ragged MXFP4 arena")?;
+        require_capacity(metadata_buffer, metadata_bytes, "S14 ragged MXFP4 metadata")?;
+        require_capacity(y, y_bytes, "S14 ragged MXFP4 output")?;
+        let binder = DescriptorBinder::new(
+            ctx,
+            &self.ragged_mxfp4_matvec,
+            &[
+                (x, x_bytes),
+                (arena, arena_logical_bytes),
+                (metadata_buffer, metadata_bytes),
+                (y, y_bytes),
+            ],
+        )?;
+        Ok(S14RaggedMxfp4Dispatch { binder, shape })
+    }
+
+    /// FP8 counterpart of `bind_ragged_mxfp4_weight_arena`.
+    pub fn bind_ragged_fp8_weight_arena(
+        &self,
+        ctx: &VulkanContext,
+        shape: S14RaggedMatvecShape,
+        x: &GpuBuffer,
+        arena: &GpuBuffer,
+        arena_logical_bytes: u64,
+        metadata_buffer: &GpuBuffer,
+        metadata: &[S14RaggedBranchOffsets],
+        y: &GpuBuffer,
+    ) -> Result<S14RaggedFp8Dispatch> {
+        let shape = shape.validate_fp8(arena_logical_bytes, metadata)?;
+        let x_bytes = shape.fp32_input_bytes()?;
+        let metadata_bytes = shape.metadata_bytes()?;
+        let y_bytes = shape.fp32_output_bytes()?;
+        require_capacity(x, x_bytes, "S14 ragged FP8 input")?;
+        require_capacity(arena, arena_logical_bytes, "S14 ragged FP8 arena")?;
+        require_capacity(metadata_buffer, metadata_bytes, "S14 ragged FP8 metadata")?;
+        require_capacity(y, y_bytes, "S14 ragged FP8 output")?;
+        let binder = DescriptorBinder::new(
+            ctx,
+            &self.ragged_fp8_matvec,
+            &[
+                (x, x_bytes),
+                (arena, arena_logical_bytes),
+                (metadata_buffer, metadata_bytes),
+                (y, y_bytes),
+            ],
+        )?;
+        Ok(S14RaggedFp8Dispatch { binder, shape })
+    }
+
     pub fn bind_grouped_fp8_bf16_weight(
         &self,
         ctx: &VulkanContext,
@@ -685,6 +1090,66 @@ impl S14NumericPipelines {
         Ok(S14Bf16AccumulateDispatch { binder, n })
     }
 
+    pub fn bind_batched_official_expert_prepare(
+        &self,
+        ctx: &VulkanContext,
+        branches: u32,
+        n: u32,
+        gate: &GpuBuffer,
+        up: &GpuBuffer,
+        route_weights: &GpuBuffer,
+        hidden: &GpuBuffer,
+    ) -> Result<S14BatchedOfficialExpertPrepareDispatch> {
+        let (matrix_bytes, route_bytes) = s14_batched_official_prepare_buffer_bytes(branches, n)?;
+        require_capacity(gate, matrix_bytes, "S14 batched official prepare gate")?;
+        require_capacity(up, matrix_bytes, "S14 batched official prepare up")?;
+        require_capacity(
+            route_weights,
+            route_bytes,
+            "S14 batched official prepare route weights",
+        )?;
+        require_capacity(hidden, matrix_bytes, "S14 batched official prepare hidden")?;
+        let binder = DescriptorBinder::new(
+            ctx,
+            &self.batched_official_expert_prepare,
+            &[
+                (gate, matrix_bytes),
+                (up, matrix_bytes),
+                (route_weights, route_bytes),
+                (hidden, matrix_bytes),
+            ],
+        )?;
+        Ok(S14BatchedOfficialExpertPrepareDispatch {
+            binder,
+            branches,
+            n,
+        })
+    }
+
+    pub fn bind_exact_order_block_reduce(
+        &self,
+        ctx: &VulkanContext,
+        positions: u32,
+        routed_down: &GpuBuffer,
+        shared_down: &GpuBuffer,
+        output: &GpuBuffer,
+    ) -> Result<S14ExactOrderBlockReduceDispatch> {
+        let (routed_bytes, output_bytes) = s14_exact_order_block_reduce_buffer_bytes(positions)?;
+        require_capacity(routed_down, routed_bytes, "S14 exact-order routed-down")?;
+        require_capacity(shared_down, output_bytes, "S14 exact-order shared-down")?;
+        require_capacity(output, output_bytes, "S14 exact-order output")?;
+        let binder = DescriptorBinder::new(
+            ctx,
+            &self.exact_order_block_reduce,
+            &[
+                (routed_down, routed_bytes),
+                (shared_down, output_bytes),
+                (output, output_bytes),
+            ],
+        )?;
+        Ok(S14ExactOrderBlockReduceDispatch { binder, positions })
+    }
+
     /// Record only the kernel dispatch. Upload, barriers, readback and fence
     /// ownership stay with the surrounding native forward command graph.
     pub unsafe fn cmd_mxfp4_matvec(
@@ -714,6 +1179,36 @@ impl S14NumericPipelines {
             ctx,
             command_buffer,
             &self.fp8_matvec,
+            dispatch.binder.set,
+            dispatch.shape,
+        );
+    }
+
+    pub unsafe fn cmd_ragged_mxfp4_matvec(
+        &self,
+        ctx: &VulkanContext,
+        command_buffer: vk::CommandBuffer,
+        dispatch: &S14RaggedMxfp4Dispatch,
+    ) {
+        record_ragged_matvec(
+            ctx,
+            command_buffer,
+            &self.ragged_mxfp4_matvec,
+            dispatch.binder.set,
+            dispatch.shape,
+        );
+    }
+
+    pub unsafe fn cmd_ragged_fp8_matvec(
+        &self,
+        ctx: &VulkanContext,
+        command_buffer: vk::CommandBuffer,
+        dispatch: &S14RaggedFp8Dispatch,
+    ) {
+        record_ragged_matvec(
+            ctx,
+            command_buffer,
+            &self.ragged_fp8_matvec,
             dispatch.binder.set,
             dispatch.shape,
         );
@@ -819,13 +1314,48 @@ impl S14NumericPipelines {
         );
     }
 
+    pub unsafe fn cmd_batched_official_expert_prepare(
+        &self,
+        ctx: &VulkanContext,
+        command_buffer: vk::CommandBuffer,
+        dispatch: &S14BatchedOfficialExpertPrepareDispatch,
+    ) {
+        record_batched_official_expert_prepare(
+            ctx,
+            command_buffer,
+            &self.batched_official_expert_prepare,
+            dispatch.binder.set,
+            dispatch.branches,
+            dispatch.n,
+        );
+    }
+
+    pub unsafe fn cmd_exact_order_block_reduce(
+        &self,
+        ctx: &VulkanContext,
+        command_buffer: vk::CommandBuffer,
+        dispatch: &S14ExactOrderBlockReduceDispatch,
+    ) {
+        record_exact_order_block_reduce(
+            ctx,
+            command_buffer,
+            &self.exact_order_block_reduce,
+            dispatch.binder.set,
+            dispatch.positions,
+        );
+    }
+
     pub fn destroy(&self, ctx: &VulkanContext) {
+        self.exact_order_block_reduce.destroy(ctx);
+        self.batched_official_expert_prepare.destroy(ctx);
         self.bf16_accumulate.destroy(ctx);
         self.official_expert_prepare.destroy(ctx);
         self.moe_accumulate.destroy(ctx);
         self.route_mix.destroy(ctx);
         self.swiglu_limit.destroy(ctx);
         self.grouped_fp8_bf16_matvec.destroy(ctx);
+        self.ragged_fp8_matvec.destroy(ctx);
+        self.ragged_mxfp4_matvec.destroy(ctx);
         self.fp8_matvec.destroy(ctx);
         self.mxfp4_matvec.destroy(ctx);
     }
@@ -903,6 +1433,109 @@ unsafe fn record_matvec(
         &push,
     );
     ctx.device.cmd_dispatch(command_buffer, shape.n, 1, 1);
+}
+
+unsafe fn record_ragged_matvec(
+    ctx: &VulkanContext,
+    command_buffer: vk::CommandBuffer,
+    pipeline: &ComputePipeline,
+    set: vk::DescriptorSet,
+    shape: S14RaggedMatvecShape,
+) {
+    ctx.device.cmd_bind_pipeline(
+        command_buffer,
+        vk::PipelineBindPoint::COMPUTE,
+        pipeline.pipeline,
+    );
+    ctx.device.cmd_bind_descriptor_sets(
+        command_buffer,
+        vk::PipelineBindPoint::COMPUTE,
+        pipeline.layout,
+        0,
+        &[set],
+        &[],
+    );
+    let mut push = [0u8; 16];
+    push[..4].copy_from_slice(&(shape.projection as u32).to_le_bytes());
+    push[4..8].copy_from_slice(&shape.branches_per_input.to_le_bytes());
+    push[8..12].copy_from_slice(&shape.n.to_le_bytes());
+    push[12..].copy_from_slice(&shape.k.to_le_bytes());
+    ctx.device.cmd_push_constants(
+        command_buffer,
+        pipeline.layout,
+        vk::ShaderStageFlags::COMPUTE,
+        0,
+        &push,
+    );
+    ctx.device
+        .cmd_dispatch(command_buffer, shape.n, shape.branches, 1);
+}
+
+unsafe fn record_batched_official_expert_prepare(
+    ctx: &VulkanContext,
+    command_buffer: vk::CommandBuffer,
+    pipeline: &ComputePipeline,
+    set: vk::DescriptorSet,
+    branches: u32,
+    n: u32,
+) {
+    ctx.device.cmd_bind_pipeline(
+        command_buffer,
+        vk::PipelineBindPoint::COMPUTE,
+        pipeline.pipeline,
+    );
+    ctx.device.cmd_bind_descriptor_sets(
+        command_buffer,
+        vk::PipelineBindPoint::COMPUTE,
+        pipeline.layout,
+        0,
+        &[set],
+        &[],
+    );
+    let mut push = [0u8; 8];
+    push[..4].copy_from_slice(&branches.to_le_bytes());
+    push[4..].copy_from_slice(&n.to_le_bytes());
+    ctx.device.cmd_push_constants(
+        command_buffer,
+        pipeline.layout,
+        vk::ShaderStageFlags::COMPUTE,
+        0,
+        &push,
+    );
+    ctx.device
+        .cmd_dispatch(command_buffer, n.div_ceil(FP8_TILE), branches, 1);
+}
+
+unsafe fn record_exact_order_block_reduce(
+    ctx: &VulkanContext,
+    command_buffer: vk::CommandBuffer,
+    pipeline: &ComputePipeline,
+    set: vk::DescriptorSet,
+    positions: u32,
+) {
+    ctx.device.cmd_bind_pipeline(
+        command_buffer,
+        vk::PipelineBindPoint::COMPUTE,
+        pipeline.pipeline,
+    );
+    ctx.device.cmd_bind_descriptor_sets(
+        command_buffer,
+        vk::PipelineBindPoint::COMPUTE,
+        pipeline.layout,
+        0,
+        &[set],
+        &[],
+    );
+    ctx.device.cmd_push_constants(
+        command_buffer,
+        pipeline.layout,
+        vk::ShaderStageFlags::COMPUTE,
+        0,
+        &positions.to_le_bytes(),
+    );
+    let output_elements = positions * S14_BLOCK_HIDDEN;
+    ctx.device
+        .cmd_dispatch(command_buffer, output_elements.div_ceil(256), 1, 1);
 }
 
 unsafe fn record_grouped_matvec(
@@ -1323,6 +1956,77 @@ mod numeric_tests {
             .unwrap()
             .validate_mxfp4()
             .is_err());
+    }
+
+    #[test]
+    fn ragged_metadata_abi_and_k4_shapes_are_exact() {
+        assert_eq!(std::mem::size_of::<S14RaggedBranchOffsets>(), 24);
+        let shape = S14RaggedMatvecShape::new(4, 2, 2048, 4096, S14RaggedProjection::W1).unwrap();
+        assert_eq!(shape.input_rows().unwrap(), 2);
+        assert_eq!(shape.fp32_input_bytes().unwrap(), 32_768);
+        assert_eq!(shape.fp32_output_bytes().unwrap(), 32_768);
+        assert_eq!(shape.metadata_bytes().unwrap(), 96);
+
+        let stride = 4_456_448u32;
+        let metadata: Vec<_> = (0..4)
+            .map(|branch| {
+                let weight = branch * stride;
+                let scale = weight + 4_194_304;
+                S14RaggedBranchOffsets {
+                    w1: weight,
+                    s1: scale,
+                    w3: weight,
+                    s3: scale,
+                    w2: weight,
+                    s2: scale,
+                }
+            })
+            .collect();
+        shape.validate_mxfp4(stride as u64 * 4, &metadata).unwrap();
+    }
+
+    #[test]
+    fn ragged_contract_rejects_bad_projection_alignment_bounds_and_overflow() {
+        assert!(S14RaggedProjection::try_from(3).is_err());
+        assert!(S14RaggedMatvecShape::new(u32::MAX, 1, 2, 128, S14RaggedProjection::W1).is_err());
+        assert!(S14RaggedMatvecShape::new(u32::MAX, 2, 1, 128, S14RaggedProjection::W1).is_err());
+
+        let shape = S14RaggedMatvecShape::new(1, 1, 128, 128, S14RaggedProjection::W3).unwrap();
+        let mut metadata = [S14RaggedBranchOffsets {
+            w1: 0,
+            s1: 0,
+            w3: 0,
+            s3: 16_384,
+            w2: 0,
+            s2: 0,
+        }];
+        shape.validate_fp8(16_388, &metadata).unwrap();
+        metadata[0].w3 = 2;
+        assert!(shape.validate_fp8(16_388, &metadata).is_err());
+        metadata[0].w3 = 8;
+        assert!(shape.validate_fp8(16_388, &metadata).is_err());
+        metadata[0].w3 = 0;
+        assert!(shape.validate_fp8(16_384, &metadata).is_err());
+        assert!(shape.validate_fp8(16_388, &[]).is_err());
+        assert!(shape.validate_fp8(u32::MAX as u64 + 2, &metadata).is_err());
+    }
+
+    #[test]
+    fn batched_prepare_and_exact_reduce_sizes_reject_index_overflow() {
+        assert_eq!(
+            s14_batched_official_prepare_buffer_bytes(4, 2048).unwrap(),
+            (32_768, 16)
+        );
+        assert!(s14_batched_official_prepare_buffer_bytes(0, 2048).is_err());
+        assert!(s14_batched_official_prepare_buffer_bytes(4, 2047).is_err());
+        assert!(s14_batched_official_prepare_buffer_bytes(u32::MAX, 128).is_err());
+
+        assert_eq!(
+            s14_exact_order_block_reduce_buffer_bytes(1).unwrap(),
+            (98_304, 16_384)
+        );
+        assert!(s14_exact_order_block_reduce_buffer_bytes(0).is_err());
+        assert!(s14_exact_order_block_reduce_buffer_bytes(u32::MAX).is_err());
     }
 
     #[test]

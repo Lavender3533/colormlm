@@ -1508,3 +1508,22 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
 - 下一速度主线是把attention、router、KV、HC、MoE与head收进单一Rust/Vulkan whole-token runtime，
   并让K=4真实连续状态在同一GPU context内执行；优先复用持久command/descriptor资源和合并
   activation upload，停止回到Python逐层调度或碎片GPU buffer路线。
+
+## 2026-08-02：K=4 grouped GPU command graph 通过全43层门
+
+- 在持久union arena上把K=4的四次compute submit、140次compute dispatch收为一次submit、
+  9次grouped dispatch；production与exact-audit均覆盖ragged MXFP4/FP8 matvec，expert prepare
+  批处理，最终仍严格按原route slot `0→5→shared`做BF16-RNE归约。
+- 全43层、四个连续位置一次通过`172/172`行BF16精确门。measure阶段GPU arena的staging/device
+  allocations均为`0`，host disk bytes为`0`；hello明确声明K=4 grouped GPU和9次dispatch。
+- 上一版持久union arena总wall为`5262.9780 ms`、kernel为`463.62472 ms`；当前分别为
+  `4391.0789 ms`与`390.67568 ms`，再加速`1.1986×`与`1.1867×`。相对最初四次单层
+  `8573.0042 ms`，累计wall加速`1.9524×`；逐层wall加速中位数`1.2601×`。
+- L39有一次`304.7563 ms`主机wall抖动，但该层kernel仍由`9.78156 ms`降到`6.44012 ms`；
+  总数保留该不利样本，没有通过重跑或排除异常刷高结果。
+- 当前ragged shader仍由各branch workgroup分别解码其权重，还未做到相同identity只解码一次服务
+  四行。权威证据为`fast16/research/polaris_meridian_v1/speculative_full_verifier/
+  CAUSAL_BLOCK_K4_GROUPED_GPU_AB.json`及同名Markdown。
+- `speed_eligible_verifier=false`继续保持：这是43层同层MoE replay，不含attention/router/KV/HC/
+  head，不是完整token/s，也没有新增质量、Kimi前端或Claude/GPT能力证据。下一主线不再优化
+  replay外壳，直接构建统一Rust/Vulkan whole-token状态ABI与K=1完整token闭环，再接K=4连续状态。

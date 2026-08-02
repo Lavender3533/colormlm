@@ -1,0 +1,80 @@
+#version 450
+
+// Audit-only ragged MXFP4 matvec. Per branch/row this is intentionally the
+// same 12-lane FMA and lane-order reduction as s14_mxfp4_matvec_exact.comp.
+
+layout(local_size_x = 128) in;
+
+layout(set = 0, binding = 0) readonly buffer X { float x[]; };
+layout(set = 0, binding = 1) readonly buffer Arena { uint arena_words[]; };
+layout(set = 0, binding = 2) readonly buffer Metadata { uint offsets[]; };
+layout(set = 0, binding = 3) writeonly buffer Y { float y[]; };
+
+layout(push_constant) uniform Push {
+    uint projection;
+    uint branches_per_input;
+    uint N;
+    uint K;
+} push;
+
+shared float partial[128];
+
+uint arena_byte(uint byte_index) {
+    uint word = arena_words[byte_index >> 2u];
+    return (word >> ((byte_index & 3u) * 8u)) & 0xffu;
+}
+
+float e2m1(uint code) {
+    uint magnitude_code = code & 7u;
+    float magnitude;
+    if (magnitude_code <= 4u) {
+        magnitude = 0.5 * float(magnitude_code);
+    } else if (magnitude_code == 5u) {
+        magnitude = 3.0;
+    } else if (magnitude_code == 6u) {
+        magnitude = 4.0;
+    } else {
+        magnitude = 6.0;
+    }
+    return (code & 8u) == 0u ? magnitude : -magnitude;
+}
+
+float ue8m0(uint code) {
+    return ldexp(1.0, int(code) - 127);
+}
+
+void main() {
+    uint n = gl_WorkGroupID.x;
+    uint branch = gl_WorkGroupID.y;
+    uint tid = gl_LocalInvocationID.x;
+    if (n >= push.N) return;
+
+    uint metadata_base = branch * 6u + push.projection * 2u;
+    uint weight_offset = offsets[metadata_base];
+    uint scale_offset = offsets[metadata_base + 1u];
+    uint input_base = (branch / push.branches_per_input) * push.K;
+    uint packed_k = push.K >> 1u;
+    uint row_weight_base = weight_offset + n * packed_k;
+    uint row_scale_base = scale_offset + n * (push.K >> 5u);
+    const uint active_lanes = 12u;
+    float acc = 0.0;
+
+    if (tid < active_lanes) {
+        for (uint pair = tid; pair < packed_k; pair += active_lanes) {
+            uint code_pair = arena_byte(row_weight_base + pair);
+            uint k = pair << 1u;
+            float scale = ue8m0(arena_byte(row_scale_base + (k >> 5u)));
+            acc = fma(scale * e2m1(code_pair & 0x0fu), x[input_base + k], acc);
+            acc = fma(scale * e2m1(code_pair >> 4u), x[input_base + k + 1u], acc);
+        }
+        partial[tid] = acc;
+    }
+    barrier();
+    if (tid == 0u) {
+        precise float total = partial[0];
+        for (uint lane = 1u; lane < active_lanes; ++lane) {
+            total += partial[lane];
+        }
+        y[branch * push.N + n] = total;
+    }
+}

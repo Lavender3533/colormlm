@@ -101,6 +101,16 @@ python -m fast16.research.polaris_meridian_v1.speculative_full_verifier `
 [`CAUSAL_BLOCK_K4_AB.json`](CAUSAL_BLOCK_K4_AB.json)。下一实现必须改用有界 union arena
 的一次批量上传，不能把 K 次串行或当前负收益 replay 包装成 batch 加速。
 
+随后两步已经完成：持久 union arena 先把 43 层 wall 从四次单层的 `8573.0042 ms`
+降到 `5262.9780 ms`；K=4 grouped GPU command graph 又把四次 submit、140 次 dispatch
+收为一次 submit、9 次 dispatch。最终 43 层为 `172/172` BF16 精确，wall `4391.0789 ms`、
+GPU kernel `390.67568 ms`，相对 union arena 再快 `1.1986×` / `1.1867×`，相对最初四次
+单层累计 wall 快 `1.9524×`。完整证据见
+[`CAUSAL_BLOCK_K4_GROUPED_GPU_AB.md`](CAUSAL_BLOCK_K4_GROUPED_GPU_AB.md) 与
+[`CAUSAL_BLOCK_K4_GROUPED_GPU_AB.json`](CAUSAL_BLOCK_K4_GROUPED_GPU_AB.json)。
+
+该结果仍是同层 MoE replay；`speed_eligible_verifier=false`，不能换算为完整 token/s。
+
 ## 证据边界
 
 当前已有真实 FullDepth43 route、权重 payload、四位置 capture 与同层 K=4 GPU 回放证据；

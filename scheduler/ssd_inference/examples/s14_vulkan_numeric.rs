@@ -19,7 +19,8 @@ use ssd_inference::device::VulkanContext;
 use ssd_inference::s14_vulkan::{
     validate_e4m3fn_codes, validate_ue8m0_codes, S14Bf16AccumulateDispatch, S14Fp8Dispatch,
     S14GroupedFp8Bf16Dispatch, S14GroupedMatvecShape, S14MatvecShape, S14MoeAccumulateDispatch,
-    S14Mxfp4Dispatch, S14NumericPipelines, S14OfficialExpertPrepareDispatch, S14RouteMixDispatch,
+    S14Mxfp4Dispatch, S14NumericPipelines, S14OfficialExpertPrepareDispatch,
+    S14RaggedBranchOffsets, S14RaggedMatvecShape, S14RaggedProjection, S14RouteMixDispatch,
     S14SwigluLimitDispatch,
 };
 use ssd_inference::verified_payload_cache::{
@@ -75,6 +76,9 @@ const DEFAULT_SHARED_GPU_PAYLOAD_CACHE_GIB: usize = 0;
 const SHARED_GPU_PAYLOAD_CACHE_GIB: usize = 2;
 const GPU_VRAM_HARD_LIMIT_GIB: usize = 8;
 const OFFICIAL_ROUTED_EXPERT_COUNT: usize = 6;
+const CAUSAL_BLOCK_BATCH4_POSITIONS: usize = 4;
+const CAUSAL_BLOCK_BATCH4_ROUTED_BRANCHES: usize =
+    CAUSAL_BLOCK_BATCH4_POSITIONS * OFFICIAL_ROUTED_EXPERT_COUNT;
 const REUSABLE_GPU_SLOT_MAX_LOGICAL_BYTES: u64 = 128 * 1024 * 1024;
 const CAUSAL_BLOCK_UNION_ARENA_MAX_BYTES: u64 = 1024 * 1024 * 1024;
 const WRITEBACK_DIAGNOSTIC_DIR_ENV: &str = "POLARIS_FULLDEPTH43_WRITEBACK_DIAGNOSTIC_DIR";
@@ -1235,6 +1239,153 @@ impl ReusableOfficialMoeSlot {
     }
 }
 
+/// Persistent K=4 workspace for one grouped causal-block command graph.
+/// The large weights stay in the union arena; only compact inputs, metadata,
+/// route weights and branch intermediates live here.
+struct ReusableCausalBlockBatch4MoeSlot {
+    x: ReusableUploadedBuffer,
+    routed_metadata: ReusableUploadedBuffer,
+    shared_metadata: ReusableUploadedBuffer,
+    routed_route_weights: ReusableUploadedBuffer,
+    shared_route_weights: ReusableUploadedBuffer,
+    routed_gate: GpuBuffer,
+    routed_up: GpuBuffer,
+    routed_hidden: GpuBuffer,
+    routed_down: GpuBuffer,
+    shared_gate: GpuBuffer,
+    shared_up: GpuBuffer,
+    shared_hidden: GpuBuffer,
+    shared_down: GpuBuffer,
+    output: GpuBuffer,
+    readback: GpuBuffer,
+}
+
+impl ReusableCausalBlockBatch4MoeSlot {
+    fn new(ctx: &VulkanContext) -> Result<Self> {
+        let x_bytes = CAUSAL_BLOCK_BATCH4_POSITIONS as u64 * 4096 * 4;
+        let routed_metadata_bytes = CAUSAL_BLOCK_BATCH4_ROUTED_BRANCHES as u64 * 6 * 4;
+        let shared_metadata_bytes = CAUSAL_BLOCK_BATCH4_POSITIONS as u64 * 6 * 4;
+        let routed_route_bytes = CAUSAL_BLOCK_BATCH4_ROUTED_BRANCHES as u64 * 4;
+        let shared_route_bytes = CAUSAL_BLOCK_BATCH4_POSITIONS as u64 * 4;
+        let routed_intermediate_bytes = CAUSAL_BLOCK_BATCH4_ROUTED_BRANCHES as u64 * 2048 * 4;
+        let routed_output_bytes = CAUSAL_BLOCK_BATCH4_ROUTED_BRANCHES as u64 * 4096 * 4;
+        let shared_intermediate_bytes = CAUSAL_BLOCK_BATCH4_POSITIONS as u64 * 2048 * 4;
+        let output_bytes = CAUSAL_BLOCK_BATCH4_POSITIONS as u64 * 4096 * 4;
+        let storage = vk::BufferUsageFlags::STORAGE_BUFFER;
+        Ok(Self {
+            x: ReusableUploadedBuffer::new(ctx, x_bytes)?,
+            routed_metadata: ReusableUploadedBuffer::new(ctx, routed_metadata_bytes)?,
+            shared_metadata: ReusableUploadedBuffer::new(ctx, shared_metadata_bytes)?,
+            routed_route_weights: ReusableUploadedBuffer::new(ctx, routed_route_bytes)?,
+            shared_route_weights: ReusableUploadedBuffer::new(ctx, shared_route_bytes)?,
+            routed_gate: GpuBuffer::new_vram(ctx, routed_intermediate_bytes, storage)?,
+            routed_up: GpuBuffer::new_vram(ctx, routed_intermediate_bytes, storage)?,
+            routed_hidden: GpuBuffer::new_vram(ctx, routed_intermediate_bytes, storage)?,
+            routed_down: GpuBuffer::new_vram(ctx, routed_output_bytes, storage)?,
+            shared_gate: GpuBuffer::new_vram(ctx, shared_intermediate_bytes, storage)?,
+            shared_up: GpuBuffer::new_vram(ctx, shared_intermediate_bytes, storage)?,
+            shared_hidden: GpuBuffer::new_vram(ctx, shared_intermediate_bytes, storage)?,
+            shared_down: GpuBuffer::new_vram(ctx, output_bytes, storage)?,
+            output: GpuBuffer::new_vram(
+                ctx,
+                output_bytes,
+                storage | vk::BufferUsageFlags::TRANSFER_SRC,
+            )?,
+            readback: GpuBuffer::new(
+                ctx,
+                output_bytes,
+                vk::BufferUsageFlags::TRANSFER_DST,
+                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+                vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                true,
+            )?,
+        })
+    }
+
+    fn rewrite_staging(
+        &self,
+        prepared: &[PreparedCausalBlockPosition],
+        routed_metadata: &[S14RaggedBranchOffsets],
+        shared_metadata: &[S14RaggedBranchOffsets],
+    ) -> Result<()> {
+        if prepared.len() != CAUSAL_BLOCK_BATCH4_POSITIONS
+            || routed_metadata.len() != CAUSAL_BLOCK_BATCH4_ROUTED_BRANCHES
+            || shared_metadata.len() != CAUSAL_BLOCK_BATCH4_POSITIONS
+        {
+            bail!("causal-block batch4 workspace input shape drift");
+        }
+        let activations = prepared
+            .iter()
+            .flat_map(|position| position.input.iter().copied())
+            .collect::<Vec<_>>();
+        let routed_weights = prepared
+            .iter()
+            .flat_map(|position| position.routed.iter().map(|payload| payload.mix_weight))
+            .collect::<Vec<_>>();
+        let shared_weights = vec![1.0f32; CAUSAL_BLOCK_BATCH4_POSITIONS];
+        let metadata_words = |rows: &[S14RaggedBranchOffsets]| {
+            rows.iter().flat_map(|row| row.words()).collect::<Vec<_>>()
+        };
+        let routed_words = metadata_words(routed_metadata);
+        let shared_words = metadata_words(shared_metadata);
+        self.x
+            .rewrite_staging(bytemuck::cast_slice(&activations), "batch4 activations")?;
+        self.routed_metadata.rewrite_staging(
+            bytemuck::cast_slice(&routed_words),
+            "batch4 routed metadata",
+        )?;
+        self.shared_metadata.rewrite_staging(
+            bytemuck::cast_slice(&shared_words),
+            "batch4 shared metadata",
+        )?;
+        self.routed_route_weights.rewrite_staging(
+            bytemuck::cast_slice(&routed_weights),
+            "batch4 routed route weights",
+        )?;
+        self.shared_route_weights.rewrite_staging(
+            bytemuck::cast_slice(&shared_weights),
+            "batch4 shared route weights",
+        )?;
+        Ok(())
+    }
+
+    unsafe fn cmd_upload_inputs(&self, ctx: &VulkanContext, cb: vk::CommandBuffer) {
+        self.x.cmd_upload(ctx, cb);
+        self.routed_metadata.cmd_upload(ctx, cb);
+        self.shared_metadata.cmd_upload(ctx, cb);
+        self.routed_route_weights.cmd_upload(ctx, cb);
+        self.shared_route_weights.cmd_upload(ctx, cb);
+    }
+
+    fn output_rows(&self) -> Vec<Vec<f32>> {
+        let values = unsafe {
+            std::slice::from_raw_parts(
+                self.readback.mapped() as *const f32,
+                CAUSAL_BLOCK_BATCH4_POSITIONS * 4096,
+            )
+        };
+        values.chunks_exact(4096).map(<[f32]>::to_vec).collect()
+    }
+
+    fn destroy(&self, ctx: &VulkanContext) {
+        self.readback.destroy(ctx);
+        self.output.destroy(ctx);
+        self.shared_down.destroy(ctx);
+        self.shared_hidden.destroy(ctx);
+        self.shared_up.destroy(ctx);
+        self.shared_gate.destroy(ctx);
+        self.routed_down.destroy(ctx);
+        self.routed_hidden.destroy(ctx);
+        self.routed_up.destroy(ctx);
+        self.routed_gate.destroy(ctx);
+        self.shared_route_weights.destroy(ctx);
+        self.routed_route_weights.destroy(ctx);
+        self.shared_metadata.destroy(ctx);
+        self.routed_metadata.destroy(ctx);
+        self.x.destroy(ctx);
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct CausalBlockArenaSpan {
     offset: u64,
@@ -1249,6 +1400,25 @@ struct CausalBlockMoeArenaView {
     s3: CausalBlockArenaSpan,
     w2: CausalBlockArenaSpan,
     s2: CausalBlockArenaSpan,
+}
+
+impl TryFrom<&CausalBlockMoeArenaView> for S14RaggedBranchOffsets {
+    type Error = anyhow::Error;
+
+    fn try_from(view: &CausalBlockMoeArenaView) -> Result<Self> {
+        let offset = |span: CausalBlockArenaSpan, label: &str| {
+            u32::try_from(span.offset)
+                .with_context(|| format!("{label} causal-block arena offset exceeds u32"))
+        };
+        Ok(Self {
+            w1: offset(view.w1, "w1")?,
+            s1: offset(view.s1, "s1")?,
+            w3: offset(view.w3, "w3")?,
+            s3: offset(view.s3, "s3")?,
+            w2: offset(view.w2, "w2")?,
+            s2: offset(view.s2, "s2")?,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -5967,6 +6137,11 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
     } else {
         None
     };
+    let causal_batch4_workspace = if causal_block_layer_replay_available {
+        Some(ReusableCausalBlockBatch4MoeSlot::new(&ctx)?)
+    } else {
+        None
+    };
     let mut reusable_causal_block_arena: Option<ReusableCausalBlockUnionArena> = None;
     let mut stdout = std::io::stdout().lock();
     serde_json::to_writer(
@@ -6003,6 +6178,8 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
             "reusable_causal_block_union_arena": causal_block_layer_replay_available,
             "reusable_causal_block_union_arena_capacity_bytes":
                 CAUSAL_BLOCK_UNION_ARENA_MAX_BYTES,
+            "causal_block_grouped_gpu_batch4": causal_batch4_workspace.is_some(),
+            "causal_block_grouped_gpu_dispatches": 9,
             "gpu_vram_hard_limit_bytes": GPU_VRAM_HARD_LIMIT_GIB as u64 * 1024 * 1024 * 1024,
             "gpu_payload_identity": "tensor+bytes+sha256",
             "numeric_mode": numeric_mode,
@@ -6042,6 +6219,9 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
                     cache.destroy(&ctx);
                 }
                 if let Some(slot) = reusable_gpu_slot.as_ref() {
+                    slot.destroy(&ctx);
+                }
+                if let Some(slot) = causal_batch4_workspace.as_ref() {
                     slot.destroy(&ctx);
                 }
                 if let Some(arena) = reusable_causal_block_arena.as_ref() {
@@ -6086,6 +6266,9 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
             if let Some(slot) = reusable_gpu_slot.as_ref() {
                 slot.destroy(&ctx);
             }
+            if let Some(slot) = causal_batch4_workspace.as_ref() {
+                slot.destroy(&ctx);
+            }
             if let Some(arena) = reusable_causal_block_arena.as_ref() {
                 arena.destroy(&ctx);
             }
@@ -6109,6 +6292,10 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
                         "causal block union arena requires the persistent reusable workspace"
                     )
                 })?;
+                let causal_batch4_workspace =
+                    causal_batch4_workspace.as_ref().ok_or_else(|| {
+                        anyhow::anyhow!("causal block grouped K=4 workspace is unavailable")
+                    })?;
                 let (arena_allocate_ms, buffers_allocated_this_request) =
                     if reusable_causal_block_arena.is_none() {
                         let allocate_started = Instant::now();
@@ -6129,6 +6316,7 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
                     timestamp_period_ns,
                     &mut payload_cache,
                     causal_workspace,
+                    causal_batch4_workspace,
                     causal_arena_buffers,
                     arena_allocate_ms,
                     buffers_allocated_this_request,
@@ -6183,6 +6371,9 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
                 if let Some(slot) = reusable_gpu_slot.as_ref() {
                     slot.destroy(&ctx);
                 }
+                if let Some(slot) = causal_batch4_workspace.as_ref() {
+                    slot.destroy(&ctx);
+                }
                 if let Some(arena) = reusable_causal_block_arena.as_ref() {
                     arena.destroy(&ctx);
                 }
@@ -6198,6 +6389,9 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
         cache.destroy(&ctx);
     }
     if let Some(slot) = reusable_gpu_slot.as_ref() {
+        slot.destroy(&ctx);
+    }
+    if let Some(slot) = causal_batch4_workspace.as_ref() {
         slot.destroy(&ctx);
     }
     if let Some(arena) = reusable_causal_block_arena.as_ref() {
@@ -6338,6 +6532,72 @@ struct PreparedCausalBlockPosition {
     shared: MoePayload,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct CausalBlockBatch4RouteAssignment {
+    route_slot: u32,
+    route_weight: f32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct CausalBlockBatch4RouteGroup {
+    rows: [Option<CausalBlockBatch4RouteAssignment>; 4],
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct CausalBlockBatch4Schedule {
+    routed: BTreeMap<GpuMoeIdentity, CausalBlockBatch4RouteGroup>,
+    shared: GpuMoeIdentity,
+}
+
+fn plan_causal_block_batch4_schedule(
+    prepared: &[PreparedCausalBlockPosition],
+) -> Result<CausalBlockBatch4Schedule> {
+    if prepared.len() != CAUSAL_BLOCK_BATCH4_POSITIONS {
+        bail!("identity-grouped causal-block execution requires exactly K=4");
+    }
+    let shared = prepared[0]
+        .shared
+        .gpu_identity
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("batch4 shared expert lost strict SHA identity"))?;
+    let mut routed = BTreeMap::<GpuMoeIdentity, CausalBlockBatch4RouteGroup>::new();
+    for (row, position) in prepared.iter().enumerate() {
+        if position.input.len() != 4096
+            || position.routed.len() != OFFICIAL_ROUTED_EXPERT_COUNT
+            || position.shared.expert_id.is_some()
+            || position.shared.gpu_identity.as_ref() != Some(&shared)
+        {
+            bail!("batch4 position shape or shared identity drift");
+        }
+        for (route_slot, payload) in position.routed.iter().enumerate() {
+            let identity = payload
+                .gpu_identity
+                .clone()
+                .ok_or_else(|| anyhow::anyhow!("batch4 routed expert lost strict SHA identity"))?;
+            if payload.expert_id.is_none()
+                || !payload.mix_weight.is_finite()
+                || payload.mix_weight < 0.0
+            {
+                bail!("batch4 routed slot contract drift");
+            }
+            let group = routed
+                .entry(identity)
+                .or_insert_with(|| CausalBlockBatch4RouteGroup { rows: [None; 4] });
+            if group.rows[row].is_some() {
+                bail!("batch4 row routes the same strict expert identity more than once");
+            }
+            group.rows[row] = Some(CausalBlockBatch4RouteAssignment {
+                route_slot: route_slot as u32,
+                route_weight: payload.mix_weight,
+            });
+        }
+    }
+    if routed.is_empty() || routed.len() > CAUSAL_BLOCK_BATCH4_ROUTED_BRANCHES {
+        bail!("batch4 unique routed identity count drift");
+    }
+    Ok(CausalBlockBatch4Schedule { routed, shared })
+}
+
 fn validate_causal_block_layer_sequence(
     manifests: &[&FullDepthBridgeManifest],
 ) -> Result<(u32, Vec<u32>)> {
@@ -6466,6 +6726,7 @@ fn execute_causal_block_layer_replay(
     timestamp_period_ns: f64,
     payload_cache: &mut VerifiedPayloadCache,
     workspace: &ReusableOfficialMoeSlot,
+    batch4_workspace: &ReusableCausalBlockBatch4MoeSlot,
     arena_buffers: &mut ReusableCausalBlockUnionArena,
     arena_allocate_ms: f64,
     buffers_allocated_this_request: bool,
@@ -6628,6 +6889,17 @@ fn execute_causal_block_layer_replay(
     }
 
     let execution = (|| -> Result<(Vec<Vec<u16>>, f64)> {
+        if prepared.len() == CAUSAL_BLOCK_BATCH4_POSITIONS {
+            return run_official_causal_block_batch4_ragged(
+                ctx,
+                pipelines,
+                timestamp_bits,
+                timestamp_period_ns,
+                &prepared,
+                &arena,
+                batch4_workspace,
+            );
+        }
         let mut outputs = Vec::with_capacity(loaded.len());
         let mut gpu_kernel_ms = 0.0;
         for position in &prepared {
@@ -7457,6 +7729,284 @@ fn run_official_top6_shared_moe_batch_cached(
         gpu_kernel_ms,
         diagnostics,
     })
+}
+
+fn run_official_causal_block_batch4_ragged(
+    ctx: &VulkanContext,
+    pipelines: &S14NumericPipelines,
+    timestamp_bits: u32,
+    timestamp_period_ns: f64,
+    prepared: &[PreparedCausalBlockPosition],
+    arena: &CausalBlockUnionArena<'_>,
+    workspace: &ReusableCausalBlockBatch4MoeSlot,
+) -> Result<(Vec<Vec<u16>>, f64)> {
+    let _identity_schedule = plan_causal_block_batch4_schedule(prepared)?;
+    let routed_metadata = prepared
+        .iter()
+        .flat_map(|position| position.routed.iter())
+        .map(|payload| S14RaggedBranchOffsets::try_from(arena.view(payload)?))
+        .collect::<Result<Vec<_>>>()?;
+    let shared_metadata = prepared
+        .iter()
+        .map(|position| S14RaggedBranchOffsets::try_from(arena.view(&position.shared)?))
+        .collect::<Result<Vec<_>>>()?;
+    workspace.rewrite_staging(prepared, &routed_metadata, &shared_metadata)?;
+
+    let routed_shape = |n, k, projection| {
+        S14RaggedMatvecShape::new(
+            CAUSAL_BLOCK_BATCH4_ROUTED_BRANCHES as u32,
+            if projection == S14RaggedProjection::W2 {
+                1
+            } else {
+                OFFICIAL_ROUTED_EXPERT_COUNT as u32
+            },
+            n,
+            k,
+            projection,
+        )
+    };
+    let shared_shape = |n, k, projection| {
+        S14RaggedMatvecShape::new(CAUSAL_BLOCK_BATCH4_POSITIONS as u32, 1, n, k, projection)
+    };
+    let routed_w1 = pipelines.bind_ragged_mxfp4_weight_arena(
+        ctx,
+        routed_shape(2048, 4096, S14RaggedProjection::W1)?,
+        &workspace.x.device,
+        &arena.buffers.device,
+        arena.plan.arena_bytes,
+        &workspace.routed_metadata.device,
+        &routed_metadata,
+        &workspace.routed_gate,
+    )?;
+    let routed_w3 = pipelines.bind_ragged_mxfp4_weight_arena(
+        ctx,
+        routed_shape(2048, 4096, S14RaggedProjection::W3)?,
+        &workspace.x.device,
+        &arena.buffers.device,
+        arena.plan.arena_bytes,
+        &workspace.routed_metadata.device,
+        &routed_metadata,
+        &workspace.routed_up,
+    )?;
+    let routed_prepare = pipelines.bind_batched_official_expert_prepare(
+        ctx,
+        CAUSAL_BLOCK_BATCH4_ROUTED_BRANCHES as u32,
+        2048,
+        &workspace.routed_gate,
+        &workspace.routed_up,
+        &workspace.routed_route_weights.device,
+        &workspace.routed_hidden,
+    )?;
+    let routed_w2 = pipelines.bind_ragged_mxfp4_weight_arena(
+        ctx,
+        routed_shape(4096, 2048, S14RaggedProjection::W2)?,
+        &workspace.routed_hidden,
+        &arena.buffers.device,
+        arena.plan.arena_bytes,
+        &workspace.routed_metadata.device,
+        &routed_metadata,
+        &workspace.routed_down,
+    )?;
+    let shared_w1 = pipelines.bind_ragged_fp8_weight_arena(
+        ctx,
+        shared_shape(2048, 4096, S14RaggedProjection::W1)?,
+        &workspace.x.device,
+        &arena.buffers.device,
+        arena.plan.arena_bytes,
+        &workspace.shared_metadata.device,
+        &shared_metadata,
+        &workspace.shared_gate,
+    )?;
+    let shared_w3 = pipelines.bind_ragged_fp8_weight_arena(
+        ctx,
+        shared_shape(2048, 4096, S14RaggedProjection::W3)?,
+        &workspace.x.device,
+        &arena.buffers.device,
+        arena.plan.arena_bytes,
+        &workspace.shared_metadata.device,
+        &shared_metadata,
+        &workspace.shared_up,
+    )?;
+    let shared_prepare = pipelines.bind_batched_official_expert_prepare(
+        ctx,
+        CAUSAL_BLOCK_BATCH4_POSITIONS as u32,
+        2048,
+        &workspace.shared_gate,
+        &workspace.shared_up,
+        &workspace.shared_route_weights.device,
+        &workspace.shared_hidden,
+    )?;
+    let shared_w2 = pipelines.bind_ragged_fp8_weight_arena(
+        ctx,
+        shared_shape(4096, 2048, S14RaggedProjection::W2)?,
+        &workspace.shared_hidden,
+        &arena.buffers.device,
+        arena.plan.arena_bytes,
+        &workspace.shared_metadata.device,
+        &shared_metadata,
+        &workspace.shared_down,
+    )?;
+    let reduce = pipelines.bind_exact_order_block_reduce(
+        ctx,
+        CAUSAL_BLOCK_BATCH4_POSITIONS as u32,
+        &workspace.routed_down,
+        &workspace.shared_down,
+        &workspace.output,
+    )?;
+
+    let execution = (|| -> Result<f64> {
+        unsafe {
+            let pool = make_command_pool(ctx)?;
+            let cb = allocate_command_buffer(ctx, pool)?;
+            let queries = ctx.device.create_query_pool(
+                &vk::QueryPoolCreateInfo::default()
+                    .query_type(vk::QueryType::TIMESTAMP)
+                    .query_count(2),
+                None,
+            )?;
+            ctx.device.begin_command_buffer(
+                cb,
+                &vk::CommandBufferBeginInfo::default()
+                    .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+            )?;
+            workspace.cmd_upload_inputs(ctx, cb);
+            let upload_to_compute = vk::MemoryBarrier::default()
+                .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[upload_to_compute],
+                &[],
+                &[],
+            );
+            ctx.device.cmd_reset_query_pool(cb, queries, 0, 2);
+            ctx.device
+                .cmd_write_timestamp(cb, vk::PipelineStageFlags::TOP_OF_PIPE, queries, 0);
+            let shader_raw = vk::MemoryBarrier::default()
+                .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ);
+
+            pipelines.cmd_ragged_mxfp4_matvec(ctx, cb, &routed_w1);
+            pipelines.cmd_ragged_mxfp4_matvec(ctx, cb, &routed_w3);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[shader_raw],
+                &[],
+                &[],
+            );
+            pipelines.cmd_batched_official_expert_prepare(ctx, cb, &routed_prepare);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[shader_raw],
+                &[],
+                &[],
+            );
+            pipelines.cmd_ragged_mxfp4_matvec(ctx, cb, &routed_w2);
+
+            pipelines.cmd_ragged_fp8_matvec(ctx, cb, &shared_w1);
+            pipelines.cmd_ragged_fp8_matvec(ctx, cb, &shared_w3);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[shader_raw],
+                &[],
+                &[],
+            );
+            pipelines.cmd_batched_official_expert_prepare(ctx, cb, &shared_prepare);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[shader_raw],
+                &[],
+                &[],
+            );
+            pipelines.cmd_ragged_fp8_matvec(ctx, cb, &shared_w2);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[shader_raw],
+                &[],
+                &[],
+            );
+            pipelines.cmd_exact_order_block_reduce(ctx, cb, &reduce);
+            ctx.device
+                .cmd_write_timestamp(cb, vk::PipelineStageFlags::BOTTOM_OF_PIPE, queries, 1);
+            let readback_barrier = vk::MemoryBarrier::default()
+                .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+                .dst_access_mask(vk::AccessFlags::TRANSFER_READ);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::DependencyFlags::empty(),
+                &[readback_barrier],
+                &[],
+                &[],
+            );
+            copy(
+                ctx,
+                cb,
+                &workspace.output,
+                &workspace.readback,
+                CAUSAL_BLOCK_BATCH4_POSITIONS as u64 * 4096 * 4,
+            );
+            ctx.device.end_command_buffer(cb)?;
+            submit_and_wait(ctx, cb)?;
+            let mut ticks = [0u64; 2];
+            ctx.device.get_query_pool_results(
+                queries,
+                0,
+                &mut ticks,
+                vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT,
+            )?;
+            let mask = if timestamp_bits >= 64 {
+                u64::MAX
+            } else {
+                (1u64 << timestamp_bits) - 1
+            };
+            let elapsed_ticks = ticks[1].wrapping_sub(ticks[0]) & mask;
+            let elapsed_ms = elapsed_ticks as f64 * timestamp_period_ns / 1_000_000.0;
+            ctx.device.destroy_query_pool(queries, None);
+            ctx.device.destroy_command_pool(pool, None);
+            Ok(elapsed_ms)
+        }
+    })();
+
+    for binder in [
+        &reduce.binder,
+        &shared_w2.binder,
+        &shared_prepare.binder,
+        &shared_w3.binder,
+        &shared_w1.binder,
+        &routed_w2.binder,
+        &routed_prepare.binder,
+        &routed_w3.binder,
+        &routed_w1.binder,
+    ] {
+        binder.destroy(ctx);
+    }
+    let gpu_kernel_ms = execution?;
+    let outputs = workspace
+        .output_rows()
+        .iter()
+        .map(|row| official_branch_bf16(row))
+        .collect::<Result<Vec<_>>>()?;
+    Ok((outputs, gpu_kernel_ms))
 }
 
 fn run_official_top6_shared_moe_batch_union_arena(
@@ -10000,6 +10550,84 @@ mod writeback_payload_cache_tests {
             ),
             batch_verify_payloads: true,
         }
+    }
+
+    fn fake_batch4_position(
+        shared: &GpuMoeIdentity,
+        routed_identities: &[GpuMoeIdentity],
+    ) -> PreparedCausalBlockPosition {
+        let layout = MoeWeightByteLayout {
+            w1: 4,
+            s1: 4,
+            w3: 4,
+            s3: 4,
+            w2: 4,
+            s2: 4,
+        };
+        let routed = routed_identities
+            .iter()
+            .enumerate()
+            .map(|(slot, identity)| {
+                let mut payload = fake_payload(layout, 0.1 + slot as f32 * 0.01);
+                payload.expert_id = Some(slot as u32);
+                payload.gpu_identity = Some(identity.clone());
+                payload
+            })
+            .collect();
+        let mut shared_payload = fake_payload(layout, 1.0);
+        shared_payload.expert_id = None;
+        shared_payload.gpu_identity = Some(shared.clone());
+        PreparedCausalBlockPosition {
+            input: vec![0.0; 4096],
+            routed,
+            shared: shared_payload,
+        }
+    }
+
+    #[test]
+    fn causal_block_batch4_groups_strict_identities_without_losing_route_slots() {
+        let shared = fake_gpu_identity('f');
+        let identities: Vec<GpuMoeIdentity> = ['0', '1', '2', '3', '4', '5']
+            .into_iter()
+            .map(fake_gpu_identity)
+            .collect();
+        let reversed: Vec<GpuMoeIdentity> = identities.iter().cloned().rev().collect();
+        let prepared = vec![
+            fake_batch4_position(&shared, &identities),
+            fake_batch4_position(&shared, &reversed),
+            fake_batch4_position(&shared, &identities),
+            fake_batch4_position(&shared, &reversed),
+        ];
+        let schedule = plan_causal_block_batch4_schedule(&prepared).unwrap();
+        assert_eq!(schedule.shared, shared);
+        assert_eq!(schedule.routed.len(), 6);
+        let first = schedule.routed.get(&identities[0]).unwrap();
+        assert_eq!(first.rows[0].unwrap().route_slot, 0);
+        assert_eq!(first.rows[1].unwrap().route_slot, 5);
+        assert_eq!(first.rows[2].unwrap().route_slot, 0);
+        assert_eq!(first.rows[3].unwrap().route_slot, 5);
+    }
+
+    #[test]
+    fn causal_block_batch4_rejects_duplicate_identity_shared_drift_and_wrong_k() {
+        let shared = fake_gpu_identity('f');
+        let identities: Vec<GpuMoeIdentity> = ['0', '1', '2', '3', '4', '5']
+            .into_iter()
+            .map(fake_gpu_identity)
+            .collect();
+        let mut duplicate = identities.clone();
+        duplicate[5] = duplicate[0].clone();
+        let duplicated = (0..4)
+            .map(|_| fake_batch4_position(&shared, &duplicate))
+            .collect::<Vec<_>>();
+        assert!(plan_causal_block_batch4_schedule(&duplicated).is_err());
+
+        let mut shared_drift = (0..4)
+            .map(|_| fake_batch4_position(&shared, &identities))
+            .collect::<Vec<_>>();
+        shared_drift[3].shared.gpu_identity = Some(fake_gpu_identity('e'));
+        assert!(plan_causal_block_batch4_schedule(&shared_drift).is_err());
+        assert!(plan_causal_block_batch4_schedule(&shared_drift[..3]).is_err());
     }
 
     #[test]

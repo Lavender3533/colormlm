@@ -1,0 +1,42 @@
+#version 450
+
+// Exact official MoE block order:
+// routed experts 0..5, then the shared expert. Every expert output crosses
+// BF16 RNE before the sequential FP32 additions.
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0) readonly buffer RoutedDown { float routed_down[]; };
+layout(set = 0, binding = 1) readonly buffer SharedDown { float shared_down[]; };
+layout(set = 0, binding = 2) writeonly buffer Output { float output_values[]; };
+
+layout(push_constant) uniform Push { uint positions; } push;
+
+const uint HIDDEN = 4096u;
+const uint ROUTED_EXPERTS = 6u;
+
+float round_bf16(float value) {
+    uint bits = floatBitsToUint(value);
+    uint exponent = bits & 0x7f800000u;
+    if (exponent == 0x7f800000u) return value;
+    uint rounded = bits + 0x00007fffu + ((bits >> 16u) & 1u);
+    return uintBitsToFloat(rounded & 0xffff0000u);
+}
+
+void main() {
+    uint output_index = gl_GlobalInvocationID.x;
+    uint output_elements = push.positions * HIDDEN;
+    if (output_index >= output_elements) return;
+
+    uint position = output_index / HIDDEN;
+    uint hidden = output_index - position * HIDDEN;
+    uint routed_base = position * ROUTED_EXPERTS * HIDDEN + hidden;
+    precise float total = round_bf16(routed_down[routed_base]);
+    total += round_bf16(routed_down[routed_base + HIDDEN]);
+    total += round_bf16(routed_down[routed_base + 2u * HIDDEN]);
+    total += round_bf16(routed_down[routed_base + 3u * HIDDEN]);
+    total += round_bf16(routed_down[routed_base + 4u * HIDDEN]);
+    total += round_bf16(routed_down[routed_base + 5u * HIDDEN]);
+    total += round_bf16(shared_down[output_index]);
+    output_values[output_index] = total;
+}
