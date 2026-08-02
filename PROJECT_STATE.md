@@ -1527,3 +1527,26 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
 - `speed_eligible_verifier=false`继续保持：这是43层同层MoE replay，不含attention/router/KV/HC/
   head，不是完整token/s，也没有新增质量、Kimi前端或Claude/GPT能力证据。下一主线不再优化
   replay外壳，直接构建统一Rust/Vulkan whole-token状态ABI与K=1完整token闭环，再接K=4连续状态。
+
+## 2026-08-02：whole-token 状态事务与 43 层 router 常驻图通过首门
+
+- 新增`DecoderStateV1`作为FullDepth43单token唯一状态所有者：`commit_epoch`、position、当前输入
+  token、固定递归态A/B bank与token ledger绑定；43层必须严格L0→L42完成，final token闭合后
+  才允许一次commit。L0、L42、final后三个失败注入单测均证明丢弃candidate不改变提交态。
+- 新增通用`BF16[N,K] × F32[B,K] → F32[B,N]` Vulkan kernel，B支持1..=8并在一次权重扫描中
+  同算K=1/4/8；N>65535二维dispatch也已覆盖。合成B=1/4/8和N=65537四门均逐元素零误差，
+  单次wall约`1.14–1.65 ms`。
+- 43份真实router`[256,4096]` BF16权重共`90,177,536 B`已一次上传到单一VRAM arena；43份
+  position3真实capture共`704,512 B`进入单一input arena。一个command buffer、一次submit、
+  43次dispatch完成全层回放，GPU/CPU global max abs error为`0`。
+- RX 5700 XT观测：43层router kernel合计`0.72492 ms`；包含首次86MiB权重上传与输入/输出搬运的
+  submit wall为`5.5913 ms`；CPU同归约参考为`169.2378 ms`。这证明router不再需要43次Python/
+  进程边界，不能把局部kernel速率冒充完整token/s。
+- 当前capture是MoE activation-quant后输入，不是正式router原始RMSNorm/BF16边界；L3–L42 raw
+  top-6集合与已有正式route仅`27/40`相同，符合缺少bias/sqrt-softplus及输入边界漂移的预期。
+  因此正式route晋级仍需whole-token图内直接传递原始hidden，禁止用该观测刷成质量证据。
+- Rust回归：`polaris_s14_runner 42/42`、JSONL集成`7/7`、`ssd_inference lib 23/23`；真实报告和
+  复现入口见`fast16/research/polaris_meridian_v1/whole_token_runtime/`。下一步直接把embedding、
+  HC/RMSNorm、attention/KV/compressor、router后处理、grouped MoE与final head绑定到同一candidate，
+  闭合position0 BOS的首个单进程完整token。当前仍没有可聊天体验、质量、Kimi前端或Claude/GPT
+  追赶完成证据。

@@ -54,6 +54,12 @@ pub const S14_GROUPED_FP8_BF16_MATVEC_EXACT_SPV: &[u8] = include_bytes!(concat!(
     "/s14_grouped_fp8_bf16_matvec_exact.spv"
 ));
 
+/// Generic BF16 [N,K] x F32 [K] -> F32 [N] projection. The first production
+/// consumer is the native 256x4096 router; compressor/indexer projections can
+/// reuse the same persistent-pipeline ABI.
+pub const S14_BF16_MATVEC_SPV: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/s14_bf16_matvec.spv"));
+
 pub const S14_SWIGLU_LIMIT_SPV: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/s14_swiglu_limit.spv"));
 
@@ -158,6 +164,62 @@ impl S14MatvecShape {
         let n_tiles = self.n.div_ceil(FP8_TILE);
         let k_tiles = self.k.div_ceil(FP8_TILE);
         checked_product(n_tiles, k_tiles, "S14 FP8 scale")
+    }
+}
+
+/// BF16 projection shape with a small causal block sharing the same weight
+/// scan. Batch is capped at eight, matching the K=1/4/8 runtime contracts and
+/// keeping shader shared memory statically bounded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct S14Bf16MatvecShape {
+    pub n: u32,
+    pub k: u32,
+    pub batch: u32,
+}
+
+impl S14Bf16MatvecShape {
+    pub fn new(n: u32, k: u32, batch: u32) -> Result<Self> {
+        Self { n, k, batch }.validate()
+    }
+
+    pub fn validate(self) -> Result<Self> {
+        if self.n == 0 || self.k == 0 || self.batch == 0 || self.batch > 8 {
+            bail!("S14 BF16 matvec requires non-zero N/K and batch in 1..=8");
+        }
+        let elements = checked_product(self.n, self.k, "S14 BF16 weight")?;
+        let input_elements = checked_product(self.batch, self.k, "S14 BF16 input")?;
+        let output_elements = checked_product(self.batch, self.n, "S14 BF16 output")?;
+        if elements > u32::MAX as u64
+            || input_elements > u32::MAX as u64
+            || output_elements > u32::MAX as u64
+        {
+            bail!("S14 BF16 matvec shader index exceeds u32");
+        }
+        if elements % 2 != 0 {
+            bail!("S14 BF16 matvec requires an even N*K for packed-u32 storage");
+        }
+        self.bf16_weight_bytes()?;
+        self.fp32_input_bytes()?;
+        self.fp32_output_bytes()?;
+        Ok(self)
+    }
+
+    pub fn bf16_weight_bytes(self) -> Result<u64> {
+        checked_bytes(
+            checked_product(self.n, self.k, "S14 BF16 weight")?,
+            2,
+            "S14 BF16 weight",
+        )
+    }
+
+    pub fn fp32_input_bytes(self) -> Result<u64> {
+        let elements = checked_product(self.batch, self.k, "S14 BF16 input")?;
+        checked_bytes(elements, 4, "S14 BF16 input")
+    }
+
+    pub fn fp32_output_bytes(self) -> Result<u64> {
+        let elements = checked_product(self.batch, self.n, "S14 BF16 output")?;
+        checked_bytes(elements, 4, "S14 BF16 output")
     }
 }
 
@@ -590,6 +652,11 @@ pub struct S14GroupedFp8Bf16Dispatch {
     pub shape: S14GroupedMatvecShape,
 }
 
+pub struct S14Bf16MatvecDispatch {
+    pub binder: DescriptorBinder,
+    pub shape: S14Bf16MatvecShape,
+}
+
 pub struct S14SwigluLimitDispatch {
     pub binder: DescriptorBinder,
     pub n: u32,
@@ -637,6 +704,7 @@ pub struct S14NumericPipelines {
     ragged_mxfp4_matvec: ComputePipeline,
     ragged_fp8_matvec: ComputePipeline,
     grouped_fp8_bf16_matvec: ComputePipeline,
+    bf16_matvec: ComputePipeline,
     swiglu_limit: ComputePipeline,
     route_mix: ComputePipeline,
     moe_accumulate: ComputePipeline,
@@ -685,6 +753,7 @@ impl S14NumericPipelines {
             ragged_mxfp4_matvec: ComputePipeline::new(ctx, ragged_mxfp4_matvec_spv, 4, 16)?,
             ragged_fp8_matvec: ComputePipeline::new(ctx, ragged_fp8_matvec_spv, 4, 16)?,
             grouped_fp8_bf16_matvec: ComputePipeline::new(ctx, grouped_fp8_bf16_matvec_spv, 4, 12)?,
+            bf16_matvec: ComputePipeline::new(ctx, S14_BF16_MATVEC_SPV, 3, 16)?,
             swiglu_limit: ComputePipeline::new(ctx, S14_SWIGLU_LIMIT_SPV, 3, 4)?,
             route_mix: ComputePipeline::new(ctx, S14_ROUTE_MIX_SPV, 2, 8)?,
             moe_accumulate: ComputePipeline::new(ctx, S14_MOE_ACCUMULATE_SPV, 2, 8)?,
@@ -971,6 +1040,126 @@ impl S14NumericPipelines {
         Ok(S14GroupedFp8Bf16Dispatch { binder, shape })
     }
 
+    pub fn bind_bf16_matvec(
+        &self,
+        ctx: &VulkanContext,
+        shape: S14Bf16MatvecShape,
+        weight: &GpuBuffer,
+        x: &GpuBuffer,
+        y: &GpuBuffer,
+    ) -> Result<S14Bf16MatvecDispatch> {
+        let shape = shape.validate()?;
+        let weight_bytes = storage_bytes(shape.bf16_weight_bytes()?);
+        let x_bytes = shape.fp32_input_bytes()?;
+        let y_bytes = shape.fp32_output_bytes()?;
+        require_capacity(weight, weight_bytes, "S14 BF16 matvec weight")?;
+        require_capacity(x, x_bytes, "S14 BF16 matvec input")?;
+        require_capacity(y, y_bytes, "S14 BF16 matvec output")?;
+        let binder = DescriptorBinder::new(
+            ctx,
+            &self.bf16_matvec,
+            &[(weight, weight_bytes), (x, x_bytes), (y, y_bytes)],
+        )?;
+        Ok(S14Bf16MatvecDispatch { binder, shape })
+    }
+
+    /// Bind a BF16 matrix inside a caller-owned persistent weight arena. This
+    /// is the intended 43-layer router path: upload the 86 MiB router set once,
+    /// then keep one descriptor per layer without rebuilding Vulkan state.
+    pub fn bind_bf16_matvec_weight_arena(
+        &self,
+        ctx: &VulkanContext,
+        shape: S14Bf16MatvecShape,
+        arena: &GpuBuffer,
+        arena_logical_bytes: u64,
+        weight_offset: u64,
+        x: &GpuBuffer,
+        y: &GpuBuffer,
+    ) -> Result<S14Bf16MatvecDispatch> {
+        let shape = shape.validate()?;
+        let weight_bytes = storage_bytes(shape.bf16_weight_bytes()?);
+        let x_bytes = shape.fp32_input_bytes()?;
+        let y_bytes = shape.fp32_output_bytes()?;
+        require_subrange_capacity(
+            arena,
+            arena_logical_bytes,
+            weight_offset,
+            weight_bytes,
+            "S14 BF16 matvec arena weight",
+        )?;
+        require_storage_offset_alignment(ctx, weight_offset, "S14 BF16 matvec arena weight")?;
+        require_capacity(x, x_bytes, "S14 BF16 matvec input")?;
+        require_capacity(y, y_bytes, "S14 BF16 matvec output")?;
+        let binder = DescriptorBinder::new_with_offsets(
+            ctx,
+            &self.bf16_matvec,
+            &[
+                (arena, weight_offset, weight_bytes),
+                (x, 0, x_bytes),
+                (y, 0, y_bytes),
+            ],
+        )?;
+        Ok(S14Bf16MatvecDispatch { binder, shape })
+    }
+
+    /// Fully arena-backed variant used by the whole-token worker. Offsets are
+    /// logical tensor starts, not Vulkan allocation sizes; all three are
+    /// checked against both the caller's logical bound and device alignment.
+    #[allow(clippy::too_many_arguments)]
+    pub fn bind_bf16_matvec_arenas(
+        &self,
+        ctx: &VulkanContext,
+        shape: S14Bf16MatvecShape,
+        weight_arena: &GpuBuffer,
+        weight_arena_logical_bytes: u64,
+        weight_offset: u64,
+        input_arena: &GpuBuffer,
+        input_arena_logical_bytes: u64,
+        input_offset: u64,
+        output_arena: &GpuBuffer,
+        output_arena_logical_bytes: u64,
+        output_offset: u64,
+    ) -> Result<S14Bf16MatvecDispatch> {
+        let shape = shape.validate()?;
+        let weight_bytes = storage_bytes(shape.bf16_weight_bytes()?);
+        let input_bytes = shape.fp32_input_bytes()?;
+        let output_bytes = shape.fp32_output_bytes()?;
+        require_subrange_capacity(
+            weight_arena,
+            weight_arena_logical_bytes,
+            weight_offset,
+            weight_bytes,
+            "S14 BF16 weight arena",
+        )?;
+        require_subrange_capacity(
+            input_arena,
+            input_arena_logical_bytes,
+            input_offset,
+            input_bytes,
+            "S14 BF16 input arena",
+        )?;
+        require_subrange_capacity(
+            output_arena,
+            output_arena_logical_bytes,
+            output_offset,
+            output_bytes,
+            "S14 BF16 output arena",
+        )?;
+        require_storage_offset_alignment(ctx, weight_offset, "S14 BF16 weight arena")?;
+        require_storage_offset_alignment(ctx, input_offset, "S14 BF16 input arena")?;
+        require_storage_offset_alignment(ctx, output_offset, "S14 BF16 output arena")?;
+        let binder = DescriptorBinder::new_with_offsets(
+            ctx,
+            &self.bf16_matvec,
+            &[
+                (weight_arena, weight_offset, weight_bytes),
+                (input_arena, input_offset, input_bytes),
+                (output_arena, output_offset, output_bytes),
+            ],
+        )?;
+        Ok(S14Bf16MatvecDispatch { binder, shape })
+    }
+
     pub fn bind_swiglu_limit(
         &self,
         ctx: &VulkanContext,
@@ -1229,6 +1418,21 @@ impl S14NumericPipelines {
         );
     }
 
+    pub unsafe fn cmd_bf16_matvec(
+        &self,
+        ctx: &VulkanContext,
+        command_buffer: vk::CommandBuffer,
+        dispatch: &S14Bf16MatvecDispatch,
+    ) {
+        record_bf16_matvec(
+            ctx,
+            command_buffer,
+            &self.bf16_matvec,
+            dispatch.binder.set,
+            dispatch.shape,
+        );
+    }
+
     pub unsafe fn cmd_swiglu_limit(
         &self,
         ctx: &VulkanContext,
@@ -1353,6 +1557,7 @@ impl S14NumericPipelines {
         self.moe_accumulate.destroy(ctx);
         self.route_mix.destroy(ctx);
         self.swiglu_limit.destroy(ctx);
+        self.bf16_matvec.destroy(ctx);
         self.grouped_fp8_bf16_matvec.destroy(ctx);
         self.ragged_fp8_matvec.destroy(ctx);
         self.ragged_mxfp4_matvec.destroy(ctx);
@@ -1433,6 +1638,45 @@ unsafe fn record_matvec(
         &push,
     );
     ctx.device.cmd_dispatch(command_buffer, shape.n, 1, 1);
+}
+
+unsafe fn record_bf16_matvec(
+    ctx: &VulkanContext,
+    command_buffer: vk::CommandBuffer,
+    pipeline: &ComputePipeline,
+    set: vk::DescriptorSet,
+    shape: S14Bf16MatvecShape,
+) {
+    ctx.device.cmd_bind_pipeline(
+        command_buffer,
+        vk::PipelineBindPoint::COMPUTE,
+        pipeline.pipeline,
+    );
+    ctx.device.cmd_bind_descriptor_sets(
+        command_buffer,
+        vk::PipelineBindPoint::COMPUTE,
+        pipeline.layout,
+        0,
+        &[set],
+        &[],
+    );
+    const MAX_GROUPS_X: u32 = 65_535;
+    let groups_x = shape.n.min(MAX_GROUPS_X);
+    let groups_y = shape.n.div_ceil(groups_x);
+    let mut push = [0u8; 16];
+    push[..4].copy_from_slice(&shape.n.to_le_bytes());
+    push[4..8].copy_from_slice(&shape.k.to_le_bytes());
+    push[8..12].copy_from_slice(&shape.batch.to_le_bytes());
+    push[12..].copy_from_slice(&groups_x.to_le_bytes());
+    ctx.device.cmd_push_constants(
+        command_buffer,
+        pipeline.layout,
+        vk::ShaderStageFlags::COMPUTE,
+        0,
+        &push,
+    );
+    ctx.device
+        .cmd_dispatch(command_buffer, groups_x, groups_y, 1);
 }
 
 unsafe fn record_ragged_matvec(
@@ -1939,6 +2183,19 @@ mod numeric_tests {
         assert_eq!(wo_a.fp8_weight_bytes().unwrap(), 33_554_432);
         assert_eq!(wo_a.fp8_scale_bytes().unwrap(), 2_048);
         assert_eq!(wo_a.fp32_output_bytes().unwrap(), 32_768);
+
+        let router = S14Bf16MatvecShape::new(256, 4096, 4).unwrap();
+        assert_eq!(router.bf16_weight_bytes().unwrap(), 2_097_152);
+        assert_eq!(router.fp32_input_bytes().unwrap(), 65_536);
+        assert_eq!(router.fp32_output_bytes().unwrap(), 4_096);
+    }
+
+    #[test]
+    fn bf16_matvec_rejects_odd_packed_storage() {
+        assert!(S14Bf16MatvecShape::new(1, 3, 1).is_err());
+        assert!(S14Bf16MatvecShape::new(256, 4096, 0).is_err());
+        assert!(S14Bf16MatvecShape::new(256, 4096, 9).is_err());
+        assert!(S14Bf16MatvecShape::new(u32::MAX, 2, 1).is_err());
     }
 
     #[test]

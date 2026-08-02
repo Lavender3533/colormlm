@@ -1,0 +1,78 @@
+#version 450
+
+// Polaris 通用 BF16 权重矩阵向量乘。
+//
+// weight: [N, K] BF16，小端序，每个 uint 打包两个 BF16
+// x:      [B, K] F32
+// y:      [B, N] F32
+//
+// 一个 workgroup 负责一行，wave64 以固定树形顺序归约。它首先服务
+// 256x4096 router，也可复用到 compressor/indexer 的 BF16 投影。
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer Weights {
+    uint packed_bf16[];
+} weights;
+
+layout(set = 0, binding = 1, std430) readonly buffer Input {
+    float values[];
+} input_state;
+
+layout(set = 0, binding = 2, std430) writeonly buffer Output {
+    float values[];
+} output_state;
+
+layout(push_constant) uniform Push {
+    uint n;
+    uint k;
+    uint batch;
+    uint groups_x;
+} pc;
+
+shared float partial[8][64];
+
+float load_bf16(uint scalar_index) {
+    uint word = weights.packed_bf16[scalar_index >> 1u];
+    uint bits = ((scalar_index & 1u) == 0u) ? (word & 0xffffu) : (word >> 16u);
+    return uintBitsToFloat(bits << 16u);
+}
+
+void main() {
+    uint row = gl_WorkGroupID.x + gl_WorkGroupID.y * pc.groups_x;
+    if (row >= pc.n || pc.batch == 0u || pc.batch > 8u) {
+        return;
+    }
+
+    uint lane = gl_LocalInvocationID.x;
+    uint row_base = row * pc.k;
+    float acc[8];
+    for (uint batch_index = 0u; batch_index < 8u; ++batch_index) {
+        acc[batch_index] = 0.0;
+    }
+    for (uint dim = lane; dim < pc.k; dim += 64u) {
+        float weight = load_bf16(row_base + dim);
+        for (uint batch_index = 0u; batch_index < pc.batch; ++batch_index) {
+            acc[batch_index] += weight * input_state.values[batch_index * pc.k + dim];
+        }
+    }
+    for (uint batch_index = 0u; batch_index < pc.batch; ++batch_index) {
+        partial[batch_index][lane] = acc[batch_index];
+    }
+    barrier();
+
+    for (uint stride = 32u; stride > 0u; stride >>= 1u) {
+        if (lane < stride) {
+            for (uint batch_index = 0u; batch_index < pc.batch; ++batch_index) {
+                partial[batch_index][lane] += partial[batch_index][lane + stride];
+            }
+        }
+        barrier();
+    }
+
+    if (lane == 0u) {
+        for (uint batch_index = 0u; batch_index < pc.batch; ++batch_index) {
+            output_state.values[batch_index * pc.n + row] = partial[batch_index][0];
+        }
+    }
+}

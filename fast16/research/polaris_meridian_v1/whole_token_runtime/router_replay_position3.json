@@ -1,0 +1,792 @@
+{
+  "format": "polaris-fulldepth43-router-replay-manifest-v1",
+  "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+  "profile": "fulldepth43_native_top6",
+  "position": 3,
+  "catalog_path": "D:\\models\\Polaris-S14\\fulldepth43_native_top6_catalog.json",
+  "catalog_sha256": "ca619984d4a46ad1a3701d2b4035766ea40c3a3dbedd3a474ce1df7aad4d0049",
+  "capture_root": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003",
+  "layers": [
+    {
+      "layer": 0,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\02355b24be52c4e8642182dceae2029dcab2201875d9f1d6a4824339fc819b21.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "e110e3c4e310e7c9981f287038c5a0c8ad73da1b36b36feb3b909e04477a6a12",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-00\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "b4eb0b9abad953a27455d5a2244c2cefb869f787e2d07efe6e2b65eee7cd978e",
+      "observed_route_source": "current_token_tid2eid_physical_i64",
+      "observed_expert_ids": [
+        143,
+        245,
+        171,
+        73,
+        50,
+        229
+      ]
+    },
+    {
+      "layer": 1,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\112c9b4e87aff1884832142c1e694aa14a5bc1eb29ba4f2c525063d8e179e28d.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "7939d81109416df8f45b34dbc358639191f10793a3c81aa1b3a52338d5c3e4d9",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-01\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "62e60d569a5d7fe424ea86d34de24be18981702bc00a36f9e2b317d11f66e775",
+      "observed_route_source": "current_token_tid2eid_physical_i64",
+      "observed_expert_ids": [
+        10,
+        140,
+        93,
+        42,
+        8,
+        79
+      ]
+    },
+    {
+      "layer": 2,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\ca4982403b594361b54a745802bc24c8ca5f339a271d56fa1ccabde70cbbc2b4.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "ce01b760336935a793f9ca559e64c62edde90b8c2436a46c7de950ccd61d715a",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-02\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "4be238613c94d7b19a14c3a234f3bc2999bd2c83fa72ae2049a40522ee62e5c8",
+      "observed_route_source": "current_token_tid2eid_physical_i64",
+      "observed_expert_ids": [
+        135,
+        246,
+        213,
+        241,
+        115,
+        247
+      ]
+    },
+    {
+      "layer": 3,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\534f8dde0a4963cb38387f3e561faf85d19a708f190d0ed61ae4a919daaf7083.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "03667a2c67509c1f9a5391d3e9a772e603132bd8e91a472e6dca595c7ea5b78c",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-03\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "1c81c7a5efce48feb32cf253acaa8a35cdc707b5520dbb4c021ac074575f9338",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        133,
+        235,
+        129,
+        119,
+        190,
+        174
+      ]
+    },
+    {
+      "layer": 4,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\9c1812c4855ab07b33cd9c5b598916ecae260645ff736a0024a345af8f4fec9b.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "087781321fd727d40dee054e6061e68f47f8c0ad30f35bc58ad41a7cb04f39ea",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-04\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "81f11368aa20e6f48cba8680cefcccb21d11e330100f98fc7795d2513c818150",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        242,
+        102,
+        8,
+        228,
+        173,
+        80
+      ]
+    },
+    {
+      "layer": 5,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\2b59e93d189c69d31ee1e8eb04a96ff72502ac388596c31e1206968ee499d6f9.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "b308a58ceab561f267557a7d088f42eefdacad87bc93ff9135b6da6c97aa333f",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-05\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "418718055d7836439827f9119894db32323c703363ad70bebba109a78ffab1f7",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        249,
+        10,
+        59,
+        169,
+        165,
+        80
+      ]
+    },
+    {
+      "layer": 6,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\fd95dbfc392473cfcdcc317fb7d71d24a22ed150bf4585934ef13b1b2d1d15c0.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "2b72700c3f1be658f8a5614f87f1b91145dd6ba0e5dd8bdc728ffadf7fd99577",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-06\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "082bc72430652eb683147926615c64ce86618a1c44dece085f63c31f24a6f44a",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        1,
+        201,
+        190,
+        16,
+        236,
+        68
+      ]
+    },
+    {
+      "layer": 7,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\5cdab4bb95ac16e9acabd874ad0990dab66b231d57f4e5ff6d6d03b045b4e98a.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "6551eca286477ddc02a2c64d128009abe23b4c279017b793c6046f39c18013b8",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-07\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "3cb9dfd2d9606934bec915149700b579d5d95baeea7c3f1cdb3ee1704885a6c1",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        141,
+        233,
+        152,
+        209,
+        135,
+        169
+      ]
+    },
+    {
+      "layer": 8,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\b37e44113ccf14dbb3869299fc77eda66ffda19749d6ffe31ad67677e4f919ab.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "0cc4b8edd5fe654219465282b884ce6ac7dbd044a95c87091f12c7f8bdb98629",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-08\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "97e5cd879c6b51896ec9785182adf02188ce1a811f0f7eaadaa98df89cc45acf",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        28,
+        20,
+        77,
+        253,
+        115,
+        102
+      ]
+    },
+    {
+      "layer": 9,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\6e8fb20d6b3b0e3d8c4921c87851f1377cad15aa2ec61d4850233677513be4be.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "43a0001b740be6392cb4cf333ecf06017b57cccf2a0483f5cf60753a73da5e81",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-09\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "c56ddb2a3d80b6f62aa45b9e50cb69397341ab0476feae6bbeb76d3a01d36201",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        191,
+        199,
+        235,
+        160,
+        184,
+        213
+      ]
+    },
+    {
+      "layer": 10,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\50d610d72db6c78e24c05d761db5e4b7c54b48f69f54cf2e54d64214f3e9684c.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "f8507225e5d48539b6f3b5515622e1011015bdfdd92bc40db56362c7ac14a0f2",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-10\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "8ea3b7a6cef5195efbe191e26a042ce1f5bc112c777132c532f0cafbeed27525",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        222,
+        40,
+        14,
+        214,
+        90,
+        61
+      ]
+    },
+    {
+      "layer": 11,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\2dd2b29ae29db0bf233ab2e78ed3d3f8462085ceee42b626f484bd271472248c.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "a93ca3e66df9cf0a423e31e4ed6222a24b17d243e7b3a5d769b101fe437252b6",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-11\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "6271014828876de960d29884ad7d810587c0306568ffdf5eb4bdb2af6e906299",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        85,
+        34,
+        161,
+        1,
+        89,
+        60
+      ]
+    },
+    {
+      "layer": 12,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\af16d2510aabf2e9d45ce95af4d9493af604e53772cf2826753fb5fda5ff030b.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "d98922fb8f69e23492ccb331c8f55d718482b0365b7cbd0a02f3be4c54b4ce84",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-12\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "e9bb17013f908643bf7d4530658ca5267b089ffbc754492e821a4065cc4f7ac8",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        142,
+        124,
+        43,
+        253,
+        210,
+        244
+      ]
+    },
+    {
+      "layer": 13,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\424cba509b55194ca8aec427e3f565aa5fa147ac29e8e61918ee14c74e3e179e.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "007cf6a23fe73efcc8fadc96aea46267a7eb11e36d6d87c26829e910f193fe8e",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-13\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "169c81a424a8c73ef01fc18c0436379dfc815449eb5448c06884e1ccfa3c5302",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        91,
+        19,
+        4,
+        38,
+        100,
+        245
+      ]
+    },
+    {
+      "layer": 14,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\c050d1ec5b675e2de8a9c770886ab44601c0b65119bdd30d3baa7c1f51201316.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "b8af57a607766736967a5ca1c9c6f60e0c80e174d6d87ebe30cc72f9cf75dcc1",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-14\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "865eab743dc699755c3cf46c6d91fba950403f25656970a4bd694ccca0976da3",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        49,
+        235,
+        83,
+        151,
+        7,
+        194
+      ]
+    },
+    {
+      "layer": 15,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\24093a2f314cf94d11a00f23279d71e46de34d7631bfc7e7b06b59af0c6f3099.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "b06424c68b8adafba62a447a98360ef42c03b3fde7c6c573a760e1e559a4f540",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-15\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "d58f3f49ff44c8af35b8b04969dc3c6dfa5c08bc2bcc707b05fd135030cf0d15",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        213,
+        27,
+        176,
+        79,
+        121,
+        95
+      ]
+    },
+    {
+      "layer": 16,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\145f7b265196fff430a5024320f088b59348756c0bc9d607140c92a876c21cab.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "edc1d6985d72fc8816bf777e9428810262c48af6c4da64785cfa25f662568e24",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-16\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "7d301b07e14fdcfa6efe53f281f0729649c78584f65d374d22c3d3cc61cafd36",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        255,
+        61,
+        220,
+        26,
+        30,
+        205
+      ]
+    },
+    {
+      "layer": 17,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\908a48be13277c10d2ce38c9b297faddd1fe10abf1433623bebe001ca00bc1d0.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "7e3a92dad746fd6496c660d74496f0c26584b7f7ec6e762e7b000a6f47cbe8f4",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-17\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "df11942fd4c03dfce01b56b27e7befd895a79cabcb6aa72e2e63a4badbc541db",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        5,
+        108,
+        104,
+        61,
+        33,
+        214
+      ]
+    },
+    {
+      "layer": 18,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\9be516e649d3890d1a90044a68e1ee40176f994059cd3d30b1e2bd35e344ca0d.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "a79834ef0959b9d7624b24cceb85d68a2158a96ab968479b9a50b15a195991bd",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-18\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "c762c8b57468e9a0112b1525a532cede37be79d7cc065f4d89959b01afc9a43d",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        208,
+        183,
+        179,
+        209,
+        220,
+        246
+      ]
+    },
+    {
+      "layer": 19,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\efd9a13ae8bff638971c28568df16572151072838b527baa2be63c8828cfbb59.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "2d80f01821de8529348b60550a496eccb44bfed412592002d597148c1b6534f5",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-19\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "209af1f6c8e526e925af171aeb11efc995b86f9a067654d780c24b4981863ff6",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        163,
+        176,
+        186,
+        234,
+        19,
+        187
+      ]
+    },
+    {
+      "layer": 20,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\704913947dd01857da4f1783a5572f0d0d2292f79d7ee3e87503f8dbcee652b7.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "0f32d52390d325aacc78059a00f65acb3ce24af2150cdefa2382fae8a47a6fe2",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-20\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "443e5348fded0f68ec44575171e09b433cad4376763f2203e598f19acfd0382e",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        187,
+        61,
+        149,
+        131,
+        132,
+        33
+      ]
+    },
+    {
+      "layer": 21,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\44760ecd2e9707ef773912085ee3224c506ba4ae2aa9d2c76b9071bcfcff48e7.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "91a9906cf6a4e830e0644552d98671177daa5d7adca53c0e23cbf49b2c6da71c",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-21\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "2608e6a194c2ddc90ea363e204a831344ce319fc1b604e9e0240c220869d614d",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        49,
+        62,
+        109,
+        28,
+        202,
+        40
+      ]
+    },
+    {
+      "layer": 22,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\f212bce61ffd03c3b016ef4745673f8d0f79d63006e4a92280048316d788c48e.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "801307a702e6f75bffe272d99683d4f50db88e0ed1c95f0342324036c7ac9ff1",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-22\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "8dd0a7127a15b30a3e0128f1d14ae4552a52b6032d51b2fa503fdffdf81e7b03",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        239,
+        216,
+        156,
+        37,
+        205,
+        0
+      ]
+    },
+    {
+      "layer": 23,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\0e96ae98fab25555bc6b9621aff48881bc6981bd965188495c1b0a54b3575828.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "b8e56e513023ae38c48c8ca6c078555fbc8bc4c67231b2441552c27b040873cb",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-23\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "9b7a27213a895e6f89083a6b8a3056cee793e25fe8c679119f60aaf754abc4f6",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        76,
+        60,
+        228,
+        118,
+        8,
+        210
+      ]
+    },
+    {
+      "layer": 24,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\e425991207aab4b1ff361b0103466792e25485e344b7c24efd9064440d59aea7.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "227c710b51d4e2151c9d0079afce6c6697be556527c2325bd5a052d6235637fb",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-24\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "f9974e2f197a8ea6fc1b7170bfd6518a78aa41cd8833a0920816e7f03c25de99",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        124,
+        58,
+        209,
+        46,
+        27,
+        134
+      ]
+    },
+    {
+      "layer": 25,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\e73b83a00795de113e646c2f9457b8ec0c7c5ca1afb478755ad1cc5b77208299.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "9bb27f67ad3883e2e79519e8d83164e2e834f668296f629d1115e8961970b1b9",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-25\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "0cfcfcec5acdea9ae4523e5f0e419f38a736b59d576f77b8e168213b0c5ccffb",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        133,
+        219,
+        167,
+        238,
+        111,
+        73
+      ]
+    },
+    {
+      "layer": 26,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\a9f6d85a60b8ea425cb30777640f3b19d1796879c9cfbe7c4d476172f5163b6d.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "ea528214b5de3727231f2f879797e503bdc2f35ce96c4a324e32716474d9a547",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-26\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "08848675db3539dabc71f14338f4445671f8e9634b7911d843636b21b9cbf8f8",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        191,
+        18,
+        201,
+        78,
+        11,
+        49
+      ]
+    },
+    {
+      "layer": 27,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\73028c6060c457e23e82a16ce1243e29e3e83d5c3401d06718b97bf1a011ef92.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "0c36b6b84d37dcc787d3bd55520fd174a0614d0c757a58248f4a26068c5e0d9b",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-27\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "44e0312fa7a3f3539e99ca45d581adb7752eb2543e7db1357ed1c13b0bfd1438",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        124,
+        39,
+        222,
+        152,
+        25,
+        41
+      ]
+    },
+    {
+      "layer": 28,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\031a5821de808dd20eeb26970805dd73d28f0e0e052540e43181049526110c2e.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "5710d1d811fa07f691432ff065fb4d83ffc5219aad64c377c865083942a785bf",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-28\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "f2c7a3a3409329c05ad29a045425dcd4dfdc14259bca61ebf384a3661e7c36e5",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        19,
+        101,
+        141,
+        130,
+        88,
+        56
+      ]
+    },
+    {
+      "layer": 29,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\9330b455782c80e417662f5b6046c1c267b7b15bf90a10459179765fe6bc85a3.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "45aada6f94a1f0fe8e900caceb36cb7577fc6bfe1d89209122898be0279f7db6",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-29\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "df8d1e8af969b539a9e122653666dc671b101c5d61b722e1c11d985035b0959a",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        81,
+        2,
+        140,
+        226,
+        178,
+        214
+      ]
+    },
+    {
+      "layer": 30,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\7a6e10747370fa08f1bd6812081cbe29d8f4e042f9070629461c3e03c6fdf4b8.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "8e0d90b7744fdbf2adb9530fa319ddbca3303740e7772206d9068084fe5e2d9b",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-30\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "1a1313875aa1ee576dd8f121d38173666f4971f6b254376f5fe8c33da6b24cf4",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        201,
+        236,
+        20,
+        93,
+        109,
+        97
+      ]
+    },
+    {
+      "layer": 31,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\b0ca0dc498bbc7bbf92e1c3da2b9d16e9da7549a7a134216db4e0c4d446c4609.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "6cf0f48a32d4547f4155f67c101cc0bd30516c474305e9910069062ca7e49fb5",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-31\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "34c931da933d18f6e7f7103ce3c5588335c4d15ec7d73e8666e7108ed0fac294",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        94,
+        51,
+        3,
+        101,
+        46,
+        78
+      ]
+    },
+    {
+      "layer": 32,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\fa1a0004bfe89da0853f66e880b37ecf1f0f937186c3e984d0e30d2389e469ee.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "846cbcab3e764d59c6fbba1d57119b2f747b83003e6b8b7bc73305a9acef02c4",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-32\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "d32bc30475dceb6d71a6933373ab45579c9c2f1141382b1cf2f1873823cf00d8",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        17,
+        193,
+        253,
+        50,
+        129,
+        53
+      ]
+    },
+    {
+      "layer": 33,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\b03030ec1999b7698df499e7a4922563c580d2006df0a020809522b78a9efd07.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "930f52532b4405a5ec9a177f0647a80ea6e799c835260fdd1b5e3f097d10cc42",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-33\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "ab39da0cec72d980fc8c39b5ea70d44c4c9098e9cecf3a91b624120936a89635",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        79,
+        47,
+        174,
+        22,
+        237,
+        110
+      ]
+    },
+    {
+      "layer": 34,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\5f52deed1d64be14733d6792aace49148e309f6f406b71ac018675b5b3bba99a.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "dc5c351c3bf0c1e03bcd94dcc1e681a3f59258099a8f2602b7d2d6224dd4cc93",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-34\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "754c2c7803eed4ac6c8b8eb771950f09c2bb827a3ec84f4267b7e9d87cb99d4f",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        126,
+        211,
+        191,
+        21,
+        201,
+        54
+      ]
+    },
+    {
+      "layer": 35,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\cbb4060a86b84456b6c9e7f9842bfc48faf2e8b9e0ed8d489b14585786f349b1.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "d3a1d02f122d666fd051ee3d426fe61e98327db2da5b0ad120704fb1159d08e0",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-35\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "78ea25f51dff6f350e177e9839ae5ec656c5c086deb8e016050507f695ac9ddd",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        216,
+        84,
+        149,
+        174,
+        111,
+        184
+      ]
+    },
+    {
+      "layer": 36,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\76fd7e2e650e9b257535b9d6f27d557394011704efc3a3c40b20372e6adb2903.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "986dd9ced4326578a58f3a91bc8d7113b68d836bdb28ec73d67029bbf143d9b9",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-36\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "83ffcae1c96f5b80ea8239845e6bdaa128c3b278593869f7c931227f0c758307",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        233,
+        144,
+        90,
+        106,
+        10,
+        151
+      ]
+    },
+    {
+      "layer": 37,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\47a22c35b6a0a419143055edaf0b030b9caf81d74378f1f4c7727a3ef93a5159.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "a6bbc3021db22e514a0264d9c7e713d6806ee7d33c1f1cf419189477f0cb0ff5",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-37\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "8982a83bd1dc286ceeb46445b42323a966a72fcb349b41e41bdc33d09a248cdd",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        243,
+        106,
+        55,
+        131,
+        231,
+        244
+      ]
+    },
+    {
+      "layer": 38,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\61d3dcb6b69eef4a8c2899735ec98f60c13ced8ca29f1b8f2646f70b7d13160d.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "5b84598d413f2bd9253d5875b3a88cc2898928edb827502630322a8570f04b57",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-38\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "2485ff3e5ef7c39d742db351f4a1d694d388af65e95f022d77d50b94655588b4",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        68,
+        241,
+        10,
+        95,
+        220,
+        232
+      ]
+    },
+    {
+      "layer": 39,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\ae98ba9a24d9c9fcd53c9889967cd5266f5c6054a527be73de4be3bdbfcf08c4.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "1bfd5e7d65911f6dc2b41c622e1217fc13dd0d43964a4742b73537b532551715",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-39\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "50f84d7e9d3531b459c0b48ae40c2127c99e901c60851e626ac78a62adc2a5e9",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        221,
+        222,
+        255,
+        189,
+        8,
+        167
+      ]
+    },
+    {
+      "layer": 40,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\4396f767cd1256d56ed02dd3535698ac87e1304572ad7ee82592965d3db04808.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "744d978414c6bd5a998306d7492cbbabe1536a24197cb8c68b071edc9b228f23",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-40\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "68ca8e407bd811d8de3ae5ec9c43ba2f89dd0b3b341b8459707b986d6e86b3e1",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        104,
+        33,
+        143,
+        45,
+        48,
+        21
+      ]
+    },
+    {
+      "layer": 41,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\dd24953a3d3ddd49b4db281852a4a77f7c103ebd25c528a2f444c69262623746.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "ea9dc9e048888705587c4661d6eb5128cfe5bb15644d20d086075f449d946d84",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-41\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "7760bca0703c70ba593bfe335446357cee09a7d9ae916d48c3a757a05dfcd2ea",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        227,
+        153,
+        162,
+        65,
+        97,
+        220
+      ]
+    },
+    {
+      "layer": 42,
+      "weight_path": "D:\\models\\Polaris-S14\\range_cache\\a0c1b509ed68beb46b1dec60f67cff4dd4225c7a67056a9e3910b3f0964a31e0.bin",
+      "weight_bytes": 2097152,
+      "weight_sha256": "09e3cd01a5b0a898dceb1d1424d3693010c5148269d9cb2289ac528c91394ea1",
+      "input_path": "D:\\project\\大模型ssd化\\.tmp-polaris-runs\\causal-block-k4-forced-fetch2-20260802\\captures\\position-000003\\layer-42\\ffn_input_activation_quant.f32le.bin",
+      "input_bytes": 16384,
+      "input_sha256": "4e647bf356358ca8466e8268e1feab6cb5475ecee030c0e0f32fbcb842aaebd8",
+      "observed_route_source": "sqrtsoftplus_plus_bias_top6",
+      "observed_expert_ids": [
+        110,
+        47,
+        108,
+        148,
+        31,
+        1
+      ]
+    }
+  ],
+  "summary": {
+    "layer_count": 43,
+    "router_weight_bytes": 90177536,
+    "input_bytes": 704512
+  },
+  "input_semantics": "已有 capture 是 MoE activation-quant 后的 F32 输入，不是 router 原始 RMSNorm BF16 输入；本清单只允许 GPU/CPU 同输入数值门，observed_expert_ids 仅作观测，不作正式路由晋级。",
+  "claim_limit": "真实固定 revision 的 43 层 router 权重回放清单；不证明正式路由一致、完整 token 或质量。"
+}

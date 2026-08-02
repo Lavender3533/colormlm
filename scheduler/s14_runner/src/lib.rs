@@ -15,6 +15,7 @@ mod metrics;
 mod range_bridge;
 mod runner;
 mod state;
+mod whole_token;
 
 pub use abi::{
     validate_expert_abi_manifest_json, AbiEntry, AbiError, ExpertAbiManifest, ValidatedExpertAbi,
@@ -62,6 +63,9 @@ pub use runner::{
 pub use state::{
     BufferSlice, CompressorState, DType, HcState, IndexerState, KvState, NativeState,
     StateLayoutError,
+};
+pub use whole_token::{
+    DecoderStateV1, TokenRecord, WholeTokenCandidate, WholeTokenError, DECODER_STATE_ABI_VERSION,
 };
 
 /// 供 Rust 和 Python 共同读取的冻结互操作契约。

@@ -1,0 +1,924 @@
+{
+  "format": "polaris-fulldepth43-router-replay-v1",
+  "gpu": "AMD Radeon RX 5700 XT",
+  "manifest_path": "../fast16/research/polaris_meridian_v1/whole_token_runtime/router_replay_position3.json",
+  "manifest_sha256": "bac426e01f576ea808f7cdb8af8a2523ca19a3e046499dcd0d2c999ec8bcb84d",
+  "position": 3,
+  "layer_count": 43,
+  "router_weight_bytes": 90177536,
+  "input_bytes": 704512,
+  "output_bytes": 44032,
+  "command_submit_count": 1,
+  "dispatch_count": 43,
+  "submit_wall_ms": 5.5912999999999995,
+  "router_kernel_ms": 0.72492,
+  "cpu_reference_wall_ms": 169.2378,
+  "global_max_abs_error": 0.0,
+  "layers": [
+    {
+      "layer": 0,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        195,
+        89,
+        26,
+        143,
+        161,
+        124
+      ],
+      "observed_official_experts": [
+        143,
+        245,
+        171,
+        73,
+        50,
+        229
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 1,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        249,
+        24,
+        197,
+        194,
+        164,
+        145
+      ],
+      "observed_official_experts": [
+        10,
+        140,
+        93,
+        42,
+        8,
+        79
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 2,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        241,
+        206,
+        187,
+        248,
+        204,
+        155
+      ],
+      "observed_official_experts": [
+        135,
+        246,
+        213,
+        241,
+        115,
+        247
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 3,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        133,
+        235,
+        129,
+        119,
+        190,
+        174
+      ],
+      "observed_official_experts": [
+        133,
+        235,
+        129,
+        119,
+        190,
+        174
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 4,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        242,
+        102,
+        8,
+        173,
+        228,
+        80
+      ],
+      "observed_official_experts": [
+        242,
+        102,
+        8,
+        228,
+        173,
+        80
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 5,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        249,
+        10,
+        59,
+        169,
+        165,
+        80
+      ],
+      "observed_official_experts": [
+        249,
+        10,
+        59,
+        169,
+        165,
+        80
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 6,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        1,
+        201,
+        190,
+        16,
+        236,
+        68
+      ],
+      "observed_official_experts": [
+        1,
+        201,
+        190,
+        16,
+        236,
+        68
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 7,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        141,
+        233,
+        152,
+        209,
+        135,
+        169
+      ],
+      "observed_official_experts": [
+        141,
+        233,
+        152,
+        209,
+        135,
+        169
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 8,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        28,
+        20,
+        253,
+        115,
+        77,
+        84
+      ],
+      "observed_official_experts": [
+        28,
+        20,
+        77,
+        253,
+        115,
+        102
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 9,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        191,
+        199,
+        235,
+        160,
+        184,
+        213
+      ],
+      "observed_official_experts": [
+        191,
+        199,
+        235,
+        160,
+        184,
+        213
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 10,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        222,
+        40,
+        14,
+        90,
+        61,
+        214
+      ],
+      "observed_official_experts": [
+        222,
+        40,
+        14,
+        214,
+        90,
+        61
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 11,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        85,
+        34,
+        161,
+        1,
+        89,
+        60
+      ],
+      "observed_official_experts": [
+        85,
+        34,
+        161,
+        1,
+        89,
+        60
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 12,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        142,
+        124,
+        43,
+        253,
+        210,
+        134
+      ],
+      "observed_official_experts": [
+        142,
+        124,
+        43,
+        253,
+        210,
+        244
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 13,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        91,
+        19,
+        245,
+        38,
+        4,
+        100
+      ],
+      "observed_official_experts": [
+        91,
+        19,
+        4,
+        38,
+        100,
+        245
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 14,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        49,
+        235,
+        83,
+        151,
+        7,
+        194
+      ],
+      "observed_official_experts": [
+        49,
+        235,
+        83,
+        151,
+        7,
+        194
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 15,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        213,
+        27,
+        176,
+        121,
+        83,
+        79
+      ],
+      "observed_official_experts": [
+        213,
+        27,
+        176,
+        79,
+        121,
+        95
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 16,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        255,
+        61,
+        220,
+        179,
+        26,
+        30
+      ],
+      "observed_official_experts": [
+        255,
+        61,
+        220,
+        26,
+        30,
+        205
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 17,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        5,
+        108,
+        104,
+        61,
+        214,
+        33
+      ],
+      "observed_official_experts": [
+        5,
+        108,
+        104,
+        61,
+        33,
+        214
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 18,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        208,
+        183,
+        209,
+        179,
+        220,
+        139
+      ],
+      "observed_official_experts": [
+        208,
+        183,
+        179,
+        209,
+        220,
+        246
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 19,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        163,
+        176,
+        186,
+        234,
+        19,
+        156
+      ],
+      "observed_official_experts": [
+        163,
+        176,
+        186,
+        234,
+        19,
+        187
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 20,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        187,
+        61,
+        149,
+        136,
+        131,
+        132
+      ],
+      "observed_official_experts": [
+        187,
+        61,
+        149,
+        131,
+        132,
+        33
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 21,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        49,
+        62,
+        109,
+        28,
+        202,
+        40
+      ],
+      "observed_official_experts": [
+        49,
+        62,
+        109,
+        28,
+        202,
+        40
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 22,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        239,
+        216,
+        156,
+        37,
+        205,
+        238
+      ],
+      "observed_official_experts": [
+        239,
+        216,
+        156,
+        37,
+        205,
+        0
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 23,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        76,
+        60,
+        228,
+        118,
+        8,
+        210
+      ],
+      "observed_official_experts": [
+        76,
+        60,
+        228,
+        118,
+        8,
+        210
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 24,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        124,
+        209,
+        58,
+        46,
+        134,
+        27
+      ],
+      "observed_official_experts": [
+        124,
+        58,
+        209,
+        46,
+        27,
+        134
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 25,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        133,
+        219,
+        167,
+        238,
+        111,
+        73
+      ],
+      "observed_official_experts": [
+        133,
+        219,
+        167,
+        238,
+        111,
+        73
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 26,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        191,
+        18,
+        201,
+        78,
+        11,
+        49
+      ],
+      "observed_official_experts": [
+        191,
+        18,
+        201,
+        78,
+        11,
+        49
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 27,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        124,
+        39,
+        222,
+        152,
+        25,
+        41
+      ],
+      "observed_official_experts": [
+        124,
+        39,
+        222,
+        152,
+        25,
+        41
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 28,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        19,
+        101,
+        130,
+        141,
+        88,
+        56
+      ],
+      "observed_official_experts": [
+        19,
+        101,
+        141,
+        130,
+        88,
+        56
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 29,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        81,
+        2,
+        140,
+        226,
+        178,
+        214
+      ],
+      "observed_official_experts": [
+        81,
+        2,
+        140,
+        226,
+        178,
+        214
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 30,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        201,
+        236,
+        20,
+        93,
+        109,
+        97
+      ],
+      "observed_official_experts": [
+        201,
+        236,
+        20,
+        93,
+        109,
+        97
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 31,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        94,
+        51,
+        3,
+        143,
+        46,
+        101
+      ],
+      "observed_official_experts": [
+        94,
+        51,
+        3,
+        101,
+        46,
+        78
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 32,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        17,
+        193,
+        253,
+        50,
+        129,
+        53
+      ],
+      "observed_official_experts": [
+        17,
+        193,
+        253,
+        50,
+        129,
+        53
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 33,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        79,
+        47,
+        174,
+        22,
+        101,
+        237
+      ],
+      "observed_official_experts": [
+        79,
+        47,
+        174,
+        22,
+        237,
+        110
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 34,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        126,
+        211,
+        191,
+        21,
+        201,
+        206
+      ],
+      "observed_official_experts": [
+        126,
+        211,
+        191,
+        21,
+        201,
+        54
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 35,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        216,
+        84,
+        149,
+        174,
+        184,
+        111
+      ],
+      "observed_official_experts": [
+        216,
+        84,
+        149,
+        174,
+        111,
+        184
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 36,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        233,
+        144,
+        90,
+        106,
+        151,
+        10
+      ],
+      "observed_official_experts": [
+        233,
+        144,
+        90,
+        106,
+        10,
+        151
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 37,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        243,
+        106,
+        55,
+        131,
+        244,
+        231
+      ],
+      "observed_official_experts": [
+        243,
+        106,
+        55,
+        131,
+        231,
+        244
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 38,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        68,
+        241,
+        10,
+        95,
+        220,
+        232
+      ],
+      "observed_official_experts": [
+        68,
+        241,
+        10,
+        95,
+        220,
+        232
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 39,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        221,
+        222,
+        189,
+        255,
+        251,
+        167
+      ],
+      "observed_official_experts": [
+        221,
+        222,
+        255,
+        189,
+        8,
+        167
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 40,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        104,
+        33,
+        143,
+        45,
+        48,
+        21
+      ],
+      "observed_official_experts": [
+        104,
+        33,
+        143,
+        45,
+        48,
+        21
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 41,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        227,
+        153,
+        162,
+        65,
+        97,
+        11
+      ],
+      "observed_official_experts": [
+        227,
+        153,
+        162,
+        65,
+        97,
+        220
+      ],
+      "observation_only": true
+    },
+    {
+      "layer": 42,
+      "max_abs_error": 0.0,
+      "gpu_raw_top6": [
+        110,
+        47,
+        108,
+        148,
+        31,
+        1
+      ],
+      "observed_official_experts": [
+        110,
+        47,
+        108,
+        148,
+        31,
+        1
+      ],
+      "observation_only": true
+    }
+  ],
+  "input_semantics": "已有 capture 是 MoE activation-quant 后的 F32 输入，不是 router 原始 RMSNorm BF16 输入；本清单只允许 GPU/CPU 同输入数值门，observed_expert_ids 仅作观测，不作正式路由晋级。",
+  "claim_limit": "43 real router weights and captures in one persistent Vulkan graph; capture is post-route activation-quant input, so this is numerical/runtime evidence, not formal route or model-quality evidence."
+}
