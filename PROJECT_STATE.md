@@ -1464,3 +1464,25 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
 - profile约49.02s中attention exclusive约18.00s、Python→Rust MoE约8.89s、Range routed获取
   约5.97s、capture I/O约3.82s、Range proof index约3.93s。下一主线正式改为单一持久
   whole-token / speculative-block Rust+Vulkan runtime；不再把小缓存当作20–50 token/s路线。
+
+## 2026-08-02：首个真实 K=4 同层块回放数值通过、速度拒绝晋级
+
+- Rust worker新增隔离实验op `execute_causal_block_layer_replay`，只接受K=4/8、同层连续position、
+  独立capture root和强制union批量SHA验证；重复tensor身份必须在kind/expert/dtype/shape/bytes/
+  path/SHA上完全一致。每个唯一expert/shared在块内只上传一次，四行BF16输出写入单一原子文件。
+- 新Python严格客户端曾在并行实现后发现与真实Rust协议不一致；已按真实hello、
+  `batch_verify_payloads=true`、嵌套output/offset、manifest SHA、input token和expert IDs重新闭合。
+  假worker回归现为`15 passed, 31 subtests passed`，Rust release example为`45/45`。
+- 真实forced-prefill四位置 `[0,128803,30594,128804]` 已跑完43/43层，原生head输出
+  `[5,271,303,30594]`，共172个manifest、0 CPU fallback。首轮零下载在新版Vulkan路由命中
+  未缓存expert时正确fail-closed；随后只在显式2GB硬预算内补页并完整完成。
+- 43层K=4回放的172/172行BF16全部与原四次单层精确一致。1032次routed引用合并为逐层
+  unique总和781，复用251次；GPU上传从`18,128,766,976 B`降至`11,523,654,144 B`
+  （-36.43%），shared每层只上传一次。
+- 当前实现速度不通过：四次单层worker wall合计`11,679.3328 ms`，K=4 block为
+  `21,390.2778 ms`，speedup仅`0.5460×`、即回归83.15%。主因是通用GPU cache为每个唯一
+  expert分别分配/上传/同步，而旧单层使用一次批量固定槽。该实现保持隔离、不得接入正式解码。
+- 下一唯一候选是K=4 union固定arena：一次批量上传全部唯一payload，按固定offset供四位置复用，
+  避免每层重建19--23个GPU buffer。证据见
+  `fast16/research/polaris_meridian_v1/speculative_full_verifier/CAUSAL_BLOCK_K4_AB.md`及同目录JSON。
+  当前正式最佳仍为`0.03767 token/s`，没有新增质量、长上下文、Kimi前端或Claude/GPT能力证据。

@@ -5,6 +5,10 @@
 
 from .assets import AssetAudit, AssetContractError, audit_assets
 from .cache_replay import ExpertPageCache, ReplayReport, RouteBlock, replay_blocks
+from .cached_layer_replay import (
+    CachedLayerReplayError,
+    PersistentCachedLayerReplay,
+)
 from .cost_model import HardwareBudget, build_analysis_report
 from .runtime_controller import (
     AtomicSpeculativeController,
@@ -54,6 +58,8 @@ __all__ = [
     "REFERENCE_BLOCK_SIZES",
     "CpuCausalBlockReferenceBackend",
     "CpuCausalBlockTransaction",
+    "CachedLayerReplayError",
+    "PersistentCachedLayerReplay",
     "ReferenceBlockAudit",
     "FullDepthDecoderStateBridge",
     "FullDepthTokenComputation",

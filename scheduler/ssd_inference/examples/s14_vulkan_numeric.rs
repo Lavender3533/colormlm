@@ -26,7 +26,7 @@ use ssd_inference::verified_payload_cache::{
     VerifiedPayloadRequest, VERIFIED_PAYLOAD_BATCH_MAX_TASKS,
 };
 use ssd_inference::{VerifiedPayloadCache, VerifiedPayloadCacheStats};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -58,6 +58,7 @@ const FULLDEPTH_FP8_ATTENTION_PROTOCOL: &str = "polaris-fulldepth43-packed-fp8-a
 const FP8_PROJECTION_FIXTURE_DIR_ENV: &str = "POLARIS_L42_FP8_PROJECTION_FIXTURE_DIR";
 const WO_A_GROUPED_FIXTURE_DIR_ENV: &str = "POLARIS_L42_WO_A_FIXTURE_DIR";
 const WRITEBACK_OUTPUT_FILE: &str = "vulkan_moe_branch.bf16le.bin";
+const CAUSAL_BLOCK_LAYER_OUTPUT_FILE: &str = "vulkan_moe_block_branches.bf16le.bin";
 const PAYLOAD_CACHE_GIB_ENV: &str = "POLARIS_VERIFIED_PAYLOAD_CACHE_GIB";
 const DEFAULT_PAYLOAD_CACHE_GIB: usize = 10;
 const MIN_PAYLOAD_CACHE_GIB: usize = 8;
@@ -1463,8 +1464,53 @@ struct WritebackRequest {
     capture_root: Option<PathBuf>,
     manifest_json: Option<String>,
     manifest_sha256: Option<String>,
+    manifests: Option<Vec<PathBuf>>,
     #[serde(default)]
     batch_verify_payloads: bool,
+}
+
+#[derive(Serialize)]
+struct CausalBlockLayerOutput {
+    position: u32,
+    input_token_id: u32,
+    manifest_sha256: String,
+    expert_ids: Vec<u32>,
+    output: CausalBlockOutputView,
+}
+
+#[derive(Serialize)]
+struct CausalBlockOutputView {
+    path: PathBuf,
+    offset: usize,
+    dtype: &'static str,
+    shape: [usize; 3],
+    bytes: usize,
+    sha256: String,
+}
+
+#[derive(Serialize)]
+struct CausalBlockLayerReplayResponse {
+    protocol: &'static str,
+    request_id: String,
+    ok: bool,
+    device: String,
+    mode: &'static str,
+    layer: u32,
+    block_size: usize,
+    positions: Vec<u32>,
+    total_routed_references: usize,
+    unique_routed_experts: usize,
+    reused_routed_references: usize,
+    shared_payload_uploads: usize,
+    outputs: Vec<CausalBlockLayerOutput>,
+    #[serde(flatten)]
+    payload_verification: PayloadVerificationReceipt,
+    payload_cache: WritebackPayloadCacheTelemetry,
+    gpu_payload_cache: WritebackGpuPayloadCacheTelemetry,
+    gpu_kernel_ms: f64,
+    wall_ms: f64,
+    speed_eligible_verifier: bool,
+    claim_limit: &'static str,
 }
 
 #[derive(Serialize)]
@@ -5440,6 +5486,8 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
             "official_boundary_graph": true,
             "verified_payload_cache": true,
             "inline_manifest_json": true,
+            "causal_block_layer_replay": true,
+            "causal_block_sizes": [4, 8],
             "batch_payload_verification": true,
             "batch_payload_verification_concurrency_limit": VERIFIED_PAYLOAD_BATCH_MAX_TASKS,
             "payload_cache_capacity_bytes": payload_cache_capacity,
@@ -5504,7 +5552,9 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
         if request.protocol != WRITEBACK_PROTOCOL
             || !matches!(
                 request.op.as_str(),
-                "execute_single_layer" | "execute_single_layer_inline_manifest"
+                "execute_single_layer"
+                    | "execute_single_layer_inline_manifest"
+                    | "execute_causal_block_layer_replay"
             )
             || request.request_id.is_empty()
             || request.request_id.len() > 128
@@ -5539,17 +5589,36 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
         }
 
         let request_id = request.request_id.clone();
-        match execute_writeback_request(
-            &ctx,
-            &pipelines,
-            timestamp_bits,
-            timestamp_period_ns,
-            &mut payload_cache,
-            &mut gpu_payload_cache,
-            &mut shared_gpu_payload_cache,
-            reusable_gpu_slot.as_ref(),
-            request,
-        ) {
+        let execution: Result<serde_json::Value> =
+            if request.op == "execute_causal_block_layer_replay" {
+                execute_causal_block_layer_replay(
+                    &ctx,
+                    &pipelines,
+                    timestamp_bits,
+                    timestamp_period_ns,
+                    &mut payload_cache,
+                    request,
+                )
+                .and_then(|response| {
+                    serde_json::to_value(response).context("serialize causal block layer response")
+                })
+            } else {
+                execute_writeback_request(
+                    &ctx,
+                    &pipelines,
+                    timestamp_bits,
+                    timestamp_period_ns,
+                    &mut payload_cache,
+                    &mut gpu_payload_cache,
+                    &mut shared_gpu_payload_cache,
+                    reusable_gpu_slot.as_ref(),
+                    request,
+                )
+                .and_then(|response| {
+                    serde_json::to_value(response).context("serialize writeback response")
+                })
+            };
+        match execution {
             Ok(response) => {
                 serde_json::to_writer(&mut stdout, &response)?;
                 stdout.write_all(b"\n")?;
@@ -5714,6 +5783,402 @@ fn preverify_writeback_payload_batch(
     })
 }
 
+struct LoadedCausalBlockManifest {
+    capture_root: PathBuf,
+    manifest_sha256: String,
+    manifest: FullDepthBridgeManifest,
+}
+
+fn validate_causal_block_layer_sequence(
+    manifests: &[&FullDepthBridgeManifest],
+) -> Result<(u32, Vec<u32>)> {
+    if !matches!(manifests.len(), 4 | 8) {
+        bail!("causal block layer replay only supports K=4/8");
+    }
+    let layer = manifests[0].layer;
+    let first_position = manifests[0].position;
+    let mut positions = Vec::with_capacity(manifests.len());
+    for (offset, manifest) in manifests.iter().enumerate() {
+        let expected_position = first_position
+            .checked_add(u32::try_from(offset).context("causal block position offset overflow")?)
+            .ok_or_else(|| anyhow::anyhow!("causal block position overflow"))?;
+        if manifest.layer != layer || manifest.position != expected_position {
+            bail!(
+                "causal block layer/position sequence drift: expected L{layer}/P{expected_position}, got L{}/P{}",
+                manifest.layer,
+                manifest.position
+            );
+        }
+        positions.push(manifest.position);
+    }
+    Ok((layer, positions))
+}
+
+fn same_payload_identity(left: &FullDepthBridgePayload, right: &FullDepthBridgePayload) -> bool {
+    left.tensor == right.tensor
+        && left.kind == right.kind
+        && left.expert_id == right.expert_id
+        && left.dtype == right.dtype
+        && left.shape == right.shape
+        && left.bytes == right.bytes
+        && left.path == right.path
+        && left.sha256 == right.sha256
+}
+
+fn validate_causal_block_request_contract(request: &WritebackRequest) -> Result<&[PathBuf]> {
+    if request.op != "execute_causal_block_layer_replay"
+        || request.manifest.is_some()
+        || request.capture_root.is_some()
+        || request.manifest_json.is_some()
+        || request.manifest_sha256.is_some()
+        || !request.batch_verify_payloads
+    {
+        bail!("causal block layer request mixed single-layer fields or disabled verification");
+    }
+    let paths = request
+        .manifests
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!("causal block layer request missing manifests"))?;
+    if !matches!(paths.len(), 4 | 8) {
+        bail!("causal block manifest path count must be K=4/8");
+    }
+    Ok(paths)
+}
+
+fn resolve_causal_block_manifest_paths(paths: &[PathBuf]) -> Result<Vec<(PathBuf, PathBuf)>> {
+    if !matches!(paths.len(), 4 | 8) {
+        bail!("causal block manifest path count must be K=4/8");
+    }
+    let mut roots = HashSet::with_capacity(paths.len());
+    let mut resolved_paths = Vec::with_capacity(paths.len());
+    for path in paths {
+        let resolved = path
+            .canonicalize()
+            .with_context(|| format!("resolve causal block manifest {}", path.display()))?;
+        if resolved.file_name().and_then(|value| value.to_str()) != Some("bridge_manifest.json") {
+            bail!("causal block manifest filename drift");
+        }
+        let capture_root = resolved
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("causal block manifest has no parent"))?
+            .canonicalize()?;
+        if !roots.insert(capture_root.clone()) {
+            bail!("causal block capture roots must be distinct");
+        }
+        resolved_paths.push((resolved, capture_root));
+    }
+    Ok(resolved_paths)
+}
+
+fn merge_causal_block_payload_identity(
+    unique_payloads: &mut BTreeMap<String, FullDepthBridgePayload>,
+    payload: &FullDepthBridgePayload,
+) -> Result<()> {
+    match unique_payloads.get(&payload.tensor) {
+        Some(previous) if !same_payload_identity(previous, payload) => {
+            bail!(
+                "causal block duplicate tensor identity drift: {}",
+                payload.tensor
+            )
+        }
+        Some(_) => {}
+        None => {
+            unique_payloads.insert(payload.tensor.clone(), payload.clone());
+        }
+    }
+    Ok(())
+}
+
+fn load_causal_block_manifests(paths: &[PathBuf]) -> Result<Vec<LoadedCausalBlockManifest>> {
+    let resolved_paths = resolve_causal_block_manifest_paths(paths)?;
+    let mut loaded = Vec::with_capacity(resolved_paths.len());
+    for (resolved, capture_root) in resolved_paths {
+        let bytes = std::fs::read(&resolved)?;
+        let manifest_sha256 = sha256_bytes(&bytes);
+        let manifest: FullDepthBridgeManifest = serde_json::from_slice(&bytes)
+            .with_context(|| format!("parse causal block manifest {}", resolved.display()))?;
+        validate_writeback_manifest(&manifest)?;
+        loaded.push(LoadedCausalBlockManifest {
+            capture_root,
+            manifest_sha256,
+            manifest,
+        });
+    }
+    let manifests: Vec<&FullDepthBridgeManifest> =
+        loaded.iter().map(|entry| &entry.manifest).collect();
+    validate_causal_block_layer_sequence(&manifests)?;
+    Ok(loaded)
+}
+
+fn execute_causal_block_layer_replay(
+    ctx: &VulkanContext,
+    pipelines: &S14NumericPipelines,
+    timestamp_bits: u32,
+    timestamp_period_ns: f64,
+    payload_cache: &mut VerifiedPayloadCache,
+    request: WritebackRequest,
+) -> Result<CausalBlockLayerReplayResponse> {
+    let started = Instant::now();
+    let cache_before = payload_cache.stats();
+    validate_causal_block_request_contract(&request)?;
+    let WritebackRequest {
+        protocol: _,
+        op,
+        request_id,
+        manifest,
+        capture_root,
+        manifest_json,
+        manifest_sha256,
+        manifests,
+        batch_verify_payloads,
+    } = request;
+    debug_assert_eq!(op, "execute_causal_block_layer_replay");
+    debug_assert!(manifest.is_none());
+    debug_assert!(capture_root.is_none());
+    debug_assert!(manifest_json.is_none());
+    debug_assert!(manifest_sha256.is_none());
+    debug_assert!(batch_verify_payloads);
+    let manifest_paths =
+        manifests.ok_or_else(|| anyhow::anyhow!("causal block layer request missing manifests"))?;
+    let loaded = load_causal_block_manifests(&manifest_paths)?;
+    let manifest_refs: Vec<&FullDepthBridgeManifest> =
+        loaded.iter().map(|entry| &entry.manifest).collect();
+    let (layer, positions) = validate_causal_block_layer_sequence(&manifest_refs)?;
+
+    let mut unique_payloads = BTreeMap::<String, FullDepthBridgePayload>::new();
+    let mut unique_experts = HashSet::<u32>::new();
+    let mut gpu_identities = HashSet::<GpuMoeIdentity>::new();
+    for entry in &loaded {
+        for &expert_id in &entry.manifest.expert_ids {
+            unique_experts.insert(expert_id);
+            gpu_identities.insert(gpu_moe_identity(&entry.manifest, Some(expert_id))?);
+        }
+        gpu_identities.insert(gpu_moe_identity(&entry.manifest, None)?);
+        for payload in &entry.manifest.payloads {
+            merge_causal_block_payload_identity(&mut unique_payloads, payload)?;
+        }
+    }
+    let cache_root = Path::new(MODEL_DIR).join("range_cache").canonicalize()?;
+    let payload_rows: Vec<FullDepthBridgePayload> = unique_payloads.into_values().collect();
+    let requests =
+        prepare_writeback_batch_requests(&payload_rows, payload_rows.len(), &cache_root)?;
+    let verified = payload_cache.load_verified_batch(&requests)?;
+    if verified.len() != requests.len()
+        || verified
+            .iter()
+            .zip(&requests)
+            .any(|(payload, request)| payload.len() != request.expected_bytes)
+    {
+        bail!("causal block union payload verification drift");
+    }
+    let payload_verification =
+        payload_verification_receipt(payload_rows.iter().map(|payload| VerifiedPayloadIdentity {
+            tensor: &payload.tensor,
+            bytes: payload.bytes,
+            sha256: &payload.sha256,
+        }))?;
+    let expected_verified_bytes = payload_rows.iter().try_fold(0u64, |total, payload| {
+        total
+            .checked_add(payload.bytes)
+            .ok_or_else(|| anyhow::anyhow!("causal block payload byte overflow"))
+    })?;
+    if payload_verification.verified_count != payload_rows.len()
+        || payload_verification.verified_bytes != expected_verified_bytes
+    {
+        bail!("causal block payload verification receipt drift");
+    }
+
+    let gpu_capacity = gpu_identities.iter().try_fold(0u64, |total, identity| {
+        total
+            .checked_add(identity.bytes()?)
+            .ok_or_else(|| anyhow::anyhow!("causal block GPU identity byte overflow"))
+    })?;
+    let mut block_gpu_cache = GpuPayloadCache::new(gpu_capacity)?;
+    let gpu_before = block_gpu_cache.stats();
+    let block_output_path = loaded[0].capture_root.join(CAUSAL_BLOCK_LAYER_OUTPUT_FILE);
+    if block_output_path.exists() {
+        block_gpu_cache.destroy(ctx);
+        bail!("refuse to overwrite causal block layer output");
+    }
+
+    let execution = (|| -> Result<(Vec<Vec<u16>>, f64)> {
+        let mut outputs = Vec::with_capacity(loaded.len());
+        let mut gpu_kernel_ms = 0.0;
+        for entry in &loaded {
+            let input = load_fulldepth_bridge_input(&entry.manifest, &entry.capture_root)?;
+            let routed = entry
+                .manifest
+                .expert_ids
+                .iter()
+                .zip(&entry.manifest.route_weights)
+                .map(|(&expert_id, &mix_weight)| {
+                    let (w1, s1) = load_fulldepth_bridge_pair_cached(
+                        &entry.manifest,
+                        expert_id,
+                        "w1",
+                        payload_cache,
+                    )?;
+                    let (w3, s3) = load_fulldepth_bridge_pair_cached(
+                        &entry.manifest,
+                        expert_id,
+                        "w3",
+                        payload_cache,
+                    )?;
+                    let (w2, s2) = load_fulldepth_bridge_pair_cached(
+                        &entry.manifest,
+                        expert_id,
+                        "w2",
+                        payload_cache,
+                    )?;
+                    Ok(MoePayload {
+                        expert_id: Some(expert_id),
+                        mix_weight,
+                        gpu_identity: Some(gpu_moe_identity(&entry.manifest, Some(expert_id))?),
+                        w1,
+                        s1,
+                        w3,
+                        s3,
+                        w2,
+                        s2,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            let (w1, s1) =
+                load_fulldepth_bridge_shared_pair_cached(&entry.manifest, "w1", payload_cache)?;
+            let (w3, s3) =
+                load_fulldepth_bridge_shared_pair_cached(&entry.manifest, "w3", payload_cache)?;
+            let (w2, s2) =
+                load_fulldepth_bridge_shared_pair_cached(&entry.manifest, "w2", payload_cache)?;
+            let shared = MoePayload {
+                expert_id: None,
+                mix_weight: 1.0,
+                gpu_identity: Some(gpu_moe_identity(&entry.manifest, None)?),
+                w1,
+                s1,
+                w3,
+                s3,
+                w2,
+                s2,
+            };
+            let result = run_official_top6_shared_moe_batch_cached(
+                ctx,
+                pipelines,
+                timestamp_bits,
+                timestamp_period_ns,
+                &input,
+                &routed,
+                &shared,
+                &mut block_gpu_cache,
+                false,
+            )?;
+            gpu_kernel_ms += result.gpu_kernel_ms;
+            outputs.push(result.branch_bf16);
+        }
+        Ok((outputs, gpu_kernel_ms))
+    })();
+    let (branch_outputs, gpu_kernel_ms) = match execution {
+        Ok(value) => value,
+        Err(error) => {
+            block_gpu_cache.destroy(ctx);
+            return Err(error);
+        }
+    };
+
+    let mut block_bytes = Vec::with_capacity(branch_outputs.len() * 4096 * 2);
+    let mut output_rows = Vec::with_capacity(branch_outputs.len());
+    for (entry, values) in loaded.iter().zip(&branch_outputs) {
+        if values.len() != 4096 {
+            block_gpu_cache.destroy(ctx);
+            bail!("causal block BF16 output shape drift");
+        }
+        let offset = block_bytes.len();
+        let mut row_bytes = Vec::with_capacity(4096 * 2);
+        for value in values {
+            row_bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        let row_sha256 = sha256_bytes(&row_bytes);
+        block_bytes.extend_from_slice(&row_bytes);
+        output_rows.push(CausalBlockLayerOutput {
+            position: entry.manifest.position,
+            input_token_id: entry.manifest.input_token_id,
+            manifest_sha256: entry.manifest_sha256.clone(),
+            expert_ids: entry.manifest.expert_ids.clone(),
+            output: CausalBlockOutputView {
+                path: block_output_path.clone(),
+                offset,
+                dtype: "bf16_le",
+                shape: [1, 1, 4096],
+                bytes: row_bytes.len(),
+                sha256: row_sha256,
+            },
+        });
+    }
+    let temporary = loaded[0]
+        .capture_root
+        .join(format!("{CAUSAL_BLOCK_LAYER_OUTPUT_FILE}.tmp"));
+    if temporary.exists() {
+        block_gpu_cache.destroy(ctx);
+        bail!("stale causal block layer output temporary exists");
+    }
+    let write_result = (|| -> Result<PathBuf> {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
+        file.write_all(&block_bytes)?;
+        file.sync_all()?;
+        std::fs::rename(&temporary, &block_output_path)?;
+        let canonical = block_output_path.canonicalize()?;
+        if !canonical.starts_with(&loaded[0].capture_root) {
+            bail!("causal block output escaped first capture root");
+        }
+        Ok(canonical)
+    })();
+    let canonical_output = match write_result {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = std::fs::remove_file(&temporary);
+            block_gpu_cache.destroy(ctx);
+            return Err(error.context("publish causal block layer output"));
+        }
+    };
+    for row in &mut output_rows {
+        row.output.path = canonical_output.clone();
+    }
+
+    let gpu_after = block_gpu_cache.stats();
+    let gpu_payload_cache =
+        WritebackGpuPayloadCacheTelemetry::between(&block_gpu_cache, gpu_before, gpu_after)?;
+    block_gpu_cache.destroy(ctx);
+    let cache_after = payload_cache.stats();
+    let payload_cache =
+        WritebackPayloadCacheTelemetry::between(payload_cache, cache_before, cache_after)?;
+    let total_routed_references = loaded.len() * OFFICIAL_ROUTED_EXPERT_COUNT;
+    let unique_routed_experts = unique_experts.len();
+    Ok(CausalBlockLayerReplayResponse {
+        protocol: WRITEBACK_PROTOCOL,
+        request_id,
+        ok: true,
+        device: ctx.gpu_name.clone(),
+        mode: "causal_block_layer_replay",
+        layer,
+        block_size: loaded.len(),
+        positions,
+        total_routed_references,
+        unique_routed_experts,
+        reused_routed_references: total_routed_references - unique_routed_experts,
+        shared_payload_uploads: 1,
+        outputs: output_rows,
+        payload_verification,
+        payload_cache,
+        gpu_payload_cache,
+        gpu_kernel_ms,
+        wall_ms: started.elapsed().as_secs_f64() * 1000.0,
+        speed_eligible_verifier: false,
+        claim_limit: "One same-layer K=4/8 replay request with union SHA verification and one GPU upload per unique expert/shared identity; not yet a 43-layer causal verifier or token/s result.",
+    })
+}
+
 fn execute_writeback_request(
     ctx: &VulkanContext,
     pipelines: &S14NumericPipelines,
@@ -5739,8 +6204,12 @@ fn execute_writeback_request(
         capture_root: requested_capture_root,
         manifest_json,
         manifest_sha256: requested_manifest_sha256,
+        manifests,
         batch_verify_payloads,
     } = request;
+    if manifests.is_some() {
+        bail!("single-layer writeback request mixed causal block manifests");
+    }
     let batch_verify_enabled = writeback_batch_verify_enabled(batch_verify_payloads)?;
     let (capture_root, manifest_bytes, manifest_sha256, manifest_transport) = match op.as_str() {
         "execute_single_layer" => {
@@ -8755,6 +9224,135 @@ mod writeback_payload_cache_tests {
             payloads,
             reference_semantics: "test".to_string(),
         }
+    }
+
+    fn fake_causal_block_manifest(layer: u32, position: u32) -> FullDepthBridgeManifest {
+        let mut manifest = fake_bridge_manifest(Vec::new());
+        manifest.layer = layer;
+        manifest.position = position;
+        manifest
+    }
+
+    fn fake_causal_block_request(size: usize) -> WritebackRequest {
+        WritebackRequest {
+            protocol: WRITEBACK_PROTOCOL.to_string(),
+            op: "execute_causal_block_layer_replay".to_string(),
+            request_id: "causal-block-test".to_string(),
+            manifest: None,
+            capture_root: None,
+            manifest_json: None,
+            manifest_sha256: None,
+            manifests: Some(
+                (0..size)
+                    .map(|index| PathBuf::from(format!("capture-{index}/bridge_manifest.json")))
+                    .collect(),
+            ),
+            batch_verify_payloads: true,
+        }
+    }
+
+    #[test]
+    fn causal_block_sequence_is_exactly_k4_or_k8_same_layer_and_contiguous() {
+        let manifests: Vec<FullDepthBridgeManifest> = (0..8)
+            .map(|position| fake_causal_block_manifest(17, position))
+            .collect();
+        let first_four: Vec<&FullDepthBridgeManifest> = manifests[..4].iter().collect();
+        assert_eq!(
+            validate_causal_block_layer_sequence(&first_four).unwrap(),
+            (17, vec![0, 1, 2, 3])
+        );
+        let all_eight: Vec<&FullDepthBridgeManifest> = manifests.iter().collect();
+        assert_eq!(
+            validate_causal_block_layer_sequence(&all_eight).unwrap(),
+            (17, (0..8).collect())
+        );
+        let first_three: Vec<&FullDepthBridgeManifest> = manifests[..3].iter().collect();
+        assert!(validate_causal_block_layer_sequence(&first_three).is_err());
+
+        let mut position_drift: Vec<FullDepthBridgeManifest> = (0..4)
+            .map(|position| fake_causal_block_manifest(17, position))
+            .collect();
+        position_drift[2].position = 9;
+        let refs: Vec<&FullDepthBridgeManifest> = position_drift.iter().collect();
+        assert!(validate_causal_block_layer_sequence(&refs).is_err());
+
+        let mut layer_drift: Vec<FullDepthBridgeManifest> = (0..4)
+            .map(|position| fake_causal_block_manifest(17, position))
+            .collect();
+        layer_drift[3].layer = 18;
+        let refs: Vec<&FullDepthBridgeManifest> = layer_drift.iter().collect();
+        assert!(validate_causal_block_layer_sequence(&refs).is_err());
+    }
+
+    #[test]
+    fn causal_block_request_rejects_mixed_fields_and_requires_batch_verification() {
+        let valid = fake_causal_block_request(4);
+        assert_eq!(
+            validate_causal_block_request_contract(&valid)
+                .unwrap()
+                .len(),
+            4
+        );
+
+        let mut disabled = fake_causal_block_request(4);
+        disabled.batch_verify_payloads = false;
+        assert!(validate_causal_block_request_contract(&disabled).is_err());
+
+        let mut mixed = fake_causal_block_request(4);
+        mixed.manifest = Some(PathBuf::from("bridge_manifest.json"));
+        assert!(validate_causal_block_request_contract(&mixed).is_err());
+
+        let mut missing = fake_causal_block_request(4);
+        missing.manifests = None;
+        assert!(validate_causal_block_request_contract(&missing).is_err());
+        assert!(validate_causal_block_request_contract(&fake_causal_block_request(5)).is_err());
+    }
+
+    #[test]
+    fn causal_block_manifest_paths_require_distinct_capture_roots() {
+        let fixture = FixtureDir::new();
+        let paths: Vec<PathBuf> = (0..4)
+            .map(|index| {
+                let root = fixture.0.join(format!("capture-{index}"));
+                std::fs::create_dir(&root).unwrap();
+                let path = root.join("bridge_manifest.json");
+                std::fs::write(&path, b"{}").unwrap();
+                path
+            })
+            .collect();
+        let resolved = resolve_causal_block_manifest_paths(&paths).unwrap();
+        assert_eq!(resolved.len(), 4);
+        let duplicate = vec![paths[0].clone(); 4];
+        assert!(resolve_causal_block_manifest_paths(&duplicate).is_err());
+
+        let wrong_name = fixture.0.join("not-a-manifest.json");
+        std::fs::write(&wrong_name, b"{}").unwrap();
+        let mut wrong_paths = paths;
+        wrong_paths[3] = wrong_name;
+        assert!(resolve_causal_block_manifest_paths(&wrong_paths).is_err());
+    }
+
+    #[test]
+    fn causal_block_duplicate_tensor_requires_full_identity_match() {
+        let payload = FullDepthBridgePayload {
+            tensor: "layers.17.ffn.experts.3.w1.weight".to_string(),
+            kind: "routed".to_string(),
+            expert_id: Some(3),
+            dtype: "I8".to_string(),
+            shape: vec![2048, 2048],
+            bytes: 4_194_304,
+            path: PathBuf::from("range_cache/expert.bin"),
+            sha256: "a".repeat(64),
+        };
+        let mut unique = BTreeMap::new();
+        merge_causal_block_payload_identity(&mut unique, &payload).unwrap();
+        merge_causal_block_payload_identity(&mut unique, &payload).unwrap();
+        assert_eq!(unique.len(), 1);
+
+        let mut drift = payload;
+        drift.sha256 = "b".repeat(64);
+        assert!(merge_causal_block_payload_identity(&mut unique, &drift).is_err());
+        assert_eq!(unique.len(), 1);
     }
 
     #[test]

@@ -89,9 +89,23 @@ python -m fast16.research.polaris_meridian_v1.speculative_full_verifier `
 3. 跨块 LRU 设备缓存命中/未命中；
 4. 按真实每页 13,369,344 B 计算的专家 PCIe 字节。
 
+## 真实 K=4 同层回放
+
+2026-08-02 已使用四个连续真实位置、43 层 FullDepth43/native-top6 capture 完成首个
+`execute_causal_block_layer_replay` 门：172/172 行 BF16 输出与原单层路径精确一致，
+1032 次 routed 引用中有 251 次块内复用，GPU 上传字节下降 36.43%。
+
+但当前通用 GPU identity cache 为每个唯一专家分别分配/上传，worker wall 为原四次单层的
+`1.83×`（speedup `0.546×`），因此不晋级。完整证据见
+[`CAUSAL_BLOCK_K4_AB.md`](CAUSAL_BLOCK_K4_AB.md) 与
+[`CAUSAL_BLOCK_K4_AB.json`](CAUSAL_BLOCK_K4_AB.json)。下一实现必须改用有界 union arena
+的一次批量上传，不能把 K 次串行或当前负收益 replay 包装成 batch 加速。
+
 ## 证据边界
 
-当前没有真实 FullDepth43 route trace、草稿接受 trace、内核计算耗时或权重 payload。因此本目录只证明接受/回退合同、字节审计和条件方程可运行；不证明 S14 或 FullDepth43 已运行，不证明 20/50 tok/s 已达到，也不宣称质量达到 DeepSeek。
+当前已有真实 FullDepth43 route、权重 payload、四位置 capture 与同层 K=4 GPU 回放证据；
+仍没有真实草稿接受 trace，也没有包含 attention/router/KV/HC/final head 的 causal-block
+forward。因此不证明 20/50 tok/s 已达到，也不宣称质量达到 DeepSeek、Claude 或 GPT。
 
 CPU causal-block 的离线 fixture 已覆盖 K=1 对一次串行、K=4
 对串行 K 的整状态等价，以及 K=8 的完整 route/checkpoint 覆盖；
