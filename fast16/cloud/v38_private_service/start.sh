@@ -13,6 +13,12 @@ verify_exact_file "${MODEL_PATH}" "${MODEL_BYTES}" "${MODEL_SHA256}"
 verify_exact_file "${POLICY_DIR}/policy.json" 1493 "${POLICY_MANIFEST_SHA256}"
 verify_exact_file "${POLICY_DIR}/weights.bin" 131264 "${POLICY_WEIGHTS_SHA256}"
 
+CTX_SIZE="${V38_CTX_SIZE:-200000}"
+if [[ ! "$CTX_SIZE" =~ ^[0-9]+$ ]] || (( CTX_SIZE < 16384 || CTX_SIZE > 262144 )); then
+    printf 'V38_CTX_SIZE 必须是 16384..262144 之间的整数。\n' >&2
+    exit 1
+fi
+
 if [[ -z "${LLAMA_API_KEY:-}" ]]; then
     read -r -s -p '请输入私人 API 密钥（至少 24 字符，不回显）：' LLAMA_API_KEY
     printf '\n'
@@ -35,7 +41,7 @@ export LLAMA_API_KEY
 nohup "${LLAMA_SERVER}" \
     --model "${MODEL_PATH}" \
     --alias "${MODEL_ALIAS}" \
-    --ctx-size 16384 \
+    --ctx-size "${CTX_SIZE}" \
     --parallel 1 \
     --batch-size 512 \
     --ubatch-size 512 \
@@ -111,6 +117,6 @@ if [[ "$webui_ready" != 1 ]]; then
     exit 1
 fi
 
-printf 'v38 与 Open WebUI 已启动，均只监听 127.0.0.1。\n'
+printf 'v38 与 Open WebUI 已启动，均只监听 127.0.0.1；上下文上限为 %s。\n' "${CTX_SIZE}"
 printf '首次打开 Open WebUI 时创建唯一管理员账号；数据库生成后重启会自动关闭注册。\n'
 printf '请执行 health-smoke.sh 完成唯一一次最短中文 smoke。\n'

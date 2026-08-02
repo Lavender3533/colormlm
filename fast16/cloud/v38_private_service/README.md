@@ -15,6 +15,9 @@
   对应本地提交 `865801f14fc53218f591714ea32dd407b15022a6`。
 - chat template 直接使用 GGUF 内嵌模板，不传入任何替换模板。
 - API alias：`ColorLM-v38-Qwen36-Shared-Sequence-Policy`。
+- GGUF 声明训练上下文为 `262144`；云端默认 `V38_CTX_SIZE=200000`。模型有10个全注意力层，
+  200K 的 F16 KV 缓存理论约 `1.91 GiB`，32 GiB 910B4 容量可容纳。当前任务只允许最短 smoke，
+  因而这表示运行时容量配置，不冒充已完成 200K 检索、质量或长程稳定性评测。
 
 ## 当前 GitCode Notebook 的人工步骤
 
@@ -64,6 +67,9 @@ cd /opt/atomgit/v38-private-service/source/colormlm/fast16/cloud/v38_private_ser
 bash start.sh
 ```
 
+需要临时回到正式历史配置时，可运行 `V38_CTX_SIZE=16384 bash start.sh`；允许范围为
+`16384..262144`。
+
 脚本会隐藏读取私人 API 密钥，密钥不回显、不写源码、配置或日志，只以进程环境变量注入。两个服务
 都只监听 `127.0.0.1`：llama API 为 `8138`，Open WebUI 为 `3000`。
 
@@ -107,4 +113,3 @@ bash cleanup.sh --yes
 当前 AtomGit/GitCode Notebook 的 910B4 32 GiB 实例为免费试玩资源，但单次会话约两小时，并非
 永久在线云服务。只要免费额度有效，本次预计计算费用为 `0 元`。若要长期在线，应迁移到至少
 24 GiB 显存、32 GiB 内存、30 GiB 可用磁盘的按量 GPU；不能通过量化或替换模型降低门槛后仍称 v38。
-
