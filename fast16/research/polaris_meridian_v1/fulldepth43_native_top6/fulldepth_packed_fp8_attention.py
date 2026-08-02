@@ -34,6 +34,12 @@ _MAX_JSON_BYTES = 65_536
 _OUTPUT_POISON = 0xA5
 _PROJECTIONS = ["wq_a", "wkv", "wq_b", "indexer.wq_b", "wo_b", "wo_a"]
 _KERNELS = ["standard", "grouped_wo_a"]
+OUTPUT_CHAIN_REQUANTIZATION = {
+    "format": "e4m3fn_group128_quantize_dequantize_f32",
+    "group_size": 128,
+    "amax_floor": 1.0e-4,
+    "max_finite": 448.0,
+}
 
 
 class FullDepthPackedFp8Error(RuntimeError):
@@ -278,6 +284,60 @@ class FullDepthPackedFp8Arena:
         }
         return input_view, output_views, _sha256(payload)
 
+    def prepare_output_chain(
+        self,
+        activation: torch.Tensor,
+        input_spec: Mapping[str, Any],
+        output_spec: Mapping[str, Any],
+    ) -> tuple[dict[str, Any], dict[str, Any], str]:
+        input_shape, _ = self._shape(input_spec)
+        _, output_shape = self._shape(output_spec)
+        if (
+            input_spec.get("kernel") != "grouped_wo_a"
+            or output_spec.get("kernel") != "standard"
+            or activation.device.type != "cpu"
+            or activation.dtype != torch.float32
+            or tuple(activation.shape) != input_shape
+            or not bool(torch.isfinite(activation).all().item())
+        ):
+            raise FullDepthPackedFp8Error("attention output-chain 输入/投影合同漂移")
+        activation_array = (
+            activation.detach().contiguous().numpy().astype("<f4", copy=False)
+        )
+        if bool(np.any(activation_array.view("<u4") & np.uint32(0xFFFF))):
+            raise FullDepthPackedFp8Error(
+                "output-chain grouped wo_a activation 必须是 BF16-carrying F32"
+            )
+        payload = activation_array.tobytes(order="C")
+        output_bytes = math.prod(output_shape) * 4
+        output_view = {
+            "path": str(self.path),
+            "offset": len(payload),
+            "bytes": output_bytes,
+            "dtype": "f32_le_bf16_rounded",
+            "shape": list(output_shape),
+        }
+        if len(payload) + output_bytes > self.path.stat().st_size:
+            raise FullDepthPackedFp8Error("arena 容量不足")
+        try:
+            with self.path.open("r+b", buffering=0) as stream:
+                stream.seek(0)
+                stream.write(payload)
+                stream.seek(len(payload))
+                stream.write(bytes([_OUTPUT_POISON]) * output_bytes)
+                stream.flush()
+                os.fsync(stream.fileno())
+        except OSError as exc:
+            raise FullDepthPackedFp8Error(f"写入 output-chain arena 失败: {exc}") from exc
+        input_view = {
+            "path": str(self.path),
+            "offset": 0,
+            "bytes": len(payload),
+            "dtype": "f32_le",
+            "shape": list(input_shape),
+        }
+        return input_view, output_view, _sha256(payload)
+
     def read_output(self, view: Mapping[str, Any], expected_sha256: str) -> torch.Tensor:
         try:
             with self.path.open("rb") as stream:
@@ -319,6 +379,19 @@ class PersistentFullDepthPackedFp8Attention:
         "projection", "output_written", "output_sha256", "weight_sha256",
         "scale_sha256", "payload_hash_verified", "gpu_slot_cache_hit",
         "gpu_slot_resident_bytes", "payload_uploaded_bytes", "numeric_mode",
+        "output_rounding",
+    }
+    _OUTPUT_CHAIN_RESPONSE_KEYS = {
+        "protocol", "request_id", "ok", "revision", "profile", "layer",
+        "position", "arena_epoch", "input", "output_written", "input_sha256",
+        "wo_a_output_sha256", "requantized_activation_sha256", "output_sha256",
+        "requantization", "slots", "catalog_sha256", "gpu_slot_cache_entries",
+        "numeric_mode", "output_rounding",
+    }
+    _OUTPUT_CHAIN_SLOT_KEYS = {
+        "projection", "weight_sha256", "scale_sha256", "payload_hash_verified",
+        "gpu_slot_cache_hit", "gpu_slot_cache_entries", "gpu_slot_resident_bytes",
+        "payload_uploaded_bytes", "activation_uploaded_bytes", "numeric_mode",
         "output_rounding",
     }
 
@@ -618,6 +691,182 @@ class PersistentFullDepthPackedFp8Attention:
             )
         self.epoch += 1
         return outputs, dict(response)
+
+    def execute_output_chain(
+        self,
+        *,
+        layer: int,
+        position: int,
+        activation: torch.Tensor,
+        assets: Mapping[str, tuple[PackedFp8Asset, PackedFp8Asset]],
+    ) -> tuple[torch.Tensor, dict[str, Any]]:
+        try:
+            return self._execute_output_chain(
+                layer=layer,
+                position=position,
+                activation=activation,
+                assets=assets,
+            )
+        except FullDepthPackedFp8Error as error:
+            if not self.poisoned:
+                self._fail(str(error))
+            raise
+        except Exception as error:
+            self._fail(
+                "FullDepth43 output-chain 客户端异常: "
+                f"{type(error).__name__}: {error}"
+            )
+
+    def _execute_output_chain(
+        self,
+        *,
+        layer: int,
+        position: int,
+        activation: torch.Tensor,
+        assets: Mapping[str, tuple[PackedFp8Asset, PackedFp8Asset]],
+    ) -> tuple[torch.Tensor, dict[str, Any]]:
+        if self.poisoned or self.process is None or self.process.poll() is not None:
+            raise FullDepthPackedFp8Error("FullDepth43 worker 已 poisoned/退出")
+        if (
+            not isinstance(position, int)
+            or isinstance(position, bool)
+            or not 0 <= position <= POSITION_MAX
+        ):
+            self._fail("position 超出合同")
+        suffixes = ("wo_a", "wo_b")
+        if set(assets) != set(suffixes):
+            self._fail("output-chain assets 必须严格为 wo_a/wo_b")
+        specs = [projection_spec(layer, suffix) for suffix in suffixes]
+        input_view, output_view, input_sha256 = self.arena.prepare_output_chain(
+            activation, specs[0], specs[1]
+        )
+        stages: list[dict[str, Any]] = []
+        ordered_assets: list[tuple[PackedFp8Asset, PackedFp8Asset]] = []
+        for suffix, spec in zip(suffixes, specs, strict=True):
+            weight, scale = assets[suffix]
+            if (
+                weight.tensor != f"{spec['name']}.weight"
+                or scale.tensor != f"{spec['name']}.scale"
+            ):
+                self._fail("output-chain weight/scale tensor 身份漂移")
+            ordered_assets.append((weight, scale))
+            stages.append(
+                {
+                    "projection": spec,
+                    "weight": weight.to_request(),
+                    "scale": scale.to_request(),
+                }
+            )
+
+        self.counter += 1
+        request_id = f"py-{os.getpid()}-{self.counter}"
+        request = {
+            "protocol": PROTOCOL,
+            "op": "execute_fp8_attention_output_chain",
+            "request_id": request_id,
+            "revision": REVISION,
+            "profile": PROFILE,
+            "layer": layer,
+            "position": position,
+            "arena_epoch": self.epoch,
+            "input_sha256": input_sha256,
+            "input": input_view,
+            "projections": stages,
+            "requantization": dict(OUTPUT_CHAIN_REQUANTIZATION),
+            "output": output_view,
+        }
+        assert self.process.stdin is not None
+        try:
+            line = json.dumps(request, ensure_ascii=False, separators=(",", ":")) + "\n"
+            if len(line.encode("utf-8")) > _MAX_JSON_BYTES:
+                self._fail("FullDepth43 output-chain request 超过 64 KiB")
+            self.process.stdin.write(line)
+            self.process.stdin.flush()
+        except (BrokenPipeError, OSError) as exc:
+            self._fail(f"写入 output-chain worker 失败: {exc}")
+
+        response = _strict_json(self._readline())
+        if response.get("ok") is not True:
+            self._fail(f"worker 拒绝 output-chain: {response.get('error')}")
+        _require_keys(
+            response,
+            self._OUTPUT_CHAIN_RESPONSE_KEYS,
+            "FullDepth43 output-chain response",
+        )
+        slots = response.get("slots")
+        if (
+            response.get("protocol") != PROTOCOL
+            or response.get("request_id") != request_id
+            or response.get("revision") != REVISION
+            or response.get("profile") != PROFILE
+            or response.get("layer") != layer
+            or response.get("position") != position
+            or response.get("arena_epoch") != self.epoch
+            or response.get("input") != input_view
+            or response.get("output_written") != output_view
+            or response.get("input_sha256") != input_sha256
+            or response.get("requantization") != OUTPUT_CHAIN_REQUANTIZATION
+            or response.get("catalog_sha256") != CATALOG_SHA256
+            or response.get("numeric_mode")
+            != "grouped_wo_a_then_e4m3fn_group128_then_wo_b"
+            or response.get("output_rounding") != OUTPUT_ROUNDING
+            or not isinstance(response.get("gpu_slot_cache_entries"), int)
+            or response.get("gpu_slot_cache_entries", -1) < 2
+            or not all(
+                _is_sha256(response.get(key))
+                for key in (
+                    "wo_a_output_sha256",
+                    "requantized_activation_sha256",
+                    "output_sha256",
+                )
+            )
+            or not isinstance(slots, list)
+            or len(slots) != 2
+        ):
+            self._fail("FullDepth43 output-chain 顶层身份/SHA 合同漂移")
+
+        assert isinstance(slots, list)
+        expected_activation_bytes = (8 * 4096 * 4, 8192 * 4)
+        for spec, asset_pair, activation_bytes, slot in zip(
+            specs,
+            ordered_assets,
+            expected_activation_bytes,
+            slots,
+            strict=True,
+        ):
+            if not isinstance(slot, dict):
+                self._fail("FullDepth43 output-chain slot 类型漂移")
+            _require_keys(slot, self._OUTPUT_CHAIN_SLOT_KEYS, "FullDepth43 output-chain slot")
+            weight, scale = asset_pair
+            expected_mode = (
+                "grouped_packed_fp8_e4m3_ue8m0_bf16_input_output"
+                if spec["kernel"] == "grouped_wo_a"
+                else "packed_fp8_e4m3_ue8m0_bf16_output"
+            )
+            if (
+                slot.get("projection") != spec
+                or slot.get("weight_sha256") != weight.sha256
+                or slot.get("scale_sha256") != scale.sha256
+                or slot.get("payload_hash_verified") is not True
+                or not isinstance(slot.get("gpu_slot_cache_hit"), bool)
+                or not isinstance(slot.get("gpu_slot_cache_entries"), int)
+                or slot.get("gpu_slot_cache_entries", -1) < 1
+                or not isinstance(slot.get("gpu_slot_resident_bytes"), int)
+                or slot.get("gpu_slot_resident_bytes", -1) < 0
+                or slot.get("payload_uploaded_bytes")
+                != (
+                    0
+                    if slot.get("gpu_slot_cache_hit")
+                    else weight.bytes + scale.bytes
+                )
+                or slot.get("activation_uploaded_bytes") != activation_bytes
+                or slot.get("numeric_mode") != expected_mode
+                or slot.get("output_rounding") != OUTPUT_ROUNDING
+            ):
+                self._fail("FullDepth43 output-chain slot 顺序/身份合同漂移")
+        output = self.arena.read_output(output_view, response["output_sha256"])
+        self.epoch += 1
+        return output, dict(response)
 
     def _execute(
         self,

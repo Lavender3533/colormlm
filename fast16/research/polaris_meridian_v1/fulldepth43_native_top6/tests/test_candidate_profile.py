@@ -253,6 +253,7 @@ def test_profiled_candidate_runs_continuous_tokens_and_keeps_single_token_compat
         vulkan_attention_worker=attention_worker,
         vulkan_attention_scratch=attention_scratch,
         vulkan_attention_shared_batch=True,
+        vulkan_attention_output_chain=True,
         vulkan_final_head_worker=final_head_worker,
         vulkan_final_head_scratch=scratch,
     )
@@ -263,6 +264,7 @@ def test_profiled_candidate_runs_continuous_tokens_and_keeps_single_token_compat
     assert config.vulkan_attention_worker == attention_worker.resolve()
     assert config.vulkan_attention_scratch == attention_scratch.resolve()
     assert config.vulkan_attention_shared_batch is True
+    assert config.vulkan_attention_output_chain is True
     assert config.vulkan_final_head_worker == final_head_worker.resolve()
     assert config.vulkan_final_head_scratch == scratch.resolve()
     assert summary["committed_token_count"] == token_count
@@ -354,6 +356,7 @@ def test_profiled_candidate_cli_forwards_continuous_head_options(
             "--vulkan-attention-scratch",
             str(attention_scratch),
             "--vulkan-attention-shared-batch",
+            "--vulkan-attention-output-chain",
             "--vulkan-final-head-worker",
             str(final_worker),
             "--vulkan-final-head-scratch",
@@ -364,5 +367,6 @@ def test_profiled_candidate_cli_forwards_continuous_head_options(
     assert captured["vulkan_attention_worker"] == attention_worker
     assert captured["vulkan_attention_scratch"] == attention_scratch
     assert captured["vulkan_attention_shared_batch"] is True
+    assert captured["vulkan_attention_output_chain"] is True
     assert captured["vulkan_final_head_worker"] == final_worker
     assert captured["vulkan_final_head_scratch"] == scratch

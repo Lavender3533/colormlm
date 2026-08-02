@@ -206,6 +206,7 @@ python -X utf8 -m `
   --worker scheduler/target/release/examples/s14_vulkan_numeric.exe `
   --vulkan-attention-worker scheduler/target/release/examples/s14_vulkan_numeric.exe `
   --vulkan-attention-shared-batch `
+  --vulkan-attention-output-chain `
   --vulkan-final-head-worker scheduler/target/release/examples/s14_bf16_head.exe `
   --vulkan-final-head-scratch <scratch-dir> `
   --output-root <fresh-output-dir> `

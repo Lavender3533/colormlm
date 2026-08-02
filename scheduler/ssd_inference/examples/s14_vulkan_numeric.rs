@@ -97,6 +97,10 @@ const L42_WO_A_INPUT_SHA256: &str =
     "eee925360c8709263a0cdfa3986c2d3ee91a38c4e4589a7220064b489ad40060";
 const L42_WO_A_OUTPUT_SHA256: &str =
     "2be0aa3b4b67aae58f62a77d2a255d6240b5baf3d71f37c9084fd890741d2eb9";
+const L42_WO_A_REQUANTIZED_SHA256: &str =
+    "94b3f7fd24ee36b8553ed513d1986ef49162c053bd6dbf62f98b9579e20ea3f0";
+const L42_WO_B_OUTPUT_SHA256: &str =
+    "84ce63ca9233b07bea99741f9982accac17bc65025b0098b7017acd7dab6db10";
 
 #[derive(Debug, Clone, Copy)]
 struct FrozenFp8Projection {
@@ -1843,11 +1847,47 @@ struct FullDepthFp8AttentionBatchRequest {
     projections: Vec<FullDepthFp8AttentionBatchItem>,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct FullDepthFp8AttentionOutputChainRequantization {
+    format: String,
+    group_size: u32,
+    amax_floor: f32,
+    max_finite: f32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FullDepthFp8AttentionOutputChainStage {
+    projection: FullDepthFp8ProjectionSpec,
+    weight: FullDepthFp8AssetView,
+    scale: FullDepthFp8AssetView,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FullDepthFp8AttentionOutputChainRequest {
+    protocol: String,
+    op: String,
+    request_id: String,
+    revision: String,
+    profile: String,
+    layer: u32,
+    position: u32,
+    arena_epoch: u64,
+    input_sha256: String,
+    input: ProjectionArenaView,
+    projections: Vec<FullDepthFp8AttentionOutputChainStage>,
+    requantization: FullDepthFp8AttentionOutputChainRequantization,
+    output: ProjectionArenaView,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
 enum FullDepthFp8AttentionWorkerRequest {
     Single(FullDepthFp8AttentionRequest),
     SharedInputBatch(FullDepthFp8AttentionBatchRequest),
+    OutputChain(FullDepthFp8AttentionOutputChainRequest),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2031,10 +2071,50 @@ struct FullDepthFp8AttentionBatchResponse {
 }
 
 #[derive(Serialize)]
+struct FullDepthFp8AttentionOutputChainSlotResponse {
+    projection: FullDepthFp8ProjectionSpec,
+    weight_sha256: String,
+    scale_sha256: String,
+    payload_hash_verified: bool,
+    gpu_slot_cache_hit: bool,
+    gpu_slot_cache_entries: usize,
+    gpu_slot_resident_bytes: u64,
+    payload_uploaded_bytes: u64,
+    activation_uploaded_bytes: u64,
+    numeric_mode: &'static str,
+    output_rounding: &'static str,
+}
+
+#[derive(Serialize)]
+struct FullDepthFp8AttentionOutputChainResponse {
+    protocol: &'static str,
+    request_id: String,
+    ok: bool,
+    revision: &'static str,
+    profile: &'static str,
+    layer: u32,
+    position: u32,
+    arena_epoch: u64,
+    input: ProjectionArenaView,
+    output_written: ProjectionArenaView,
+    input_sha256: String,
+    wo_a_output_sha256: String,
+    requantized_activation_sha256: String,
+    output_sha256: String,
+    requantization: FullDepthFp8AttentionOutputChainRequantization,
+    slots: Vec<FullDepthFp8AttentionOutputChainSlotResponse>,
+    catalog_sha256: &'static str,
+    gpu_slot_cache_entries: usize,
+    numeric_mode: &'static str,
+    output_rounding: &'static str,
+}
+
+#[derive(Serialize)]
 #[serde(untagged)]
 enum FullDepthFp8AttentionWorkerResponse {
     Single(FullDepthFp8AttentionResponse),
     SharedInputBatch(FullDepthFp8AttentionBatchResponse),
+    OutputChain(FullDepthFp8AttentionOutputChainResponse),
 }
 
 #[derive(Serialize)]
@@ -2299,6 +2379,97 @@ fn validate_fulldepth_fp8_attention_batch_request(
         || first_kernel.input_shape() != second_kernel.input_shape()
     {
         bail!("FullDepth43 shared-input FP8 batch kernel/input contract drift");
+    }
+    Ok([(first, first_kernel), (second, second_kernel)])
+}
+
+fn validate_fulldepth_fp8_attention_output_chain_request(
+    request: &FullDepthFp8AttentionOutputChainRequest,
+    expected_epoch: u64,
+) -> Result<[(FullDepthFp8AttentionRequest, FullDepthFp8Kernel); 2]> {
+    if request.protocol != FULLDEPTH_FP8_ATTENTION_PROTOCOL
+        || request.op != "execute_fp8_attention_output_chain"
+        || request.revision != REVISION
+        || request.profile != "fulldepth43_native_top6"
+        || request.layer > 42
+        || request.position > FULLDEPTH_FP8_MAX_POSITION
+        || request.arena_epoch != expected_epoch
+        || request.request_id.is_empty()
+        || request.request_id.len() > 128
+        || !request
+            .request_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+        || !is_lower_sha256(&request.input_sha256)
+        || request.projections.len() != 2
+    {
+        bail!("FullDepth43 FP8 output-chain request identity drift");
+    }
+    if request.requantization.format != "e4m3fn_group128_quantize_dequantize_f32"
+        || request.requantization.group_size != 128
+        || request.requantization.amax_floor != 1.0e-4
+        || request.requantization.max_finite != 448.0
+    {
+        bail!("FullDepth43 FP8 output-chain requantization contract drift");
+    }
+
+    let prefix = format!("layers.{}.attn.", request.layer);
+    let suffixes: Vec<&str> =
+        request
+            .projections
+            .iter()
+            .map(|stage| {
+                stage.projection.name.strip_prefix(&prefix).ok_or_else(|| {
+                    anyhow::anyhow!("FullDepth43 output-chain projection layer drift")
+                })
+            })
+            .collect::<Result<_>>()?;
+    if suffixes != ["wo_a", "wo_b"] {
+        bail!("FullDepth43 FP8 output-chain projection order must be wo_a then wo_b");
+    }
+
+    let intermediate = ProjectionArenaView {
+        path: request.input.path.clone(),
+        offset: 0,
+        bytes: 8192 * 4,
+        dtype: "f32_le_bf16_rounded".to_string(),
+        shape: vec![1, 1, 8192],
+    };
+    let requantized = ProjectionArenaView {
+        path: request.input.path.clone(),
+        offset: 0,
+        bytes: 8192 * 4,
+        dtype: "f32_le".to_string(),
+        shape: vec![1, 1, 8192],
+    };
+    let make_request = |stage: &FullDepthFp8AttentionOutputChainStage,
+                        input: ProjectionArenaView,
+                        output: ProjectionArenaView| {
+        FullDepthFp8AttentionRequest {
+            protocol: request.protocol.clone(),
+            op: "execute_fp8_attention".to_string(),
+            request_id: request.request_id.clone(),
+            revision: request.revision.clone(),
+            profile: request.profile.clone(),
+            layer: request.layer,
+            position: request.position,
+            arena_epoch: request.arena_epoch,
+            input_sha256: request.input_sha256.clone(),
+            projection: stage.projection.clone(),
+            weight: stage.weight.clone(),
+            scale: stage.scale.clone(),
+            input,
+            output,
+        }
+    };
+    let first = make_request(&request.projections[0], request.input.clone(), intermediate);
+    let second = make_request(&request.projections[1], requantized, request.output.clone());
+    let first_kernel = validate_fulldepth_fp8_attention_request(&first, expected_epoch)?;
+    let second_kernel = validate_fulldepth_fp8_attention_request(&second, expected_epoch)?;
+    if !matches!(first_kernel, FullDepthFp8Kernel::GroupedWoA(_))
+        || !matches!(second_kernel, FullDepthFp8Kernel::Standard(_))
+    {
+        bail!("FullDepth43 FP8 output-chain kernel contract drift");
     }
     Ok([(first, first_kernel), (second, second_kernel)])
 }
@@ -2690,6 +2861,96 @@ fn round_f32_to_bf16_f32(value: f32) -> f32 {
     let bits = value.to_bits();
     let rounded = bits.wrapping_add(0x0000_7fff + ((bits >> 16) & 1));
     f32::from_bits(rounded & 0xffff_0000)
+}
+
+fn nearest_e4m3fn_code(value: f32) -> Result<u8> {
+    if !value.is_finite() || value.abs() > 448.0 {
+        bail!("E4M3FN quantization input is non-finite or out of range");
+    }
+    let negative = value.is_sign_negative();
+    let magnitude = value.abs();
+    // Positive finite E4M3FN codes are monotonic over 0x00..=0x7e;
+    // 0x7f is NaN. Binary-search the first representable value >= magnitude
+    // instead of scanning all 127 codes for every activation element.
+    let mut left = 0usize;
+    let mut right = 0x7fusize;
+    while left < right {
+        let middle = (left + right) / 2;
+        if e4m3fn(middle as u8) < magnitude {
+            left = middle + 1;
+        } else {
+            right = middle;
+        }
+    }
+    let upper = left.min(0x7e) as u8;
+    let lower = upper.saturating_sub(1);
+    let lower_distance = (magnitude - e4m3fn(lower)).abs();
+    let upper_distance = (e4m3fn(upper) - magnitude).abs();
+    // Ties use the destination mantissa's least-significant bit, matching
+    // torch.float8_e4m3fn round-to-nearest-ties-to-even.
+    let best_code = if upper_distance < lower_distance
+        || (upper_distance == lower_distance && upper & 1 == 0 && lower & 1 != 0)
+    {
+        upper
+    } else {
+        lower
+    };
+    Ok(if negative {
+        best_code | 0x80
+    } else {
+        best_code
+    })
+}
+
+fn official_group128_e4m3fn_activation_quantize_dequantize(values: &[f32]) -> Result<Vec<f32>> {
+    const GROUP_SIZE: usize = 128;
+    const AMAX_FLOOR: f32 = 1.0e-4;
+    const MAX_FINITE: f32 = 448.0;
+    if values.is_empty()
+        || values.len() % GROUP_SIZE != 0
+        || values.iter().any(|value| !value.is_finite())
+    {
+        bail!("group-128 E4M3FN activation input contract drift");
+    }
+    let mut output = Vec::with_capacity(values.len());
+    for block in values.chunks_exact(GROUP_SIZE) {
+        let amax = block
+            .iter()
+            .fold(0.0f32, |maximum, value| maximum.max(value.abs()))
+            .max(AMAX_FLOOR);
+        let scale_exponent = (amax / MAX_FINITE).log2().ceil() as i32;
+        let scale = 2.0f32.powi(scale_exponent);
+        if !scale.is_finite() || scale <= 0.0 {
+            bail!("group-128 E4M3FN activation scale drift");
+        }
+        for value in block {
+            let normalized = (*value / scale).clamp(-MAX_FINITE, MAX_FINITE);
+            let code = nearest_e4m3fn_code(normalized)?;
+            output.push(e4m3fn(code) * scale);
+        }
+    }
+    if output.iter().any(|value| !value.is_finite()) {
+        bail!("group-128 E4M3FN activation output is non-finite");
+    }
+    Ok(output)
+}
+
+fn validate_frozen_l42_output_chain_hashes(
+    layer: u32,
+    input_sha256: &str,
+    wo_a_output_sha256: &str,
+    requantized_activation_sha256: &str,
+    output_sha256: &str,
+) -> Result<()> {
+    if layer == 42
+        && input_sha256 == L42_WO_A_INPUT_SHA256
+        && (wo_a_output_sha256 != L42_WO_A_OUTPUT_SHA256
+            || requantized_activation_sha256 != L42_WO_A_REQUANTIZED_SHA256
+            || output_sha256 != L42_WO_B_OUTPUT_SHA256)
+    {
+        bail!("frozen L42 FP8 output-chain SHA-256 drift");
+    }
+    Ok(())
 }
 
 fn write_projection_output(path: &Path, view: &ProjectionArenaView, values: &[f32]) -> Result<()> {
@@ -3778,6 +4039,7 @@ fn run_fulldepth_fp8_attention_loop(
             FullDepthFp8AttentionWorkerRequest::SharedInputBatch(request) => {
                 request.request_id.clone()
             }
+            FullDepthFp8AttentionWorkerRequest::OutputChain(request) => request.request_id.clone(),
         };
         let response = (|| -> Result<FullDepthFp8AttentionWorkerResponse> {
             match request {
@@ -3968,6 +4230,159 @@ fn run_fulldepth_fp8_attention_loop(
                             catalog_sha256: FULLDEPTH43_CATALOG_SHA256,
                             gpu_slot_cache_entries: second_execution.gpu_slot_cache_entries,
                             activation_uploaded_bytes: shared_activation_bytes,
+                        },
+                    ))
+                }
+                FullDepthFp8AttentionWorkerRequest::OutputChain(request) => {
+                    let [(wo_a, wo_a_kernel), (wo_b, wo_b_kernel)] =
+                        validate_fulldepth_fp8_attention_output_chain_request(
+                            &request,
+                            expected_epoch,
+                        )?;
+                    for (stage, kernel) in [(&wo_a, wo_a_kernel), (&wo_b, wo_b_kernel)] {
+                        validate_fulldepth_fp8_attention_catalog(catalog, stage, kernel)?;
+                        validate_fulldepth_fp8_cache_proofs(catalog, stage, &cache_root)?;
+                    }
+                    let arena = resolve_projection_arena(&request.input, &request.output)?;
+                    let input = read_fulldepth_fp8_input(
+                        &arena,
+                        &request.input,
+                        &request.input_sha256,
+                        wo_a_kernel,
+                    )?;
+
+                    // Reserve both misses before executing wo_a. A rejected wo_b slot
+                    // must not leave a half-admitted output-chain resident on the GPU.
+                    let mut projected_entries = standard_slots.len() + grouped_slots.len();
+                    let mut projected_resident_bytes = gpu_slot_resident_bytes;
+                    for (stage, kernel) in [(&wo_a, wo_a_kernel), (&wo_b, wo_b_kernel)] {
+                        let key = fulldepth_fp8_slot_key(kernel, stage);
+                        let hit = match kernel {
+                            FullDepthFp8Kernel::Standard(_) => standard_slots.contains_key(&key),
+                            FullDepthFp8Kernel::GroupedWoA(_) => grouped_slots.contains_key(&key),
+                        };
+                        if !hit {
+                            projected_resident_bytes = reserve_fulldepth_fp8_gpu_slot(
+                                projected_entries,
+                                projected_resident_bytes,
+                                stage,
+                            )?;
+                            projected_entries =
+                                projected_entries.checked_add(1).ok_or_else(|| {
+                                    anyhow::anyhow!(
+                                        "FullDepth43 output-chain GPU slot count overflow"
+                                    )
+                                })?;
+                        }
+                    }
+
+                    let wo_a_execution = execute_fulldepth_fp8_with_slot_cache(
+                        ctx,
+                        pipelines,
+                        &mut payload_cache,
+                        &cache_root,
+                        &mut standard_slots,
+                        &mut grouped_slots,
+                        &mut gpu_slot_resident_bytes,
+                        &wo_a,
+                        wo_a_kernel,
+                        &input,
+                    )?;
+                    let wo_a_output_sha256 = sha256_f32_le(&wo_a_execution.output);
+                    let requantized = official_group128_e4m3fn_activation_quantize_dequantize(
+                        &wo_a_execution.output,
+                    )?;
+                    let requantized_activation_sha256 = sha256_f32_le(&requantized);
+                    let wo_b_execution = execute_fulldepth_fp8_with_slot_cache(
+                        ctx,
+                        pipelines,
+                        &mut payload_cache,
+                        &cache_root,
+                        &mut standard_slots,
+                        &mut grouped_slots,
+                        &mut gpu_slot_resident_bytes,
+                        &wo_b,
+                        wo_b_kernel,
+                        &requantized,
+                    )?;
+                    let output_sha256 = sha256_f32_le(&wo_b_execution.output);
+                    validate_frozen_l42_output_chain_hashes(
+                        request.layer,
+                        &request.input_sha256,
+                        &wo_a_output_sha256,
+                        &requantized_activation_sha256,
+                        &output_sha256,
+                    )?;
+                    let written_sha256 = write_fulldepth_fp8_output(
+                        &arena,
+                        &request.output,
+                        &wo_b_execution.output,
+                        wo_b_kernel,
+                    )?;
+                    if written_sha256 != output_sha256 {
+                        bail!("FullDepth43 output-chain final write SHA-256 drift");
+                    }
+
+                    let slots = vec![
+                        FullDepthFp8AttentionOutputChainSlotResponse {
+                            projection: wo_a.projection,
+                            weight_sha256: wo_a.weight.sha256,
+                            scale_sha256: wo_a.scale.sha256,
+                            payload_hash_verified: true,
+                            gpu_slot_cache_hit: wo_a_execution.gpu_slot_cache_hit,
+                            gpu_slot_cache_entries: wo_a_execution.gpu_slot_cache_entries,
+                            gpu_slot_resident_bytes: wo_a_execution.gpu_slot_resident_bytes,
+                            payload_uploaded_bytes: wo_a_execution.payload_uploaded_bytes,
+                            activation_uploaded_bytes: wo_a_kernel
+                                .input_elements()?
+                                .checked_mul(4)
+                                .ok_or_else(|| {
+                                    anyhow::anyhow!("FullDepth43 wo_a activation byte overflow")
+                                })?,
+                            numeric_mode: wo_a_kernel.numeric_mode(),
+                            output_rounding: "bf16_rne_then_f32_le",
+                        },
+                        FullDepthFp8AttentionOutputChainSlotResponse {
+                            projection: wo_b.projection,
+                            weight_sha256: wo_b.weight.sha256,
+                            scale_sha256: wo_b.scale.sha256,
+                            payload_hash_verified: true,
+                            gpu_slot_cache_hit: wo_b_execution.gpu_slot_cache_hit,
+                            gpu_slot_cache_entries: wo_b_execution.gpu_slot_cache_entries,
+                            gpu_slot_resident_bytes: wo_b_execution.gpu_slot_resident_bytes,
+                            payload_uploaded_bytes: wo_b_execution.payload_uploaded_bytes,
+                            activation_uploaded_bytes: wo_b_kernel
+                                .input_elements()?
+                                .checked_mul(4)
+                                .ok_or_else(|| {
+                                    anyhow::anyhow!("FullDepth43 wo_b activation byte overflow")
+                                })?,
+                            numeric_mode: wo_b_kernel.numeric_mode(),
+                            output_rounding: "bf16_rne_then_f32_le",
+                        },
+                    ];
+                    Ok(FullDepthFp8AttentionWorkerResponse::OutputChain(
+                        FullDepthFp8AttentionOutputChainResponse {
+                            protocol: FULLDEPTH_FP8_ATTENTION_PROTOCOL,
+                            request_id: request.request_id,
+                            ok: true,
+                            revision: REVISION,
+                            profile: "fulldepth43_native_top6",
+                            layer: request.layer,
+                            position: request.position,
+                            arena_epoch: request.arena_epoch,
+                            input: request.input,
+                            output_written: request.output,
+                            input_sha256: request.input_sha256,
+                            wo_a_output_sha256,
+                            requantized_activation_sha256,
+                            output_sha256,
+                            requantization: request.requantization,
+                            slots,
+                            catalog_sha256: FULLDEPTH43_CATALOG_SHA256,
+                            gpu_slot_cache_entries: wo_b_execution.gpu_slot_cache_entries,
+                            numeric_mode: "grouped_wo_a_then_e4m3fn_group128_then_wo_b",
+                            output_rounding: "bf16_rne_then_f32_le",
                         },
                     ))
                 }
@@ -8132,6 +8547,15 @@ mod fp8_projection_worker_tests {
                 "cpu_e4m3fn_quant_dequant_f32",
                 vec![1, 1, 1024],
             ),
+            "wo_b" => (
+                "standard",
+                4096,
+                8192,
+                None,
+                None,
+                "cpu_e4m3fn_quant_dequant_f32",
+                vec![1, 1, 8192],
+            ),
             _ => panic!("unsupported test projection"),
         };
         let projection_name = format!("layers.{layer}.attn.{suffix}");
@@ -8222,6 +8646,38 @@ mod fp8_projection_worker_tests {
             input_sha256: first.input_sha256.clone(),
             input: first.input.clone(),
             projections: vec![item(&first), item(&second)],
+        }
+    }
+
+    fn fulldepth_output_chain_request(layer: u32) -> FullDepthFp8AttentionOutputChainRequest {
+        let wo_a = fulldepth_request(layer, "wo_a");
+        let mut wo_b = fulldepth_request(layer, "wo_b");
+        wo_b.output.offset = checked_arena_end(&wo_a.input).unwrap();
+        let stage =
+            |request: &FullDepthFp8AttentionRequest| FullDepthFp8AttentionOutputChainStage {
+                projection: request.projection.clone(),
+                weight: request.weight.clone(),
+                scale: request.scale.clone(),
+            };
+        FullDepthFp8AttentionOutputChainRequest {
+            protocol: FULLDEPTH_FP8_ATTENTION_PROTOCOL.to_string(),
+            op: "execute_fp8_attention_output_chain".to_string(),
+            request_id: format!("l{layer}-attention-output-chain-0"),
+            revision: REVISION.to_string(),
+            profile: "fulldepth43_native_top6".to_string(),
+            layer,
+            position: 17,
+            arena_epoch: 0,
+            input_sha256: "1".repeat(64),
+            input: wo_a.input.clone(),
+            projections: vec![stage(&wo_a), stage(&wo_b)],
+            requantization: FullDepthFp8AttentionOutputChainRequantization {
+                format: "e4m3fn_group128_quantize_dequantize_f32".to_string(),
+                group_size: 128,
+                amax_floor: 1.0e-4,
+                max_finite: 448.0,
+            },
+            output: wo_b.output,
         }
     }
 
@@ -8377,6 +8833,102 @@ mod fp8_projection_worker_tests {
                 &request.projections[0].output,
                 &request.projections[1].output,
             ],
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn fulldepth_fp8_output_chain_accepts_only_grouped_wo_a_then_wo_b() {
+        let request = fulldepth_output_chain_request(42);
+        let [(wo_a, wo_a_kernel), (wo_b, wo_b_kernel)] =
+            validate_fulldepth_fp8_attention_output_chain_request(&request, 0).unwrap();
+        assert_eq!(wo_a.projection.name, "layers.42.attn.wo_a");
+        assert_eq!(wo_b.projection.name, "layers.42.attn.wo_b");
+        assert!(matches!(wo_a_kernel, FullDepthFp8Kernel::GroupedWoA(_)));
+        assert!(matches!(wo_b_kernel, FullDepthFp8Kernel::Standard(_)));
+        assert_eq!(wo_a_kernel.output_elements().unwrap(), 8192);
+        assert_eq!(wo_b_kernel.input_elements().unwrap(), 8192);
+        assert_eq!(wo_b_kernel.output_elements().unwrap(), 4096);
+    }
+
+    #[test]
+    fn fulldepth_fp8_output_chain_rejects_order_epoch_and_requantization_drift() {
+        let valid = fulldepth_output_chain_request(7);
+        assert!(validate_fulldepth_fp8_attention_output_chain_request(&valid, 1).is_err());
+
+        let mut reversed = valid.clone();
+        reversed.projections.swap(0, 1);
+        assert!(validate_fulldepth_fp8_attention_output_chain_request(&reversed, 0).is_err());
+
+        let mut duplicate = valid.clone();
+        duplicate.projections[1] = duplicate.projections[0].clone();
+        assert!(validate_fulldepth_fp8_attention_output_chain_request(&duplicate, 0).is_err());
+
+        let mut wrong_group = valid.clone();
+        wrong_group.requantization.group_size = 64;
+        assert!(validate_fulldepth_fp8_attention_output_chain_request(&wrong_group, 0).is_err());
+
+        let mut wrong_format = valid.clone();
+        wrong_format.requantization.format = "silu_then_wo_b".to_string();
+        assert!(validate_fulldepth_fp8_attention_output_chain_request(&wrong_format, 0).is_err());
+
+        let mut wrong_output = valid;
+        wrong_output.output.shape = vec![1, 1, 8192];
+        assert!(validate_fulldepth_fp8_attention_output_chain_request(&wrong_output, 0).is_err());
+    }
+
+    #[test]
+    fn fulldepth_fp8_output_chain_arena_is_single_file_aligned_and_disjoint() {
+        let fixture = ProjectionFixtureDir::new();
+        let path = fixture.0.join("arena.bin");
+        let mut request = fulldepth_output_chain_request(7);
+        request.input.path = path.clone();
+        request.output.path = path.clone();
+        let arena_bytes = checked_arena_end(&request.output).unwrap();
+        std::fs::write(&path, vec![0u8; arena_bytes as usize]).unwrap();
+        assert_eq!(
+            resolve_projection_arena(&request.input, &request.output).unwrap(),
+            path.canonicalize().unwrap()
+        );
+
+        request.output.offset = request.input.bytes - 4;
+        assert!(resolve_projection_arena(&request.input, &request.output).is_err());
+    }
+
+    #[test]
+    fn official_group128_e4m3fn_requantization_matches_torch_ties_to_even_vector() {
+        let mut values = vec![0.0f32; 128];
+        values[0] = 1.0;
+        values[1] = 1.0625;
+        values[2] = 1.1875;
+        values[3] = -1.0625;
+        values[4] = -1.1875;
+        values[127] = 448.0;
+        let requantized = official_group128_e4m3fn_activation_quantize_dequantize(&values).unwrap();
+        assert_eq!(&requantized[..5], &[1.0, 1.0, 1.25, -1.0, -1.25]);
+        assert_eq!(requantized[127], 448.0);
+        assert_eq!(
+            sha256_f32_le(&requantized),
+            "47e7582ed13a087604d6b45a3f3d4de813b312233ae39f56220fb04259179455"
+        );
+    }
+
+    #[test]
+    fn frozen_l42_output_chain_hash_gate_covers_all_three_boundaries() {
+        validate_frozen_l42_output_chain_hashes(
+            42,
+            L42_WO_A_INPUT_SHA256,
+            L42_WO_A_OUTPUT_SHA256,
+            L42_WO_A_REQUANTIZED_SHA256,
+            L42_WO_B_OUTPUT_SHA256,
+        )
+        .unwrap();
+        assert!(validate_frozen_l42_output_chain_hashes(
+            42,
+            L42_WO_A_INPUT_SHA256,
+            L42_WO_A_OUTPUT_SHA256,
+            L42_WO_A_REQUANTIZED_SHA256,
+            &"0".repeat(64),
         )
         .is_err());
     }

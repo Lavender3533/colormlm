@@ -1344,5 +1344,29 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
   更不构成质量或Claude/GPT追赶完成证据。完整报告见
   `fast16/research/polaris_meridian_v1/fulldepth43_native_top6/FULLDEPTH43_SHARED_ATTENTION_BATCH.md`
   与`FULLDEPTH43_SHARED_ATTENTION_BATCH_AB.json`。
-- 下一速度硬门改为worker内链式`wo_a→中间SwiGLU/重排→wo_b`；之后才扩成完整attention层请求。
+- 下一速度硬门改为worker内链式
+  `wo_a→BF16-carrying F32→group-128 E4M3FN activation quantize/dequantize→wo_b`；这里没有
+  SwiGLU。之后才扩成完整attention层请求。
   质量主线仍需极短多能力生成门，不能因为速度路径通过就宣称模型更聪明。
+
+## 2026-08-02：attention输出链通过真实门
+
+- Rust worker、Python严格客户端和FullDepth executor已接通单请求
+  `grouped wo_a→BF16-carrying F32→group-128 E4M3FN quantize/dequantize→wo_b→BF16`。
+  初版O(127)逐值查找在局部A/B回归51.7%，未晋级；改为有序有限值二分后，Torch ties-to-even
+  单测与真实L42四个冻结SHA全部保持一致。
+- L42八轮热A/B：独立两请求中位数`12.9140 ms`，链式`12.4473 ms`，下降`3.61%`；热重放
+  两个slot均命中，静态payload上传`0 B`。
+- 全43层两-token候选保持`[5,223]`、86/86层、472个attention projection、86次Vulkan MoE、
+  零fallback、`error=null`。每token attention请求`172→129`（-25%），position 1仍236/236
+  slot hit与零静态上传。
+- 完整观测为`72.1430s→63.9234s`（-11.39%），但Range阶段同时波动约2.63s；更贴近改动路径的
+  attention exclusive为`16.6325s→14.7892s`（-11.08%）。不得把完整11.39%全部归因于链式算子。
+- 正式候选需同时显式启用`--vulkan-attention-shared-batch`和
+  `--vulkan-attention-output-chain`；默认保持关闭，便于回滚和相邻对照。证据见
+  `FULLDEPTH43_OUTPUT_CHAIN.md`、`FULLDEPTH43_OUTPUT_CHAIN_L42_GATE.json`与
+  `FULLDEPTH43_OUTPUT_CHAIN_AB.json`。
+- 下一速度主线转为深度1的下一层static-only验证预取。只允许预取下一层non-expert/router，
+  禁止预取experts/shared/final；正式`prepare_layer()`必须等待Future并保持fail-closed。现有Range
+  读取、SHA与准备约24秒/两 token，现实目标是隐藏5--8秒。当前仍约20--30秒/token，尚不能
+  宣称可交互、20--50 token/s或Claude/GPT追赶完成。

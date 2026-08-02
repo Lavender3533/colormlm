@@ -55,6 +55,7 @@ def run_profiled_candidate(
     vulkan_attention_worker: Path | None = None,
     vulkan_attention_scratch: Path | None = None,
     vulkan_attention_shared_batch: bool = False,
+    vulkan_attention_output_chain: bool = False,
     vulkan_final_head_worker: Path | None = None,
     vulkan_final_head_scratch: Path | None = None,
 ) -> dict[str, Any]:
@@ -107,6 +108,7 @@ def run_profiled_candidate(
                     vulkan_attention_worker=vulkan_attention_worker,
                     vulkan_attention_scratch=vulkan_attention_scratch,
                     vulkan_attention_shared_batch=vulkan_attention_shared_batch,
+                    vulkan_attention_output_chain=vulkan_attention_output_chain,
                     vulkan_final_head_worker=vulkan_final_head_worker,
                     vulkan_final_head_scratch=vulkan_final_head_scratch,
                 )
@@ -195,6 +197,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--vulkan-attention-worker", type=Path)
     parser.add_argument("--vulkan-attention-scratch", type=Path)
     parser.add_argument("--vulkan-attention-shared-batch", action="store_true")
+    parser.add_argument("--vulkan-attention-output-chain", action="store_true")
     parser.add_argument("--vulkan-final-head-worker", type=Path)
     parser.add_argument("--vulkan-final-head-scratch", type=Path)
     parser.add_argument("--fp8-cache-gib", type=float, default=0.0)
@@ -216,6 +219,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         vulkan_attention_worker=args.vulkan_attention_worker,
         vulkan_attention_scratch=args.vulkan_attention_scratch,
         vulkan_attention_shared_batch=args.vulkan_attention_shared_batch,
+        vulkan_attention_output_chain=args.vulkan_attention_output_chain,
         vulkan_final_head_worker=args.vulkan_final_head_worker,
         vulkan_final_head_scratch=args.vulkan_final_head_scratch,
     )

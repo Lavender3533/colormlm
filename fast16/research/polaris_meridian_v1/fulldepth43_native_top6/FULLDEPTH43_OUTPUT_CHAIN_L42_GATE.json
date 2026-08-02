@@ -1,0 +1,107 @@
+{
+  "format": "polaris-fulldepth43-dynamic-attention-output-chain-gate-v1",
+  "status": "complete",
+  "layer": 42,
+  "request_count": 2,
+  "projection_execution_count": 4,
+  "frozen_boundaries": {
+    "wo_a_input_sha256": "eee925360c8709263a0cdfa3986c2d3ee91a38c4e4589a7220064b489ad40060",
+    "wo_a_output_sha256": "2be0aa3b4b67aae58f62a77d2a255d6240b5baf3d71f37c9084fd890741d2eb9",
+    "requantized_activation_sha256": "94b3f7fd24ee36b8553ed513d1986ef49162c053bd6dbf62f98b9579e20ea3f0",
+    "wo_b_output_sha256": "84ce63ca9233b07bea99741f9982accac17bc65025b0098b7017acd7dab6db10"
+  },
+  "runs": [
+    {
+      "replay_index": 0,
+      "arena_epoch": 0,
+      "boundaries": {
+        "wo_a_input_sha256": "eee925360c8709263a0cdfa3986c2d3ee91a38c4e4589a7220064b489ad40060",
+        "wo_a_output_sha256": "2be0aa3b4b67aae58f62a77d2a255d6240b5baf3d71f37c9084fd890741d2eb9",
+        "requantized_activation_sha256": "94b3f7fd24ee36b8553ed513d1986ef49162c053bd6dbf62f98b9579e20ea3f0",
+        "wo_b_output_sha256": "84ce63ca9233b07bea99741f9982accac17bc65025b0098b7017acd7dab6db10"
+      },
+      "gpu_slot_cache_hits": [
+        false,
+        false
+      ],
+      "payload_uploaded_bytes": [
+        33556480,
+        33556480
+      ],
+      "activation_uploaded_bytes": [
+        131072,
+        32768
+      ],
+      "gpu_slot_cache_entries": 2,
+      "elapsed_seconds": 0.11829549999674782
+    },
+    {
+      "replay_index": 1,
+      "arena_epoch": 1,
+      "boundaries": {
+        "wo_a_input_sha256": "eee925360c8709263a0cdfa3986c2d3ee91a38c4e4589a7220064b489ad40060",
+        "wo_a_output_sha256": "2be0aa3b4b67aae58f62a77d2a255d6240b5baf3d71f37c9084fd890741d2eb9",
+        "requantized_activation_sha256": "94b3f7fd24ee36b8553ed513d1986ef49162c053bd6dbf62f98b9579e20ea3f0",
+        "wo_b_output_sha256": "84ce63ca9233b07bea99741f9982accac17bc65025b0098b7017acd7dab6db10"
+      },
+      "gpu_slot_cache_hits": [
+        true,
+        true
+      ],
+      "payload_uploaded_bytes": [
+        0,
+        0
+      ],
+      "activation_uploaded_bytes": [
+        131072,
+        32768
+      ],
+      "gpu_slot_cache_entries": 2,
+      "elapsed_seconds": 0.013199399996665306
+    }
+  ],
+  "hot_adjacent_ab": {
+    "rounds": 8,
+    "separate_request_seconds": [
+      0.013289399998029694,
+      0.01286180000170134,
+      0.013028000001213513,
+      0.01278930000262335,
+      0.012958199993590824,
+      0.012869800004409626,
+      0.012765699997544289,
+      0.01340399999753572
+    ],
+    "output_chain_seconds": [
+      0.012340799992671236,
+      0.01214110000000801,
+      0.012253799999598414,
+      0.01238780000130646,
+      0.012640799992368557,
+      0.012506800005212426,
+      0.012748199995257892,
+      0.012571800005389377
+    ],
+    "separate_median_seconds": 0.012913999999000225,
+    "output_chain_median_seconds": 0.012447300003259443,
+    "median_reduction_fraction": 0.03613907354629963
+  },
+  "range_proof_cache": {
+    "hits": 0,
+    "misses": 4,
+    "rehashes": 0,
+    "full_hashes": 4,
+    "bytes_saved": 0,
+    "bytes_hashed": 67112960,
+    "entries": 4,
+    "scope": "current RangeCache process lifetime only",
+    "identity_fields": [
+      "content_key",
+      "absolute_path",
+      "size",
+      "mtime_ns"
+    ]
+  },
+  "elapsed_seconds": 1.084825500001898,
+  "claim_limit": "只证明 L42 wo_a→官方 group-128 E4M3FN 重定量→wo_b 单请求链命中四个冻结边界并热重放 GPU slot；不单独证明完整 token 提速。"
+}

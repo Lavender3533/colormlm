@@ -196,6 +196,36 @@ class FullDepthContractTests(unittest.TestCase):
                     ],
                 }
 
+            def execute_output_chain(
+                self, **request: object
+            ) -> tuple[torch.Tensor, dict[str, object]]:
+                self.requests.append(request)
+                layer = int(request["layer"])
+                position = int(request["position"])
+                slots = [
+                    {
+                        "projection": {
+                            "name": f"layers.{layer}.attn.{suffix}"
+                        },
+                        "gpu_slot_cache_entries": index + 1,
+                    }
+                    for index, suffix in enumerate(("wo_a", "wo_b"))
+                ]
+                return torch.zeros((1, 1, 4096), dtype=torch.float32), {
+                    "protocol": "fixture",
+                    "request_id": "fixture-output-chain",
+                    "layer": layer,
+                    "position": position,
+                    "arena_epoch": 0,
+                    "input": {"bytes": 8 * 4096 * 4},
+                    "input_sha256": "0" * 64,
+                    "catalog_sha256": "1" * 64,
+                    "wo_a_output_sha256": "2" * 64,
+                    "requantized_activation_sha256": "3" * 64,
+                    "output_sha256": "4" * 64,
+                    "slots": slots,
+                }
+
         class TestLayer(FullDepthNativeLayerReference):
             def _packed_asset(self, tensor: str) -> object:
                 return tensor
@@ -223,6 +253,64 @@ class FullDepthContractTests(unittest.TestCase):
         self.assertEqual(worker.requests[0]["position"], 3)
         self.assertEqual(worker.requests[0]["suffixes"], ("wq_a", "wkv"))
         self.assertEqual(len(worker.requests), 1)
+        self.assertEqual(len(kernel.attention_vulkan_evidence), 2)
+
+    def test_native_layer_output_chain_executes_wo_a_and_wo_b_in_one_request(self) -> None:
+        class FakeAttentionWorker:
+            def __init__(self) -> None:
+                self.requests: list[dict[str, object]] = []
+
+            def execute_output_chain(
+                self, **request: object
+            ) -> tuple[torch.Tensor, dict[str, object]]:
+                self.requests.append(request)
+                layer = int(request["layer"])
+                return torch.zeros((1, 1, 4096), dtype=torch.float32), {
+                    "protocol": "fixture",
+                    "request_id": "fixture-output-chain",
+                    "layer": layer,
+                    "position": int(request["position"]),
+                    "arena_epoch": 0,
+                    "input": {"bytes": 8 * 4096 * 4},
+                    "input_sha256": "0" * 64,
+                    "catalog_sha256": "1" * 64,
+                    "wo_a_output_sha256": "2" * 64,
+                    "requantized_activation_sha256": "3" * 64,
+                    "output_sha256": "4" * 64,
+                    "slots": [
+                        {
+                            "projection": {
+                                "name": f"layers.{layer}.attn.{suffix}"
+                            },
+                            "gpu_slot_cache_entries": index + 1,
+                        }
+                        for index, suffix in enumerate(("wo_a", "wo_b"))
+                    ],
+                }
+
+        class TestLayer(FullDepthNativeLayerReference):
+            def _packed_asset(self, tensor: str) -> object:
+                return tensor
+
+        with tempfile.TemporaryDirectory() as directory:
+            worker = FakeAttentionWorker()
+            kernel = TestLayer(
+                7,
+                TensorStore(Path(directory)),
+                attention_worker=worker,
+                attention_position=3,
+                attention_output_chain=True,
+            )
+            low = kernel._grouped_wo_a(
+                np.zeros((1, 1, 8, 4096), dtype=np.float32),
+                "layers.7.attn.wo_a",
+            )
+            output = kernel._linear_fp8(low, "layers.7.attn.wo_b")
+        self.assertEqual(low.shape, (1, 1, 8192))
+        self.assertEqual(output.shape, (1, 1, 4096))
+        self.assertEqual(len(worker.requests), 1)
+        self.assertEqual(worker.requests[0]["layer"], 7)
+        self.assertEqual(worker.requests[0]["position"], 3)
         self.assertEqual(len(kernel.attention_vulkan_evidence), 2)
 
     def test_first_preview_forced_prefill_runs_five_inputs_before_argmax(self) -> None:

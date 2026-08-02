@@ -1,0 +1,80 @@
+{
+  "format": "polaris-fulldepth43-output-chain-ab-v1",
+  "date": "2026-08-02",
+  "status": "complete",
+  "profile": "FullDepth43/native-top6",
+  "device": "AMD Radeon RX 5700 XT",
+  "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+  "changed_variable": "vulkan_attention_output_chain",
+  "baseline": {
+    "shared_input_batch": true,
+    "output_chain": false,
+    "execution_seconds": 72.14301160001196,
+    "token_wall_seconds": 69.78360319999047,
+    "per_token_wall_seconds": [44.562534500000766, 25.2210686999897],
+    "output_token_ids": [5, 223],
+    "attention_requests_per_token": 172,
+    "attention_projection_count_per_token": 236,
+    "attention_exclusive_seconds": 16.63250489991333,
+    "range_fetch_routed_seconds": 16.817237800030853,
+    "range_prepare_layer_seconds": 9.785519999990356,
+    "summary_sha256": "d585e5570e21eeab75f4587bf9d682b6c3758833dd0ad4dbb94bf1e087739046",
+    "model_report_sha256": "6b5237a5b71b0a8231e6a5ef4f918626296c8aa5541b6d72f36d174c34d3e623",
+    "runtime_profile_sha256": "9b5b7f2b09f3539d760d3f5b0e5dbe2c01019648b30ab2b24f07884a365ccb55"
+  },
+  "candidate": {
+    "shared_input_batch": true,
+    "output_chain": true,
+    "execution_seconds": 63.923420000006445,
+    "token_wall_seconds": 62.05573399999412,
+    "per_token_wall_seconds": [40.124772099996335, 21.930961899997783],
+    "output_token_ids": [5, 223],
+    "attention_requests_per_token": 129,
+    "attention_projection_count_per_token": 236,
+    "output_chain_projection_rows_per_token": 86,
+    "attention_exclusive_seconds": 14.789162699962617,
+    "range_fetch_routed_seconds": 15.084922000067309,
+    "range_prepare_layer_seconds": 8.889823499994236,
+    "completed_layers": 86,
+    "vulkan_moe_writebacks": 86,
+    "cpu_fallbacks": 0,
+    "position_1_gpu_slot_hits": 236,
+    "position_1_payload_uploaded_bytes": 0,
+    "error": null,
+    "summary_sha256": "2b5d40689e65e5f3ea39fb2ca075542ffe07ebbc055f850e13caa3548b03b675",
+    "model_report_sha256": "a598f6d3538a23eb237f49f718e97b6c28d0b5d6442a147a49939dcce0692b5d",
+    "runtime_profile_sha256": "31bcb87eb8830901d332cf108db1ec8fb529bdc0ca5b5ed770c00ca69df8719d"
+  },
+  "delta": {
+    "seconds_saved": 8.219591600005515,
+    "wall_reduction_fraction": 0.11393468913632311,
+    "throughput_increase_fraction": 0.12858497871366525,
+    "position_0_wall_reduction_fraction": 0.0995850538977839,
+    "position_1_wall_reduction_fraction": 0.13045072907609429,
+    "attention_request_reduction_fraction": 0.25,
+    "attention_exclusive_seconds_saved": 1.8433421999507118,
+    "attention_exclusive_reduction_fraction": 0.11082769619146887
+  },
+  "l42_gate": {
+    "four_boundaries_exact": true,
+    "hot_rounds": 8,
+    "separate_median_seconds": 0.012913999999000225,
+    "output_chain_median_seconds": 0.012447300003259443,
+    "median_reduction_fraction": 0.03613907354629963,
+    "report_sha256": "8044c7301f6f0c28e85ccf7e4f914a892c63eca4bc5342aaf4ae522f9294151c"
+  },
+  "tests": {
+    "python_full_pytest": "69 passed, 9 subtests passed",
+    "python_unittest": "54 passed",
+    "candidate_profile_pytest": "included: 9 passed",
+    "rust_release_example": "34 passed",
+    "git_diff_check": "pass",
+    "utf8_no_bom": "pass"
+  },
+  "interpretation": {
+    "strict_adjacent_pre_optimization": "72.1430s -> 68.5711s, but the initial O(127) requantizer was locally slower and was not promoted",
+    "optimized_local_causal_gate": "binary-search requantizer preserves every frozen SHA and makes the hot L42 chain 3.61% faster than two requests",
+    "full_run_caution": "the optimized candidate reuses the same frozen baseline but is not an immediate back-to-back rerun; Range phases also varied by 2.63s"
+  },
+  "claim_limit": "The output-chain is numerically exact and reduces 43 attention requests per token. The observed full two-token wall reduction is 11.39%, while only the 11.08% attention-phase reduction and 3.61% hot L42 gate are directly aligned with the changed path. This does not prove interactive throughput or quality improvement."
+}

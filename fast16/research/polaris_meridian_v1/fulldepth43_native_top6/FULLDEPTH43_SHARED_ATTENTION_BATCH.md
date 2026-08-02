@@ -56,16 +56,17 @@ verify_dynamic_attention_shared_batch.py
 ## 实现边界
 
 Batch不是完整attention融合。两个矩阵仍在Rust worker内依次dispatch；收益来自共享activation
-写入、单次协议往返、统一epoch和减少Python验证边界。`wo_a→wo_b`之间存在SwiGLU/reshape，
-不能用相同的共享输入batch伪装，下一阶段必须在worker内部建立有中间计算的链式图。
+写入、单次协议往返、统一epoch和减少Python验证边界。`wo_a→wo_b`之间不存在SwiGLU；官方路径是
+`wo_a→BF16-carrying F32→group-128 E4M3FN activation quantize/dequantize→wo_b`，不能用相同的
+共享输入batch伪装，下一阶段必须在worker内部建立包含官方中间重定量的链式图。
 
 默认配置保持batch关闭；正式性能入口显式传入`--vulkan-attention-shared-batch`。这样同一路径
 仍可做关闭对照和故障回滚，不把尚未稳定复测的实验开关静默变成全局行为。
 
 ## 下一速度硬门
 
-实现worker内`wo_a→SwiGLU/重排→wo_b`链式执行，目标是继续减少每层一次跨进程边界和一次
-中间tensor往返。仍要求：
+实现worker内`wo_a→官方group-128 E4M3FN activation quantize/dequantize→wo_b`链式执行，目标是
+继续减少每层一次跨进程边界和一次中间tensor往返。仍要求：
 
 1. `[5,223]`短轨不变；
 2. 43/43层×2、472个attention projection语义完整；

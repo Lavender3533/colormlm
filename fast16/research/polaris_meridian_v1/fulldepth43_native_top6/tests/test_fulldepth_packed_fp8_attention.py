@@ -63,6 +63,71 @@ for line in sys.stdin:
         raise SystemExit(3)
     if request["arena_epoch"] != expected_epoch:
         raise SystemExit(4)
+    if request["op"] == "execute_fp8_attention_output_chain":
+        output = bytes(request["output"]["bytes"])
+        arena = Path(request["output"]["path"])
+        with arena.open("r+b") as stream:
+            stream.seek(request["output"]["offset"])
+            stream.write(output)
+            stream.flush()
+        output_sha = hashlib.sha256(output).hexdigest()
+        intermediate_sha = hashlib.sha256(bytes(8192 * 4)).hexdigest()
+        slots = []
+        for index, item in enumerate(request["projections"]):
+            slots.append({
+                "projection": item["projection"],
+                "weight_sha256": item["weight"]["sha256"],
+                "scale_sha256": item["scale"]["sha256"],
+                "payload_hash_verified": True,
+                "gpu_slot_cache_hit": expected_epoch > 0,
+                "gpu_slot_cache_entries": index + 1,
+                "gpu_slot_resident_bytes": sum(
+                    stage["weight"]["bytes"] + stage["scale"]["bytes"]
+                    for stage in request["projections"][: index + 1]
+                ),
+                "payload_uploaded_bytes": (
+                    0 if expected_epoch > 0
+                    else item["weight"]["bytes"] + item["scale"]["bytes"]
+                ),
+                "activation_uploaded_bytes": 8 * 4096 * 4 if index == 0 else 8192 * 4,
+                "numeric_mode": (
+                    "grouped_packed_fp8_e4m3_ue8m0_bf16_input_output"
+                    if index == 0
+                    else "packed_fp8_e4m3_ue8m0_bf16_output"
+                ),
+                "output_rounding": "bf16_rne_then_f32_le",
+            })
+        if mode == "chain_bad_slot_order":
+            slots.reverse()
+        response = {
+            "protocol": protocol,
+            "request_id": request["request_id"],
+            "ok": True,
+            "revision": revision,
+            "profile": profile,
+            "layer": request["layer"],
+            "position": request["position"],
+            "arena_epoch": request["arena_epoch"],
+            "input": request["input"],
+            "output_written": request["output"],
+            "input_sha256": request["input_sha256"],
+            "wo_a_output_sha256": intermediate_sha,
+            "requantized_activation_sha256": intermediate_sha,
+            "output_sha256": output_sha,
+            "requantization": request["requantization"],
+            "slots": slots,
+            "catalog_sha256": catalog_sha,
+            "gpu_slot_cache_entries": 2,
+            "numeric_mode": "grouped_wo_a_then_e4m3fn_group128_then_wo_b",
+            "output_rounding": "bf16_rne_then_f32_le",
+        }
+        if mode == "chain_bad_requant_sha":
+            response["requantized_activation_sha256"] = "not-a-sha"
+        print(json.dumps(response), flush=True)
+        expected_epoch += 1
+        if mode in {"chain_bad_slot_order", "chain_bad_requant_sha"}:
+            raise SystemExit(7)
+        continue
     if request["op"] == "execute_fp8_attention_shared_batch":
         outputs = []
         for item in request["projections"]:
@@ -557,6 +622,92 @@ class FullDepthPackedFp8AttentionTests(unittest.TestCase):
                     self.assertEqual(worker.epoch, 0)
                 finally:
                     worker.close()
+
+    def test_output_chain_is_one_epoch_and_preserves_two_slot_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script, arena, _, _ = self._fixture(root)
+            assets = self._batch_assets(root / "range_cache", 42, ("wo_a", "wo_b"))
+            activation = torch.zeros((1, 1, 8, 4096), dtype=torch.float32)
+            with CleanPersistentClient(
+                self._command(script, "success", root / "range_cache"),
+                arena,
+                timeout_seconds=5,
+            ) as worker:
+                output, evidence = worker.execute_output_chain(
+                    layer=42,
+                    position=0,
+                    activation=activation,
+                    assets=assets,
+                )
+                self.assertEqual(worker.epoch, 1)
+                self.assertEqual(evidence["arena_epoch"], 0)
+                self.assertEqual(
+                    [slot["projection"]["name"] for slot in evidence["slots"]],
+                    ["layers.42.attn.wo_a", "layers.42.attn.wo_b"],
+                )
+                self.assertEqual(tuple(output.shape), (1, 1, 4096))
+                self.assertTrue(torch.equal(output, torch.zeros_like(output)))
+                input_end = evidence["input"]["offset"] + evidence["input"]["bytes"]
+                self.assertLessEqual(input_end, evidence["output_written"]["offset"])
+
+    def test_output_chain_rejects_asset_and_response_identity_drift(self) -> None:
+        for mode, message in (
+            ("chain_bad_slot_order", "slot 顺序|身份合同"),
+            ("chain_bad_requant_sha", "顶层身份/SHA 合同"),
+        ):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                script, arena, _, _ = self._fixture(root)
+                assets = self._batch_assets(
+                    root / "range_cache", 42, ("wo_a", "wo_b")
+                )
+                worker = CleanPersistentClient(
+                    self._command(script, mode, root / "range_cache"),
+                    arena,
+                    timeout_seconds=5,
+                )
+                try:
+                    with self.assertRaisesRegex(
+                        attention.FullDepthPackedFp8Error, message
+                    ):
+                        worker.execute_output_chain(
+                            layer=42,
+                            position=0,
+                            activation=torch.zeros(
+                                (1, 1, 8, 4096), dtype=torch.float32
+                            ),
+                            assets=assets,
+                        )
+                    self.assertTrue(worker.poisoned)
+                    self.assertEqual(worker.epoch, 0)
+                finally:
+                    worker.close()
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script, arena, _, _ = self._fixture(root)
+            assets = self._batch_assets(root / "range_cache", 42, ("wo_a", "wo_b"))
+            assets.pop("wo_b")
+            worker = CleanPersistentClient(
+                self._command(script, "success", root / "range_cache"),
+                arena,
+                timeout_seconds=5,
+            )
+            try:
+                with self.assertRaisesRegex(
+                    attention.FullDepthPackedFp8Error, "assets 必须严格"
+                ):
+                    worker.execute_output_chain(
+                        layer=42,
+                        position=0,
+                        activation=torch.zeros((1, 1, 8, 4096), dtype=torch.float32),
+                        assets=assets,
+                    )
+                self.assertTrue(worker.poisoned)
+                self.assertEqual(worker.epoch, 0)
+            finally:
+                worker.close()
 
     def test_arena_rejects_shape_and_non_bf16_grouped_input(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
