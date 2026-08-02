@@ -1414,3 +1414,25 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
   及同目录AB JSON。下一速度硬门是Rust当前层计算期间预取并
   验证下一层GPU payload，再消除逐层capture manifest控制面；当前约`0.0342 token/s`，仍远非
   20--50 token/s，也没有新增质量、长上下文、Kimi前端或Claude/GPT能力证据。
+
+## 2026-08-02：Rust同层42页批验通过正反相邻真实门
+
+- MoE route确定后，Rust worker对当前层top-6 + shared的42个payload做最多8路并行读取/
+  SHA；只有整批成功后才原子发布到有界LRU。之后原有顺序loader必须精确42/42 hit、
+  0 miss、0新读盘，否则在GPU compute前fail-closed。显式开关为
+  `--vulkan-writeback-batch-verify-payloads`，默认关闭。
+- 正向相邻两-token A/B仅切换该开关：`64.3844s→53.0887s`，完整墙钟下降
+  `17.54%`、吞吐提高`21.28%`。候选后立即跑的反向基线为`58.6042s`，候选仍保持
+  `9.41%`墙钟/有效吞吐`+10.39%`优势，排除了纯OS cache顺序假象。
+- 候选输出仍为`[5,223]`；86/86层、472/472 Attention投影、86/86 Vulkan MoE、0 fallback、
+  84/84预取Future、position 1的236/236 slot hit及0 B静态重传全部保持。
+- 86份batch回执全部证明42 entries、42 follow-up hits及
+  `all_verified_before_compute=true`。总计3612请求，432 hit、3180 miss，并行完整校验
+  `7,593,067,008 B`。RangeCache与Rust回执还按owner独立闭合count/bytes和身份多重集，
+  并在token/checkpoint commit前阻断失败。
+- FullDepth Python回归为`90 passed, 22 subtests passed`，online Range为`14 passed`，Rust
+  batch cache为`6/6`，release example为`40/40`。证据见
+  `FULLDEPTH43_BATCH_PAYLOAD_VERIFICATION.md`及同目录AB JSON。
+- 当前最佳完整观测为`0.03767 token/s`，比本轮第一个基线快但仍远非交互速度，
+  不构成20–50 token/s、质量、长上下文、Kimi前端或Claude/GPT追赶完成证据。下一速度主线是
+  消除逐层`bridge_manifest.json`文件控制面，直接向持久Rust worker发送同一份严格manifest。

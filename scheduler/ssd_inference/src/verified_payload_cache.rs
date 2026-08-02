@@ -6,10 +6,20 @@
 //! 即使被外部改写，也不会污染当前 worker 已持有的可信副本。
 
 use anyhow::{bail, Context, Result};
+use rayon::prelude::*;
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+pub const VERIFIED_PAYLOAD_BATCH_MAX_TASKS: usize = 8;
+
+#[derive(Debug, Clone)]
+pub struct VerifiedPayloadRequest {
+    pub path: PathBuf,
+    pub expected_bytes: usize,
+    pub expected_sha256: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct PayloadKey {
@@ -172,6 +182,160 @@ impl VerifiedPayloadCache {
         Ok(payload)
     }
 
+    /// 有界并行读取并验证一批互不重复的 payload，全部成功后才发布到 LRU。
+    ///
+    /// 返回顺序严格等于请求顺序。cache hit 仍直接复用不可变 `Arc`；miss 最多拆成
+    /// `VERIFIED_PAYLOAD_BATCH_MAX_TASKS` 个并行任务。任一 miss 校验失败时，本批次
+    /// 新读取的 payload 一个也不会进入缓存。
+    pub fn load_verified_batch(
+        &mut self,
+        requests: &[VerifiedPayloadRequest],
+    ) -> Result<Vec<Arc<[u8]>>> {
+        if requests.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        #[derive(Debug)]
+        struct BatchMiss {
+            index: usize,
+            key: PayloadKey,
+            touch: u64,
+        }
+
+        let mut outputs: Vec<Option<Arc<[u8]>>> = vec![None; requests.len()];
+        let mut misses = Vec::new();
+        let mut batch_keys = HashSet::with_capacity(requests.len());
+
+        for (index, request) in requests.iter().enumerate() {
+            if request.expected_bytes == 0 {
+                bail!("verified payload batch 的期望字节数必须大于 0");
+            }
+            validate_sha256(&request.expected_sha256)?;
+            let canonical = request
+                .path
+                .canonicalize()
+                .with_context(|| format!("resolve verified payload {}", request.path.display()))?;
+            if !canonical.is_file() {
+                bail!("verified payload 不是普通文件: {}", canonical.display());
+            }
+            let key = PayloadKey {
+                path: canonical,
+                bytes: request.expected_bytes,
+                sha256: request.expected_sha256.clone(),
+            };
+            if !batch_keys.insert(key.clone()) {
+                bail!("verified payload batch 含重复 path/bytes/SHA 身份");
+            }
+
+            self.clock = self
+                .clock
+                .checked_add(1)
+                .ok_or_else(|| anyhow::anyhow!("verified payload cache clock overflow"))?;
+            let touch = self.clock;
+            self.stats.requests += 1;
+            self.stats.bytes_served = self
+                .stats
+                .bytes_served
+                .checked_add(request.expected_bytes as u64)
+                .ok_or_else(|| anyhow::anyhow!("verified payload bytes_served overflow"))?;
+            if let Some(entry) = self.entries.get_mut(&key) {
+                entry.last_touch = touch;
+                self.stats.hits += 1;
+                outputs[index] = Some(Arc::clone(&entry.payload));
+            } else {
+                self.stats.misses += 1;
+                misses.push(BatchMiss { index, key, touch });
+            }
+        }
+
+        if !misses.is_empty() {
+            let chunk_size = misses.len().div_ceil(VERIFIED_PAYLOAD_BATCH_MAX_TASKS);
+            let grouped: Vec<Vec<Result<(usize, PayloadKey, u64, Arc<[u8]>)>>> = misses
+                .par_chunks(chunk_size)
+                .map(|chunk| {
+                    chunk
+                        .iter()
+                        .map(|miss| {
+                            let bytes = std::fs::read(&miss.key.path).with_context(|| {
+                                format!("read verified payload {}", miss.key.path.display())
+                            })?;
+                            if bytes.len() != miss.key.bytes {
+                                bail!(
+                                    "verified payload 字节漂移: {} expected={} actual={}",
+                                    miss.key.path.display(),
+                                    miss.key.bytes,
+                                    bytes.len()
+                                );
+                            }
+                            let observed = sha256_bytes(&bytes);
+                            if observed != miss.key.sha256 {
+                                bail!(
+                                    "verified payload SHA-256 漂移: {} expected={} actual={}",
+                                    miss.key.path.display(),
+                                    miss.key.sha256,
+                                    observed
+                                );
+                            }
+                            Ok((
+                                miss.index,
+                                miss.key.clone(),
+                                miss.touch,
+                                Arc::<[u8]>::from(bytes),
+                            ))
+                        })
+                        .collect()
+                })
+                .collect();
+            let mut verified = Vec::with_capacity(misses.len());
+            for result in grouped.into_iter().flatten() {
+                verified.push(result?);
+            }
+
+            self.stats.disk_bytes_read = self
+                .stats
+                .disk_bytes_read
+                .checked_add(
+                    verified
+                        .iter()
+                        .map(|(_, _, _, payload)| payload.len() as u64)
+                        .sum::<u64>(),
+                )
+                .ok_or_else(|| anyhow::anyhow!("verified payload disk byte counter overflow"))?;
+
+            // 只有整批SHA全部成功后才按原请求顺序原子发布已验证Arc。
+            for (index, key, touch, payload) in verified {
+                if key.bytes > self.capacity_bytes {
+                    self.stats.oversized_bypasses += 1;
+                    outputs[index] = Some(payload);
+                    continue;
+                }
+                while self.current_bytes + key.bytes > self.capacity_bytes {
+                    self.evict_oldest()?;
+                }
+                self.current_bytes += key.bytes;
+                self.stats.current_bytes = self.current_bytes as u64;
+                self.stats.peak_bytes = self.stats.peak_bytes.max(self.stats.current_bytes);
+                self.entries.insert(
+                    key,
+                    CacheEntry {
+                        payload: Arc::clone(&payload),
+                        last_touch: touch,
+                    },
+                );
+                outputs[index] = Some(payload);
+            }
+        }
+
+        outputs
+            .into_iter()
+            .enumerate()
+            .map(|(index, payload)| {
+                payload
+                    .ok_or_else(|| anyhow::anyhow!("verified payload batch 输出槽 {index} 未发布"))
+            })
+            .collect()
+    }
+
     fn evict_oldest(&mut self) -> Result<()> {
         let key = self
             .entries
@@ -289,6 +453,86 @@ mod tests {
         assert_eq!(cache.stats().oversized_bypasses, 1);
         assert!(cache.load_verified(&path, 9, &hash).is_err());
         assert!(cache.load_verified(&path, 10, &"0".repeat(64)).is_err());
+        assert!(cache.is_empty());
+    }
+
+    #[test]
+    fn batch_preserves_request_order_and_turns_second_batch_into_hits() {
+        let fixture = FixtureDir::new();
+        let rows: Vec<_> = (0..12)
+            .map(|index| {
+                let payload = vec![index as u8; index + 1];
+                let (path, hash) = fixture.write(&format!("{index:02}.bin"), &payload);
+                (
+                    VerifiedPayloadRequest {
+                        path,
+                        expected_bytes: payload.len(),
+                        expected_sha256: hash,
+                    },
+                    payload,
+                )
+            })
+            .collect();
+        let requests: Vec<_> = rows.iter().map(|(request, _)| request.clone()).collect();
+        let mut cache = VerifiedPayloadCache::new(1024).unwrap();
+
+        let first = cache.load_verified_batch(&requests).unwrap();
+        for (payload, (_, expected)) in first.iter().zip(&rows) {
+            assert_eq!(&**payload, expected.as_slice());
+        }
+        let first_stats = cache.stats();
+        assert_eq!(first_stats.requests, 12);
+        assert_eq!(first_stats.misses, 12);
+        assert_eq!(first_stats.hits, 0);
+        assert_eq!(first_stats.disk_bytes_read, 78);
+
+        let second = cache.load_verified_batch(&requests).unwrap();
+        for (left, right) in first.iter().zip(&second) {
+            assert!(Arc::ptr_eq(left, right));
+        }
+        let second_stats = cache.stats();
+        assert_eq!(second_stats.requests, 24);
+        assert_eq!(second_stats.misses, 12);
+        assert_eq!(second_stats.hits, 12);
+        assert_eq!(second_stats.disk_bytes_read, 78);
+    }
+
+    #[test]
+    fn failed_batch_does_not_publish_any_new_payload() {
+        let fixture = FixtureDir::new();
+        let (good_path, good_hash) = fixture.write("good.bin", b"good");
+        let (bad_path, _) = fixture.write("bad.bin", b"bad!");
+        let requests = vec![
+            VerifiedPayloadRequest {
+                path: good_path,
+                expected_bytes: 4,
+                expected_sha256: good_hash,
+            },
+            VerifiedPayloadRequest {
+                path: bad_path,
+                expected_bytes: 4,
+                expected_sha256: "0".repeat(64),
+            },
+        ];
+        let mut cache = VerifiedPayloadCache::new(64).unwrap();
+        assert!(cache.load_verified_batch(&requests).is_err());
+        assert!(cache.is_empty());
+        assert_eq!(cache.stats().current_bytes, 0);
+    }
+
+    #[test]
+    fn batch_rejects_duplicate_identity_before_parallel_publish() {
+        let fixture = FixtureDir::new();
+        let (path, hash) = fixture.write("same.bin", b"same");
+        let request = VerifiedPayloadRequest {
+            path,
+            expected_bytes: 4,
+            expected_sha256: hash,
+        };
+        let mut cache = VerifiedPayloadCache::new(64).unwrap();
+        assert!(cache
+            .load_verified_batch(&[request.clone(), request])
+            .is_err());
         assert!(cache.is_empty());
     }
 }

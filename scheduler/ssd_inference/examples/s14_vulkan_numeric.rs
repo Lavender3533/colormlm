@@ -22,6 +22,9 @@ use ssd_inference::s14_vulkan::{
     S14Mxfp4Dispatch, S14NumericPipelines, S14OfficialExpertPrepareDispatch, S14RouteMixDispatch,
     S14SwigluLimitDispatch,
 };
+use ssd_inference::verified_payload_cache::{
+    VerifiedPayloadRequest, VERIFIED_PAYLOAD_BATCH_MAX_TASKS,
+};
 use ssd_inference::{VerifiedPayloadCache, VerifiedPayloadCacheStats};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
@@ -70,6 +73,7 @@ const GPU_VRAM_HARD_LIMIT_GIB: usize = 8;
 const OFFICIAL_ROUTED_EXPERT_COUNT: usize = 6;
 const REUSABLE_GPU_SLOT_MAX_LOGICAL_BYTES: u64 = 128 * 1024 * 1024;
 const WRITEBACK_DIAGNOSTIC_DIR_ENV: &str = "POLARIS_FULLDEPTH43_WRITEBACK_DIAGNOSTIC_DIR";
+const WRITEBACK_BATCH_VERIFY_ENV: &str = "POLARIS_FULLDEPTH43_BATCH_VERIFY_PAYLOADS";
 const FULLDEPTH43_CATALOG_FILE: &str = "D:/models/Polaris-S14/fulldepth43_native_top6_catalog.json";
 const FULLDEPTH43_CATALOG_SHA256: &str =
     "ca619984d4a46ad1a3701d2b4035766ea40c3a3dbedd3a474ce1df7aad4d0049";
@@ -1408,7 +1412,7 @@ struct FullDepthBridgeManifest {
     reference_semantics: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 struct FullDepthBridgePayload {
     tensor: String,
     kind: String,
@@ -1447,6 +1451,8 @@ struct WritebackRequest {
     op: String,
     request_id: String,
     manifest: PathBuf,
+    #[serde(default)]
+    batch_verify_payloads: bool,
 }
 
 #[derive(Serialize)]
@@ -1474,6 +1480,70 @@ struct PayloadVerificationReceipt {
     payload_identity_contract: &'static str,
     verified_before_compute: bool,
     verification_scope: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct WritebackBatchVerificationReceipt {
+    enabled: bool,
+    batch_entries: usize,
+    batch_hits: u64,
+    batch_misses: u64,
+    batch_disk_bytes_read: u64,
+    concurrency_limit: usize,
+    followup_cached_loader_hits: u64,
+    all_verified_before_compute: bool,
+}
+
+struct PendingWritebackBatchVerification {
+    receipt: WritebackBatchVerificationReceipt,
+    followup_before: Option<VerifiedPayloadCacheStats>,
+}
+
+impl PendingWritebackBatchVerification {
+    fn disabled() -> Self {
+        Self {
+            receipt: WritebackBatchVerificationReceipt {
+                enabled: false,
+                batch_entries: 0,
+                batch_hits: 0,
+                batch_misses: 0,
+                batch_disk_bytes_read: 0,
+                concurrency_limit: VERIFIED_PAYLOAD_BATCH_MAX_TASKS,
+                followup_cached_loader_hits: 0,
+                all_verified_before_compute: false,
+            },
+            followup_before: None,
+        }
+    }
+
+    fn finish_before_compute(
+        mut self,
+        payload_cache: &VerifiedPayloadCache,
+    ) -> Result<WritebackBatchVerificationReceipt> {
+        let Some(before) = self.followup_before else {
+            return Ok(self.receipt);
+        };
+        let after = payload_cache.stats();
+        let hits = monotonic_delta(after.hits, before.hits, "batch_followup_hits")?;
+        let misses = monotonic_delta(after.misses, before.misses, "batch_followup_misses")?;
+        let disk_bytes = monotonic_delta(
+            after.disk_bytes_read,
+            before.disk_bytes_read,
+            "batch_followup_disk_bytes_read",
+        )?;
+        if hits != self.receipt.batch_entries as u64 || misses != 0 || disk_bytes != 0 {
+            bail!(
+                "batch-preverified payloads were not complete cache hits: hits={} expected={} misses={} disk_bytes={}",
+                hits,
+                self.receipt.batch_entries,
+                misses,
+                disk_bytes
+            );
+        }
+        self.receipt.followup_cached_loader_hits = hits;
+        self.receipt.all_verified_before_compute = true;
+        Ok(self.receipt)
+    }
 }
 
 fn payload_verification_receipt<'a>(
@@ -1546,6 +1616,7 @@ struct WritebackResponse {
     input_token_id: u32,
     #[serde(flatten)]
     payload_verification: PayloadVerificationReceipt,
+    batch_payload_verification: WritebackBatchVerificationReceipt,
     output: WritebackOutput,
     gpu_kernel_ms: f64,
     wall_ms: f64,
@@ -5321,6 +5392,8 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
             "persistent_context": true,
             "official_boundary_graph": true,
             "verified_payload_cache": true,
+            "batch_payload_verification": true,
+            "batch_payload_verification_concurrency_limit": VERIFIED_PAYLOAD_BATCH_MAX_TASKS,
             "payload_cache_capacity_bytes": payload_cache_capacity,
             "gpu_payload_cache": gpu_payload_cache.is_some(),
             "gpu_payload_cache_capacity_bytes": gpu_payload_cache_capacity.unwrap_or(0),
@@ -5456,6 +5529,125 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
     Ok(())
 }
 
+fn writeback_batch_verify_enabled_from(
+    request_switch: bool,
+    env_value: Option<&std::ffi::OsStr>,
+) -> Result<bool> {
+    match env_value {
+        None => Ok(request_switch),
+        Some(value) if value == "0" => Ok(request_switch),
+        Some(value) if value == "1" => Ok(true),
+        Some(value) => bail!(
+            "{WRITEBACK_BATCH_VERIFY_ENV} must be exactly 0 or 1, got {:?}",
+            value
+        ),
+    }
+}
+
+fn writeback_batch_verify_enabled(request_switch: bool) -> Result<bool> {
+    let env_value = std::env::var_os(WRITEBACK_BATCH_VERIFY_ENV);
+    writeback_batch_verify_enabled_from(request_switch, env_value.as_deref())
+}
+
+fn prepare_writeback_batch_requests(
+    payloads: &[FullDepthBridgePayload],
+    expected_count: usize,
+    cache_root: &Path,
+) -> Result<Vec<VerifiedPayloadRequest>> {
+    if payloads.len() != expected_count || expected_count == 0 {
+        bail!(
+            "writeback batch payload count drift: actual={} expected={}",
+            payloads.len(),
+            expected_count
+        );
+    }
+    payloads
+        .iter()
+        .map(|payload| {
+            let path = resolve_verified_payload_path(&payload.path, cache_root, &payload.tensor)?;
+            let expected_bytes = usize::try_from(payload.bytes)
+                .context("writeback batch payload byte count overflows usize")?;
+            Ok(VerifiedPayloadRequest {
+                path,
+                expected_bytes,
+                expected_sha256: payload.sha256.clone(),
+            })
+        })
+        .collect()
+}
+
+fn preverify_writeback_payload_batch(
+    manifest: &FullDepthBridgeManifest,
+    capture_root: &Path,
+    cache_root: &Path,
+    payload_cache: &mut VerifiedPayloadCache,
+    enabled: bool,
+) -> Result<PendingWritebackBatchVerification> {
+    if !enabled {
+        return Ok(PendingWritebackBatchVerification::disabled());
+    }
+    if !capture_root.is_dir() {
+        bail!("writeback capture root is not a directory");
+    }
+    let canonical_capture_root = capture_root
+        .canonicalize()
+        .context("resolve writeback capture root for batch verification")?;
+    if canonical_capture_root != capture_root {
+        bail!("writeback capture root must already be canonical");
+    }
+    let canonical_cache_root = cache_root
+        .canonicalize()
+        .context("resolve range cache root for batch verification")?;
+    if canonical_cache_root != cache_root || !canonical_cache_root.is_dir() {
+        bail!("writeback range cache root must be a canonical directory");
+    }
+
+    let requests = prepare_writeback_batch_requests(
+        &manifest.payloads,
+        manifest.payload_count,
+        &canonical_cache_root,
+    )?;
+    let before = payload_cache.stats();
+    let verified = payload_cache.load_verified_batch(&requests)?;
+    if verified.len() != requests.len()
+        || verified
+            .iter()
+            .zip(&requests)
+            .any(|(payload, request)| payload.len() != request.expected_bytes)
+    {
+        bail!("writeback batch verification output count/size drift");
+    }
+    let after = payload_cache.stats();
+    let batch_hits = monotonic_delta(after.hits, before.hits, "batch_verify_hits")?;
+    let batch_misses = monotonic_delta(after.misses, before.misses, "batch_verify_misses")?;
+    let batch_disk_bytes_read = monotonic_delta(
+        after.disk_bytes_read,
+        before.disk_bytes_read,
+        "batch_verify_disk_bytes_read",
+    )?;
+    if batch_hits
+        .checked_add(batch_misses)
+        .ok_or_else(|| anyhow::anyhow!("batch verification request count overflow"))?
+        != requests.len() as u64
+    {
+        bail!("writeback batch verification request accounting drift");
+    }
+
+    Ok(PendingWritebackBatchVerification {
+        receipt: WritebackBatchVerificationReceipt {
+            enabled: true,
+            batch_entries: requests.len(),
+            batch_hits,
+            batch_misses,
+            batch_disk_bytes_read,
+            concurrency_limit: VERIFIED_PAYLOAD_BATCH_MAX_TASKS,
+            followup_cached_loader_hits: 0,
+            all_verified_before_compute: false,
+        },
+        followup_before: Some(after),
+    })
+}
+
 fn execute_writeback_request(
     ctx: &VulkanContext,
     pipelines: &S14NumericPipelines,
@@ -5469,6 +5661,7 @@ fn execute_writeback_request(
     let started = Instant::now();
     let cache_before = payload_cache.stats();
     let gpu_cache_before = gpu_payload_cache.as_ref().map(GpuPayloadCache::stats);
+    let batch_verify_enabled = writeback_batch_verify_enabled(request.batch_verify_payloads)?;
     let manifest_path = request
         .manifest
         .canonicalize()
@@ -5486,6 +5679,14 @@ fn execute_writeback_request(
         serde_json::from_slice(&manifest_bytes).context("parse FullDepth43 writeback manifest")?;
     validate_writeback_manifest(&manifest)?;
     let input = load_fulldepth_bridge_input(&manifest, &capture_root)?;
+    let cache_root = Path::new(MODEL_DIR).join("range_cache").canonicalize()?;
+    let pending_batch_verification = preverify_writeback_payload_batch(
+        &manifest,
+        &capture_root,
+        &cache_root,
+        payload_cache,
+        batch_verify_enabled,
+    )?;
     let routed = manifest
         .expert_ids
         .iter()
@@ -5524,6 +5725,8 @@ fn execute_writeback_request(
         w2,
         s2,
     };
+    let batch_payload_verification =
+        pending_batch_verification.finish_before_compute(payload_cache)?;
     // Every payload Arc above is returned only after VerifiedPayloadCache has
     // matched the complete file bytes to the manifest SHA-256.  Freeze the
     // exact verified identity set before the first Vulkan MoE dispatch.
@@ -5640,6 +5843,7 @@ fn execute_writeback_request(
         position: manifest.position,
         input_token_id: manifest.input_token_id,
         payload_verification,
+        batch_payload_verification,
         output: WritebackOutput {
             path: output_path,
             dtype: "bf16_le",
@@ -8318,6 +8522,142 @@ mod writeback_payload_cache_tests {
             w2: bytes(layout.w2),
             s2: bytes(layout.s2),
         }
+    }
+
+    fn fake_bridge_manifest(payloads: Vec<FullDepthBridgePayload>) -> FullDepthBridgeManifest {
+        FullDepthBridgeManifest {
+            format: "test".to_string(),
+            revision: "test".to_string(),
+            profile: "test".to_string(),
+            layer: 0,
+            position: 0,
+            input_token_id: 0,
+            completed_layers_before_capture: Vec::new(),
+            route_source: "test".to_string(),
+            expert_ids: Vec::new(),
+            route_weights: Vec::new(),
+            route_weight_sum: 0.0,
+            source_ffn_input_f32_le_sha256: "0".repeat(64),
+            input: CaptureInput {
+                name: "test".to_string(),
+                file: PathBuf::from("input.bin"),
+                shape: vec![1],
+                bytes: 4,
+                f32_le_sha256: "0".repeat(64),
+            },
+            payload_count: payloads.len(),
+            payload_bytes: payloads.iter().map(|payload| payload.bytes).sum(),
+            payloads,
+            reference_semantics: "test".to_string(),
+        }
+    }
+
+    #[test]
+    fn writeback_batch_verify_switch_is_explicit_and_default_off() {
+        use std::ffi::OsStr;
+
+        assert!(!writeback_batch_verify_enabled_from(false, None).unwrap());
+        assert!(!writeback_batch_verify_enabled_from(false, Some(OsStr::new("0"))).unwrap());
+        assert!(writeback_batch_verify_enabled_from(true, None).unwrap());
+        assert!(writeback_batch_verify_enabled_from(true, Some(OsStr::new("0"))).unwrap());
+        assert!(writeback_batch_verify_enabled_from(false, Some(OsStr::new("1"))).unwrap());
+        assert!(writeback_batch_verify_enabled_from(false, Some(OsStr::new("true"))).is_err());
+    }
+
+    #[test]
+    fn writeback_batch_paths_are_canonical_and_range_cache_bounded() {
+        let fixture = FixtureDir::new();
+        let range_cache = fixture.0.join("range_cache");
+        std::fs::create_dir(&range_cache).unwrap();
+        let range_cache = range_cache.canonicalize().unwrap();
+        let inside = range_cache.join("inside.bin");
+        std::fs::write(&inside, b"safe").unwrap();
+        let payload = FullDepthBridgePayload {
+            tensor: "layers.0.ffn.experts.0.w1.weight".to_string(),
+            kind: "routed".to_string(),
+            expert_id: Some(0),
+            dtype: "I8".to_string(),
+            shape: vec![4],
+            bytes: 4,
+            path: inside.clone(),
+            sha256: sha256_bytes(b"safe"),
+        };
+        let requests =
+            prepare_writeback_batch_requests(std::slice::from_ref(&payload), 1, &range_cache)
+                .unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].path, inside.canonicalize().unwrap());
+
+        let outside = fixture.0.join("outside.bin");
+        std::fs::write(&outside, b"safe").unwrap();
+        let escaped = FullDepthBridgePayload {
+            path: outside,
+            ..payload.clone()
+        };
+        assert!(prepare_writeback_batch_requests(&[escaped], 1, &range_cache).is_err());
+
+        let wrong_extension = range_cache.join("inside.dat");
+        std::fs::write(&wrong_extension, b"safe").unwrap();
+        let wrong_extension = FullDepthBridgePayload {
+            path: wrong_extension,
+            ..payload
+        };
+        assert!(prepare_writeback_batch_requests(&[wrong_extension], 1, &range_cache).is_err());
+    }
+
+    #[test]
+    fn writeback_batch_preverification_makes_existing_loader_all_hits() {
+        let fixture = FixtureDir::new();
+        let capture_root = fixture.0.join("capture");
+        let range_cache = fixture.0.join("range_cache");
+        std::fs::create_dir(&capture_root).unwrap();
+        std::fs::create_dir(&range_cache).unwrap();
+        let capture_root = capture_root.canonicalize().unwrap();
+        let range_cache = range_cache.canonicalize().unwrap();
+        let path = range_cache.join("payload.bin");
+        std::fs::write(&path, b"verified").unwrap();
+        let tensor = "layers.0.ffn.experts.0.w1.weight";
+        let sha256 = sha256_bytes(b"verified");
+        let manifest = fake_bridge_manifest(vec![FullDepthBridgePayload {
+            tensor: tensor.to_string(),
+            kind: "routed".to_string(),
+            expert_id: Some(0),
+            dtype: "I8".to_string(),
+            shape: vec![8],
+            bytes: 8,
+            path: path.clone(),
+            sha256: sha256.clone(),
+        }]);
+        let mut cache = VerifiedPayloadCache::new(64).unwrap();
+
+        let pending = preverify_writeback_payload_batch(
+            &manifest,
+            &capture_root,
+            &range_cache,
+            &mut cache,
+            true,
+        )
+        .unwrap();
+        let payload = read_verified_payload_cached_with_root(
+            &mut cache,
+            &range_cache,
+            &path,
+            8,
+            &sha256,
+            tensor,
+        )
+        .unwrap();
+        assert_eq!(&*payload, b"verified");
+        let receipt = pending.finish_before_compute(&cache).unwrap();
+
+        assert!(receipt.enabled);
+        assert_eq!(receipt.batch_entries, 1);
+        assert_eq!(receipt.batch_hits, 0);
+        assert_eq!(receipt.batch_misses, 1);
+        assert_eq!(receipt.batch_disk_bytes_read, 8);
+        assert_eq!(receipt.concurrency_limit, 8);
+        assert_eq!(receipt.followup_cached_loader_hits, 1);
+        assert!(receipt.all_verified_before_compute);
     }
 
     #[test]

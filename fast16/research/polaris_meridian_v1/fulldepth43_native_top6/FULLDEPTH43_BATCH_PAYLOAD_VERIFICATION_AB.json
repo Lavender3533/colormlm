@@ -1,0 +1,64 @@
+{
+  "format": "polaris-fulldepth43-batch-payload-verification-ab-v1",
+  "date": "2026-08-02",
+  "status": "passed",
+  "single_variable": "vulkan_writeback_batch_verify_payloads",
+  "forward_adjacent_pair": {
+    "baseline": {
+      "enabled": false,
+      "execution_seconds": 64.38439340000332,
+      "effective_tokens_per_second": 0.031063428486069994,
+      "per_token_wall_seconds": [40.094054300003336, 22.004706100007752]
+    },
+    "candidate": {
+      "enabled": true,
+      "execution_seconds": 53.08870880000177,
+      "effective_tokens_per_second": 0.037672794181800355,
+      "per_token_wall_seconds": [34.397582400008105, 16.694651099998737]
+    },
+    "delta": {
+      "wall_seconds_saved": 11.29568460000155,
+      "wall_reduction_percent": 17.544134538667517,
+      "throughput_improvement_percent": 21.277000053919505
+    }
+  },
+  "reverse_adjacent_confirmation": {
+    "candidate_execution_seconds": 53.08870880000177,
+    "following_baseline_execution_seconds": 58.6041758999927,
+    "candidate_wall_seconds_saved": 5.51546709999093,
+    "candidate_wall_reduction_percent": 9.411389231721313,
+    "candidate_throughput_improvement_percent": 10.38915284372248
+  },
+  "candidate_batch_verification": {
+    "receipt_count": 86,
+    "entries_per_receipt": 42,
+    "followup_cached_loader_hits_per_receipt": 42,
+    "batch_requests": 3612,
+    "batch_hits": 432,
+    "batch_misses": 3180,
+    "batch_disk_bytes_read": 7593067008,
+    "concurrency_limit": 8,
+    "all_verified_before_compute": true,
+    "all_followup_loaders_zero_miss": true
+  },
+  "hard_gates": {
+    "status_complete_all_three_runs": true,
+    "output_token_ids_equal": true,
+    "output_token_ids": [5, 223],
+    "layers": "86/86",
+    "attention_projections": "472/472",
+    "vulkan_moe_writebacks": "86/86",
+    "cpu_fallbacks": 0,
+    "static_prefetch_futures_consumed": "84/84",
+    "position_1_attention_slot_hits": "236/236",
+    "position_1_static_payload_uploaded_bytes": 0,
+    "gpu_verifier_ownership_closed": true,
+    "identity_multiset_closed": true
+  },
+  "source_runs": {
+    "baseline": ".tmp-polaris-runs/batch-verify-ab-baseline-20260802",
+    "candidate": ".tmp-polaris-runs/batch-verify-ab-candidate-20260802",
+    "reverse_baseline": ".tmp-polaris-runs/batch-verify-ab-reverse-baseline-20260802"
+  },
+  "claim_limit": "正向相邻对为17.54%完整墙钟收益，候选后紧邻的反向基线仍确认9.41%墙钟收益；保守只声称收益在反向相邻门中仍为正。当前候选仅为0.03767 token/s，不是可交互聊天、20–50 token/s或Claude/GPT质量证据。"
+}

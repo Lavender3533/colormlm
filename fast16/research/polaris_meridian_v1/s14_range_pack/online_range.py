@@ -40,6 +40,49 @@ EXPERT_COUNT = 256
 TOP_K = 6
 CONTENT_RANGE_RE = re.compile(r"bytes ([0-9]+)-([0-9]+)/([0-9]+)")
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
+DEFERRED_IDENTITY_MULTISET_CONTRACT = (
+    "sum_mod_2^256(sha256(polaris-range-deferred-payload-v1_nul || "
+    "length_le64(tensor_utf8) || tensor_utf8 || bytes_le64 || "
+    "expected_sha256_ascii))"
+)
+DEFERRED_IDENTITY_MULTISET_MODULUS = 1 << 256
+
+
+def deferred_payload_identity_u256(
+    tensor: str,
+    byte_count: int,
+    expected_sha256: str,
+) -> int:
+    """把一个延迟页的完整身份收窄成256位元素。"""
+
+    if not isinstance(tensor, str) or not tensor:
+        raise rp.ContractError("延迟页 tensor 必须是非空字符串")
+    if isinstance(byte_count, bool) or not isinstance(byte_count, int) or byte_count <= 0:
+        raise rp.ContractError("延迟页 bytes 必须是正整数")
+    if not isinstance(expected_sha256, str) or not SHA256_RE.fullmatch(expected_sha256):
+        raise rp.ContractError("延迟页 expected_sha256 必须是64位小写十六进制")
+    encoded = tensor.encode("utf-8")
+    digest = hashlib.sha256()
+    digest.update(b"polaris-range-deferred-payload-v1\0")
+    digest.update(len(encoded).to_bytes(8, "little", signed=False))
+    digest.update(encoded)
+    digest.update(byte_count.to_bytes(8, "little", signed=False))
+    digest.update(expected_sha256.encode("ascii"))
+    return int.from_bytes(digest.digest(), "big", signed=False)
+
+
+def deferred_identity_multiset_sum_u256(
+    identities: Iterable[tuple[str, int, str]],
+) -> str:
+    """返回可交换、保留重复项的mod 2^256身份和。"""
+
+    total = 0
+    for tensor, byte_count, expected_sha256 in identities:
+        total = (
+            total
+            + deferred_payload_identity_u256(tensor, byte_count, expected_sha256)
+        ) % DEFERRED_IDENTITY_MULTISET_MODULUS
+    return f"{total:064x}"
 
 
 class RangePayloadTruncatedError(ConnectionError):
@@ -831,6 +874,20 @@ class RangeCache:
     @property
     def proof_cache_telemetry(self) -> dict[str, Any]:
         with self._proof_cache_lock:
+            owner_rows = {
+                owner: {
+                    "ranges": values["ranges"],
+                    "bytes": values["bytes"],
+                    "identity_multiset_sum_u256": (
+                        f"{values['identity_multiset_sum_u256']:064x}"
+                    ),
+                }
+                for owner, values in self._proof_deferred_by_owner.items()
+            }
+            global_identity_sum = sum(
+                values["identity_multiset_sum_u256"]
+                for values in self._proof_deferred_by_owner.values()
+            ) % DEFERRED_IDENTITY_MULTISET_MODULUS
             return {
                 "hits": self._proof_hits,
                 "misses": self._proof_misses,
@@ -840,10 +897,13 @@ class RangeCache:
                 "bytes_hashed": self._proof_bytes_hashed,
                 "deferred": self._proof_deferred,
                 "bytes_deferred": self._proof_bytes_deferred,
-                "deferred_by_owner": {
-                    owner: dict(values)
-                    for owner, values in self._proof_deferred_by_owner.items()
-                },
+                "deferred_identity_multiset_contract": (
+                    DEFERRED_IDENTITY_MULTISET_CONTRACT
+                ),
+                "deferred_identity_multiset_sum_u256": (
+                    f"{global_identity_sum:064x}"
+                ),
+                "deferred_by_owner": owner_rows,
                 "entries": len(self._verified_proofs),
                 "scope": "current RangeCache process lifetime only",
                 "identity_fields": ["content_key", "absolute_path", "size", "mtime_ns"],
@@ -852,6 +912,7 @@ class RangeCache:
     def _load_deferred_hit(
         self,
         *,
+        entry: Mapping[str, Any],
         key: str,
         identity: Mapping[str, Any],
         payload: Path,
@@ -902,15 +963,28 @@ class RangeCache:
         after = self._proof_fingerprint(key, payload)
         if before != after:
             raise CacheEntryCorruption("cache payload 在延迟proof读取期间身份变化")
+        tensor = entry.get("tensor")
+        entry_bytes = entry.get("bytes")
+        if (
+            not isinstance(tensor, str)
+            or not tensor
+            or isinstance(entry_bytes, bool)
+            or entry_bytes != size
+        ):
+            raise CacheEntryCorruption("延迟页 catalog tensor/bytes 身份漂移")
+        identity_u256 = deferred_payload_identity_u256(tensor, size, observed)
         with self._proof_cache_lock:
             self._proof_deferred += 1
             self._proof_bytes_deferred += size
             owner_stats = self._proof_deferred_by_owner.setdefault(
                 verification_owner,
-                {"ranges": 0, "bytes": 0},
+                {"ranges": 0, "bytes": 0, "identity_multiset_sum_u256": 0},
             )
             owner_stats["ranges"] += 1
             owner_stats["bytes"] += size
+            owner_stats["identity_multiset_sum_u256"] = (
+                owner_stats["identity_multiset_sum_u256"] + identity_u256
+            ) % DEFERRED_IDENTITY_MULTISET_MODULUS
         return CachedRange(
             entry={},
             path=payload,
@@ -1190,6 +1264,7 @@ class RangeCache:
                 hit = None
                 if verification_owner is not None:
                     hit = self._load_deferred_hit(
+                        entry=entry,
                         key=key,
                         identity=identity,
                         payload=payload,

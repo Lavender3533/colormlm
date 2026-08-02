@@ -223,3 +223,8 @@ Vulkan与NumPy/OpenBLAS的归约顺序存在最高`6.103515625e-05`的已知投�
 fallback的正式候选上使用。它让GPU专属页由Rust worker在计算前做唯一内容SHA；Python仍完整验证
 所有CPU页，cache miss也仍走完整SHA。真实两-token门为`60.4563s→58.4415s`（-3.33%），
 输出与所有权闭环保持；详见`FULLDEPTH43_GPU_VERIFIER_OWNERSHIP.md`。
+
+当前层route确定后的42个MoE payload还可显式启用
+`--vulkan-writeback-batch-verify-payloads`，由Rust做最多8路并行读取/SHA并在全部成功后原子发布。
+正反相邻门中完整墙钟收益分别为17.54%和9.41%，输出仍为`[5,223]`；详见
+`FULLDEPTH43_BATCH_PAYLOAD_VERIFICATION.md`。

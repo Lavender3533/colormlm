@@ -15,6 +15,8 @@ from typing import Any, Mapping, Sequence
 
 import torch
 
+from fast16.research.polaris_meridian_v1.s14_range_pack import online_range
+
 
 PROTOCOL = "polaris-fulldepth43-vulkan-writeback-v1"
 OUTPUT_FILE = "vulkan_moe_branch.bf16le.bin"
@@ -31,6 +33,17 @@ PAYLOAD_VERIFICATION_KEYS = (
     "verified_before_compute",
     "verification_scope",
 )
+BATCH_PAYLOAD_VERIFICATION_KEYS = {
+    "enabled",
+    "batch_entries",
+    "batch_hits",
+    "batch_misses",
+    "batch_disk_bytes_read",
+    "concurrency_limit",
+    "followup_cached_loader_hits",
+    "all_verified_before_compute",
+}
+BATCH_PAYLOAD_VERIFICATION_CONCURRENCY = 8
 
 
 class VulkanWritebackError(RuntimeError):
@@ -133,17 +146,96 @@ def _require_payload_verification(
     observed = {key: response.get(key) for key in PAYLOAD_VERIFICATION_KEYS}
     if observed != expected:
         raise VulkanWritebackError("Vulkan worker GPU计算前 payload 验证回执漂移")
-    return observed
+    assert isinstance(payloads, list)
+    identities = [
+        (payload["tensor"], payload["bytes"], payload["sha256"])
+        for payload in payloads
+    ]
+    return {
+        **observed,
+        "python_expected_payload_identity_sha256": expected[
+            "payload_identity_sha256"
+        ],
+        "python_deferred_identity_multiset_contract": (
+            online_range.DEFERRED_IDENTITY_MULTISET_CONTRACT
+        ),
+        "python_deferred_identity_multiset_sum_u256": (
+            online_range.deferred_identity_multiset_sum_u256(identities)
+        ),
+    }
+
+
+def _require_batch_payload_verification(
+    response: Mapping[str, Any],
+    *,
+    enabled: bool,
+    payload_count: object,
+) -> dict[str, object]:
+    receipt = response.get("batch_payload_verification")
+    if not isinstance(receipt, Mapping) or set(receipt) != BATCH_PAYLOAD_VERIFICATION_KEYS:
+        raise VulkanWritebackError("Vulkan worker batch payload 验证回执结构漂移")
+    if isinstance(payload_count, bool) or not isinstance(payload_count, int) or payload_count <= 0:
+        raise VulkanWritebackError("Vulkan manifest payload_count 非法")
+
+    integer_fields = (
+        "batch_entries",
+        "batch_hits",
+        "batch_misses",
+        "batch_disk_bytes_read",
+        "concurrency_limit",
+        "followup_cached_loader_hits",
+    )
+    if any(
+        isinstance(receipt.get(key), bool)
+        or not isinstance(receipt.get(key), int)
+        or int(receipt[key]) < 0
+        for key in integer_fields
+    ):
+        raise VulkanWritebackError("Vulkan worker batch payload 验证回执整数账本漂移")
+    if receipt.get("enabled") is not enabled:
+        raise VulkanWritebackError("Vulkan worker batch payload 验证开关漂移")
+    if receipt.get("concurrency_limit") != BATCH_PAYLOAD_VERIFICATION_CONCURRENCY:
+        raise VulkanWritebackError("Vulkan worker batch payload 验证并发上限漂移")
+
+    if enabled:
+        if (
+            receipt.get("batch_entries") != payload_count
+            or int(receipt["batch_hits"]) + int(receipt["batch_misses"]) != payload_count
+            or receipt.get("followup_cached_loader_hits") != payload_count
+            or receipt.get("all_verified_before_compute") is not True
+            or (
+                int(receipt["batch_misses"]) == 0
+                and int(receipt["batch_disk_bytes_read"]) != 0
+            )
+            or (
+                int(receipt["batch_misses"]) > 0
+                and int(receipt["batch_disk_bytes_read"]) <= 0
+            )
+        ):
+            raise VulkanWritebackError("Vulkan worker batch payload 验证账本未闭合")
+    elif (
+        any(int(receipt[key]) != 0 for key in integer_fields if key != "concurrency_limit")
+        or receipt.get("all_verified_before_compute") is not False
+    ):
+        raise VulkanWritebackError("Vulkan worker 关闭 batch payload 验证时仍声明工作量")
+    return dict(receipt)
 
 
 class PersistentVulkanWriteback:
     """一次建立 Vulkan device/pipeline，以 UTF-8 JSONL 处理单层请求。"""
 
-    def __init__(self, command: Sequence[str], *, timeout_seconds: float = 30.0) -> None:
+    def __init__(
+        self,
+        command: Sequence[str],
+        *,
+        timeout_seconds: float = 30.0,
+        batch_verify_payloads: bool = False,
+    ) -> None:
         if not command or timeout_seconds <= 0:
             raise VulkanWritebackError("worker command 和 timeout 必须有效")
         self.command = tuple(str(value) for value in command)
         self.timeout_seconds = float(timeout_seconds)
+        self.batch_verify_payloads = bool(batch_verify_payloads)
         self.process: subprocess.Popen[str] | None = None
         self.poisoned = False
         self.counter = 0
@@ -199,6 +291,9 @@ class PersistentVulkanWriteback:
             or hello.get("ready") is not True
             or hello.get("persistent_context") is not True
             or hello.get("official_boundary_graph") is not True
+            or hello.get("batch_payload_verification") is not True
+            or hello.get("batch_payload_verification_concurrency_limit")
+            != BATCH_PAYLOAD_VERIFICATION_CONCURRENCY
         ):
             self._fail("Vulkan worker hello 合同漂移")
         self.hello = hello
@@ -283,6 +378,7 @@ class PersistentVulkanWriteback:
             "op": "execute_single_layer",
             "request_id": request_id,
             "manifest": str(manifest_path),
+            "batch_verify_payloads": self.batch_verify_payloads,
         }
         assert self.process.stdin is not None
         try:
@@ -310,6 +406,14 @@ class PersistentVulkanWriteback:
             payload_verification = _require_payload_verification(
                 response,
                 manifest.get("payloads"),
+            )
+        except VulkanWritebackError as error:
+            self._fail(str(error))
+        try:
+            batch_payload_verification = _require_batch_payload_verification(
+                response,
+                enabled=self.batch_verify_payloads,
+                payload_count=manifest.get("payload_count"),
             )
         except VulkanWritebackError as error:
             self._fail(str(error))
@@ -350,6 +454,7 @@ class PersistentVulkanWriteback:
             "gpu_payload_cache": response.get("gpu_payload_cache"),
             "reusable_gpu_slot": response.get("reusable_gpu_slot"),
             "payload_verification": payload_verification,
+            "batch_payload_verification": batch_payload_verification,
             "boundaries": response.get("boundaries"),
             "persistent_context": True,
         }

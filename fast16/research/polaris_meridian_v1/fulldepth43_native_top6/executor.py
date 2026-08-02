@@ -39,6 +39,8 @@ from .fulldepth_packed_fp8_attention import (
     WORKER_ARG as FULLDEPTH_FP8_ATTENTION_WORKER_ARG,
 )
 from .vulkan_writeback import (
+    PAYLOAD_IDENTITY_CONTRACT,
+    PAYLOAD_VERIFICATION_SCOPE,
     PersistentVulkanWriteback,
     VulkanWritebackError,
     verify_exact_bf16_writeback,
@@ -761,6 +763,7 @@ class ExecutionConfig:
     vulkan_writeback_verify_cpu: bool = True
     vulkan_writeback_cpu_fallback: bool = True
     vulkan_writeback_fast_production: bool = False
+    vulkan_writeback_batch_verify_payloads: bool = False
     vulkan_final_head_worker: Path | None = None
     vulkan_final_head_timeout_seconds: float = 60.0
     vulkan_final_head_scratch: Path | None = None
@@ -810,6 +813,14 @@ class ExecutionConfig:
             raise FullDepthError("全层 Vulkan writeback 必须指定 worker")
         if self.vulkan_writeback_fast_production and self.vulkan_writeback_verify_cpu:
             raise FullDepthError("fast production 累加顺序不适用逐 BF16 CPU 审计")
+        if self.vulkan_writeback_batch_verify_payloads and (
+            self.vulkan_writeback_worker is None
+            or not self.vulkan_writeback_all_layers
+            or not self.vulkan_writeback_fast_production
+        ):
+            raise FullDepthError(
+                "batch payload 验证要求全层 fast-production Vulkan MoE worker"
+            )
         if (
             self.vulkan_final_head_worker is not None
             and not self.vulkan_final_head_worker.resolve().is_file()
@@ -879,7 +890,7 @@ def _sha256_bytes(payload: bytes) -> str:
 
 def _gpu_verifier_receipt_closure(
     report: Mapping[str, Any],
-    range_telemetry: Mapping[str, Any],
+    range_telemetry: object,
 ) -> dict[str, Any]:
     """把 Python 延迟所有权逐项闭合到 Rust 计算前强验证回执。"""
 
@@ -889,6 +900,14 @@ def _gpu_verifier_receipt_closure(
     }
     receipt_count = 0
     invalid_receipts: list[dict[str, Any]] = []
+    observed_identity_sums = {owner: 0 for owner in observed}
+
+    def is_u256_hex(value: object) -> bool:
+        return (
+            isinstance(value, str)
+            and len(value) == 64
+            and all(character in "0123456789abcdef" for character in value)
+        )
 
     def consume(owner: str, receipt: object, *, position: Any, layer: Any) -> None:
         nonlocal receipt_count
@@ -900,9 +919,25 @@ def _gpu_verifier_receipt_closure(
             return
         count = receipt.get("verified_count")
         byte_count = receipt.get("verified_bytes")
+        identity = receipt.get("payload_identity_sha256")
+        python_expected_identity = receipt.get(
+            "python_expected_payload_identity_sha256"
+        )
+        deferred_identity_sum = receipt.get(
+            "python_deferred_identity_multiset_sum_u256"
+        )
         if (
             receipt.get("verification_owner") != "rust_vulkan_worker"
             or receipt.get("verified_before_compute") is not True
+            or receipt.get("payload_identity_contract") != PAYLOAD_IDENTITY_CONTRACT
+            or receipt.get("verification_scope") != PAYLOAD_VERIFICATION_SCOPE
+            or not isinstance(identity, str)
+            or len(identity) != 64
+            or any(character not in "0123456789abcdef" for character in identity)
+            or identity != python_expected_identity
+            or receipt.get("python_deferred_identity_multiset_contract")
+            != online_range.DEFERRED_IDENTITY_MULTISET_CONTRACT
+            or not is_u256_hex(deferred_identity_sum)
             or isinstance(count, bool)
             or not isinstance(count, int)
             or count <= 0
@@ -916,6 +951,10 @@ def _gpu_verifier_receipt_closure(
             return
         observed[owner]["ranges"] += count
         observed[owner]["bytes"] += byte_count
+        assert isinstance(deferred_identity_sum, str)
+        observed_identity_sums[owner] = (
+            observed_identity_sums[owner] + int(deferred_identity_sum, 16)
+        ) % online_range.DEFERRED_IDENTITY_MULTISET_MODULUS
 
     for token in report.get("tokens", ()):
         if not isinstance(token, Mapping):
@@ -945,32 +984,121 @@ def _gpu_verifier_receipt_closure(
                 layer=layer,
             )
 
-    raw_expected = range_telemetry.get("deferred_by_owner")
+    telemetry_errors: list[str] = []
+    if not isinstance(range_telemetry, Mapping):
+        raw_expected: object = None
+        telemetry_errors.append("range_proof_cache missing_or_not_mapping")
+    else:
+        raw_expected = range_telemetry.get("deferred_by_owner")
+        if not isinstance(raw_expected, Mapping):
+            telemetry_errors.append("deferred_by_owner missing_or_not_mapping")
+        elif set(raw_expected) != set(observed):
+            telemetry_errors.append("deferred_by_owner owner_set_drift")
+        if (
+            range_telemetry.get("deferred_identity_multiset_contract")
+            != online_range.DEFERRED_IDENTITY_MULTISET_CONTRACT
+        ):
+            telemetry_errors.append("deferred_identity_multiset_contract drift")
+
+    def expected_stat(owner: str, key: str) -> int:
+        if not isinstance(raw_expected, Mapping):
+            return -1
+        row = raw_expected.get(owner)
+        if not isinstance(row, Mapping):
+            telemetry_errors.append(f"{owner} missing_or_not_mapping")
+            return -1
+        value = row.get(key)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            telemetry_errors.append(f"{owner}.{key} invalid")
+            return -1
+        return value
+
     expected = {
         owner: {
-            "ranges": int(
-                raw_expected.get(owner, {}).get("ranges", -1)
-                if isinstance(raw_expected, Mapping)
-                else -1
-            ),
-            "bytes": int(
-                raw_expected.get(owner, {}).get("bytes", -1)
-                if isinstance(raw_expected, Mapping)
-                else -1
-            ),
+            "ranges": expected_stat(owner, "ranges"),
+            "bytes": expected_stat(owner, "bytes"),
         }
         for owner in observed
     }
-    closed = not invalid_receipts and observed == expected
+
+    def expected_identity_sum(owner: str) -> int:
+        if not isinstance(raw_expected, Mapping):
+            return -1
+        row = raw_expected.get(owner)
+        if not isinstance(row, Mapping):
+            return -1
+        value = row.get("identity_multiset_sum_u256")
+        if not is_u256_hex(value):
+            telemetry_errors.append(f"{owner}.identity_multiset_sum_u256 invalid")
+            return -1
+        assert isinstance(value, str)
+        return int(value, 16)
+
+    expected_identity_sums = {
+        owner: expected_identity_sum(owner) for owner in observed
+    }
+    expected_range_total = sum(row["ranges"] for row in expected.values())
+    expected_byte_total = sum(row["bytes"] for row in expected.values())
+    expected_global_identity_sum = (
+        sum(expected_identity_sums.values())
+        % online_range.DEFERRED_IDENTITY_MULTISET_MODULUS
+        if all(value >= 0 for value in expected_identity_sums.values())
+        else -1
+    )
+    if isinstance(range_telemetry, Mapping):
+        top_ranges = range_telemetry.get("deferred")
+        top_bytes = range_telemetry.get("bytes_deferred")
+        top_identity_sum = range_telemetry.get(
+            "deferred_identity_multiset_sum_u256"
+        )
+        if (
+            isinstance(top_ranges, bool)
+            or not isinstance(top_ranges, int)
+            or top_ranges < 0
+            or top_ranges != expected_range_total
+        ):
+            telemetry_errors.append("deferred top_level_total_drift")
+        if (
+            isinstance(top_bytes, bool)
+            or not isinstance(top_bytes, int)
+            or top_bytes < 0
+            or top_bytes != expected_byte_total
+        ):
+            telemetry_errors.append("bytes_deferred top_level_total_drift")
+        if (
+            not is_u256_hex(top_identity_sum)
+            or expected_global_identity_sum < 0
+            or int(top_identity_sum, 16) != expected_global_identity_sum
+        ):
+            telemetry_errors.append(
+                "deferred_identity_multiset_sum_u256 top_level_drift"
+            )
+
+    closed = (
+        not invalid_receipts
+        and not telemetry_errors
+        and observed == expected
+        and observed_identity_sums == expected_identity_sums
+    )
     return {
         "closed": closed,
         "receipt_count": receipt_count,
         "expected_deferred": expected,
         "rust_verified_before_compute": observed,
         "invalid_receipts": invalid_receipts,
+        "telemetry_errors": telemetry_errors,
+        "expected_deferred_identity_multiset_sum_u256": {
+            owner: (None if value < 0 else f"{value:064x}")
+            for owner, value in expected_identity_sums.items()
+        },
+        "python_receipt_identity_multiset_sum_u256": {
+            owner: f"{value:064x}"
+            for owner, value in observed_identity_sums.items()
+        },
         "contract": (
-            "sum(Rust per-compute verified_count/bytes) == "
-            "sum(Python deferred ownership count/bytes)"
+            "Rust receipt identities first equal Python request identities; then "
+            "sum_mod_2^256(Python request deferred payload identities) and "
+            "count/bytes equal the independent Python RangeCache owner ledgers"
         ),
     }
 
@@ -1336,6 +1464,9 @@ class FullDepthTokenWorker:
                     worker_arg,
                 ),
                 timeout_seconds=self.config.vulkan_writeback_timeout_seconds,
+                batch_verify_payloads=(
+                    self.config.vulkan_writeback_batch_verify_payloads
+                ),
             )
             expected_mode = (
                 "fast_production_128_lane"
@@ -1928,6 +2059,9 @@ def execute(
                 "cpu_verification": config.vulkan_writeback_verify_cpu,
                 "cpu_fallback": config.vulkan_writeback_cpu_fallback,
                 "fast_production": config.vulkan_writeback_fast_production,
+                "batch_verify_payloads": (
+                    config.vulkan_writeback_batch_verify_payloads
+                ),
             }
         attention_hello = getattr(worker, "attention_hello", None)
         if attention_hello is not None:
@@ -1963,6 +2097,18 @@ def execute(
                     "cpu_fallback": False,
                     "production_full_logits_returned": False,
                 }
+            if config.range_gpu_verifier_ownership:
+                worker.stage = f"position_{position}_gpu_verifier_ownership_closure"
+                closure = _gpu_verifier_receipt_closure(
+                    report,
+                    getattr(cache, "proof_cache_telemetry", None),
+                )
+                report["gpu_verifier_ownership_closure"] = closure
+                if closure["closed"] is not True:
+                    raise FullDepthError(
+                        "Python 延迟所有权与 Rust 计算前验证回执未闭合；禁止提交token/checkpoint"
+                    )
+                worker.stage = f"position_{position}_ready_to_commit"
             if config.checkpoint_path is None:
                 decoder.commit(
                     output_token_id=computation.predicted_token_id,
@@ -2095,11 +2241,7 @@ def execute(
                     "Vulkan worker cleanup failed; execution report retained but run is not promotable"
                 )
     report["range_proof_cache"] = getattr(cache, "proof_cache_telemetry", None)
-    if (
-        config.range_gpu_verifier_ownership
-        and report.get("status") == "complete"
-        and isinstance(report["range_proof_cache"], Mapping)
-    ):
+    if config.range_gpu_verifier_ownership and report.get("status") == "complete":
         closure = _gpu_verifier_receipt_closure(
             report,
             report["range_proof_cache"],
@@ -2150,6 +2292,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--vulkan-writeback-no-cpu-verify", action="store_true")
     parser.add_argument("--vulkan-writeback-no-cpu-fallback", action="store_true")
     parser.add_argument("--vulkan-writeback-fast-production", action="store_true")
+    parser.add_argument(
+        "--vulkan-writeback-batch-verify-payloads",
+        action="store_true",
+    )
     parser.add_argument("--vulkan-final-head-worker", type=Path)
     parser.add_argument("--vulkan-final-head-timeout-seconds", type=float, default=60.0)
     parser.add_argument("--vulkan-final-head-scratch", type=Path)
@@ -2202,6 +2348,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             vulkan_writeback_verify_cpu=not args.vulkan_writeback_no_cpu_verify,
             vulkan_writeback_cpu_fallback=not args.vulkan_writeback_no_cpu_fallback,
             vulkan_writeback_fast_production=args.vulkan_writeback_fast_production,
+            vulkan_writeback_batch_verify_payloads=(
+                args.vulkan_writeback_batch_verify_payloads
+            ),
             vulkan_final_head_worker=args.vulkan_final_head_worker,
             vulkan_final_head_timeout_seconds=args.vulkan_final_head_timeout_seconds,
             vulkan_final_head_scratch=args.vulkan_final_head_scratch,

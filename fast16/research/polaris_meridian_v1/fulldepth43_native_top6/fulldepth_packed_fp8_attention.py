@@ -21,6 +21,8 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import torch
 
+from fast16.research.polaris_meridian_v1.s14_range_pack import online_range
+
 
 PROTOCOL = "polaris-fulldepth43-packed-fp8-attention-v1"
 WORKER_ARG = "--fulldepth43-packed-fp8-attention-worker"
@@ -112,6 +114,25 @@ def _require_payload_verification(
     observed = {key: document.get(key) for key in _PAYLOAD_VERIFICATION_KEYS}
     if observed != expected:
         raise FullDepthPackedFp8Error(f"{label} GPU计算前 payload 验证回执漂移")
+
+
+def _python_deferred_identity_evidence(
+    assets: Sequence["PackedFp8Asset"],
+) -> dict[str, str]:
+    expected = _expected_payload_verification(assets)
+    return {
+        "python_expected_payload_identity_sha256": expected[
+            "payload_identity_sha256"
+        ],
+        "python_deferred_identity_multiset_contract": (
+            online_range.DEFERRED_IDENTITY_MULTISET_CONTRACT
+        ),
+        "python_deferred_identity_multiset_sum_u256": (
+            online_range.deferred_identity_multiset_sum_u256(
+                (asset.tensor, asset.bytes, asset.sha256) for asset in assets
+            )
+        ),
+    }
 
 
 def _strict_json(line: str) -> dict[str, Any]:
@@ -758,6 +779,7 @@ class PersistentFullDepthPackedFp8Attention:
                 )
             except FullDepthPackedFp8Error as error:
                 self._fail(str(error))
+            item.update(_python_deferred_identity_evidence([weight, scale]))
             outputs[suffix] = self.arena.read_output(
                 output_view, item["output_sha256"]
             )
@@ -952,6 +974,7 @@ class PersistentFullDepthPackedFp8Attention:
                 )
             except FullDepthPackedFp8Error as error:
                 self._fail(str(error))
+            slot.update(_python_deferred_identity_evidence([weight, scale]))
         output = self.arena.read_output(output_view, response["output_sha256"])
         self.epoch += 1
         return output, dict(response)
@@ -1053,6 +1076,7 @@ class PersistentFullDepthPackedFp8Attention:
             self._fail(str(error))
         output = self.arena.read_output(output_view, response["output_sha256"])
         evidence = dict(response)
+        evidence.update(_python_deferred_identity_evidence([weight, scale]))
         self.epoch += 1
         return output, evidence
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
@@ -27,6 +28,78 @@ from fast16.research.polaris_meridian_v1.s14_range_pack import online_range
 
 PAYLOAD = b"\x10\x20\x30\x40"
 OWNER = "vulkan_attention_worker"
+PAYLOAD_IDENTITY_CONTRACT = (
+    "sha256(v1_nul || sorted(length_le64(tensor),tensor,bytes_le64,expected_sha256_ascii))"
+)
+PAYLOAD_VERIFICATION_SCOPE = "all_listed_payloads_before_corresponding_gpu_compute"
+
+
+def payload_identity_sha256(identities: tuple[tuple[str, int, str], ...]) -> str:
+    digest = hashlib.sha256()
+    digest.update(b"polaris-rust-vulkan-payload-identity-v1\0")
+    for tensor, byte_count, sha256 in sorted(identities):
+        encoded = tensor.encode("utf-8")
+        digest.update(len(encoded).to_bytes(8, "little", signed=False))
+        digest.update(encoded)
+        digest.update(byte_count.to_bytes(8, "little", signed=False))
+        digest.update(sha256.encode("ascii"))
+    return digest.hexdigest()
+
+
+def verification_receipt(
+    identities: tuple[tuple[str, int, str], ...],
+) -> dict[str, Any]:
+    identity = payload_identity_sha256(identities)
+    return {
+        "verification_owner": "rust_vulkan_worker",
+        "verified_before_compute": True,
+        "verified_count": len(identities),
+        "verified_bytes": sum(item[1] for item in identities),
+        "payload_identity_sha256": identity,
+        "python_expected_payload_identity_sha256": identity,
+        "payload_identity_contract": PAYLOAD_IDENTITY_CONTRACT,
+        "verification_scope": PAYLOAD_VERIFICATION_SCOPE,
+        "python_deferred_identity_multiset_contract": (
+            online_range.DEFERRED_IDENTITY_MULTISET_CONTRACT
+        ),
+        "python_deferred_identity_multiset_sum_u256": (
+            online_range.deferred_identity_multiset_sum_u256(identities)
+        ),
+    }
+
+
+def closure_telemetry(
+    attention: tuple[tuple[str, int, str], ...],
+    moe: tuple[tuple[str, int, str], ...],
+) -> dict[str, Any]:
+    rows = {
+        "vulkan_attention_worker": {
+            "ranges": len(attention),
+            "bytes": sum(item[1] for item in attention),
+            "identity_multiset_sum_u256": (
+                online_range.deferred_identity_multiset_sum_u256(attention)
+            ),
+        },
+        "vulkan_moe_worker": {
+            "ranges": len(moe),
+            "bytes": sum(item[1] for item in moe),
+            "identity_multiset_sum_u256": (
+                online_range.deferred_identity_multiset_sum_u256(moe)
+            ),
+        },
+    }
+    global_identity_sum = sum(
+        int(row["identity_multiset_sum_u256"], 16) for row in rows.values()
+    ) % online_range.DEFERRED_IDENTITY_MULTISET_MODULUS
+    return {
+        "deferred": sum(row["ranges"] for row in rows.values()),
+        "bytes_deferred": sum(row["bytes"] for row in rows.values()),
+        "deferred_identity_multiset_contract": (
+            online_range.DEFERRED_IDENTITY_MULTISET_CONTRACT
+        ),
+        "deferred_identity_multiset_sum_u256": f"{global_identity_sum:064x}",
+        "deferred_by_owner": rows,
+    }
 
 
 class FakeResponse:
@@ -138,6 +211,25 @@ class DeferredGpuVerificationTests(unittest.TestCase):
         self.assertEqual(cache.proof_cache_telemetry["full_hashes"], 0)
         self.assertEqual(cache.proof_cache_telemetry["deferred"], 1)
         self.assertEqual(cache.proof_cache_telemetry["bytes_deferred"], len(PAYLOAD))
+        expected_sum = online_range.deferred_identity_multiset_sum_u256(
+            [
+                (
+                    self.entry["tensor"],
+                    len(PAYLOAD),
+                    hashlib.sha256(PAYLOAD).hexdigest(),
+                )
+            ]
+        )
+        telemetry = cache.proof_cache_telemetry
+        self.assertEqual(
+            telemetry["deferred_by_owner"][OWNER][
+                "identity_multiset_sum_u256"
+            ],
+            expected_sum,
+        )
+        self.assertEqual(
+            telemetry["deferred_identity_multiset_sum_u256"], expected_sum
+        )
 
     def test_cache_miss_still_performs_complete_python_sha_before_publish(self) -> None:
         cache = self.cache(allow_fetch=True, deferred=True)
@@ -278,12 +370,70 @@ class DeferredGpuVerificationTests(unittest.TestCase):
                     ExecutionConfig(**{**valid.__dict__, **changes}).validate()
 
     def test_python_deferred_ownership_closes_to_rust_receipts(self) -> None:
-        receipt = {
-            "verification_owner": "rust_vulkan_worker",
-            "verified_before_compute": True,
-            "verified_count": 2,
-            "verified_bytes": 12,
+        attention = (
+            ("layers.0.attn.weight", 8, "1" * 64),
+            ("layers.0.attn.scale", 4, "2" * 64),
+        )
+        moe = tuple(
+            (f"layers.0.ffn.payload.{index}", 2, f"{index % 16:x}" * 64)
+            for index in range(42)
+        )
+        attention_receipt = verification_receipt(attention)
+        moe_receipt = verification_receipt(moe)
+        report = {
+            "tokens": [
+                {
+                    "position": 0,
+                    "layers": [
+                        {
+                            "layer": 0,
+                            "vulkan_attention": [attention_receipt],
+                            "vulkan_writeback": {
+                                "payload_verification": moe_receipt
+                            },
+                        }
+                    ],
+                }
+            ]
         }
+        telemetry = closure_telemetry(attention, moe)
+        closed = _gpu_verifier_receipt_closure(report, telemetry)
+        self.assertTrue(closed["closed"])
+        telemetry["deferred_by_owner"]["vulkan_moe_worker"]["bytes"] = 85
+        self.assertFalse(_gpu_verifier_receipt_closure(report, telemetry)["closed"])
+
+    def test_deferred_identity_multiset_is_order_independent_and_counts_duplicates(
+        self,
+    ) -> None:
+        first = ("layers.0.attn.weight", 8, "1" * 64)
+        second = ("layers.0.attn.scale", 4, "2" * 64)
+        forward = online_range.deferred_identity_multiset_sum_u256((first, second))
+        reversed_order = online_range.deferred_identity_multiset_sum_u256(
+            (second, first)
+        )
+        repeated = online_range.deferred_identity_multiset_sum_u256(
+            (first, second, first)
+        )
+        first_identity = online_range.deferred_payload_identity_u256(*first)
+
+        self.assertEqual(forward, reversed_order)
+        self.assertEqual(
+            int(repeated, 16),
+            (int(forward, 16) + first_identity)
+            % online_range.DEFERRED_IDENTITY_MULTISET_MODULUS,
+        )
+        self.assertNotEqual(repeated, forward)
+
+    def test_closure_rejects_forged_identity_and_missing_telemetry(self) -> None:
+        real_identities = (
+            ("layers.0.real.weight", 8, "1" * 64),
+            ("layers.0.real.scale", 4, "2" * 64),
+        )
+        forged_identities = (
+            ("layers.0.forged.weight", 8, "3" * 64),
+            ("layers.0.forged.scale", 4, "4" * 64),
+        )
+        receipt = verification_receipt(forged_identities)
         report = {
             "tokens": [
                 {
@@ -292,28 +442,62 @@ class DeferredGpuVerificationTests(unittest.TestCase):
                         {
                             "layer": 0,
                             "vulkan_attention": [receipt],
-                            "vulkan_writeback": {
-                                "payload_verification": {
-                                    **receipt,
-                                    "verified_count": 42,
-                                    "verified_bytes": 84,
-                                }
-                            },
+                            "vulkan_writeback": {"payload_verification": receipt},
                         }
                     ],
                 }
             ]
         }
-        telemetry = {
-            "deferred_by_owner": {
-                "vulkan_attention_worker": {"ranges": 2, "bytes": 12},
-                "vulkan_moe_worker": {"ranges": 42, "bytes": 84},
-            }
+        telemetry = closure_telemetry(real_identities, real_identities)
+        forged = _gpu_verifier_receipt_closure(report, telemetry)
+        self.assertFalse(forged["closed"])
+        self.assertFalse(forged["invalid_receipts"])
+        self.assertNotEqual(
+            forged["python_receipt_identity_multiset_sum_u256"],
+            forged["expected_deferred_identity_multiset_sum_u256"],
+        )
+
+        missing = _gpu_verifier_receipt_closure({"tokens": []}, None)
+        self.assertFalse(missing["closed"])
+        self.assertTrue(missing["telemetry_errors"])
+
+    def test_closure_rejects_extra_owner_and_top_level_total_drift(self) -> None:
+        identities = (("layers.0.payload", 12, "a" * 64),)
+        receipt = verification_receipt(identities)
+        report = {
+            "tokens": [
+                {
+                    "position": 0,
+                    "layers": [
+                        {
+                            "layer": 0,
+                            "vulkan_attention": [receipt],
+                            "vulkan_writeback": {"payload_verification": receipt},
+                        }
+                    ],
+                }
+            ]
         }
-        closed = _gpu_verifier_receipt_closure(report, telemetry)
-        self.assertTrue(closed["closed"])
-        telemetry["deferred_by_owner"]["vulkan_moe_worker"]["bytes"] = 85
-        self.assertFalse(_gpu_verifier_receipt_closure(report, telemetry)["closed"])
+        baseline = closure_telemetry(identities, identities)
+        self.assertTrue(_gpu_verifier_receipt_closure(report, baseline)["closed"])
+
+        extra_owner = copy.deepcopy(baseline)
+        extra_owner["deferred_by_owner"]["unexpected_worker"] = {
+            "ranges": 0,
+            "bytes": 0,
+            "identity_multiset_sum_u256": "0" * 64,
+        }
+        self.assertFalse(
+            _gpu_verifier_receipt_closure(report, extra_owner)["closed"]
+        )
+
+        for field in ("deferred", "bytes_deferred"):
+            with self.subTest(field=field):
+                drift = copy.deepcopy(baseline)
+                drift[field] += 1
+                self.assertFalse(
+                    _gpu_verifier_receipt_closure(report, drift)["closed"]
+                )
 
 
 if __name__ == "__main__":

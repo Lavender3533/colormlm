@@ -50,6 +50,8 @@ print(json.dumps({
     "device": "fixture",
     "persistent_context": True,
     "official_boundary_graph": True,
+    "batch_payload_verification": True,
+    "batch_payload_verification_concurrency_limit": 8,
 }), flush=True)
 for line in sys.stdin:
     request = json.loads(line)
@@ -58,6 +60,8 @@ for line in sys.stdin:
     output = manifest.parent / "vulkan_moe_branch.bf16le.bin"
     payload = bytes(8192)
     output.write_bytes(payload)
+    batch_enabled = request.get("batch_verify_payloads") is True
+    payload_count = manifest_document["payload_count"]
     print(json.dumps({
         "protocol": protocol,
         "request_id": request["request_id"],
@@ -79,6 +83,16 @@ for line in sys.stdin:
         "boundaries": ["fixture"],
         "expansion_status": "single_real_layer_writeback_only",
         "claim_limit": "fixture",
+        "batch_payload_verification": {
+            "enabled": batch_enabled,
+            "batch_entries": payload_count if batch_enabled else 0,
+            "batch_hits": 0,
+            "batch_misses": payload_count if batch_enabled else 0,
+            "batch_disk_bytes_read": 3 if batch_enabled else 0,
+            "concurrency_limit": 8,
+            "followup_cached_loader_hits": payload_count if batch_enabled else 0,
+            "all_verified_before_compute": batch_enabled,
+        },
         **verification_receipt(manifest_document["payloads"]),
     }), flush=True)
 """
@@ -95,6 +109,7 @@ class VulkanWritebackTests(unittest.TestCase):
                     "position": position,
                     "layer": layer,
                     "input_token_id": token_id,
+                    "payload_count": 2,
                     "payloads": [
                         {
                             "tensor": f"layers.{layer}.fixture.scale",
@@ -133,6 +148,26 @@ class VulkanWritebackTests(unittest.TestCase):
                 self.assertTrue(torch.equal(tensor, torch.zeros_like(tensor)))
                 self.assertEqual(worker.counter, 1)
                 self.assertTrue(evidence["persistent_context"])
+                self.assertFalse(evidence["batch_payload_verification"]["enabled"])
+
+    def test_explicit_batch_verification_receipt_closes_before_compute(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script = root / "fake_worker.py"
+            script.write_text(textwrap.dedent(FAKE_WORKER), encoding="utf-8", newline="\n")
+            manifest = self._write_manifest(root, position=0, layer=42, token_id=0)
+            with PersistentVulkanWriteback(
+                (sys.executable, "-X", "utf8", str(script)),
+                timeout_seconds=5,
+                batch_verify_payloads=True,
+            ) as worker:
+                _, evidence = worker.execute(manifest)
+            receipt = evidence["batch_payload_verification"]
+            self.assertTrue(receipt["enabled"])
+            self.assertEqual(receipt["batch_entries"], 2)
+            self.assertEqual(receipt["batch_misses"], 2)
+            self.assertEqual(receipt["followup_cached_loader_hits"], 2)
+            self.assertTrue(receipt["all_verified_before_compute"])
 
     def test_persistent_protocol_accepts_next_token_after_layer_42(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
