@@ -1,0 +1,118 @@
+{
+  "format": "polaris-fulldepth43-static-prefetch-ab-v1",
+  "date": "2026-08-02",
+  "status": "complete",
+  "profile": "FullDepth43/native-top6",
+  "device": "AMD Radeon RX 5700 XT",
+  "base_revision": "56b55b42949fde566cb17129a34ab2e3e756702a",
+  "changed_variable": "range_static_prefetch",
+  "common_configuration": {
+    "token_count": 2,
+    "range_workers": 3,
+    "vulkan_attention_shared_batch": true,
+    "vulkan_attention_output_chain": true,
+    "vulkan_moe_writeback_all_layers": true,
+    "vulkan_final_head": true
+  },
+  "baseline": {
+    "range_static_prefetch": false,
+    "execution_seconds": 65.79615460000059,
+    "token_wall_seconds": 63.77337290000287,
+    "per_token_wall_seconds": [
+      41.02223370000138,
+      22.75113920000149
+    ],
+    "output_token_ids": [5, 223],
+    "range_prepare_layer_seconds": 9.004276600055164,
+    "range_fetch_routed_seconds": 15.554674300001352,
+    "completed_layers": 86,
+    "attention_projections": 472,
+    "vulkan_moe_writebacks": 86,
+    "cpu_fallbacks": 0,
+    "position_1_gpu_slot_hits": 236,
+    "position_1_payload_uploaded_bytes": 0,
+    "range_proof_cache": {
+      "hits": 1737,
+      "full_hashes": 4487,
+      "bytes_saved": 8174608604,
+      "bytes_hashed": 14297784540
+    },
+    "summary_sha256": "12b7641ea4bcff6d4d53dc5f6bddcc0aa59d3f2771b786acbfcfe8b269bf7eeb",
+    "model_report_sha256": "9453b8dedc3c11142a4ccbc4920bc92d237d4bbc73eaf31680ca6fa4a1a4e6b4",
+    "runtime_profile_sha256": "abf5b9262cd763e8668270d02b56d141a41142f86ef9a94fb10bb6630fb4c687"
+  },
+  "candidate": {
+    "range_static_prefetch": true,
+    "execution_seconds": 61.864845699994476,
+    "token_wall_seconds": 59.73737329999858,
+    "per_token_wall_seconds": [
+      37.47331810000469,
+      22.26405519999389
+    ],
+    "output_token_ids": [5, 223],
+    "range_prepare_layer_seconds": 0.14352530000905972,
+    "range_fetch_routed_seconds": 15.816868399939267,
+    "prefetch_events": 84,
+    "prefetch_statuses": ["consumed"],
+    "prefetch_fetch_seconds": 9.635413200012408,
+    "prefetch_formal_wait_seconds": 0.0005364999524317682,
+    "prefetch_hidden_seconds": 9.634876700059976,
+    "position_0_prefetch": {
+      "events": 42,
+      "fetch_seconds": 6.982330500031821,
+      "formal_wait_seconds": 0.00024930000654421747,
+      "hidden_seconds": 6.982081200025277
+    },
+    "position_1_prefetch": {
+      "events": 42,
+      "fetch_seconds": 2.6530826999805868,
+      "formal_wait_seconds": 0.0002871999458875507,
+      "hidden_seconds": 2.652795500034699
+    },
+    "completed_layers": 86,
+    "attention_projections": 472,
+    "vulkan_moe_writebacks": 86,
+    "cpu_fallbacks": 0,
+    "position_1_gpu_slot_hits": 236,
+    "position_1_payload_uploaded_bytes": 0,
+    "range_proof_cache": {
+      "hits": 1737,
+      "full_hashes": 4487,
+      "bytes_saved": 8174608604,
+      "bytes_hashed": 14297784540
+    },
+    "summary_sha256": "51f3929884753806c0e22c0dc9ff088df7cd60f912f4a651a86c9e32ef640ece",
+    "model_report_sha256": "109380c1b5ef23a3b81a130de9f4bff03e6a1909c70d4e91de083d8fda82dd40",
+    "runtime_profile_sha256": "33c0ff60c2a457883c4abf5f8ea1511dd7c2721ef405c18096b9b5369e661289"
+  },
+  "delta": {
+    "seconds_saved": 3.9313089000061154,
+    "wall_reduction_fraction": 0.0597498276898705,
+    "throughput_increase_fraction": 0.06354673410276468,
+    "position_0_wall_reduction_fraction": 0.0865120028799546,
+    "position_1_wall_reduction_fraction": 0.021409213654126243,
+    "range_prepare_layer_reduction_fraction": 0.9840603186259094
+  },
+  "safety_contract": {
+    "prefetch_scope": ["next_layer.non_expert", "next_layer.router"],
+    "forbidden_scope": ["experts", "shared", "final"],
+    "distinct_fetch_and_coordinator_pools": true,
+    "future_cannot_mutate_route_first_state": true,
+    "future_failure_prevents_layer_commit": true,
+    "cleanup_failure_cannot_replace_primary_token_failure": true,
+    "concurrent_token_sessions_rejected": true
+  },
+  "tests": {
+    "python_full_pytest": "79 passed, 9 subtests passed",
+    "static_prefetch_contracts": "9 passed",
+    "python_compile": "pass",
+    "git_diff_check": "pass",
+    "utf8_no_bom": "pass"
+  },
+  "interpretation": {
+    "causal_signal": "84/84 scheduled static prefetches were consumed; total formal wait was 0.0005365 seconds while 9.6349 seconds of fetch work completed before formal prepare",
+    "contention": "range_fetch_routed and other concurrent phases did not improve, so the 9.6349 seconds hidden-work sum must not be reported as wall-time savings",
+    "promotion": "promote as an opt-in candidate because complete adjacent wall time improved 5.97% with identical short-trajectory outputs and proof telemetry"
+  },
+  "claim_limit": "This is a real two-token end-to-end speed promotion only. It does not establish interactive throughput, quality improvement, long-context capability, Kimi frontend transfer, or Claude/GPT parity."
+}

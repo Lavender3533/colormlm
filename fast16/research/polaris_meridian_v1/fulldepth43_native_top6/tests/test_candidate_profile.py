@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import time
 from pathlib import Path
@@ -177,10 +178,10 @@ def test_materialized_fp8_cache_resists_sequential_scan_pollution(tmp_path: Path
 
 
 @pytest.mark.parametrize(
-    ("token_count", "execution_seconds", "token_walls"),
+    ("token_count", "execution_seconds", "token_walls", "range_static_prefetch"),
     (
-        (1, 4.0, [3.5]),
-        (3, 9.0, [3.5, 2.5, 2.0]),
+        (1, 4.0, [3.5], False),
+        (3, 9.0, [3.5, 2.5, 2.0], True),
     ),
 )
 def test_profiled_candidate_runs_continuous_tokens_and_keeps_single_token_compatibility(
@@ -189,6 +190,7 @@ def test_profiled_candidate_runs_continuous_tokens_and_keeps_single_token_compat
     token_count: int,
     execution_seconds: float,
     token_walls: list[float],
+    range_static_prefetch: bool,
 ) -> None:
     worker = tmp_path / "writeback.exe"
     attention_worker = tmp_path / "attention.exe"
@@ -250,6 +252,7 @@ def test_profiled_candidate_runs_continuous_tokens_and_keeps_single_token_compat
         worker=worker,
         output_root=output_root,
         token_count=token_count,
+        range_static_prefetch=range_static_prefetch,
         vulkan_attention_worker=attention_worker,
         vulkan_attention_scratch=attention_scratch,
         vulkan_attention_shared_batch=True,
@@ -261,6 +264,7 @@ def test_profiled_candidate_runs_continuous_tokens_and_keeps_single_token_compat
     assert len(observed_configs) == 1
     config = observed_configs[0]
     assert config.token_count == token_count
+    assert config.range_static_prefetch is range_static_prefetch
     assert config.vulkan_attention_worker == attention_worker.resolve()
     assert config.vulkan_attention_scratch == attention_scratch.resolve()
     assert config.vulkan_attention_shared_batch is True
@@ -357,6 +361,7 @@ def test_profiled_candidate_cli_forwards_continuous_head_options(
             str(attention_scratch),
             "--vulkan-attention-shared-batch",
             "--vulkan-attention-output-chain",
+            "--range-static-prefetch",
             "--vulkan-final-head-worker",
             str(final_worker),
             "--vulkan-final-head-scratch",
@@ -368,5 +373,32 @@ def test_profiled_candidate_cli_forwards_continuous_head_options(
     assert captured["vulkan_attention_scratch"] == attention_scratch
     assert captured["vulkan_attention_shared_batch"] is True
     assert captured["vulkan_attention_output_chain"] is True
+    assert captured["range_static_prefetch"] is True
     assert captured["vulkan_final_head_worker"] == final_worker
     assert captured["vulkan_final_head_scratch"] == scratch
+
+
+def test_profiled_candidate_range_static_prefetch_defaults_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    parameter = inspect.signature(
+        candidate_runner.run_profiled_candidate
+    ).parameters["range_static_prefetch"]
+    assert parameter.default is False
+
+    captured = {}
+
+    def fake_run(**kwargs):
+        captured.update(kwargs)
+        return {"status": "complete"}
+
+    monkeypatch.setattr(candidate_runner, "run_profiled_candidate", fake_run)
+    assert candidate_runner.main(
+        [
+            "--worker",
+            "worker.exe",
+            "--output-root",
+            "output",
+        ]
+    ) == 0
+    assert captured["range_static_prefetch"] is False

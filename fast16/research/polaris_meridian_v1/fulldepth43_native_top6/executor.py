@@ -12,9 +12,10 @@ import hashlib
 import json
 import os
 import tempfile
+import threading
 import time
 import traceback
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -93,6 +94,12 @@ class RoutedLayer:
     shared: tuple[online_range.CachedRange, ...]
 
 
+@dataclass(frozen=True)
+class StaticPrefetchResult:
+    prerequisites: LayerPrerequisites
+    fetch_seconds: float
+
+
 class FullDepthRangeSession:
     """固定 43 层 route-first 状态机；路由前无 expert 读取入口。"""
 
@@ -104,6 +111,9 @@ class FullDepthRangeSession:
         profile: ExecutionProfile = FULLDEPTH43_NATIVE_TOP6,
         range_attempts: int = 4,
         range_workers: int = 3,
+        range_pool: ThreadPoolExecutor | None = None,
+        prefetch_pool: ThreadPoolExecutor | None = None,
+        owns_pools: bool = True,
     ) -> None:
         profile.validate()
         validate_catalog(catalog)
@@ -114,6 +124,20 @@ class FullDepthRangeSession:
             raise FullDepthError("Range attempts/workers 必须分别为正数和 1..8")
         self.range_attempts = range_attempts
         self.range_workers = range_workers
+        if (range_pool is None) != (prefetch_pool is None):
+            raise FullDepthError("静态预取必须同时提供 Range 池与独立协调池")
+        if range_pool is not None and range_pool is prefetch_pool:
+            raise FullDepthError("Range 池与静态预取协调池必须是两个独立线程池")
+        self.range_pool = range_pool
+        self.prefetch_pool = prefetch_pool
+        self.owns_pools = owns_pools
+        self._prefetch_future: Future[StaticPrefetchResult] | None = None
+        self._prefetch_layer: int | None = None
+        self._prefetch_token_id: int | None = None
+        self._prefetch_scheduled_after_layer: int | None = None
+        self._prefetch_scheduled_at: float | None = None
+        self._closed = False
+        self.prefetch_events: list[dict[str, Any]] = []
         self.phase = SessionPhase.INIT
         self.layer_index = 0
         self.token_id: int | None = None
@@ -139,8 +163,57 @@ class FullDepthRangeSession:
         frozen = tuple(entries)
         if self.range_workers == 1 or len(frozen) <= 1:
             return tuple(self._fetch_one(entry) for entry in frozen)
+        range_pool = getattr(self, "range_pool", None)
+        if range_pool is not None:
+            return tuple(range_pool.map(self._fetch_one, frozen))
         with ThreadPoolExecutor(max_workers=self.range_workers, thread_name_prefix="fd43-range") as pool:
             return tuple(pool.map(self._fetch_one, frozen))
+
+    def _fetch_static(self, layer: int, token_id: int) -> StaticPrefetchResult:
+        started = time.perf_counter()
+        row = self.catalog["layers"][str(layer)]
+        prerequisites = LayerPrerequisites(
+            layer=layer,
+            token_id=token_id,
+            non_expert=self._fetch_all(row["non_expert"]),
+            router=self._fetch_all(row["router"]),
+        )
+        return StaticPrefetchResult(
+            prerequisites=prerequisites,
+            fetch_seconds=time.perf_counter() - started,
+        )
+
+    def schedule_next_static(self, layer: int, token_id: int) -> bool:
+        """仅在当前 routed fetch 成功后调度紧邻下一层静态页。"""
+
+        if self._closed:
+            raise FullDepthError("Range session 已关闭")
+        if self.range_pool is None or self.prefetch_pool is None:
+            return False
+        if self.phase is not SessionPhase.LAYER_READY:
+            raise FullDepthError("静态预取只允许在当前层 routed fetch 完成后调度")
+        if token_id != self.token_id or self.current_layer is None:
+            raise FullDepthError("静态预取 token 与当前层状态不一致")
+        next_index = self.layer_index + 1
+        if next_index >= len(self.profile.layers):
+            return False
+        expected = self.profile.layers[next_index]
+        if layer != expected:
+            raise FullDepthError(
+                f"静态预取只能读取紧邻下一层: expected={expected}, got={layer}"
+            )
+        if self._prefetch_future is not None:
+            raise FullDepthError("上一项静态预取尚未正式消费")
+        self._prefetch_layer = layer
+        self._prefetch_token_id = token_id
+        self._prefetch_scheduled_after_layer = self.current_layer
+        self._prefetch_scheduled_at = time.perf_counter()
+        self._prefetch_future = self.prefetch_pool.submit(
+            self._fetch_static,
+            layer,
+            token_id,
+        )
+        return True
 
     def prepare_embedding_row(self, token_id: int) -> online_range.CachedRange:
         if self.phase is not SessionPhase.INIT:
@@ -152,13 +225,54 @@ class FullDepthRangeSession:
     def prepare_layer(self, layer: int, token_id: int) -> LayerPrerequisites:
         if self.phase is not SessionPhase.AWAITING_LAYER or layer != self.current_layer:
             raise FullDepthError(f"层顺序错误: expected={self.current_layer}, got={layer}")
-        row = self.catalog["layers"][str(layer)]
-        result = LayerPrerequisites(
-            layer=layer,
-            token_id=token_id,
-            non_expert=self._fetch_all(row["non_expert"]),
-            router=self._fetch_all(row["router"]),
-        )
+        future = self._prefetch_future
+        if future is None:
+            if self.prefetch_pool is not None and self.layer_index > 0:
+                raise FullDepthError("启用静态预取后，非首层 prepare 缺少对应 Future")
+            result = self._fetch_static(layer, token_id).prerequisites
+        else:
+            if layer != self._prefetch_layer or token_id != self._prefetch_token_id:
+                raise FullDepthError("正式 prepare 与已调度静态预取的 layer/token 不一致")
+            wait_started = time.perf_counter()
+            try:
+                prefetched = future.result()
+            except BaseException as error:
+                self.prefetch_events.append(
+                    {
+                        "layer": layer,
+                        "scheduled_after_layer": self._prefetch_scheduled_after_layer,
+                        "status": "failed",
+                        "formal_wait_seconds": time.perf_counter() - wait_started,
+                        "type": type(error).__name__,
+                        "message": str(error),
+                    }
+                )
+                raise
+            formal_wait = time.perf_counter() - wait_started
+            result = prefetched.prerequisites
+            scheduled_at = self._prefetch_scheduled_at
+            self.prefetch_events.append(
+                {
+                    "layer": layer,
+                    "scheduled_after_layer": self._prefetch_scheduled_after_layer,
+                    "status": "consumed",
+                    "fetch_seconds": prefetched.fetch_seconds,
+                    "formal_wait_seconds": formal_wait,
+                    "hidden_seconds": max(prefetched.fetch_seconds - formal_wait, 0.0),
+                    "schedule_to_consume_seconds": (
+                        None
+                        if scheduled_at is None
+                        else time.perf_counter() - scheduled_at
+                    ),
+                    "non_expert_count": len(result.non_expert),
+                    "router_count": len(result.router),
+                }
+            )
+            self._prefetch_future = None
+            self._prefetch_layer = None
+            self._prefetch_token_id = None
+            self._prefetch_scheduled_after_layer = None
+            self._prefetch_scheduled_at = None
         self.token_id = token_id
         self.route = None
         self.phase = SessionPhase.LAYER_BASE_READY
@@ -234,6 +348,30 @@ class FullDepthRangeSession:
         result = self._fetch_all(self.catalog["boundary"]["final"])
         self.phase = SessionPhase.COMPLETE
         return result
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        first_error: BaseException | None = None
+        future = self._prefetch_future
+        if future is not None:
+            if not future.cancel():
+                try:
+                    future.result()
+                except BaseException as error:
+                    first_error = error
+        if self.owns_pools:
+            for pool in (self.prefetch_pool, self.range_pool):
+                if pool is None:
+                    continue
+                try:
+                    pool.shutdown(wait=True, cancel_futures=True)
+                except BaseException as error:
+                    if first_error is None:
+                        first_error = error
+        if first_error is not None:
+            raise first_error
 
 
 class FullDepthNativeLayerReference(s14.NativeLayerReference):
@@ -581,6 +719,7 @@ class ExecutionConfig:
     head_chunk_size: int = 4096
     range_attempts: int = 4
     range_workers: int = 3
+    range_static_prefetch: bool = False
     forced_prefill_path: Path | None = None
     vulkan_bridge_capture: Path | None = None
     vulkan_bridge_layer: int = 42
@@ -950,6 +1089,11 @@ class FullDepthTokenWorker:
         self._writeback: PersistentVulkanWriteback | None = None
         self._attention: PersistentFullDepthPackedFp8Attention | None = None
         self._attention_arena_path: Path | None = None
+        self._range_pool: ThreadPoolExecutor | None = None
+        self._range_prefetch_pool: ThreadPoolExecutor | None = None
+        self._active_range_session: FullDepthRangeSession | None = None
+        self._token_call_lock = threading.RLock()
+        self.range_cleanup_errors: list[dict[str, str]] = []
         self.attention_layers: list[int] = []
         self.attention_projection_count = 0
         self._started = False
@@ -968,6 +1112,10 @@ class FullDepthTokenWorker:
         return None if self._attention is None else self._attention.hello
 
     def start(self) -> None:
+        with self._token_call_lock:
+            self._start_locked()
+
+    def _start_locked(self) -> None:
         if self._closed:
             raise FullDepthError("FullDepth token worker 已关闭")
         if self._started:
@@ -1024,20 +1172,61 @@ class FullDepthTokenWorker:
                 raise FullDepthError(
                     f"Vulkan worker numeric_mode 漂移，期望 {expected_mode}"
                 )
+        if self.config.range_static_prefetch:
+            self._range_pool = ThreadPoolExecutor(
+                max_workers=self.config.range_workers,
+                thread_name_prefix="fd43-range-persistent",
+            )
+            self._range_prefetch_pool = ThreadPoolExecutor(
+                max_workers=1,
+                thread_name_prefix="fd43-static-prefetch",
+            )
         self._started = True
 
     def close(self) -> None:
+        with self._token_call_lock:
+            self._close_locked()
+
+    def _close_locked(self) -> None:
         if self._closed:
             return
         self._closed = True
+        first_error: BaseException | None = None
+
+        def cleanup(action: Callable[[], None]) -> None:
+            nonlocal first_error
+            try:
+                action()
+            except BaseException as error:
+                if first_error is None:
+                    first_error = error
+
+        if self._active_range_session is not None:
+            cleanup(self._active_range_session.close)
+            self._active_range_session = None
+        if self._range_prefetch_pool is not None:
+            cleanup(
+                lambda: self._range_prefetch_pool.shutdown(
+                    wait=True,
+                    cancel_futures=True,
+                )
+            )
+            self._range_prefetch_pool = None
+        if self._range_pool is not None:
+            cleanup(
+                lambda: self._range_pool.shutdown(wait=True, cancel_futures=True)
+            )
+            self._range_pool = None
         if self._writeback is not None:
-            self._writeback.close()
+            cleanup(self._writeback.close)
         if self._final_head is not None:
-            self._final_head.close()
+            cleanup(self._final_head.close)
         if self._attention is not None:
-            self._attention.close()
+            cleanup(self._attention.close)
         if self._attention_arena_path is not None:
-            self._attention_arena_path.unlink(missing_ok=True)
+            cleanup(lambda: self._attention_arena_path.unlink(missing_ok=True))
+        if first_error is not None:
+            raise first_error
 
     def _notify(self, token_report: dict[str, Any]) -> None:
         self.last_token_report = token_report
@@ -1069,6 +1258,19 @@ class FullDepthTokenWorker:
         input_token_id: int,
         previous: Mapping[int, s14.LayerRuntimeState],
     ) -> FullDepthTokenComputation:
+        if not self._token_call_lock.acquire(blocking=False):
+            raise FullDepthError("FullDepth token worker 不允许并发 token session")
+        try:
+            return self._call_one(position, input_token_id, previous)
+        finally:
+            self._token_call_lock.release()
+
+    def _call_one(
+        self,
+        position: int,
+        input_token_id: int,
+        previous: Mapping[int, s14.LayerRuntimeState],
+    ) -> FullDepthTokenComputation:
         self.start()
         if (
             isinstance(input_token_id, bool)
@@ -1077,13 +1279,50 @@ class FullDepthTokenWorker:
         ):
             raise FullDepthError("FullDepth worker input token ID 越界")
         private_previous = self._validate_previous(position, previous)
+        if self._active_range_session is not None:
+            raise FullDepthError("FullDepth token worker 不允许并发 token session")
         session = FullDepthRangeSession(
             self.catalog,
             self.cache,
             profile=self.profile,
             range_attempts=self.config.range_attempts,
             range_workers=self.config.range_workers,
+            range_pool=self._range_pool,
+            prefetch_pool=self._range_prefetch_pool,
+            owns_pools=False,
         )
+        self._active_range_session = session
+        try:
+            result = self._compute_token(
+                position,
+                input_token_id,
+                private_previous,
+                session,
+            )
+        except BaseException:
+            try:
+                session.close()
+            except BaseException as cleanup_error:
+                self.range_cleanup_errors.append(
+                    {
+                        "type": type(cleanup_error).__name__,
+                        "message": str(cleanup_error),
+                    }
+                )
+            raise
+        else:
+            session.close()
+            return result
+        finally:
+            self._active_range_session = None
+
+    def _compute_token(
+        self,
+        position: int,
+        input_token_id: int,
+        private_previous: Mapping[int, s14.LayerRuntimeState],
+        session: FullDepthRangeSession,
+    ) -> FullDepthTokenComputation:
         token_report: dict[str, Any] = {
             "position": position,
             "input_token_id": input_token_id,
@@ -1091,6 +1330,7 @@ class FullDepthTokenWorker:
             "layers": [],
             "final": None,
             "state_committed": False,
+            "range_static_prefetch": session.prefetch_events,
         }
         self.current_layer = None
         self._notify(token_report)
@@ -1130,6 +1370,12 @@ class FullDepthTokenWorker:
 
             self.stage = f"position_{position}_layer_{layer}_top6_shared"
             routed = session.fetch_routed(layer, input_token_id)
+            next_index = session.layer_index + 1
+            if next_index < len(self.profile.layers):
+                session.schedule_next_static(
+                    self.profile.layers[next_index],
+                    input_token_id,
+                )
             pages = list(routed.shared)
             for expert_id in pending.route_ids:
                 pages.extend(routed.experts[expert_id])
@@ -1381,6 +1627,7 @@ def execute(
         "profile": profile.as_dict(),
         "download_authorized": config.allow_fetch,
         "download_budget_bytes": config.download_budget_bytes,
+        "range_static_prefetch_enabled": config.range_static_prefetch,
         "forced_prefill_path": (
             None
             if config.forced_prefill_path is None
@@ -1647,6 +1894,9 @@ def execute(
         report["vulkan_attention_projection_count"] = int(
             getattr(worker, "attention_projection_count", 0)
         )
+        report["range_cleanup_errors"] = list(
+            getattr(worker, "range_cleanup_errors", ())
+        )
         try:
             worker.close()
         except Exception as close_error:
@@ -1685,6 +1935,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--head-chunk-size", type=int, default=4096)
     parser.add_argument("--range-attempts", type=int, default=4)
     parser.add_argument("--range-workers", type=int, choices=range(1, 9), default=3)
+    parser.add_argument("--range-static-prefetch", action="store_true")
     parser.add_argument("--vulkan-bridge-capture", type=Path)
     parser.add_argument("--vulkan-bridge-layer", type=int, choices=range(43), default=42)
     parser.add_argument("--vulkan-writeback-worker", type=Path)
@@ -1734,6 +1985,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             head_chunk_size=args.head_chunk_size,
             range_attempts=args.range_attempts,
             range_workers=args.range_workers,
+            range_static_prefetch=args.range_static_prefetch,
             forced_prefill_path=args.forced_prefill,
             vulkan_bridge_capture=args.vulkan_bridge_capture,
             vulkan_bridge_layer=args.vulkan_bridge_layer,

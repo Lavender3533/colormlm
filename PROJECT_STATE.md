@@ -1370,3 +1370,24 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
   禁止预取experts/shared/final；正式`prepare_layer()`必须等待Future并保持fail-closed。现有Range
   读取、SHA与准备约24秒/两 token，现实目标是隐藏5--8秒。当前仍约20--30秒/token，尚不能
   宣称可交互、20--50 token/s或Claude/GPT追赶完成。
+
+## 2026-08-02：深度1静态页预取通过真实门
+
+- `--range-static-prefetch`现只在当前层routed expert成功到齐后调度紧邻下一层的
+  `non_expert + router`；`experts/shared/final`不进入预取。读取池与单线程协调池独立持久，
+  正式`prepare_layer()`仍先验证phase/layer/token再消费Future，异常时不推进层或提交token。
+- 同配置相邻两-token A/B只切换预取开关：`65.7962s→61.8648s`，完整墙钟下降`5.97%`、
+  有效吞吐提高`6.35%`；逐token为`41.0222s→37.4733s`与`22.7511s→22.2641s`，输出仍为
+  `[5,223]`。
+- `range_prepare_layer`从`9.0043s`降至`0.1435s`（`-98.41%`）。84/84个Future成功消费，
+  后台fetch累计`9.6354s`，正式等待仅`0.0005365s`；但完整墙钟只省`3.9313s`，其余被并发
+  I/O/主机争用抵消，禁止用累计hidden时间冒充token收益。
+- 86/86层、472个attention projection、86次Vulkan MoE、零fallback、position 1的236/236
+  slot hit与0 B静态上传均保持。两侧proof telemetry完全一致：4487次完整SHA、1737次hit、
+  哈希`14,297,784,540 B`、避免重复`8,174,608,604 B`。
+- 审查后补强：同池配置在调度前拒绝；并发token session互斥；清理期Future异常不能覆盖模型/
+  Vulkan主错误。FullDepth43测试现为`79 passed, 9 subtests passed`。证据见
+  `FULLDEPTH43_STATIC_PREFETCH.md`与`FULLDEPTH43_STATIC_PREFETCH_AB.json`。
+- 下一速度主线进入有界生命周期sealed payload：首次读取同时完成SHA与当前层数值消费，验证完成
+  前不得发布buffer；随后才清理proof-hit控制面。当前仍约30秒/token，尚无质量、长上下文、
+  Kimi前端能力或Claude/GPT水平的晋级证据。
