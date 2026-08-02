@@ -1486,3 +1486,25 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
   避免每层重建19--23个GPU buffer。证据见
   `fast16/research/polaris_meridian_v1/speculative_full_verifier/CAUSAL_BLOCK_K4_AB.md`及同目录JSON。
   当前正式最佳仍为`0.03767 token/s`，没有新增质量、长上下文、Kimi前端或Claude/GPT能力证据。
+
+## 2026-08-02：K=4 持久 union arena 通过全43层速度与精确门
+
+- 已把上一节逐expert碎片上传替换为确定性固定offset arena：同一worker只保留一个1GiB上限的
+  mapped staging buffer和一个device buffer；每层按完整`GpuMoeIdentity`排布所有唯一
+  routed/shared张量，只上传实际使用前缀。四个位置、专家顺序和BF16累加顺序均未改变。
+- arena首次按需分配，后续请求复用；正式测量的43个block均为`arena_allocate_ms=0`、
+  `staging_allocations=0`、`device_allocations=0`。每层仍只有一次copy和一次upload submit；
+  resident GPU cache与该路径继续强制互斥，hello不会在冲突配置下虚报causal-block可用。
+- RX 5700 XT同一worker、逐层先预热host verified cache、再连续“四次单层→一次K=4 block”的
+  公平相邻A/B中，172/172行BF16逐字节一致。四次单层总wall为`8573.0042 ms`，block总wall为
+  `5262.9780 ms`，观测加速`1.6289×`；逐层中位加速`1.5870×`。L42单层侧出现一次488ms
+  系统抖动，排除该层后的保守总加速仍为`1.5724×`，因此正式表述为约`1.5–1.6×`。
+- GPU上传量从`18,128,766,976 B`降至`11,523,654,144 B`，减少`36.43%`；Rust release
+  example为`49/49`通过。首个warm请求也已把约188ms lazy arena分配计入`wall_ms`，不再漏账。
+- 权威证据为
+  `fast16/research/polaris_meridian_v1/speculative_full_verifier/CAUSAL_BLOCK_K4_PERSISTENT_ARENA_AB.json`。
+  `speed_eligible_verifier=false`仍保留：该结果只证明43层MoE replay块加速，不含attention/router/
+  KV/HC/final head，不能冒充端到端token/s，也没有新增质量、Kimi前端或Claude/GPT能力证据。
+- 下一速度主线是把attention、router、KV、HC、MoE与head收进单一Rust/Vulkan whole-token runtime，
+  并让K=4真实连续状态在同一GPU context内执行；优先复用持久command/descriptor资源和合并
+  activation upload，停止回到Python逐层调度或碎片GPU buffer路线。

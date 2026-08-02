@@ -222,6 +222,42 @@ fn require_capacity(buffer: &GpuBuffer, required: u64, label: &str) -> Result<()
     Ok(())
 }
 
+fn require_subrange_capacity(
+    buffer: &GpuBuffer,
+    logical_capacity: u64,
+    offset: u64,
+    required: u64,
+    label: &str,
+) -> Result<()> {
+    if logical_capacity == 0 || logical_capacity > buffer.size() {
+        bail!(
+            "{label} logical capacity {logical_capacity} B is invalid for {} B allocation",
+            buffer.size()
+        );
+    }
+    let end = offset
+        .checked_add(required)
+        .ok_or_else(|| anyhow!("{label} subrange overflow"))?;
+    if end > logical_capacity {
+        bail!("{label} subrange [{offset}, {end}) exceeds logical capacity {logical_capacity} B");
+    }
+    Ok(())
+}
+
+fn require_storage_offset_alignment(ctx: &VulkanContext, offset: u64, label: &str) -> Result<()> {
+    let alignment = unsafe {
+        ctx.instance
+            .get_physical_device_properties(ctx.physical)
+            .limits
+            .min_storage_buffer_offset_alignment
+    }
+    .max(1);
+    if offset % alignment != 0 {
+        bail!("{label} offset {offset} is not aligned to {alignment} B");
+    }
+    Ok(())
+}
+
 /// Reject the UE8M0 NaN encoding before bytes are uploaded to Vulkan.
 pub fn validate_ue8m0_codes(codes: &[u8]) -> Result<()> {
     if let Some(index) = codes.iter().position(|&code| code == 0xff) {
@@ -369,6 +405,57 @@ impl S14NumericPipelines {
         Ok(S14Mxfp4Dispatch { binder, shape })
     }
 
+    /// Bind MXFP4 weight and scale views inside one larger storage arena.
+    /// `arena_logical_bytes` is the caller-owned logical bound; it is checked
+    /// separately from `GpuBuffer::size()` because Vulkan memory requirements
+    /// may round the physical allocation up beyond the requested arena size.
+    pub fn bind_mxfp4_weight_arena(
+        &self,
+        ctx: &VulkanContext,
+        shape: S14MatvecShape,
+        x: &GpuBuffer,
+        arena: &GpuBuffer,
+        arena_logical_bytes: u64,
+        packed_weight_offset: u64,
+        weight_scale_offset: u64,
+        y: &GpuBuffer,
+    ) -> Result<S14Mxfp4Dispatch> {
+        let shape = shape.validate_mxfp4()?;
+        let x_bytes = shape.fp32_input_bytes()?;
+        let weight_bytes = storage_bytes(shape.mxfp4_weight_bytes()?);
+        let scale_bytes = storage_bytes(shape.mxfp4_scale_bytes()?);
+        let y_bytes = shape.fp32_output_bytes()?;
+        require_capacity(x, x_bytes, "S14 MXFP4 input")?;
+        require_subrange_capacity(
+            arena,
+            arena_logical_bytes,
+            packed_weight_offset,
+            weight_bytes,
+            "S14 MXFP4 arena weight",
+        )?;
+        require_subrange_capacity(
+            arena,
+            arena_logical_bytes,
+            weight_scale_offset,
+            scale_bytes,
+            "S14 MXFP4 arena scale",
+        )?;
+        require_storage_offset_alignment(ctx, packed_weight_offset, "S14 MXFP4 arena weight")?;
+        require_storage_offset_alignment(ctx, weight_scale_offset, "S14 MXFP4 arena scale")?;
+        require_capacity(y, y_bytes, "S14 MXFP4 output")?;
+        let binder = DescriptorBinder::new_with_offsets(
+            ctx,
+            &self.mxfp4_matvec,
+            &[
+                (x, 0, x_bytes),
+                (arena, packed_weight_offset, weight_bytes),
+                (arena, weight_scale_offset, scale_bytes),
+                (y, 0, y_bytes),
+            ],
+        )?;
+        Ok(S14Mxfp4Dispatch { binder, shape })
+    }
+
     pub fn bind_fp8(
         &self,
         ctx: &VulkanContext,
@@ -395,6 +482,54 @@ impl S14NumericPipelines {
                 (weight, weight_bytes),
                 (weight_scale, scale_bytes),
                 (y, y_bytes),
+            ],
+        )?;
+        Ok(S14Fp8Dispatch { binder, shape })
+    }
+
+    /// Bind FP8 weight and scale views inside one larger storage arena.
+    pub fn bind_fp8_weight_arena(
+        &self,
+        ctx: &VulkanContext,
+        shape: S14MatvecShape,
+        x: &GpuBuffer,
+        arena: &GpuBuffer,
+        arena_logical_bytes: u64,
+        weight_offset: u64,
+        weight_scale_offset: u64,
+        y: &GpuBuffer,
+    ) -> Result<S14Fp8Dispatch> {
+        let shape = shape.validate_fp8()?;
+        let x_bytes = shape.fp32_input_bytes()?;
+        let weight_bytes = storage_bytes(shape.fp8_weight_bytes()?);
+        let scale_bytes = storage_bytes(shape.fp8_scale_bytes()?);
+        let y_bytes = shape.fp32_output_bytes()?;
+        require_capacity(x, x_bytes, "S14 FP8 input")?;
+        require_subrange_capacity(
+            arena,
+            arena_logical_bytes,
+            weight_offset,
+            weight_bytes,
+            "S14 FP8 arena weight",
+        )?;
+        require_subrange_capacity(
+            arena,
+            arena_logical_bytes,
+            weight_scale_offset,
+            scale_bytes,
+            "S14 FP8 arena scale",
+        )?;
+        require_storage_offset_alignment(ctx, weight_offset, "S14 FP8 arena weight")?;
+        require_storage_offset_alignment(ctx, weight_scale_offset, "S14 FP8 arena scale")?;
+        require_capacity(y, y_bytes, "S14 FP8 output")?;
+        let binder = DescriptorBinder::new_with_offsets(
+            ctx,
+            &self.fp8_matvec,
+            &[
+                (x, 0, x_bytes),
+                (arena, weight_offset, weight_bytes),
+                (arena, weight_scale_offset, scale_bytes),
+                (y, 0, y_bytes),
             ],
         )?;
         Ok(S14Fp8Dispatch { binder, shape })

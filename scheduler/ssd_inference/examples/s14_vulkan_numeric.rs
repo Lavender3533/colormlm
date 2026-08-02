@@ -76,6 +76,7 @@ const SHARED_GPU_PAYLOAD_CACHE_GIB: usize = 2;
 const GPU_VRAM_HARD_LIMIT_GIB: usize = 8;
 const OFFICIAL_ROUTED_EXPERT_COUNT: usize = 6;
 const REUSABLE_GPU_SLOT_MAX_LOGICAL_BYTES: u64 = 128 * 1024 * 1024;
+const CAUSAL_BLOCK_UNION_ARENA_MAX_BYTES: u64 = 1024 * 1024 * 1024;
 const WRITEBACK_DIAGNOSTIC_DIR_ENV: &str = "POLARIS_FULLDEPTH43_WRITEBACK_DIAGNOSTIC_DIR";
 const WRITEBACK_BATCH_VERIFY_ENV: &str = "POLARIS_FULLDEPTH43_BATCH_VERIFY_PAYLOADS";
 const FULLDEPTH43_CATALOG_FILE: &str = "D:/models/Polaris-S14/fulldepth43_native_top6_catalog.json";
@@ -480,14 +481,14 @@ impl ExpertChainBuffers {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct GpuTensorIdentity {
     tensor: String,
     bytes: u64,
     sha256: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct GpuMoeIdentity {
     tensors: [GpuTensorIdentity; 6],
 }
@@ -1181,6 +1182,40 @@ impl ReusableOfficialMoeSlot {
         Ok(())
     }
 
+    fn rewrite_and_upload_activation(&self, ctx: &VulkanContext, x: &[f32]) -> Result<()> {
+        if x.len() != 4096 {
+            bail!("causal block reusable activation shape drift");
+        }
+        self.x
+            .rewrite_staging(bytemuck::cast_slice(x), "causal block activation")?;
+        unsafe {
+            let pool = make_command_pool(ctx)?;
+            let cb = allocate_command_buffer(ctx, pool)?;
+            ctx.device.begin_command_buffer(
+                cb,
+                &vk::CommandBufferBeginInfo::default()
+                    .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+            )?;
+            self.x.cmd_upload(ctx, cb);
+            let barrier = vk::MemoryBarrier::default()
+                .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[barrier],
+                &[],
+                &[],
+            );
+            ctx.device.end_command_buffer(cb)?;
+            submit_and_wait(ctx, cb)?;
+            ctx.device.destroy_command_pool(pool, None);
+        }
+        Ok(())
+    }
+
     fn output(&self) -> Vec<f32> {
         unsafe { std::slice::from_raw_parts(self.readback.mapped() as *const f32, 4096).to_vec() }
     }
@@ -1197,6 +1232,364 @@ impl ReusableOfficialMoeSlot {
             weights.destroy(ctx);
         }
         self.x.destroy(ctx);
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CausalBlockArenaSpan {
+    offset: u64,
+    bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CausalBlockMoeArenaView {
+    w1: CausalBlockArenaSpan,
+    s1: CausalBlockArenaSpan,
+    w3: CausalBlockArenaSpan,
+    s3: CausalBlockArenaSpan,
+    w2: CausalBlockArenaSpan,
+    s2: CausalBlockArenaSpan,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CausalBlockUnionArenaPlanEntry {
+    view: CausalBlockMoeArenaView,
+    is_shared: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CausalBlockUnionArenaPlan {
+    entries: BTreeMap<GpuMoeIdentity, CausalBlockUnionArenaPlanEntry>,
+    logical_payload_bytes: u64,
+    arena_bytes: u64,
+    alignment_bytes: u64,
+    unique_routed_identities: usize,
+    shared_identities: usize,
+}
+
+fn checked_align_up(value: u64, alignment: u64) -> Result<u64> {
+    if alignment == 0 || !alignment.is_power_of_two() {
+        bail!("causal block union arena alignment must be a non-zero power of two");
+    }
+    let mask = alignment - 1;
+    value
+        .checked_add(mask)
+        .map(|candidate| candidate & !mask)
+        .ok_or_else(|| anyhow::anyhow!("causal block union arena alignment overflow"))
+}
+
+fn place_causal_block_arena_span(
+    cursor: &mut u64,
+    bytes: u64,
+    alignment: u64,
+    hard_limit: u64,
+) -> Result<CausalBlockArenaSpan> {
+    if bytes == 0 || bytes % 4 != 0 {
+        bail!("causal block union arena tensor size must be positive and four-byte aligned");
+    }
+    let offset = checked_align_up(*cursor, alignment)?;
+    let end = offset
+        .checked_add(bytes)
+        .ok_or_else(|| anyhow::anyhow!("causal block union arena span overflow"))?;
+    if end > hard_limit {
+        bail!("causal block union arena requires {end} bytes, above {hard_limit} byte hard limit");
+    }
+    *cursor = end;
+    Ok(CausalBlockArenaSpan { offset, bytes })
+}
+
+fn plan_causal_block_union_arena<I>(
+    rows: I,
+    alignment: u64,
+    hard_limit: u64,
+) -> Result<CausalBlockUnionArenaPlan>
+where
+    I: IntoIterator<Item = (GpuMoeIdentity, MoeWeightByteLayout, bool)>,
+{
+    if hard_limit == 0 || hard_limit > (GPU_VRAM_HARD_LIMIT_GIB as u64) * 1024 * 1024 * 1024 {
+        bail!("causal block union arena hard limit exceeds the fixed 8 GiB contract");
+    }
+    let alignment = alignment.max(4);
+    if !alignment.is_power_of_two() {
+        bail!("causal block union arena device alignment must be a power of two");
+    }
+    let mut unique = BTreeMap::<GpuMoeIdentity, (MoeWeightByteLayout, bool)>::new();
+    for (identity, layout, is_shared) in rows {
+        match unique.get(&identity) {
+            Some((previous_layout, previous_shared))
+                if *previous_layout != layout || *previous_shared != is_shared =>
+            {
+                bail!("causal block union arena duplicate identity layout drift")
+            }
+            Some(_) => {}
+            None => {
+                unique.insert(identity, (layout, is_shared));
+            }
+        }
+    }
+    if unique.is_empty() {
+        bail!("causal block union arena cannot be empty");
+    }
+
+    let mut cursor = 0u64;
+    let mut logical_payload_bytes = 0u64;
+    let mut entries = BTreeMap::new();
+    let mut unique_routed_identities = 0usize;
+    let mut shared_identities = 0usize;
+    for (identity, (layout, is_shared)) in unique {
+        logical_payload_bytes = logical_payload_bytes
+            .checked_add(layout.total()?)
+            .ok_or_else(|| anyhow::anyhow!("causal block union payload byte overflow"))?;
+        let view = CausalBlockMoeArenaView {
+            w1: place_causal_block_arena_span(&mut cursor, layout.w1, alignment, hard_limit)?,
+            s1: place_causal_block_arena_span(&mut cursor, layout.s1, alignment, hard_limit)?,
+            w3: place_causal_block_arena_span(&mut cursor, layout.w3, alignment, hard_limit)?,
+            s3: place_causal_block_arena_span(&mut cursor, layout.s3, alignment, hard_limit)?,
+            w2: place_causal_block_arena_span(&mut cursor, layout.w2, alignment, hard_limit)?,
+            s2: place_causal_block_arena_span(&mut cursor, layout.s2, alignment, hard_limit)?,
+        };
+        if is_shared {
+            shared_identities += 1;
+        } else {
+            unique_routed_identities += 1;
+        }
+        entries.insert(identity, CausalBlockUnionArenaPlanEntry { view, is_shared });
+    }
+    if shared_identities != 1 {
+        bail!("causal block union arena requires exactly one shared identity");
+    }
+    Ok(CausalBlockUnionArenaPlan {
+        entries,
+        logical_payload_bytes,
+        arena_bytes: cursor,
+        alignment_bytes: alignment,
+        unique_routed_identities,
+        shared_identities,
+    })
+}
+
+fn pack_causal_block_arena_span(
+    packed: &mut [u8],
+    span: CausalBlockArenaSpan,
+    payload: &[u8],
+    label: &str,
+) -> Result<()> {
+    if payload.len() as u64 != span.bytes {
+        bail!("{label} causal block arena payload length drift");
+    }
+    let start = usize::try_from(span.offset).context("causal block arena offset exceeds usize")?;
+    let end_u64 = span
+        .offset
+        .checked_add(span.bytes)
+        .ok_or_else(|| anyhow::anyhow!("{label} causal block arena span overflow"))?;
+    let end = usize::try_from(end_u64).context("causal block arena end exceeds usize")?;
+    let target = packed
+        .get_mut(start..end)
+        .ok_or_else(|| anyhow::anyhow!("{label} causal block arena span escaped allocation"))?;
+    target.copy_from_slice(payload);
+    Ok(())
+}
+
+/// Worker-owned fixed buffers for causal-block union weights. The first block
+/// request allocates the maximum bounded staging/device pair once; later
+/// requests only rewrite and upload the used prefix.
+struct ReusableCausalBlockUnionArena {
+    staging: GpuBuffer,
+    device: GpuBuffer,
+    logical_capacity_bytes: u64,
+}
+
+impl ReusableCausalBlockUnionArena {
+    fn new(ctx: &VulkanContext) -> Result<Self> {
+        let logical_capacity_bytes = CAUSAL_BLOCK_UNION_ARENA_MAX_BYTES;
+        let staging = GpuBuffer::new_staging(ctx, logical_capacity_bytes)?;
+        let device = match GpuBuffer::new_vram(
+            ctx,
+            logical_capacity_bytes,
+            vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+        ) {
+            Ok(device) => device,
+            Err(error) => {
+                staging.destroy(ctx);
+                return Err(error.context("allocate reusable causal-block device arena"));
+            }
+        };
+        if staging.mapped().is_null()
+            || staging.size() < logical_capacity_bytes
+            || device.size() < logical_capacity_bytes
+        {
+            device.destroy(ctx);
+            staging.destroy(ctx);
+            bail!("reusable causal-block union arena allocation drift");
+        }
+        Ok(Self {
+            staging,
+            device,
+            logical_capacity_bytes,
+        })
+    }
+
+    fn destroy(&self, ctx: &VulkanContext) {
+        self.device.destroy(ctx);
+        self.staging.destroy(ctx);
+    }
+}
+
+struct CausalBlockUnionArena<'a> {
+    buffers: &'a mut ReusableCausalBlockUnionArena,
+    plan: CausalBlockUnionArenaPlan,
+    host_pack_ms: f64,
+    arena_allocate_ms: f64,
+    arena_upload_ms: f64,
+    buffers_allocated_this_request: bool,
+}
+
+impl<'a> CausalBlockUnionArena<'a> {
+    fn prepare(
+        ctx: &VulkanContext,
+        buffers: &'a mut ReusableCausalBlockUnionArena,
+        payloads: &[&MoePayload],
+        arena_allocate_ms: f64,
+        buffers_allocated_this_request: bool,
+    ) -> Result<Self> {
+        let alignment = unsafe {
+            ctx.instance
+                .get_physical_device_properties(ctx.physical)
+                .limits
+                .min_storage_buffer_offset_alignment
+        }
+        .max(4);
+        let (routed_layout, shared_layout) = official_moe_weight_layouts()?;
+        let mut unique_payloads = BTreeMap::<GpuMoeIdentity, &MoePayload>::new();
+        for payload in payloads {
+            let identity = payload.gpu_identity.as_ref().ok_or_else(|| {
+                anyhow::anyhow!("causal block arena payload lost strict SHA identity")
+            })?;
+            let expected = if payload.expert_id.is_some() {
+                routed_layout
+            } else {
+                shared_layout
+            };
+            require_exact_moe_weight_layout(payload, expected, "causal block union payload")?;
+            match unique_payloads.get(identity) {
+                Some(previous)
+                    if previous.expert_id.is_some() != payload.expert_id.is_some()
+                        || MoeWeightByteLayout::from_payload(previous)
+                            != MoeWeightByteLayout::from_payload(payload) =>
+                {
+                    bail!("causal block arena duplicate payload identity drift")
+                }
+                Some(_) => {}
+                None => {
+                    unique_payloads.insert(identity.clone(), payload);
+                }
+            }
+        }
+        let plan = plan_causal_block_union_arena(
+            unique_payloads.iter().map(|(identity, payload)| {
+                (
+                    identity.clone(),
+                    MoeWeightByteLayout::from_payload(payload),
+                    payload.expert_id.is_none(),
+                )
+            }),
+            alignment,
+            CAUSAL_BLOCK_UNION_ARENA_MAX_BYTES,
+        )?;
+
+        if plan.arena_bytes > buffers.logical_capacity_bytes
+            || plan.arena_bytes > buffers.staging.size()
+            || plan.arena_bytes > buffers.device.size()
+        {
+            bail!("causal block union plan exceeds reusable arena capacity");
+        }
+        let packed_len = usize::try_from(plan.arena_bytes)
+            .context("causal block union arena exceeds host address space")?;
+
+        let host_pack_started = Instant::now();
+        let pack_result = (|| -> Result<()> {
+            let packed =
+                unsafe { std::slice::from_raw_parts_mut(buffers.staging.mapped(), packed_len) };
+            if plan.arena_bytes != plan.logical_payload_bytes {
+                packed.fill(0);
+            }
+            for (identity, payload) in &unique_payloads {
+                let entry = plan.entries.get(identity).ok_or_else(|| {
+                    anyhow::anyhow!("causal block arena plan lost payload identity")
+                })?;
+                if payload.expert_id.is_some() {
+                    for scale in [&payload.s1, &payload.s3, &payload.s2] {
+                        validate_ue8m0_codes(scale)?;
+                    }
+                } else {
+                    for weight in [&payload.w1, &payload.w3, &payload.w2] {
+                        validate_e4m3fn_codes(weight)?;
+                    }
+                    for scale in [&payload.s1, &payload.s3, &payload.s2] {
+                        validate_ue8m0_codes(scale)?;
+                    }
+                }
+                pack_causal_block_arena_span(packed, entry.view.w1, &payload.w1, "w1")?;
+                pack_causal_block_arena_span(packed, entry.view.s1, &payload.s1, "s1")?;
+                pack_causal_block_arena_span(packed, entry.view.w3, &payload.w3, "w3")?;
+                pack_causal_block_arena_span(packed, entry.view.s3, &payload.s3, "s3")?;
+                pack_causal_block_arena_span(packed, entry.view.w2, &payload.w2, "w2")?;
+                pack_causal_block_arena_span(packed, entry.view.s2, &payload.s2, "s2")?;
+            }
+            Ok(())
+        })();
+        if let Err(error) = pack_result {
+            return Err(error);
+        }
+        let host_pack_ms = host_pack_started.elapsed().as_secs_f64() * 1000.0;
+
+        let upload_started = Instant::now();
+        unsafe {
+            let pool = make_command_pool(ctx)?;
+            let cb = allocate_command_buffer(ctx, pool)?;
+            ctx.device.begin_command_buffer(
+                cb,
+                &vk::CommandBufferBeginInfo::default()
+                    .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+            )?;
+            copy(ctx, cb, &buffers.staging, &buffers.device, plan.arena_bytes);
+            let barrier = vk::MemoryBarrier::default()
+                .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ);
+            ctx.device.cmd_pipeline_barrier(
+                cb,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[barrier],
+                &[],
+                &[],
+            );
+            ctx.device.end_command_buffer(cb)?;
+            submit_and_wait(ctx, cb)?;
+            ctx.device.destroy_command_pool(pool, None);
+        }
+        let arena_upload_ms = upload_started.elapsed().as_secs_f64() * 1000.0;
+        Ok(Self {
+            buffers,
+            plan,
+            host_pack_ms,
+            arena_allocate_ms,
+            arena_upload_ms,
+            buffers_allocated_this_request,
+        })
+    }
+
+    fn view(&self, payload: &MoePayload) -> Result<&CausalBlockMoeArenaView> {
+        let identity = payload
+            .gpu_identity
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("causal block arena lookup lost strict SHA identity"))?;
+        self.plan
+            .entries
+            .get(identity)
+            .map(|entry| &entry.view)
+            .ok_or_else(|| anyhow::anyhow!("causal block arena identity missing from fixed plan"))
     }
 }
 
@@ -1506,7 +1899,11 @@ struct CausalBlockLayerReplayResponse {
     #[serde(flatten)]
     payload_verification: PayloadVerificationReceipt,
     payload_cache: WritebackPayloadCacheTelemetry,
+    /// Compatibility projection for older report readers. The authoritative
+    /// upload contract is `gpu_union_arena`; this field preserves the previous
+    /// hit/miss byte counters without claiming per-identity allocations.
     gpu_payload_cache: WritebackGpuPayloadCacheTelemetry,
+    gpu_union_arena: CausalBlockUnionArenaTelemetry,
     gpu_kernel_ms: f64,
     wall_ms: f64,
     speed_eligible_verifier: bool,
@@ -1722,6 +2119,102 @@ struct WritebackGpuPayloadCacheTelemetry {
     total_uploaded_bytes: u64,
     total_hit_rate: f64,
     strict_sha_identity: bool,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+struct CausalBlockUnionArenaTelemetry {
+    enabled: bool,
+    persistent_worker_buffers: bool,
+    logical_capacity_bytes: u64,
+    logical_payload_bytes: u64,
+    arena_bytes: u64,
+    alignment_bytes: u64,
+    padding_bytes: u64,
+    staging_allocations: u64,
+    device_allocations: u64,
+    upload_submissions: u64,
+    copy_commands: u64,
+    copy_regions: u64,
+    actual_uploaded_bytes: u64,
+    unique_tensor_views: usize,
+    unique_routed_identities: usize,
+    shared_identities: usize,
+    reused_routed_references: usize,
+    host_pack_ms: f64,
+    arena_allocate_ms: f64,
+    arena_upload_ms: f64,
+    strict_sha_identity: bool,
+    hard_limit_bytes: u64,
+}
+
+impl CausalBlockUnionArenaTelemetry {
+    fn from_arena(
+        arena: &CausalBlockUnionArena<'_>,
+        reused_routed_references: usize,
+    ) -> Result<Self> {
+        Self::from_plan(
+            &arena.plan,
+            reused_routed_references,
+            arena.host_pack_ms,
+            arena.arena_allocate_ms,
+            arena.arena_upload_ms,
+            arena.buffers_allocated_this_request,
+            arena.buffers.logical_capacity_bytes,
+        )
+    }
+
+    fn from_plan(
+        plan: &CausalBlockUnionArenaPlan,
+        reused_routed_references: usize,
+        host_pack_ms: f64,
+        arena_allocate_ms: f64,
+        arena_upload_ms: f64,
+        buffers_allocated_this_request: bool,
+        logical_capacity_bytes: u64,
+    ) -> Result<Self> {
+        if !host_pack_ms.is_finite()
+            || host_pack_ms < 0.0
+            || !arena_allocate_ms.is_finite()
+            || arena_allocate_ms < 0.0
+            || !arena_upload_ms.is_finite()
+            || arena_upload_ms < 0.0
+        {
+            bail!("causal block union arena telemetry timing drift");
+        }
+        if logical_capacity_bytes < plan.arena_bytes
+            || logical_capacity_bytes > CAUSAL_BLOCK_UNION_ARENA_MAX_BYTES
+        {
+            bail!("causal block union arena telemetry capacity drift");
+        }
+        let padding_bytes = plan
+            .arena_bytes
+            .checked_sub(plan.logical_payload_bytes)
+            .ok_or_else(|| anyhow::anyhow!("causal block union arena padding underflow"))?;
+        Ok(Self {
+            enabled: true,
+            persistent_worker_buffers: true,
+            logical_capacity_bytes,
+            logical_payload_bytes: plan.logical_payload_bytes,
+            arena_bytes: plan.arena_bytes,
+            alignment_bytes: plan.alignment_bytes,
+            padding_bytes,
+            staging_allocations: u64::from(buffers_allocated_this_request),
+            device_allocations: u64::from(buffers_allocated_this_request),
+            upload_submissions: 1,
+            copy_commands: 1,
+            copy_regions: 1,
+            actual_uploaded_bytes: plan.arena_bytes,
+            unique_tensor_views: plan.entries.len() * 6,
+            unique_routed_identities: plan.unique_routed_identities,
+            shared_identities: plan.shared_identities,
+            reused_routed_references,
+            host_pack_ms,
+            arena_allocate_ms,
+            arena_upload_ms,
+            strict_sha_identity: true,
+            hard_limit_bytes: CAUSAL_BLOCK_UNION_ARENA_MAX_BYTES,
+        })
+    }
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -5464,6 +5957,8 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
     let mut shared_gpu_payload_cache = shared_gpu_payload_cache_capacity
         .map(GpuPayloadCache::new)
         .transpose()?;
+    let causal_block_layer_replay_available =
+        gpu_payload_cache.is_none() && shared_gpu_payload_cache.is_none();
     // The two GPU weight modes are deliberately disjoint. Default operation
     // owns one bounded upload slot; explicit resident-cache operation owns no
     // reusable slot, so stale slot contents can never masquerade as a hit.
@@ -5472,6 +5967,7 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
     } else {
         None
     };
+    let mut reusable_causal_block_arena: Option<ReusableCausalBlockUnionArena> = None;
     let mut stdout = std::io::stdout().lock();
     serde_json::to_writer(
         &mut stdout,
@@ -5486,7 +5982,7 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
             "official_boundary_graph": true,
             "verified_payload_cache": true,
             "inline_manifest_json": true,
-            "causal_block_layer_replay": true,
+            "causal_block_layer_replay": causal_block_layer_replay_available,
             "causal_block_sizes": [4, 8],
             "batch_payload_verification": true,
             "batch_payload_verification_concurrency_limit": VERIFIED_PAYLOAD_BATCH_MAX_TASKS,
@@ -5504,6 +6000,9 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
                 .as_ref()
                 .map(|slot| slot.logical_staging_bytes)
                 .unwrap_or(0),
+            "reusable_causal_block_union_arena": causal_block_layer_replay_available,
+            "reusable_causal_block_union_arena_capacity_bytes":
+                CAUSAL_BLOCK_UNION_ARENA_MAX_BYTES,
             "gpu_vram_hard_limit_bytes": GPU_VRAM_HARD_LIMIT_GIB as u64 * 1024 * 1024 * 1024,
             "gpu_payload_identity": "tensor+bytes+sha256",
             "numeric_mode": numeric_mode,
@@ -5545,6 +6044,9 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
                 if let Some(slot) = reusable_gpu_slot.as_ref() {
                     slot.destroy(&ctx);
                 }
+                if let Some(arena) = reusable_causal_block_arena.as_ref() {
+                    arena.destroy(&ctx);
+                }
                 pipelines.destroy(&ctx);
                 bail!("writeback worker poisoned by invalid request");
             }
@@ -5584,40 +6086,75 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
             if let Some(slot) = reusable_gpu_slot.as_ref() {
                 slot.destroy(&ctx);
             }
+            if let Some(arena) = reusable_causal_block_arena.as_ref() {
+                arena.destroy(&ctx);
+            }
             pipelines.destroy(&ctx);
             bail!("writeback worker poisoned by contract drift");
         }
 
         let request_id = request.request_id.clone();
-        let execution: Result<serde_json::Value> =
-            if request.op == "execute_causal_block_layer_replay" {
+        let execution: Result<serde_json::Value> = if request.op
+            == "execute_causal_block_layer_replay"
+        {
+            (|| -> Result<serde_json::Value> {
+                let request_started = Instant::now();
+                if gpu_payload_cache.is_some() || shared_gpu_payload_cache.is_some() {
+                    bail!(
+                        "causal block union arena is mutually exclusive with resident GPU caches"
+                    );
+                }
+                let causal_workspace = reusable_gpu_slot.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "causal block union arena requires the persistent reusable workspace"
+                    )
+                })?;
+                let (arena_allocate_ms, buffers_allocated_this_request) =
+                    if reusable_causal_block_arena.is_none() {
+                        let allocate_started = Instant::now();
+                        reusable_causal_block_arena =
+                            Some(ReusableCausalBlockUnionArena::new(&ctx)?);
+                        (allocate_started.elapsed().as_secs_f64() * 1000.0, true)
+                    } else {
+                        (0.0, false)
+                    };
+                let causal_arena_buffers =
+                    reusable_causal_block_arena.as_mut().ok_or_else(|| {
+                        anyhow::anyhow!("reusable causal block union arena disappeared")
+                    })?;
                 execute_causal_block_layer_replay(
                     &ctx,
                     &pipelines,
                     timestamp_bits,
                     timestamp_period_ns,
                     &mut payload_cache,
+                    causal_workspace,
+                    causal_arena_buffers,
+                    arena_allocate_ms,
+                    buffers_allocated_this_request,
+                    request_started,
                     request,
                 )
                 .and_then(|response| {
                     serde_json::to_value(response).context("serialize causal block layer response")
                 })
-            } else {
-                execute_writeback_request(
-                    &ctx,
-                    &pipelines,
-                    timestamp_bits,
-                    timestamp_period_ns,
-                    &mut payload_cache,
-                    &mut gpu_payload_cache,
-                    &mut shared_gpu_payload_cache,
-                    reusable_gpu_slot.as_ref(),
-                    request,
-                )
-                .and_then(|response| {
-                    serde_json::to_value(response).context("serialize writeback response")
-                })
-            };
+            })()
+        } else {
+            execute_writeback_request(
+                &ctx,
+                &pipelines,
+                timestamp_bits,
+                timestamp_period_ns,
+                &mut payload_cache,
+                &mut gpu_payload_cache,
+                &mut shared_gpu_payload_cache,
+                reusable_gpu_slot.as_ref(),
+                request,
+            )
+            .and_then(|response| {
+                serde_json::to_value(response).context("serialize writeback response")
+            })
+        };
         match execution {
             Ok(response) => {
                 serde_json::to_writer(&mut stdout, &response)?;
@@ -5646,6 +6183,9 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
                 if let Some(slot) = reusable_gpu_slot.as_ref() {
                     slot.destroy(&ctx);
                 }
+                if let Some(arena) = reusable_causal_block_arena.as_ref() {
+                    arena.destroy(&ctx);
+                }
                 pipelines.destroy(&ctx);
                 return Err(error.context("writeback worker poisoned"));
             }
@@ -5659,6 +6199,9 @@ fn run_fulldepth_writeback_worker(exact_audit: bool) -> Result<()> {
     }
     if let Some(slot) = reusable_gpu_slot.as_ref() {
         slot.destroy(&ctx);
+    }
+    if let Some(arena) = reusable_causal_block_arena.as_ref() {
+        arena.destroy(&ctx);
     }
     pipelines.destroy(&ctx);
     Ok(())
@@ -5789,6 +6332,12 @@ struct LoadedCausalBlockManifest {
     manifest: FullDepthBridgeManifest,
 }
 
+struct PreparedCausalBlockPosition {
+    input: Vec<f32>,
+    routed: Vec<MoePayload>,
+    shared: MoePayload,
+}
+
 fn validate_causal_block_layer_sequence(
     manifests: &[&FullDepthBridgeManifest],
 ) -> Result<(u32, Vec<u32>)> {
@@ -5916,9 +6465,13 @@ fn execute_causal_block_layer_replay(
     timestamp_bits: u32,
     timestamp_period_ns: f64,
     payload_cache: &mut VerifiedPayloadCache,
+    workspace: &ReusableOfficialMoeSlot,
+    arena_buffers: &mut ReusableCausalBlockUnionArena,
+    arena_allocate_ms: f64,
+    buffers_allocated_this_request: bool,
+    started: Instant,
     request: WritebackRequest,
 ) -> Result<CausalBlockLayerReplayResponse> {
-    let started = Instant::now();
     let cache_before = payload_cache.stats();
     validate_causal_block_request_contract(&request)?;
     let WritebackRequest {
@@ -5947,13 +6500,10 @@ fn execute_causal_block_layer_replay(
 
     let mut unique_payloads = BTreeMap::<String, FullDepthBridgePayload>::new();
     let mut unique_experts = HashSet::<u32>::new();
-    let mut gpu_identities = HashSet::<GpuMoeIdentity>::new();
     for entry in &loaded {
         for &expert_id in &entry.manifest.expert_ids {
             unique_experts.insert(expert_id);
-            gpu_identities.insert(gpu_moe_identity(&entry.manifest, Some(expert_id))?);
         }
-        gpu_identities.insert(gpu_moe_identity(&entry.manifest, None)?);
         for payload in &entry.manifest.payloads {
             merge_causal_block_payload_identity(&mut unique_payloads, payload)?;
         }
@@ -5988,23 +6538,14 @@ fn execute_causal_block_layer_replay(
         bail!("causal block payload verification receipt drift");
     }
 
-    let gpu_capacity = gpu_identities.iter().try_fold(0u64, |total, identity| {
-        total
-            .checked_add(identity.bytes()?)
-            .ok_or_else(|| anyhow::anyhow!("causal block GPU identity byte overflow"))
-    })?;
-    let mut block_gpu_cache = GpuPayloadCache::new(gpu_capacity)?;
-    let gpu_before = block_gpu_cache.stats();
     let block_output_path = loaded[0].capture_root.join(CAUSAL_BLOCK_LAYER_OUTPUT_FILE);
     if block_output_path.exists() {
-        block_gpu_cache.destroy(ctx);
         bail!("refuse to overwrite causal block layer output");
     }
 
-    let execution = (|| -> Result<(Vec<Vec<u16>>, f64)> {
-        let mut outputs = Vec::with_capacity(loaded.len());
-        let mut gpu_kernel_ms = 0.0;
-        for entry in &loaded {
+    let prepared = loaded
+        .iter()
+        .map(|entry| {
             let input = load_fulldepth_bridge_input(&entry.manifest, &entry.capture_root)?;
             let routed = entry
                 .manifest
@@ -6049,46 +6590,69 @@ fn execute_causal_block_layer_replay(
                 load_fulldepth_bridge_shared_pair_cached(&entry.manifest, "w3", payload_cache)?;
             let (w2, s2) =
                 load_fulldepth_bridge_shared_pair_cached(&entry.manifest, "w2", payload_cache)?;
-            let shared = MoePayload {
-                expert_id: None,
-                mix_weight: 1.0,
-                gpu_identity: Some(gpu_moe_identity(&entry.manifest, None)?),
-                w1,
-                s1,
-                w3,
-                s3,
-                w2,
-                s2,
-            };
-            let result = run_official_top6_shared_moe_batch_cached(
+            Ok(PreparedCausalBlockPosition {
+                input,
+                routed,
+                shared: MoePayload {
+                    expert_id: None,
+                    mix_weight: 1.0,
+                    gpu_identity: Some(gpu_moe_identity(&entry.manifest, None)?),
+                    w1,
+                    s1,
+                    w3,
+                    s3,
+                    w2,
+                    s2,
+                },
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let all_payloads = prepared
+        .iter()
+        .flat_map(|position| {
+            position
+                .routed
+                .iter()
+                .chain(std::iter::once(&position.shared))
+        })
+        .collect::<Vec<_>>();
+    let arena = CausalBlockUnionArena::prepare(
+        ctx,
+        arena_buffers,
+        &all_payloads,
+        arena_allocate_ms,
+        buffers_allocated_this_request,
+    )?;
+    if arena.plan.unique_routed_identities != unique_experts.len() {
+        bail!("causal block union arena routed identity count drift");
+    }
+
+    let execution = (|| -> Result<(Vec<Vec<u16>>, f64)> {
+        let mut outputs = Vec::with_capacity(loaded.len());
+        let mut gpu_kernel_ms = 0.0;
+        for position in &prepared {
+            let result = run_official_top6_shared_moe_batch_union_arena(
                 ctx,
                 pipelines,
                 timestamp_bits,
                 timestamp_period_ns,
-                &input,
-                &routed,
-                &shared,
-                &mut block_gpu_cache,
-                false,
+                &position.input,
+                &position.routed,
+                &position.shared,
+                &arena,
+                workspace,
             )?;
             gpu_kernel_ms += result.gpu_kernel_ms;
             outputs.push(result.branch_bf16);
         }
         Ok((outputs, gpu_kernel_ms))
     })();
-    let (branch_outputs, gpu_kernel_ms) = match execution {
-        Ok(value) => value,
-        Err(error) => {
-            block_gpu_cache.destroy(ctx);
-            return Err(error);
-        }
-    };
+    let (branch_outputs, gpu_kernel_ms) = execution?;
 
     let mut block_bytes = Vec::with_capacity(branch_outputs.len() * 4096 * 2);
     let mut output_rows = Vec::with_capacity(branch_outputs.len());
     for (entry, values) in loaded.iter().zip(&branch_outputs) {
         if values.len() != 4096 {
-            block_gpu_cache.destroy(ctx);
             bail!("causal block BF16 output shape drift");
         }
         let offset = block_bytes.len();
@@ -6117,7 +6681,6 @@ fn execute_causal_block_layer_replay(
         .capture_root
         .join(format!("{CAUSAL_BLOCK_LAYER_OUTPUT_FILE}.tmp"));
     if temporary.exists() {
-        block_gpu_cache.destroy(ctx);
         bail!("stale causal block layer output temporary exists");
     }
     let write_result = (|| -> Result<PathBuf> {
@@ -6138,7 +6701,6 @@ fn execute_causal_block_layer_replay(
         Ok(value) => value,
         Err(error) => {
             let _ = std::fs::remove_file(&temporary);
-            block_gpu_cache.destroy(ctx);
             return Err(error.context("publish causal block layer output"));
         }
     };
@@ -6146,15 +6708,42 @@ fn execute_causal_block_layer_replay(
         row.output.path = canonical_output.clone();
     }
 
-    let gpu_after = block_gpu_cache.stats();
-    let gpu_payload_cache =
-        WritebackGpuPayloadCacheTelemetry::between(&block_gpu_cache, gpu_before, gpu_after)?;
-    block_gpu_cache.destroy(ctx);
     let cache_after = payload_cache.stats();
     let payload_cache =
         WritebackPayloadCacheTelemetry::between(payload_cache, cache_before, cache_after)?;
     let total_routed_references = loaded.len() * OFFICIAL_ROUTED_EXPERT_COUNT;
     let unique_routed_experts = unique_experts.len();
+    let reused_routed_references = total_routed_references - unique_routed_experts;
+    let gpu_union_arena =
+        CausalBlockUnionArenaTelemetry::from_arena(&arena, reused_routed_references)?;
+    let total_gpu_references = loaded.len() * (OFFICIAL_ROUTED_EXPERT_COUNT + 1);
+    let unique_gpu_identities = arena.plan.entries.len();
+    let request_hits = u64::try_from(total_gpu_references - unique_gpu_identities)
+        .context("causal block arena hit count exceeds u64")?;
+    let request_misses = u64::try_from(unique_gpu_identities)
+        .context("causal block arena miss count exceeds u64")?;
+    let request_total = request_hits + request_misses;
+    let gpu_payload_cache = WritebackGpuPayloadCacheTelemetry {
+        enabled: true,
+        capacity_bytes: arena.plan.arena_bytes,
+        entries: unique_gpu_identities,
+        current_bytes: arena.plan.arena_bytes,
+        peak_bytes: arena.plan.arena_bytes,
+        request_hits,
+        request_misses,
+        request_uploaded_bytes: arena.plan.arena_bytes,
+        total_hits: request_hits,
+        total_misses: request_misses,
+        total_evictions: 0,
+        total_uploaded_bytes: arena.plan.arena_bytes,
+        total_hit_rate: if request_total == 0 {
+            0.0
+        } else {
+            request_hits as f64 / request_total as f64
+        },
+        strict_sha_identity: true,
+    };
+    let shared_payload_uploads = arena.plan.shared_identities;
     Ok(CausalBlockLayerReplayResponse {
         protocol: WRITEBACK_PROTOCOL,
         request_id,
@@ -6166,16 +6755,17 @@ fn execute_causal_block_layer_replay(
         positions,
         total_routed_references,
         unique_routed_experts,
-        reused_routed_references: total_routed_references - unique_routed_experts,
-        shared_payload_uploads: 1,
+        reused_routed_references,
+        shared_payload_uploads,
         outputs: output_rows,
         payload_verification,
         payload_cache,
         gpu_payload_cache,
+        gpu_union_arena,
         gpu_kernel_ms,
         wall_ms: started.elapsed().as_secs_f64() * 1000.0,
         speed_eligible_verifier: false,
-        claim_limit: "One same-layer K=4/8 replay request with union SHA verification and one GPU upload per unique expert/shared identity; not yet a 43-layer causal verifier or token/s result.",
+        claim_limit: "One same-layer K=4/8 replay request with union SHA verification and one fixed arena upload for all unique expert/shared identities; not yet a 43-layer causal verifier or token/s result.",
     })
 }
 
@@ -6866,6 +7456,167 @@ fn run_official_top6_shared_moe_batch_cached(
         branch_bf16,
         gpu_kernel_ms,
         diagnostics,
+    })
+}
+
+fn run_official_top6_shared_moe_batch_union_arena(
+    ctx: &VulkanContext,
+    pipelines: &S14NumericPipelines,
+    timestamp_bits: u32,
+    timestamp_period_ns: f64,
+    x: &[f32],
+    routed: &[MoePayload],
+    shared: &MoePayload,
+    arena: &CausalBlockUnionArena<'_>,
+    workspace: &ReusableOfficialMoeSlot,
+) -> Result<OfficialMoeResult> {
+    if x.len() != 4096 || routed.len() != OFFICIAL_ROUTED_EXPERT_COUNT || shared.expert_id.is_some()
+    {
+        bail!("official causal-block union MoE shape/route contract drift");
+    }
+    let up_shape = S14MatvecShape::new(2048, 4096)?.validate_mxfp4()?;
+    let down_shape = S14MatvecShape::new(4096, 2048)?.validate_mxfp4()?;
+    let shared_up_shape = S14MatvecShape::new(2048, 4096)?.validate_fp8()?;
+    let shared_down_shape = S14MatvecShape::new(4096, 2048)?.validate_fp8()?;
+    for payload in routed {
+        if payload.expert_id.is_none()
+            || !payload.mix_weight.is_finite()
+            || payload.mix_weight < 0.0
+        {
+            bail!("official causal-block routed payload contract drift");
+        }
+    }
+
+    workspace.rewrite_and_upload_activation(ctx, x)?;
+    let routed_dispatches = routed
+        .iter()
+        .map(|payload| {
+            let view = arena.view(payload)?;
+            Ok(RoutedOfficialDispatch {
+                w1: pipelines.bind_mxfp4_weight_arena(
+                    ctx,
+                    up_shape,
+                    &workspace.x.device,
+                    &arena.buffers.device,
+                    arena.plan.arena_bytes,
+                    view.w1.offset,
+                    view.s1.offset,
+                    &workspace.gate,
+                )?,
+                w3: pipelines.bind_mxfp4_weight_arena(
+                    ctx,
+                    up_shape,
+                    &workspace.x.device,
+                    &arena.buffers.device,
+                    arena.plan.arena_bytes,
+                    view.w3.offset,
+                    view.s3.offset,
+                    &workspace.up,
+                )?,
+                prepare: pipelines.bind_official_expert_prepare(
+                    ctx,
+                    2048,
+                    payload.mix_weight,
+                    &workspace.gate,
+                    &workspace.up,
+                    &workspace.hidden,
+                )?,
+                w2: pipelines.bind_mxfp4_weight_arena(
+                    ctx,
+                    down_shape,
+                    &workspace.hidden,
+                    &arena.buffers.device,
+                    arena.plan.arena_bytes,
+                    view.w2.offset,
+                    view.s2.offset,
+                    &workspace.down,
+                )?,
+                accumulate: pipelines.bind_bf16_accumulate(
+                    ctx,
+                    4096,
+                    &workspace.down,
+                    &workspace.accumulator,
+                )?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let shared_view = arena.view(shared)?;
+    let shared_dispatch = SharedOfficialDispatch {
+        w1: pipelines.bind_fp8_weight_arena(
+            ctx,
+            shared_up_shape,
+            &workspace.x.device,
+            &arena.buffers.device,
+            arena.plan.arena_bytes,
+            shared_view.w1.offset,
+            shared_view.s1.offset,
+            &workspace.gate,
+        )?,
+        w3: pipelines.bind_fp8_weight_arena(
+            ctx,
+            shared_up_shape,
+            &workspace.x.device,
+            &arena.buffers.device,
+            arena.plan.arena_bytes,
+            shared_view.w3.offset,
+            shared_view.s3.offset,
+            &workspace.up,
+        )?,
+        prepare: pipelines.bind_official_expert_prepare(
+            ctx,
+            2048,
+            1.0,
+            &workspace.gate,
+            &workspace.up,
+            &workspace.hidden,
+        )?,
+        w2: pipelines.bind_fp8_weight_arena(
+            ctx,
+            shared_down_shape,
+            &workspace.hidden,
+            &arena.buffers.device,
+            arena.plan.arena_bytes,
+            shared_view.w2.offset,
+            shared_view.s2.offset,
+            &workspace.down,
+        )?,
+        accumulate: pipelines.bind_bf16_accumulate(
+            ctx,
+            4096,
+            &workspace.down,
+            &workspace.accumulator,
+        )?,
+    };
+
+    let gpu_kernel_ms = record_official_moe_once(
+        ctx,
+        pipelines,
+        &workspace.accumulator,
+        &workspace.readback,
+        timestamp_bits,
+        timestamp_period_ns,
+        &routed_dispatches,
+        &shared_dispatch,
+    )?;
+    let output = workspace.output();
+    let branch_bf16 = official_branch_bf16(&output)?;
+
+    shared_dispatch.accumulate.binder.destroy(ctx);
+    shared_dispatch.w2.binder.destroy(ctx);
+    shared_dispatch.prepare.binder.destroy(ctx);
+    shared_dispatch.w3.binder.destroy(ctx);
+    shared_dispatch.w1.binder.destroy(ctx);
+    for dispatch in routed_dispatches.into_iter().rev() {
+        dispatch.accumulate.binder.destroy(ctx);
+        dispatch.w2.binder.destroy(ctx);
+        dispatch.prepare.binder.destroy(ctx);
+        dispatch.w3.binder.destroy(ctx);
+        dispatch.w1.binder.destroy(ctx);
+    }
+    Ok(OfficialMoeResult {
+        branch_bf16,
+        gpu_kernel_ms,
+        diagnostics: None,
     })
 }
 
@@ -9349,10 +10100,202 @@ mod writeback_payload_cache_tests {
         merge_causal_block_payload_identity(&mut unique, &payload).unwrap();
         assert_eq!(unique.len(), 1);
 
+        let mut drifts = Vec::new();
+        let mut drift = payload.clone();
+        drift.kind = "shared".to_string();
+        drifts.push(drift);
+        let mut drift = payload.clone();
+        drift.expert_id = Some(4);
+        drifts.push(drift);
+        let mut drift = payload.clone();
+        drift.dtype = "F8_E4M3".to_string();
+        drifts.push(drift);
+        let mut drift = payload.clone();
+        drift.shape = vec![4096, 2048];
+        drifts.push(drift);
+        let mut drift = payload.clone();
+        drift.bytes += 4;
+        drifts.push(drift);
+        let mut drift = payload.clone();
+        drift.path = PathBuf::from("range_cache/other.bin");
+        drifts.push(drift);
         let mut drift = payload;
         drift.sha256 = "b".repeat(64);
-        assert!(merge_causal_block_payload_identity(&mut unique, &drift).is_err());
-        assert_eq!(unique.len(), 1);
+        drifts.push(drift);
+        for drift in drifts {
+            assert!(merge_causal_block_payload_identity(&mut unique, &drift).is_err());
+            assert_eq!(unique.len(), 1);
+        }
+    }
+
+    fn tiny_arena_layout() -> MoeWeightByteLayout {
+        MoeWeightByteLayout {
+            w1: 4,
+            s1: 8,
+            w3: 12,
+            s3: 16,
+            w2: 20,
+            s2: 24,
+        }
+    }
+
+    #[test]
+    fn causal_block_union_arena_plan_is_deterministic_disjoint_and_deduplicated() {
+        let a = fake_gpu_identity('a');
+        let b = fake_gpu_identity('b');
+        let shared = fake_gpu_identity('c');
+        let layout = tiny_arena_layout();
+        let first = plan_causal_block_union_arena(
+            vec![
+                (b.clone(), layout, false),
+                (a.clone(), layout, false),
+                (shared.clone(), layout, true),
+                (a.clone(), layout, false),
+            ],
+            256,
+            1024 * 1024,
+        )
+        .unwrap();
+        let second = plan_causal_block_union_arena(
+            vec![
+                (a, layout, false),
+                (shared, layout, true),
+                (b, layout, false),
+            ],
+            256,
+            1024 * 1024,
+        )
+        .unwrap();
+        assert_eq!(first, second);
+        assert_eq!(first.entries.len(), 3);
+        assert_eq!(first.unique_routed_identities, 2);
+        assert_eq!(first.shared_identities, 1);
+        assert_eq!(first.logical_payload_bytes, layout.total().unwrap() * 3);
+
+        let mut spans = first
+            .entries
+            .values()
+            .flat_map(|entry| {
+                let view = &entry.view;
+                [view.w1, view.s1, view.w3, view.s3, view.w2, view.s2]
+            })
+            .collect::<Vec<_>>();
+        spans.sort_by_key(|span| span.offset);
+        let mut previous_end = 0u64;
+        for span in spans {
+            assert_eq!(span.offset % 256, 0);
+            assert!(span.offset >= previous_end);
+            previous_end = span.offset + span.bytes;
+            assert!(previous_end <= first.arena_bytes);
+        }
+    }
+
+    #[test]
+    fn causal_block_union_arena_route_lookup_uses_identity_not_route_slot() {
+        let a = fake_gpu_identity('a');
+        let b = fake_gpu_identity('b');
+        let shared = fake_gpu_identity('c');
+        let layout = tiny_arena_layout();
+        let plan = plan_causal_block_union_arena(
+            vec![
+                (a.clone(), layout, false),
+                (b.clone(), layout, false),
+                (shared, layout, true),
+            ],
+            64,
+            1024 * 1024,
+        )
+        .unwrap();
+        let route = [(&b, 0.75f32), (&a, 0.20f32), (&b, 0.05f32)];
+        let resolved = route
+            .iter()
+            .map(|(identity, weight)| {
+                (plan.entries.get(*identity).unwrap().view.w1.offset, *weight)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(resolved[0].0, resolved[2].0);
+        assert_ne!(resolved[0].0, resolved[1].0);
+        assert_eq!(
+            resolved.iter().map(|row| row.1).collect::<Vec<_>>(),
+            vec![0.75, 0.20, 0.05]
+        );
+    }
+
+    #[test]
+    fn causal_block_union_arena_enforces_checked_hard_bounds() {
+        let eight_gib = 8u64 * 1024 * 1024 * 1024;
+        let mut cursor = 0u64;
+        let span = place_causal_block_arena_span(&mut cursor, eight_gib, 256, eight_gib).unwrap();
+        assert_eq!(span.offset, 0);
+        assert_eq!(cursor, eight_gib);
+        let mut cursor = 0u64;
+        assert!(place_causal_block_arena_span(&mut cursor, eight_gib + 4, 256, eight_gib).is_err());
+        assert!(checked_align_up(u64::MAX, 256).is_err());
+        let mut cursor = u64::MAX - 1;
+        assert!(place_causal_block_arena_span(&mut cursor, 4, 4, u64::MAX).is_err());
+
+        let layout = tiny_arena_layout();
+        assert!(plan_causal_block_union_arena(
+            vec![(fake_gpu_identity('s'), layout, true)],
+            256,
+            eight_gib + 1,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn causal_block_union_arena_telemetry_proves_single_batch_upload() {
+        let layout = tiny_arena_layout();
+        let plan = plan_causal_block_union_arena(
+            vec![
+                (fake_gpu_identity('a'), layout, false),
+                (fake_gpu_identity('s'), layout, true),
+            ],
+            256,
+            1024 * 1024,
+        )
+        .unwrap();
+        let telemetry = CausalBlockUnionArenaTelemetry::from_plan(
+            &plan,
+            5,
+            1.0,
+            2.0,
+            3.0,
+            true,
+            CAUSAL_BLOCK_UNION_ARENA_MAX_BYTES,
+        )
+        .unwrap();
+        assert!(telemetry.enabled);
+        assert!(telemetry.persistent_worker_buffers);
+        assert_eq!(
+            telemetry.logical_capacity_bytes,
+            CAUSAL_BLOCK_UNION_ARENA_MAX_BYTES
+        );
+        assert_eq!(telemetry.staging_allocations, 1);
+        assert_eq!(telemetry.device_allocations, 1);
+        assert_eq!(telemetry.upload_submissions, 1);
+        assert_eq!(telemetry.copy_commands, 1);
+        assert_eq!(telemetry.copy_regions, 1);
+        assert_eq!(telemetry.actual_uploaded_bytes, plan.arena_bytes);
+        assert_eq!(telemetry.unique_tensor_views, 12);
+        assert_eq!(telemetry.unique_routed_identities, 1);
+        assert_eq!(telemetry.shared_identities, 1);
+        assert_eq!(telemetry.reused_routed_references, 5);
+        assert!(telemetry.strict_sha_identity);
+
+        let reused = CausalBlockUnionArenaTelemetry::from_plan(
+            &plan,
+            5,
+            1.0,
+            0.0,
+            3.0,
+            false,
+            CAUSAL_BLOCK_UNION_ARENA_MAX_BYTES,
+        )
+        .unwrap();
+        assert_eq!(reused.staging_allocations, 0);
+        assert_eq!(reused.device_allocations, 0);
+        assert_eq!(reused.arena_allocate_ms, 0.0);
     }
 
     #[test]
