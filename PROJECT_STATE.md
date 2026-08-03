@@ -2032,3 +2032,22 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
 - D盘仍余约 `70.45GiB`，未删页、未搬运 `42GiB` cache，保留空间远高于
   `20GiB` 安全线。下一步不是质量测试，而是跨 block 复用 verified mapping/SHA
   结果、用 pack/index 降低小文件cache-hit探测，并给第二块实际路由做有界预取。
+
+## 2026-08-03：真实 8-token API 可见文本门通过
+
+- A区跨 block verified mmap/SHA store 已以提交 `011fc3e` 落地；B区 resident K4 checkpoint
+  ChatEngine 合同已以提交 `ed356fc` 编译通过。当前 API 真门仍诚实使用 resident
+  `S14Runtime` token-major production backend，尚未把未实现的 production K4 decoder 注入接口。
+- 本机唯一 S14/Vulkan 实例对 `POST /v1/chat/completions` 返回 HTTP `200`。输入“你好”，
+  `prompt_tokens=5`、`completion_tokens=8`，真实连续 UTF-8 文本为
+  “好的，用户发来一个简单的问候”，墙钟 `256.578514s`，最终 `commit_epoch=12`。
+- 请求前后 Range cache 顶层 `.bin` 从 `18,539` 增至 `19,333`，新增 `794` 页、
+  `1,764,769,792 B`。按12个模型step、每step 1,548个physical Range请求计算，总请求
+  `18,576`，派生hit为`17,782`（`95.725668%`）；该hit口径为请求数减新落盘页数，未冒充
+  worker原生计数。完整证据见
+  `fast16/research/polaris_meridian_v1/whole_token_runtime/S14_API_8_TOKEN_GATE_20260803.json`。
+- API进程PID `42964`与其持久fetch worker PID `49788`均已关闭，未留下常驻模型实例；D盘仍余
+  约`68.575GiB`。首次新页的HTTPS 206、Content-Range、长度与SHA门未放宽。
+- ModelScope DSW的gfx942/191.7GiB HBM节点当前被stock RADV Vulkan `CS rejected -22`阻断；
+  不上传42GiB缓存、不启动HIP移植。它只保留为精确hotset/pack索引CPU预构建或后续训练的可选资源，
+  不阻塞本地API主线。

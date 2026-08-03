@@ -1,0 +1,63 @@
+{
+  "schema": "polaris-s14-api-gate-v1",
+  "created_at_bjt": "2026-08-03T20:02:39+08:00",
+  "git_head_before_evidence_commit": "ed356fc",
+  "endpoint": "http://127.0.0.1:11435/v1/chat/completions",
+  "request": {
+    "model": "Polaris-S14",
+    "messages": [
+      {
+        "role": "user",
+        "content": "你好"
+      }
+    ],
+    "max_tokens": 8,
+    "temperature": 0,
+    "stream": false
+  },
+  "response": {
+    "http_status": 200,
+    "model": "Polaris-S14",
+    "content": "好的，用户发来一个简单的问候",
+    "finish_reason": "length",
+    "prompt_tokens": 5,
+    "completion_tokens": 8,
+    "total_tokens": 13
+  },
+  "runtime": {
+    "path": "resident S14Runtime token-major production backend",
+    "resident_k4_decoder_active": false,
+    "wall_seconds": 256.578514,
+    "model_steps": 12,
+    "prefill_steps": 4,
+    "generation_steps": 8,
+    "final_commit_epoch": 12,
+    "physical_range_requests_per_step": 1548,
+    "physical_range_requests_total": 18576,
+    "step_elapsed_ms_sum": 254450.205,
+    "generation_step_elapsed_ms_sum": 225853.169
+  },
+  "cache": {
+    "measurement": "before/after top-level .bin inventory; hits derived as total physical Range requests minus newly materialized .bin files",
+    "before_bin_files": 18539,
+    "after_bin_files": 19333,
+    "misses": 794,
+    "derived_hits": 17782,
+    "derived_hit_rate_percent": 95.725668,
+    "before_bin_bytes": 45568827612,
+    "after_bin_bytes": 47333597404,
+    "downloaded_bytes": 1764769792
+  },
+  "integrity": {
+    "first_new_page_https_206_content_range_length_sha_required": true,
+    "proof_or_sha_relaxed": false,
+    "cpu_compute_fallback_allowed": false
+  },
+  "shutdown": {
+    "api_pid": 42964,
+    "fetch_worker_pid": 49788,
+    "api_exited": true,
+    "fetch_worker_exited": true,
+    "service_left_running": false
+  }
+}
