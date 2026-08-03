@@ -815,7 +815,9 @@ fn build_real_position1_k4_inputs_with_builder(
         hidden_banks: S14CausalBlockContextBound::new(Arc::clone(&context), hidden_banks),
         catalog: bundle_catalog,
         cache_root,
-        fetch_mode: DynamicPageFetchMode::LocalOnly,
+        // 用户已显式授权外网 Range；仅在真实在线 top-6 命中缺页时
+        // 通过现有 206/Content-Range/SHA transport 补页，不下载整模。
+        fetch_mode: DynamicPageFetchMode::ExplicitFetch,
         static_arena: S14CausalBlockContextBound::new(
             Arc::clone(&context),
             Arc::clone(&paged_arena),

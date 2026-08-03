@@ -21,7 +21,8 @@ use crate::{
     s14_causal_block_layer::{
         S14CausalBlockAttentionRouterOutput, S14CausalBlockGroupedMoeOutput,
         S14CausalBlockHiddenBinding, S14CausalBlockLayerInput, S14CausalBlockLayerRangePlan,
-        S14CausalBlockUnionBankBinding, S14CausalBlockUnionMaterializeReceipt,
+        S14CausalBlockRangeEvidenceReceipt, S14CausalBlockUnionBankBinding,
+        S14CausalBlockUnionMaterializeReceipt,
     },
     s14_causal_block_moe_adapter::S14CausalBlockVulkanMoeAdapter,
     s14_causal_block_resources::S14CausalBlockUnionBankPlan,
@@ -390,6 +391,7 @@ impl<R: S14CausalBlockGroupedMoeRecorder> S14CausalBlockProductionSingleLayerMoe
         {
             bail!("single-layer actual Range staging 回执漂移");
         }
+        let telemetry = materialized.telemetry;
         self.pending = Some(PendingMaterialized {
             captured,
             range_plan: range_plan.clone(),
@@ -404,6 +406,16 @@ impl<R: S14CausalBlockGroupedMoeRecorder> S14CausalBlockProductionSingleLayerMoe
             uploaded_bytes: range_plan.union_expert_bytes,
             // 这里表示一次真实物化；GPU copy 延迟到 grouped 同一个 command buffer。
             materialize_calls: 1,
+            range_evidence: S14CausalBlockRangeEvidenceReceipt {
+                proof_assets: telemetry.proof_assets,
+                explicit_fetch_lane_plans: telemetry.explicit_fetch_lane_plans,
+                mmap_requests: telemetry.mmap_requests_this_call,
+                mmap_hits: telemetry.mmap_hits_this_call,
+                mmap_misses: telemetry.mmap_misses_this_call,
+                sha256_bytes: telemetry.sha256_bytes_this_call,
+                staging_range_copies: stage.host_range_copies,
+                gpu_upload_copy_regions: stage.gpu_upload_copy_regions,
+            },
         })
     }
 

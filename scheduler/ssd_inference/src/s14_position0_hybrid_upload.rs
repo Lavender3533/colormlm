@@ -537,6 +537,16 @@ impl S14Position0HybridUploader {
             && self.progress.pending_head_chunk.is_none()
     }
 
+    /// Causal-block 的43层 static/routed 由 paged HC/QKV + union materializer 记录，
+    /// 不推进旧单 token uploader 的 layer 游标。切换后的 uploader 只作为
+    /// verified head staging owner，因此只验收 resident-small 与全新 head 流状态。
+    pub fn ready_for_causal_block_head_stream(&self) -> bool {
+        self.progress.static_complete
+            && self.progress.pending_layer.is_none()
+            && self.progress.next_head_chunk == 0
+            && self.progress.pending_head_chunk.is_none()
+    }
+
     /// resident-small 与可选 resident static 页已经由同源 runtime 完成 verified
     /// proof/SHA/mmap/upload。跨到 causal-block 后只能复用，不能再次执行 one-shot 上传。
     pub fn resident_static_uploaded(&self) -> bool {

@@ -533,9 +533,19 @@ fn validate_completed_host_output(
             .checkpoint
             .validate()
             .map_err(|error| anyhow::anyhow!("candidate checkpoint {lane} 非法: {error}"))?;
+        let record = position
+            .checkpoint
+            .committed_tokens
+            .last()
+            .context("K-lane terminal candidate checkpoint 缺少 token ledger")?;
+        let expected_record_position = expected_position
+            .checked_sub(1)
+            .context("K-lane terminal token ledger position underflow")?;
         if &position.routes != routes
             || position.predicted_token_id != head.token_id
             || position.checkpoint.position != expected_position
+            || record.position != expected_record_position
+            || record.predicted_token_id != position.predicted_token_id
         {
             bail!("K-lane terminal host checkpoint/routes/GPU prediction 不同源");
         }

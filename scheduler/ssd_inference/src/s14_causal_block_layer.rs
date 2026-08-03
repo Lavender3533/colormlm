@@ -131,6 +131,18 @@ pub struct S14CausalBlockAttentionRouterOutput {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct S14CausalBlockRangeEvidenceReceipt {
+    pub proof_assets: usize,
+    pub explicit_fetch_lane_plans: usize,
+    pub mmap_requests: u64,
+    pub mmap_hits: u64,
+    pub mmap_misses: u64,
+    pub sha256_bytes: u64,
+    pub staging_range_copies: usize,
+    pub gpu_upload_copy_regions: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct S14CausalBlockUnionMaterializeReceipt {
     pub layer: u8,
     pub bank_index: usize,
@@ -138,6 +150,7 @@ pub struct S14CausalBlockUnionMaterializeReceipt {
     pub physical_ranges: usize,
     pub uploaded_bytes: u64,
     pub materialize_calls: u32,
+    pub range_evidence: S14CausalBlockRangeEvidenceReceipt,
 }
 
 #[derive(Clone, Debug)]
@@ -160,6 +173,7 @@ pub struct S14CausalBlockLayerReceipt {
     pub union_expert_bytes: u64,
     pub attention_router_forward_calls: u32,
     pub union_range_materialize_calls: u32,
+    pub range_evidence: S14CausalBlockRangeEvidenceReceipt,
     pub grouped_moe_submit_calls: u32,
     pub serial_token_forward_calls: u32,
     pub routes: Vec<RouteDecision>,
@@ -413,6 +427,7 @@ pub struct S14CausalBlockLayerSummary {
     pub unique_experts: usize,
     pub physical_ranges: usize,
     pub union_expert_bytes: u64,
+    pub range_evidence: S14CausalBlockRangeEvidenceReceipt,
 }
 
 #[derive(Clone, Debug)]
@@ -630,6 +645,7 @@ pub fn execute_causal_block_full_depth<B: S14CausalBlockFullDepthBackend>(
             unique_experts: receipt.unique_experts,
             physical_ranges: receipt.physical_ranges,
             union_expert_bytes: receipt.union_expert_bytes,
+            range_evidence: receipt.range_evidence,
         });
     }
 
@@ -975,6 +991,18 @@ pub fn execute_causal_block_layer<B: S14CausalBlockLayerBackend>(
         || materialized.physical_ranges != range_plan.physical_ranges
         || materialized.uploaded_bytes != range_plan.union_expert_bytes
         || materialized.materialize_calls != 1
+        || materialized.range_evidence.proof_assets != range_plan.physical_ranges
+        || materialized.range_evidence.mmap_requests != range_plan.physical_ranges as u64
+        || materialized
+            .range_evidence
+            .mmap_hits
+            .checked_add(materialized.range_evidence.mmap_misses)
+            != Some(materialized.range_evidence.mmap_requests)
+        || (materialized.range_evidence.mmap_misses != 0
+            && materialized.range_evidence.sha256_bytes == 0)
+        || materialized.range_evidence.staging_range_copies != range_plan.physical_ranges
+        || materialized.range_evidence.gpu_upload_copy_regions != 1
+        || materialized.range_evidence.explicit_fetch_lane_plans > block_size
     {
         return Err(layer_error("union Range materialize 强回执漂移"));
     }
@@ -1014,6 +1042,7 @@ pub fn execute_causal_block_layer<B: S14CausalBlockLayerBackend>(
         union_expert_bytes: range_plan.union_expert_bytes,
         attention_router_forward_calls: attention.forward_calls,
         union_range_materialize_calls: materialized.materialize_calls,
+        range_evidence: materialized.range_evidence,
         grouped_moe_submit_calls: grouped.grouped_submit_calls,
         serial_token_forward_calls: grouped.serial_token_forward_calls,
         routes: attention.routes,
@@ -1476,6 +1505,16 @@ mod tests {
                 physical_ranges: range_plan.physical_ranges,
                 uploaded_bytes: range_plan.union_expert_bytes,
                 materialize_calls: 1,
+                range_evidence: S14CausalBlockRangeEvidenceReceipt {
+                    proof_assets: range_plan.physical_ranges,
+                    explicit_fetch_lane_plans: 0,
+                    mmap_requests: range_plan.physical_ranges as u64,
+                    mmap_hits: range_plan.physical_ranges as u64,
+                    mmap_misses: 0,
+                    sha256_bytes: 0,
+                    staging_range_copies: range_plan.physical_ranges,
+                    gpu_upload_copy_regions: 1,
+                },
             })
         }
 

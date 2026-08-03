@@ -263,6 +263,14 @@ impl S14CausalBlockProductionTerminalResourceOwner {
         if !Arc::ptr_eq(&context, prefix_checkpoint_arena.context()) {
             bail!("production terminal owner 与 prefix checkpoint arena VulkanContext 漂移");
         }
+        {
+            let state = head_upload
+                .lock()
+                .map_err(|_| anyhow::anyhow!("production terminal head uploader poisoned"))?;
+            if !state.uploader.resident_static_uploaded() {
+                bail!("production terminal HC/norm 绑定前 resident-small 尚未完成 verified upload");
+            }
+        }
         let terminal_static = resolve_terminal_static_slices(paged_arena.as_ref())?;
         validate_external_resources(
             block_size,
@@ -661,12 +669,8 @@ impl S14CausalBlockTerminalResourceOwner for S14CausalBlockProductionTerminalRes
             .head_upload
             .lock()
             .map_err(|_| "production terminal head uploader poisoned".to_owned())?;
-        if chunk == 0
-            && !state
-                .uploader
-                .ready_for_paged_head_stream(&self.head_weight_plan)
-        {
-            return Err("production terminal head uploader 尚未完成本 token 43层上传".into());
+        if chunk == 0 && !state.uploader.ready_for_causal_block_head_stream() {
+            return Err("production terminal head uploader 未处于 causal-block 全新 head 流起点".into());
         }
         let receipt = state
             .uploader

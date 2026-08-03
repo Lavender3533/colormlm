@@ -14,7 +14,8 @@ use crate::{
     s14_causal_block_layer::{
         S14CausalBlockAttentionRouterOutput, S14CausalBlockGroupedMoeOutput,
         S14CausalBlockHiddenBinding, S14CausalBlockLayerInput, S14CausalBlockLayerRangePlan,
-        S14CausalBlockUnionBankBinding, S14CausalBlockUnionMaterializeReceipt,
+        S14CausalBlockRangeEvidenceReceipt, S14CausalBlockUnionBankBinding,
+        S14CausalBlockUnionMaterializeReceipt,
     },
     s14_causal_block_resources::S14CausalBlockUnionBankPlan,
     s14_causal_block_union_materializer::{
@@ -310,6 +311,16 @@ impl<R: S14CausalBlockGroupedMoeRecorder> S14CausalBlockProductionMoeAdapter<R> 
             physical_ranges: range_plan.physical_ranges,
             uploaded_bytes: materialized.union_expert_bytes,
             materialize_calls: 1,
+            range_evidence: S14CausalBlockRangeEvidenceReceipt {
+                proof_assets: materialized.telemetry.proof_assets,
+                explicit_fetch_lane_plans: materialized.telemetry.explicit_fetch_lane_plans,
+                mmap_requests: materialized.telemetry.mmap_requests_this_call,
+                mmap_hits: materialized.telemetry.mmap_hits_this_call,
+                mmap_misses: materialized.telemetry.mmap_misses_this_call,
+                sha256_bytes: materialized.telemetry.sha256_bytes_this_call,
+                staging_range_copies: materialized.telemetry.staging_range_copies,
+                gpu_upload_copy_regions: materialized.telemetry.gpu_upload_copy_regions,
+            },
         })
     }
 

@@ -1897,3 +1897,99 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
 - 本轮另将约`1.188GiB`高置信无引用/可重建冗余移入Windows回收站：旧v17 batch build、24个
   已否决v18候选`.npy`及两个临时v38快照。它们可恢复，清空对应回收站项后才物理释放空间；S14、
   v47/v38、v17 runtime-v3、v18 runtime-v2、供体、Range/head/checkpoint与Rust/shader缓存均未触碰。
+
+## 2026-08-03：K=4/8 production terminal owner 与唯一 post-seal 发布路径闭合
+
+- 新增 concrete `S14CausalBlockProductionTerminalResourceOwner`，强持有真实`[K,4,4096]` BF16
+  final HC、final HC/norm权重、K-row terminal arena、单一K-prefix device checkpoint arena、
+  32份真实head chunk、producer timeline、command/pipeline与sticky status readback。单command执行
+  K次final HC、一次K-row RMSNorm和一次K-row BF16→F32；它不接受预制预测token。
+- terminal adapter只在GPU batched head完成且producer timeline已等待后校验HC/norm status；校验成功
+  才消费一次性host candidate finalizer。K份checkpoint必须来自同一arena且范围不重叠，head chunk
+  必须精确32份并符合production shape；发布失败会先drain producer timeline，禁止复用陈旧source。
+- 并发开发中出现的“直接publisher/record”与`post-seal hook`两条入口已收敛为单一路径：调用方只能
+  在idle时为下一block安装真实owner+finalizer；`begin_full_depth_block`核对context/K/base/checkpoint
+  ABI，43层seal后hook精确发布一份source，未验收export继续阻止下一block。publisher与owner的
+  record入口均收紧为crate内部，不能从bundle外绕过seal生命周期。
+- `cargo check --offline -p ssd_inference --lib`通过；terminal owner定向门3/3、adapter 2/2、bundle
+  post-seal门2/2通过。只运行了秒级编译/结构门，没有启动模型、网页、旧Python executor或旧长榜。
+- 当前仍不得宣称K=4 whole-token完成：43层block-major producer还必须生成K份真实KV/HC/compressor/
+  indexer prefix snapshot，并与本terminal owner的timeline/checkpoint arena同源闭合；之后才允许唯一
+  一次必要Rust/Vulkan K=4真门。当前权威端到端速度仍是N=8热态约`14.638320s/token`。
+
+## 2026-08-03：position1 K=4 concrete HC/QKV provider 与顶层 builder 缺口收敛
+
+- 新增 concrete `S14Base1K4ProductionHcQkvProvider`：它强制从真实position1 committed
+  `NativeState`与同源device-state slice开始，按43层严格顺序构造production HC/QKV图；L0--L2
+  根据四个真实input token从SHA验证的`tid2eid`解码physical ID，L3--L42读取SHA验证且finite的
+  router bias，并为position1--4生成ratio0/4/128三组真实K-row RoPE。
+- provider复用同一production paged arena与terminal `head_upload`，逐层准备真实static权重，读取
+  committed window-KV并写入自有43层current-KV arena；21个ratio4层必须精确提供21个candidate-state
+  recorder，缺层、乱序、重试或context漂移均poison/fail-closed。小型aux/current-KV allocation由显式
+  external owner销毁，不用RAII假装Vulkan资源已经释放。
+- `s14_causal_block_k4_whole_token_real.rs`已直接调用上述concrete provider并完整构造production bundle；
+  过去“缺concrete provider”的报错已删除。所有尚未公开的production能力收敛为唯一
+  `RealK4Position0CommittedProductionBuilder`：它必须在同一Vulkan context内执行position0 `0→5`并
+  原子返回authoritative host/device state、21个ratio4 owner、prefix arena/program、hidden/union、
+  terminal/head、host finalizer与evidence。当前默认实现会在初始化Vulkan和模型计算前明确拒绝：
+  `缺少同一 Vulkan context 内 position0 0→5 committed production state builder`。
+- `cargo check --offline -p ssd_inference --example s14_causal_block_k4_whole_token_real`与library离线编译
+  均通过；只跑编译门，未启动模型、网页、旧Python executor、forced-BOS replay或旧长榜。K=4真实
+  whole-token仍未完成，下一步只能实现这个唯一position0 production builder并接入21个ratio4 owner。
+- production bundle现把prefix producer从concrete provider作为强必需资源消费，并安装进HC/QKV
+  recorder；每层KV finalize后在同一个command录制K-prefix写集，fence后释放binder，43层seal时才
+  发布prefix program receipt。real builder的host finalizer类型也已收紧为
+  `S14CausalBlockDeferredHostCandidateBatch`：禁止begin前预造host snapshot，只能在terminal GPU head
+  完成后一次批量device→host回读K份完整checkpoint。上述接线继续只过离线编译门。
+
+## 2026-08-03：K=4 production embedding 与 prefix post-seal 生命周期收紧
+
+- 新增 `s14_causal_block_k4_input_hidden` 强 owner：按实际 base position 为四个任意 input token
+  解析 embedding asset proof，对四个8KiB BF16 Range row做完整SHA/mmap，并通过
+  `S14EmbeddingBroadcastPipeline` 生成真实 `[K,4,4096]` BF16 initial hidden；不接受固定BOS、
+  manifest replay、零填充或host capture，外部owner必须在bundle释放后显式销毁Vulkan buffer。
+- prefix arena现在把producer receipt与terminal验收拆开：43层producer只能发布一次receipt，terminal
+  post-seal窗口验证完整K×43层三角覆盖后才原子进入sealed并允许host readback；提前导出、重复发布、
+  fence等待失败后误销毁pending资源均继续fail-closed。
+- `cargo check --offline -p ssd_inference --lib`与
+  `cargo check --offline -p ssd_inference --example s14_causal_block_k4_whole_token_real`均通过；只跑离线
+  编译门，没有启动模型、网页、旧Python executor或旧长榜。real example仍由唯一position0 committed
+  production builder收口，未移除该缺口前不得运行或宣称K=4 whole-token完成。
+- 存储审计确认D盘约余81GiB，`D:/models`只有正在使用的Polaris-S14约32.3GiB；v38/v36/v6与
+  Qwen/Coder/Kimi供体仍有运行回滚或能力岛用途，当前没有高置信“无引用且值得删除”的大模型，
+  因而本轮没有删除模型。约2.28GiB旧编译target虽可重建，但并发编译期暂不清理。
+
+## 2026-08-03：K=4 position0 production builder 与真实成功证据账本闭合编译门
+
+- `s14_causal_block_k4_whole_token_real`中原先硬拒绝的position0 builder已替换为真实
+  `S14Runtime`路径：同一runtime先完成position0 `0→5`原子提交，再导出同源committed device
+  state、paged arena、uploader/store、layer program与union banks；随后构造prefix initializer、
+  21层ratio4 state owner、positions1..4真实embedding hidden、terminal/head及显式external destroy链。
+- 新增纯host共享production evidence ledger。它不持有Vulkan context/buffer/command/fence；21层
+  ratio4回执只在layer fence、prefix release、sticky status与route decode全部成功后记账，prefix
+  seal只在terminal post-seal验收后记账。只读snapshot从真实`FULL_DEPTH_LAYERS/COMPRESS_RATIOS`
+  派生期望层集合，分别报告position3 finalize/writeback/rollover、position4 indexer/attention、
+  prefix seal、CPU fallback与serial-token-forward计数；不使用固定假常量。
+- `cargo check --offline -p ssd_inference --lib`与K=4 real example离线编译均通过；只保留项目既有
+  warnings。尚未启动唯一Rust/Vulkan K=4整模真门，因此不得宣称K=4 whole-token、S14模型完成、
+  网页聊天或20--50 token/s已经成立。
+- 本轮没有删除模型。D盘容量仍足够，当前瓶颈是K=4真实数值门而非下载或存储；S14、v47/v38、
+  v17/v18回滚包、供体、Range/head/checkpoint与编译缓存继续保留。
+
+## 2026-08-03：S14 production K=4 whole-token 唯一 Rust/Vulkan 真门通过
+
+- release 真门已真实执行并返回 `status=pass`：`base_position=1`、positions `1..4`、
+  `43/43`层、`172` 行图内在线 top-6、`43` 次 grouped MoE submit、position3 ratio4
+  finalize/writeback/rollover、position4 compressed indexer/attention、`4` 份prefix checkpoint、
+  `1` 次batched head，`serial_token_forward_calls=0`且无CPU fallback。本门为rollback验证，
+  `committed=false`，未污染authoritative committed state。
+- 真实路由命中的缺页已改由 `DynamicPageFetchMode::ExplicitFetch` 调用既有Range
+  transport按需补齐；本次只下载实际top-6需要的14组expert、84份payload，共
+  `187170816`字节（约`178.5MiB`），逐项验证HTTPS 206、exact Content-Range、长度和
+  SHA proof，未下载整模。最终复跑全部命中本地cache并在约`27s`内通过。
+- terminal/head不再错用旧单token uploader的43层layer游标。causal-block模式下HC/QKV与
+  union materializer自行完成43层paged上传，uploader只作为verified resident-small/head
+  staging owner；现在精确验收全新head流起点，不再将已完成的K-block误拒。
+- 本轮只运行了release编译与上述唯一必要真门，未跑旧长榜、旧Python executor、
+  固定BOS replay、网页或API。`D:/models` 仍只有当前Polaris-S14及其必需Range
+  cache，没有可高置信删除的无用模型，因此未删除模型。

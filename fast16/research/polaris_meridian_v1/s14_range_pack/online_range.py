@@ -17,6 +17,7 @@ import os
 import re
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
@@ -710,11 +711,23 @@ class UrllibHttpsRangeTransport:
     """生产 HTTPS transport；最终重定向 URL 仍由 RangeCache 做 HTTPS 校验。"""
 
     def open_range(self, url: str, start: int, end: int, timeout: float) -> ResponseLike:
-        request = urllib.request.Request(
-            url,
-            headers={"Range": f"bytes={start}-{end}", "Accept-Encoding": "identity"},
-        )
-        return urllib.request.urlopen(request, timeout=timeout)  # type: ignore[return-value]
+        for attempt in range(4):
+            request = urllib.request.Request(
+                url,
+                headers={"Range": f"bytes={start}-{end}", "Accept-Encoding": "identity"},
+            )
+            try:
+                return urllib.request.urlopen(request, timeout=timeout)  # type: ignore[return-value]
+            except urllib.error.HTTPError:
+                # 4xx/5xx 响应是明确的远端状态，交给上层完整传播，不能靠重试掩盖。
+                raise
+            except (urllib.error.URLError, TimeoutError, OSError):
+                if attempt == 3:
+                    raise
+                # 只覆盖连接建立/瞬时网络失败；Range、Content-Range、长度和 SHA
+                # 仍由 RangeCache 在响应返回后逐项硬校验。
+                time.sleep(0.5 * (2**attempt))
+        raise AssertionError("unreachable")
 
 
 def _require_https(url: str) -> None:
