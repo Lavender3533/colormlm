@@ -261,3 +261,21 @@ fast16/research/polaris_meridian_v1/HANDOFF_20260802_ASYNC_TIMELINE.md，
 - 存储清理只处理高置信、无引用、可重建副本。最新约`1.188GiB`旧v17 build、已否决v18 `.npy`
   和临时v38快照已移入Windows回收站；S14、v47/v38、v17 runtime-v3、v18 runtime-v2、供体、
   Range/head/checkpoint及Rust/shader缓存全部保留。回收站未清空前这些空间仍可恢复且不会物理释放。
+
+## 2026-08-03 19:28：K=4 连续两块成立，hot 性能门未过
+
+- 同输入 production 真门严格串行 A/B；两轮都是43层两块、block1 position 1→5、
+  block2 base 5、`committed=true`，真实 selected token 均为 `17351`。这是新
+  Rust/Vulkan S14 continuation，不是旧executor、fixture或固定checkpoint replay。
+- A：`139.703s`，66 miss，下载`140.25MiB`，fetch `67.302s`，union/SHA/mmap
+  `8.542s`，其他计算/编排/启动/checkpoint残差`63.859s`。cold `<5min` 成立。
+- B：`100.334s`，仍有24 miss与`51.00MiB`下载，fetch `44.490s`，union
+  `6.518s`，残差`49.326s`。B不能称hot，hot `<90s` 失败`10.334s`；禁止通过
+  重复第三次刷热掩盖。两轮union都是0 mmap hit，分别对`17.457GiB`/
+  `17.481GiB` payload重做SHA，这是当前最硬的hot路径浪费。
+- durable checkpoint新增的`sha256_file()`曾因1MiB栈数组导致Windows主线程
+  `0xC00000FD`；已改为堆缓冲，根修后 B 轮已在普通主线程通过。
+- 下一唯一顺序：跨 block 常驻 verified mapped store/SHA receipt → 用已完成的
+  pack-index 规划降低53,914小文件探测 → 用已知task/K-block route做有界预取 →
+  再做一次真正`cache_misses=0` A/B。不跑质量榜、旧长榜或第三次刷热。D盘约余
+  `70.45GiB`，必须始终保留至少`20GiB`。

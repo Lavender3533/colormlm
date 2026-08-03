@@ -16,8 +16,11 @@
 - 当前网页能力仍只按权威 token-major N=8 门开放短回复。8-token completion CLI 已越过
   position8，并在 position9/L21 冷补页时触及20分钟工具上限；没有数值错误，但未形成完整
   长回复证据，因此 API 暂不冒进放宽门限。
-- 当前唯一主线是把已通过的 K=4 continuation 抽成 resident 可重复接口，并补齐非对齐 base
-  position 后接入现有 Open WebUI。v47 后续只作为草稿岛；能力岛/胶囊不抢占这一闭环。
+- K=4 两块 cold/warm 真实 A/B 已执行且不再重复：两轮都产生真实 token `17351`
+  并完成第二块提交，但拟定 hot 轮仍有 24 个冷 miss，墙钟 `100.334s`，没有达到
+  `<90s` 目标。当前唯一性能主线是让 verified mmap/SHA store 真正跨 block 常驻并消除
+  cache-hit 小文件重复探测；随后再把 resident continuation 接入现有 Open WebUI。v47 只作
+  草稿岛，能力岛/胶囊不抢占这一闭环。
 
 ## 正式命名与兼容层
 
@@ -2008,3 +2011,24 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
 - 本轮只运行了release编译与上述唯一必要真门，未跑旧长榜、旧Python executor、
   固定BOS replay、网页或API。`D:/models` 仍只有当前Polaris-S14及其必需Range
   cache，没有可高置信删除的无用模型，因此未删除模型。
+
+## 2026-08-03：K=4 双 block cold/warm A/B 与性能归因
+
+- 同一输入 `[5,223,939,21,695,553,1266,16179,0]` 严格串行执行两次 production
+  Rust/Vulkan 真门。两次均为 `status=pass`：block1 从 `base_position=1` 提交到
+  position 5，block2 消费该 checkpoint 从 `base_position=5` 进入，最终
+  `committed=true`、`final_position=6`、真实 selected token 均为 `17351`。
+- A 轮墙钟 `139.703s`，86层次的 exact-route prefetch 合计 `67.302s`，冷 miss `66`、
+  下载 `140.25MiB`；union proof/open/mmap/SHA 合计 `8.542s`，对 `17.457GiB` payload
+  重做 SHA；其余计算、Vulkan 编排、启动和checkpoint残差约 `63.859s`。
+- B 轮墙钟 `100.334s`，不能标为 hot：虽然输入与最终token一致，第二块的实际
+  routed Range identity 仍扩展出 `24` 个 miss，下载 `51.00MiB`。exact-route prefetch
+  `44.490s`，union `6.518s`，对 `17.481GiB` payload 重做 SHA，其余残差
+  `49.326s`。因此 cold `<5min` 成立，hot `<90s` 尚未成立；按约定不再跑第三次
+  刷热。
+- 启动时曾在 `1.7s` 以 Windows `0xC00000FD` 退出，根因为 durable checkpoint
+  `sha256_file()` 在默认 1MiB 主线程栈上声明 1MiB 数组。已改为堆缓冲，撤销入口
+  扩栈 workaround；根修后 B 轮已在普通主线程通过。
+- D盘仍余约 `70.45GiB`，未删页、未搬运 `42GiB` cache，保留空间远高于
+  `20GiB` 安全线。下一步不是质量测试，而是跨 block 复用 verified mapping/SHA
+  结果、用 pack/index 降低小文件cache-hit探测，并给第二块实际路由做有界预取。
