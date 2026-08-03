@@ -1,7 +1,8 @@
 //! S14 StarFold packed-row MXFP4 的 proof-bound 流式组包。
 //!
 //! 每个 tile 分别从 weight/scale 的权威 Range 取完整行，再固定拼成
-//! `[weight rows][scale rows]`。这里只分配约 1 MiB packed payload，不恢复整专家。
+//! `[weight rows][scale rows]`。这里只借用一个受启动合同约束的 packed supertile，
+//! 不恢复整专家或旧 GiB union bank。
 
 use crate::{
     s14_starfold_cache::{StarfoldMicrotileSpan, StarfoldPageKey},

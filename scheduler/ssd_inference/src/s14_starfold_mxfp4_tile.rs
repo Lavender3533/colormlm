@@ -8,7 +8,9 @@ use ash::vk;
 pub const S14_STARFOLD_MXFP4_TILE_SPV: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/s14_starfold_mxfp4_tile.spv"));
 
-pub const S14_STARFOLD_MXFP4_MAX_WINDOW_BYTES: u32 = 1024 * 1024;
+/// 与 production StarFold 双窗口合同一致；64 MiB 上限仍远低于旧 GiB union bank，
+/// 8 MiB 默认值可让当前 4096×2048/2048×4096 投影各自一次整行提交完成。
+pub const S14_STARFOLD_MXFP4_MAX_WINDOW_BYTES: u32 = 64 * 1024 * 1024;
 pub const S14_STARFOLD_MXFP4_LOCAL_SIZE: u32 = 128;
 pub const S14_STARFOLD_MXFP4_PAYLOAD_CONTRACT_VERSION: u32 = 1;
 pub const S14_STARFOLD_MXFP4_ROW_ALIGNMENT: u64 = 64;
