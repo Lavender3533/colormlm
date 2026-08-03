@@ -95,6 +95,7 @@ pub struct S14StarfoldProjectionExecutionReceipt {
 pub struct S14StarfoldRoutedExecutor {
     compute: S14StarfoldMxfp4ComputeOwner,
     next_consumer_id: u64,
+    next_transfer_epoch: u64,
 }
 
 impl S14StarfoldRoutedExecutor {
@@ -102,6 +103,7 @@ impl S14StarfoldRoutedExecutor {
         Ok(Self {
             compute: S14StarfoldMxfp4ComputeOwner::new(context)?,
             next_consumer_id: 1,
+            next_transfer_epoch: 1,
         })
     }
 
@@ -122,78 +124,97 @@ impl S14StarfoldRoutedExecutor {
             bail!("S14 StarFold routed executor 的 plan/schedule/runtime identity 漂移");
         }
 
-        let mut packed_uploads = 0u32;
-        let mut packed_upload_bytes = 0u64;
-        let mut lane_dispatches = 0u32;
-        let mut queue_submit_calls = 0u32;
-        let mut completion = None;
-        for expert in &schedule.experts {
-            for work in expert.tiles_for(projection) {
-                let packed =
-                    materialize_packed_mxfp4_tile(runtime, layer_plan, expert.expert_id, work)?;
-                let proof = Arc::clone(packed.proof());
-                let payload_bytes = proof.byte_len();
-                let ticket = runtime.reserve_verified_upload(proof, 1)?;
-                let ready = runtime.upload_verified_microtile(ticket)?;
+        let transfer_epoch = self.next_transfer_epoch;
+        self.next_transfer_epoch = self
+            .next_transfer_epoch
+            .checked_add(1)
+            .context("S14 StarFold transfer epoch overflow")?;
+        runtime.begin_transfer_block_epoch(transfer_epoch)?;
 
-                let mut lane_ios = Vec::with_capacity(expert.lane_uses.len());
-                for lane_use in &expert.lane_uses {
-                    let branch = branch_index(lane_use.lane, lane_use.route_rank)?;
-                    let (input, output) =
-                        projection_io(projection, branch, lane_use.lane, buffers, layout)?;
-                    lane_ios.push(S14StarfoldMxfp4LaneIo {
-                        lane: lane_use.lane,
-                        input_f32: input,
-                        output_f32: output,
-                    });
+        let execution = (|| -> Result<S14StarfoldProjectionExecutionReceipt> {
+            let mut packed_uploads = 0u32;
+            let mut packed_upload_bytes = 0u64;
+            let mut lane_dispatches = 0u32;
+            let mut queue_submit_calls = 0u32;
+            let mut completion = None;
+            for expert in &schedule.experts {
+                for work in expert.tiles_for(projection) {
+                    let packed =
+                        materialize_packed_mxfp4_tile(runtime, layer_plan, expert.expert_id, work)?;
+                    let proof = Arc::clone(packed.proof());
+                    let payload_bytes = proof.byte_len();
+                    let ticket = runtime.reserve_verified_upload(proof, 1)?;
+                    let ready =
+                        runtime.upload_verified_microtile_in_epoch(transfer_epoch, ticket)?;
+
+                    let mut lane_ios = Vec::with_capacity(expert.lane_uses.len());
+                    for lane_use in &expert.lane_uses {
+                        let branch = branch_index(lane_use.lane, lane_use.route_rank)?;
+                        let (input, output) =
+                            projection_io(projection, branch, lane_use.lane, buffers, layout)?;
+                        lane_ios.push(S14StarfoldMxfp4LaneIo {
+                            lane: lane_use.lane,
+                            input_f32: input,
+                            output_f32: output,
+                        });
+                    }
+                    let consumer_id = self.next_consumer_id;
+                    self.next_consumer_id = self
+                        .next_consumer_id
+                        .checked_add(1)
+                        .context("S14 StarFold compute consumer id overflow")?;
+                    let ready_binding = ready.binding();
+                    let ready_proof = Arc::clone(ready.proof());
+                    let receipt = self.compute.submit_ready_tile_batch(
+                        runtime.vulkan_windows_mut()?,
+                        ready_binding,
+                        ready_proof,
+                        consumer_id,
+                        packed.shape,
+                        packed.tile_index,
+                        &lane_ios,
+                        packed.scale_audit(),
+                    )?;
+                    packed_uploads = packed_uploads
+                        .checked_add(1)
+                        .context("S14 StarFold packed upload count overflow")?;
+                    packed_upload_bytes = packed_upload_bytes
+                        .checked_add(payload_bytes)
+                        .context("S14 StarFold packed upload bytes overflow")?;
+                    lane_dispatches = lane_dispatches
+                        .checked_add(receipt.lane_dispatches)
+                        .context("S14 StarFold lane dispatch count overflow")?;
+                    queue_submit_calls = queue_submit_calls
+                        .checked_add(receipt.queue_submit_calls)
+                        .context("S14 StarFold queue submit count overflow")?;
+                    completion = Some(receipt.signal_compute);
                 }
-                let consumer_id = self.next_consumer_id;
-                self.next_consumer_id = self
-                    .next_consumer_id
-                    .checked_add(1)
-                    .context("S14 StarFold compute consumer id overflow")?;
-                let ready_binding = ready.binding();
-                let ready_proof = Arc::clone(ready.proof());
-                let receipt = self.compute.submit_ready_tile_batch(
-                    runtime.vulkan_windows_mut()?,
-                    ready_binding,
-                    ready_proof,
-                    consumer_id,
-                    packed.shape,
-                    packed.tile_index,
-                    &lane_ios,
-                    packed.scale_audit(),
-                )?;
-                packed_uploads = packed_uploads
-                    .checked_add(1)
-                    .context("S14 StarFold packed upload count overflow")?;
-                packed_upload_bytes = packed_upload_bytes
-                    .checked_add(payload_bytes)
-                    .context("S14 StarFold packed upload bytes overflow")?;
-                lane_dispatches = lane_dispatches
-                    .checked_add(receipt.lane_dispatches)
-                    .context("S14 StarFold lane dispatch count overflow")?;
-                queue_submit_calls = queue_submit_calls
-                    .checked_add(receipt.queue_submit_calls)
-                    .context("S14 StarFold queue submit count overflow")?;
-                completion = Some(receipt.signal_compute);
+            }
+            if packed_uploads == 0 || lane_dispatches == 0 || packed_uploads != queue_submit_calls {
+                bail!("S14 StarFold routed projection 没有形成 upload→batch-dispatch 一一对应");
+            }
+            Ok(S14StarfoldProjectionExecutionReceipt {
+                layer: schedule.layer,
+                base_position: schedule.base_position,
+                projection,
+                unique_experts: schedule.experts.len() as u32,
+                packed_uploads,
+                packed_upload_bytes,
+                lane_dispatches,
+                queue_submit_calls,
+                completion: completion
+                    .context("S14 StarFold routed projection 缺少 compute completion")?,
+                serial_token_forward_calls: 0,
+            })
+        })();
+        let drain = runtime.drain_transfer_block_epoch(transfer_epoch);
+        match (execution, drain) {
+            (Ok(receipt), Ok(())) => Ok(receipt),
+            (Err(error), Ok(())) | (Ok(_), Err(error)) => Err(error),
+            (Err(error), Err(drain)) => {
+                Err(anyhow::anyhow!("{error:#}; transfer epoch drain={drain:#}"))
             }
         }
-        if packed_uploads == 0 || lane_dispatches == 0 || packed_uploads != queue_submit_calls {
-            bail!("S14 StarFold routed projection 没有形成 upload→batch-dispatch 一一对应");
-        }
-        Ok(S14StarfoldProjectionExecutionReceipt {
-            layer: schedule.layer,
-            base_position: schedule.base_position,
-            projection,
-            unique_experts: schedule.experts.len() as u32,
-            packed_uploads,
-            packed_upload_bytes,
-            lane_dispatches,
-            queue_submit_calls,
-            completion: completion.context("S14 StarFold routed projection 缺少 compute completion")?,
-            serial_token_forward_calls: 0,
-        })
     }
 
     pub fn try_destroy(&mut self) -> Result<()> {

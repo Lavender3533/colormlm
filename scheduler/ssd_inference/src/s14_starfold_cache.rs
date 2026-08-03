@@ -14,15 +14,25 @@
 //! 给实际 `GpuBuffer` 分配 offset，并在每次 SSD/RAM 读取和 Vulkan 提交前检查
 //! [`StarfoldCancellationToken::is_cancelled`] 即可接入。
 
+use crate::{
+    s14_input_asset_plan::S14PlannedRangeAsset,
+    s14_position0_mapped_assets::{VerifiedMappedAsset, VerifiedMappedAssetStore},
+};
+use polaris_s14_runner::Position0Asset;
+use sha2::{Digest, Sha256};
 use std::{
     cmp::Ordering,
     collections::{BTreeMap, BinaryHeap, HashMap},
     error::Error,
     fmt,
+    fs::{File, OpenOptions},
+    io::Read,
+    path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering as AtomicOrdering},
-        Arc,
+        Arc, Condvar, Mutex, OnceLock,
     },
+    time::SystemTime,
 };
 
 pub const STARFOLD_B4_LANES: usize = 4;
@@ -33,6 +43,10 @@ pub const STARFOLD_MIN_RAM_PAGES: usize = 1;
 pub const STARFOLD_MAX_RAM_PAGES: usize = 15_000;
 pub const STARFOLD_MIN_PREFETCH_DISTANCE: u16 = 2;
 pub const STARFOLD_MAX_PREFETCH_DISTANCE: u16 = 8;
+pub const STARFOLD_DEFAULT_VERIFIED_LEASES: usize = 4_096;
+pub const STARFOLD_MAX_VERIFIED_LEASES: usize = STARFOLD_MAX_RAM_PAGES;
+pub const STARFOLD_VERIFIED_LEASE_CACHE_CONTRACT_VERSION: u32 = 1;
+const STARFOLD_MAX_PROOF_BYTES: u64 = 16 * 1024 * 1024;
 
 pub type StarfoldResult<T> = Result<T, StarfoldError>;
 
@@ -920,6 +934,753 @@ impl StarfoldRamPageCache {
         stats.resident_pages = self.entries.len();
         stats
     }
+}
+
+// ---- 进程级 verified mmap/proof/SHA 热 lease --------------------------------------
+
+/// 一份可跨 K4 block、跨同进程请求复用的完整 Range 身份。
+///
+/// `payload_sha256` 与 `proof_sha256` 都来自已解析的 Range proof；文件长度和修改时间
+/// 另由热缓存记录。调用方只能从 [`StarfoldVerifiedLeaseCache::acquire_planned`] 得到
+/// 此身份，不能把普通 mmap 冒充为已验证 lease。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StarfoldVerifiedLeaseIdentity {
+    pub tensor: String,
+    pub cache_key: String,
+    pub range_key: String,
+    pub payload_path: PathBuf,
+    pub payload_bytes: u64,
+    pub payload_sha256: String,
+    pub proof_path: PathBuf,
+    pub proof_sha256: String,
+    pub hash_authority: String,
+    pub expert_id: Option<u16>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct StarfoldVerifiedLeaseKey {
+    tensor: String,
+    cache_key: String,
+    range_key: String,
+    payload_path: PathBuf,
+    payload_bytes: u64,
+    proof_path: PathBuf,
+    expert_id: Option<u16>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct StarfoldFileStamp {
+    bytes: u64,
+    modified: SystemTime,
+    #[cfg(unix)]
+    device: u64,
+    #[cfg(unix)]
+    inode: u64,
+}
+
+/// proof 文件句柄和 verified payload mmap 必须与 microtile 一起存活。
+///
+/// Windows 上两个句柄都拒绝写入/删除共享；Unix 上即使路径被原子替换，当前 lease
+/// 仍指向已经散列验证的旧 inode，而后续 acquire 会因 inode/mtime 漂移重新验证。
+#[derive(Debug)]
+pub struct StarfoldVerifiedMappedLease {
+    identity: StarfoldVerifiedLeaseIdentity,
+    asset: Position0Asset,
+    mapped: Arc<VerifiedMappedAsset>,
+    #[allow(dead_code)]
+    proof_file: File,
+    payload_stamp: StarfoldFileStamp,
+    proof_stamp: StarfoldFileStamp,
+}
+
+impl StarfoldVerifiedMappedLease {
+    pub fn identity(&self) -> &StarfoldVerifiedLeaseIdentity {
+        &self.identity
+    }
+
+    pub fn asset(&self) -> &Position0Asset {
+        &self.asset
+    }
+
+    fn payload_bytes(&self) -> &[u8] {
+        self.mapped.bytes()
+    }
+
+    /// microtile 的唯一 host 读取入口。取得本类型本身就证明完整 proof 与 payload SHA
+    /// 已经闭合；这里再绑定 offset/length，禁止使用方绕过 planned Range 边界。
+    pub fn microtile(&self, offset: u64, bytes: u32) -> StarfoldResult<&[u8]> {
+        if bytes == 0 {
+            return Err(StarfoldError::new(
+                "Starfold verified microtile bytes 不能为 0",
+            ));
+        }
+        let end = offset
+            .checked_add(u64::from(bytes))
+            .ok_or_else(|| StarfoldError::new("Starfold verified microtile end overflow"))?;
+        if end > self.identity.payload_bytes {
+            return Err(StarfoldError::new(
+                "Starfold verified microtile 越出 proof-bound payload",
+            ));
+        }
+        let start = usize::try_from(offset)
+            .map_err(|_| StarfoldError::new("Starfold verified microtile offset 超出 usize"))?;
+        let end = usize::try_from(end)
+            .map_err(|_| StarfoldError::new("Starfold verified microtile end 超出 usize"))?;
+        self.payload_bytes()
+            .get(start..end)
+            .ok_or_else(|| StarfoldError::new("Starfold verified mmap slice 越界"))
+    }
+
+    fn files_are_current(&self) -> StarfoldResult<bool> {
+        Ok(
+            file_stamp(&self.identity.payload_path)? == self.payload_stamp
+                && file_stamp(&self.identity.proof_path)? == self.proof_stamp,
+        )
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StarfoldVerifiedLeaseCacheStats {
+    pub requests: u64,
+    pub hits: u64,
+    pub misses: u64,
+    pub waits: u64,
+    pub invalidations: u64,
+    pub evictions: u64,
+    pub resident_entries: usize,
+    pub resident_logical_bytes: u64,
+    /// 命中热 lease 后避免再次完整散列的 payload 逻辑字节。
+    pub sha256_bytes_avoided: u64,
+}
+
+#[derive(Debug)]
+enum VerifiedLeaseSlotState {
+    Vacant,
+    Loading,
+    Ready(Arc<StarfoldVerifiedMappedLease>),
+}
+
+#[derive(Debug)]
+struct VerifiedLeaseSlot {
+    state: Mutex<VerifiedLeaseSlotState>,
+    changed: Condvar,
+}
+
+impl VerifiedLeaseSlot {
+    fn new() -> Self {
+        Self {
+            state: Mutex::new(VerifiedLeaseSlotState::Vacant),
+            changed: Condvar::new(),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct VerifiedLeaseRegistryEntry {
+    slot: Arc<VerifiedLeaseSlot>,
+    last_touch: u64,
+    logical_bytes: u64,
+}
+
+#[derive(Debug, Default)]
+struct VerifiedLeaseRegistry {
+    entries: HashMap<StarfoldVerifiedLeaseKey, VerifiedLeaseRegistryEntry>,
+    clock: u64,
+    stats: StarfoldVerifiedLeaseCacheStats,
+}
+
+/// 有界、并发安全的 verified mmap 热 lease 缓存。
+///
+/// 不同资产可并发执行首次 SHA；同一资产只有一个 loader，其余线程等待同一个 slot。
+/// 缓存只保存完整 Range mmap，microtile 仍由 lease 的 [`StarfoldVerifiedMappedLease::microtile`]
+/// 做 proof-bound 切片，不会把未验证 RAM 页发布给 Vulkan 上传路径。
+#[derive(Debug)]
+pub struct StarfoldVerifiedLeaseCache {
+    capacity_entries: usize,
+    registry: Mutex<VerifiedLeaseRegistry>,
+}
+
+impl StarfoldVerifiedLeaseCache {
+    pub fn new(capacity_entries: usize) -> StarfoldResult<Self> {
+        if !(1..=STARFOLD_MAX_VERIFIED_LEASES).contains(&capacity_entries) {
+            return Err(StarfoldError::new(format!(
+                "Starfold verified lease capacity 必须位于 1..={STARFOLD_MAX_VERIFIED_LEASES}: actual={capacity_entries}"
+            )));
+        }
+        Ok(Self {
+            capacity_entries,
+            registry: Mutex::new(VerifiedLeaseRegistry::default()),
+        })
+    }
+
+    pub const fn capacity_entries(&self) -> usize {
+        self.capacity_entries
+    }
+
+    /// 从 planned Range 获取进程级热 lease。cache hit 不再读取 proof、不重新 mmap，
+    /// 也不重新散列 payload；但每次仍复核 payload/proof 的长度、mtime（Unix 额外复核
+    /// dev/inode）。任何漂移都会先失效旧 entry，再走完整 proof/SHA loader。
+    pub fn acquire_planned(
+        &self,
+        allowed_root: &Path,
+        planned: &S14PlannedRangeAsset,
+        expert_id: Option<u16>,
+    ) -> StarfoldResult<Arc<StarfoldVerifiedMappedLease>> {
+        let canonical_root = canonical_directory(allowed_root)?;
+        let key = normalized_lease_key(&canonical_root, planned, expert_id)?;
+        let slot = self.slot_for(&key)?;
+
+        loop {
+            let mut state = slot
+                .state
+                .lock()
+                .map_err(|_| StarfoldError::new("Starfold verified lease slot poisoned"))?;
+            match &*state {
+                VerifiedLeaseSlotState::Ready(lease) => {
+                    let lease = Arc::clone(lease);
+                    drop(state);
+                    if lease.files_are_current()? {
+                        planned
+                            .validate_resolved_position0_asset(lease.asset(), expert_id)
+                            .map_err(|error| {
+                                StarfoldError::new(format!(
+                                    "Starfold verified lease cache hit planned identity 漂移: {error:#}"
+                                ))
+                            })?;
+                        self.record_hit(&key, &slot, lease.identity.payload_bytes)?;
+                        return Ok(lease);
+                    }
+                    let mut state = slot.state.lock().map_err(|_| {
+                        StarfoldError::new("Starfold verified lease invalidation slot poisoned")
+                    })?;
+                    if matches!(&*state, VerifiedLeaseSlotState::Ready(current) if Arc::ptr_eq(current, &lease))
+                    {
+                        *state = VerifiedLeaseSlotState::Vacant;
+                        slot.changed.notify_all();
+                        drop(state);
+                        self.record_invalidation(&key, &slot)?;
+                    }
+                }
+                VerifiedLeaseSlotState::Loading => {
+                    state = slot.changed.wait(state).map_err(|_| {
+                        StarfoldError::new("Starfold verified lease wait slot poisoned")
+                    })?;
+                    drop(state);
+                    // 不得在持有 slot mutex 时再取 registry mutex；slot_for 的淘汰
+                    // 路径按 registry -> slot 的顺序取锁，反向取锁会形成 ABBA 死锁。
+                    self.record_wait()?;
+                }
+                VerifiedLeaseSlotState::Vacant => {
+                    *state = VerifiedLeaseSlotState::Loading;
+                    drop(state);
+                    self.record_miss()?;
+                    let loaded = load_verified_lease(&canonical_root, planned, expert_id, &key);
+                    let mut state = slot.state.lock().map_err(|_| {
+                        StarfoldError::new("Starfold verified lease publish slot poisoned")
+                    })?;
+                    match loaded {
+                        Ok(lease) => {
+                            let lease = Arc::new(lease);
+                            *state = VerifiedLeaseSlotState::Ready(Arc::clone(&lease));
+                            slot.changed.notify_all();
+                            drop(state);
+                            self.record_publish(&key, &slot, lease.identity.payload_bytes)?;
+                            return Ok(lease);
+                        }
+                        Err(error) => {
+                            *state = VerifiedLeaseSlotState::Vacant;
+                            slot.changed.notify_all();
+                            return Err(error);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// 管理面全失效入口。调用方应先停止接收新的 acquire；已经取得的 `Arc` lease
+    /// 仍可安全完成当前 microtile，清空 registry 不会使其底层句柄提前失效。
+    pub fn invalidate_all(&self) -> StarfoldResult<usize> {
+        let mut registry = self
+            .registry
+            .lock()
+            .map_err(|_| StarfoldError::new("Starfold verified lease registry poisoned"))?;
+        let removed = registry.entries.len();
+        registry.entries.clear();
+        registry.stats.invalidations = registry.stats.invalidations.saturating_add(removed as u64);
+        registry.stats.resident_entries = 0;
+        registry.stats.resident_logical_bytes = 0;
+        Ok(removed)
+    }
+
+    pub fn stats(&self) -> StarfoldResult<StarfoldVerifiedLeaseCacheStats> {
+        let registry = self
+            .registry
+            .lock()
+            .map_err(|_| StarfoldError::new("Starfold verified lease registry poisoned"))?;
+        let mut stats = registry.stats;
+        stats.resident_entries = registry.entries.len();
+        Ok(stats)
+    }
+
+    fn slot_for(&self, key: &StarfoldVerifiedLeaseKey) -> StarfoldResult<Arc<VerifiedLeaseSlot>> {
+        let mut registry = self
+            .registry
+            .lock()
+            .map_err(|_| StarfoldError::new("Starfold verified lease registry poisoned"))?;
+        registry.stats.requests = registry.stats.requests.saturating_add(1);
+        registry.clock = registry.clock.saturating_add(1);
+        let touch = registry.clock;
+        if let Some(entry) = registry.entries.get_mut(key) {
+            entry.last_touch = touch;
+            return Ok(Arc::clone(&entry.slot));
+        }
+        if registry.entries.len() >= self.capacity_entries {
+            let victim = registry
+                .entries
+                .iter()
+                // 正在执行完整 proof/SHA 的 slot 不能被逐出；否则同一 key 会创建
+                // 第二个 loader，既浪费 I/O，也破坏 single-flight 契约。
+                .filter(|(_, entry)| {
+                    entry
+                        .slot
+                        .state
+                        .lock()
+                        .map(|state| !matches!(&*state, VerifiedLeaseSlotState::Loading))
+                        .unwrap_or(false)
+                })
+                .min_by(|(left_key, left), (right_key, right)| {
+                    left.last_touch
+                        .cmp(&right.last_touch)
+                        .then_with(|| left_key.cache_key.cmp(&right_key.cache_key))
+                })
+                .map(|(key, _)| key.clone())
+                .ok_or_else(|| {
+                    StarfoldError::new(
+                        "Starfold verified lease cache 已满且所有 slot 都在验证；拒绝重复 loader",
+                    )
+                })?;
+            let evicted = registry
+                .entries
+                .remove(&victim)
+                .ok_or_else(|| StarfoldError::new("Starfold verified lease LRU victim 消失"))?;
+            registry.stats.evictions = registry.stats.evictions.saturating_add(1);
+            registry.stats.resident_logical_bytes = registry
+                .stats
+                .resident_logical_bytes
+                .saturating_sub(evicted.logical_bytes);
+        }
+        let slot = Arc::new(VerifiedLeaseSlot::new());
+        registry.entries.insert(
+            key.clone(),
+            VerifiedLeaseRegistryEntry {
+                slot: Arc::clone(&slot),
+                last_touch: touch,
+                logical_bytes: 0,
+            },
+        );
+        registry.stats.resident_entries = registry.entries.len();
+        Ok(slot)
+    }
+
+    fn record_hit(
+        &self,
+        key: &StarfoldVerifiedLeaseKey,
+        slot: &Arc<VerifiedLeaseSlot>,
+        bytes: u64,
+    ) -> StarfoldResult<()> {
+        let mut registry = self.registry_lock()?;
+        registry.stats.hits = registry.stats.hits.saturating_add(1);
+        registry.stats.sha256_bytes_avoided =
+            registry.stats.sha256_bytes_avoided.saturating_add(bytes);
+        touch_matching_entry(&mut registry, key, slot);
+        Ok(())
+    }
+
+    fn record_wait(&self) -> StarfoldResult<()> {
+        let mut registry = self.registry_lock()?;
+        registry.stats.waits = registry.stats.waits.saturating_add(1);
+        Ok(())
+    }
+
+    fn record_miss(&self) -> StarfoldResult<()> {
+        let mut registry = self.registry_lock()?;
+        registry.stats.misses = registry.stats.misses.saturating_add(1);
+        Ok(())
+    }
+
+    fn record_invalidation(
+        &self,
+        key: &StarfoldVerifiedLeaseKey,
+        slot: &Arc<VerifiedLeaseSlot>,
+    ) -> StarfoldResult<()> {
+        let mut registry = self.registry_lock()?;
+        registry.stats.invalidations = registry.stats.invalidations.saturating_add(1);
+        let old_bytes = registry
+            .entries
+            .get_mut(key)
+            .filter(|entry| Arc::ptr_eq(&entry.slot, slot))
+            .map(|entry| {
+                let old_bytes = entry.logical_bytes;
+                entry.logical_bytes = 0;
+                old_bytes
+            });
+        if let Some(old_bytes) = old_bytes {
+            registry.stats.resident_logical_bytes = registry
+                .stats
+                .resident_logical_bytes
+                .saturating_sub(old_bytes);
+        }
+        Ok(())
+    }
+
+    fn record_publish(
+        &self,
+        key: &StarfoldVerifiedLeaseKey,
+        slot: &Arc<VerifiedLeaseSlot>,
+        bytes: u64,
+    ) -> StarfoldResult<()> {
+        let mut registry = self.registry_lock()?;
+        let mut old_bytes = None;
+        if let Some(entry) = registry
+            .entries
+            .get_mut(key)
+            .filter(|entry| Arc::ptr_eq(&entry.slot, slot))
+        {
+            old_bytes = Some(entry.logical_bytes);
+            entry.logical_bytes = bytes;
+        }
+        if let Some(old_bytes) = old_bytes {
+            registry.stats.resident_logical_bytes = registry
+                .stats
+                .resident_logical_bytes
+                .saturating_sub(old_bytes)
+                .saturating_add(bytes);
+        }
+        Ok(())
+    }
+
+    fn registry_lock(&self) -> StarfoldResult<std::sync::MutexGuard<'_, VerifiedLeaseRegistry>> {
+        self.registry
+            .lock()
+            .map_err(|_| StarfoldError::new("Starfold verified lease registry poisoned"))
+    }
+}
+
+fn touch_matching_entry(
+    registry: &mut VerifiedLeaseRegistry,
+    key: &StarfoldVerifiedLeaseKey,
+    slot: &Arc<VerifiedLeaseSlot>,
+) {
+    registry.clock = registry.clock.saturating_add(1);
+    let touch = registry.clock;
+    if let Some(entry) = registry
+        .entries
+        .get_mut(key)
+        .filter(|entry| Arc::ptr_eq(&entry.slot, slot))
+    {
+        entry.last_touch = touch;
+    }
+}
+
+fn canonical_directory(path: &Path) -> StarfoldResult<PathBuf> {
+    let canonical = path.canonicalize().map_err(|error| {
+        StarfoldError::new(format!(
+            "resolve Starfold verified lease root {}: {error}",
+            path.display()
+        ))
+    })?;
+    if !canonical.is_dir() {
+        return Err(StarfoldError::new(format!(
+            "Starfold verified lease root 不是目录: {}",
+            canonical.display()
+        )));
+    }
+    Ok(canonical)
+}
+
+fn normalized_lease_key(
+    canonical_root: &Path,
+    planned: &S14PlannedRangeAsset,
+    expert_id: Option<u16>,
+) -> StarfoldResult<StarfoldVerifiedLeaseKey> {
+    if planned.tensor.is_empty()
+        || planned.cache_key.is_empty()
+        || planned.range_key.is_empty()
+        || planned.bytes == 0
+    {
+        return Err(StarfoldError::new(
+            "Starfold verified lease planned identity 为空",
+        ));
+    }
+    let payload_path = canonical_child(canonical_root, &planned.payload_path, "payload")?;
+    let proof_path = canonical_child(canonical_root, &planned.proof_path, "proof")?;
+    Ok(StarfoldVerifiedLeaseKey {
+        tensor: planned.tensor.clone(),
+        cache_key: planned.cache_key.clone(),
+        range_key: planned.range_key.clone(),
+        payload_path,
+        payload_bytes: planned.bytes,
+        proof_path,
+        expert_id,
+    })
+}
+
+fn canonical_child(root: &Path, path: &Path, label: &str) -> StarfoldResult<PathBuf> {
+    let canonical = path.canonicalize().map_err(|error| {
+        StarfoldError::new(format!(
+            "resolve Starfold verified {label} {}: {error}",
+            path.display()
+        ))
+    })?;
+    if !canonical.starts_with(root) {
+        return Err(StarfoldError::new(format!(
+            "Starfold verified {label} 越出允许根目录: root={} path={}",
+            root.display(),
+            canonical.display()
+        )));
+    }
+    Ok(canonical)
+}
+
+fn load_verified_lease(
+    canonical_root: &Path,
+    planned: &S14PlannedRangeAsset,
+    expert_id: Option<u16>,
+    key: &StarfoldVerifiedLeaseKey,
+) -> StarfoldResult<StarfoldVerifiedMappedLease> {
+    let payload_before = file_stamp(&key.payload_path)?;
+    let proof_before = file_stamp(&key.proof_path)?;
+    if payload_before.bytes != key.payload_bytes {
+        return Err(StarfoldError::new(format!(
+            "Starfold payload bytes 漂移: expected={} actual={}",
+            key.payload_bytes, payload_before.bytes
+        )));
+    }
+    if proof_before.bytes == 0 || proof_before.bytes > STARFOLD_MAX_PROOF_BYTES {
+        return Err(StarfoldError::new(format!(
+            "Starfold proof bytes 超出 1..={STARFOLD_MAX_PROOF_BYTES}: actual={}",
+            proof_before.bytes
+        )));
+    }
+
+    let mut asset = planned
+        .resolve_cached_position0_asset(canonical_root, expert_id)
+        .map_err(|error| StarfoldError::new(format!("解析 Starfold Range proof: {error:#}")))?;
+    planned
+        .validate_resolved_position0_asset(&asset, expert_id)
+        .map_err(|error| StarfoldError::new(format!("绑定 Starfold Range proof: {error:#}")))?;
+    validate_lower_sha256(&asset.sha256, "payload")?;
+    validate_lower_sha256(&asset.proof_sha256, "proof")?;
+
+    let (mut proof_file, proof_open_stamp) = open_immutable_with_stamp(&key.proof_path, "proof")?;
+    let proof_capacity = usize::try_from(proof_open_stamp.bytes)
+        .map_err(|_| StarfoldError::new("Starfold proof bytes 超出 usize"))?;
+    let mut proof_bytes = Vec::with_capacity(proof_capacity);
+    proof_file.read_to_end(&mut proof_bytes).map_err(|error| {
+        StarfoldError::new(format!(
+            "读取 Starfold proof {}: {error}",
+            key.proof_path.display()
+        ))
+    })?;
+    if proof_bytes.len() as u64 != proof_open_stamp.bytes {
+        return Err(StarfoldError::new("Starfold proof 读取长度漂移"));
+    }
+    let proof_sha256 = sha256_hex(&proof_bytes);
+    if proof_sha256 != asset.proof_sha256 {
+        return Err(StarfoldError::new(format!(
+            "Starfold proof SHA-256 漂移: expected={} actual={proof_sha256}",
+            asset.proof_sha256
+        )));
+    }
+
+    let mut store = VerifiedMappedAssetStore::new(canonical_root).map_err(|error| {
+        StarfoldError::new(format!("初始化 Starfold verified mmap store: {error:#}"))
+    })?;
+    let mapped = store
+        .map_verified_batch(std::slice::from_ref(&asset))
+        .map_err(|error| StarfoldError::new(format!("校验 Starfold payload SHA: {error:#}")))?
+        .pop()
+        .ok_or_else(|| StarfoldError::new("Starfold verified mmap lease 缺失"))?;
+
+    let payload_after = file_stamp(&key.payload_path)?;
+    let proof_after = file_stamp(&key.proof_path)?;
+    if payload_before != payload_after
+        || proof_before != proof_open_stamp
+        || proof_open_stamp != proof_after
+    {
+        return Err(StarfoldError::new(
+            "Starfold payload/proof 在验证期间发生身份漂移",
+        ));
+    }
+    if mapped.path() != key.payload_path
+        || mapped.tensor() != key.tensor
+        || mapped.bytes().len() as u64 != key.payload_bytes
+        || mapped.expected_sha256() != asset.sha256
+        || asset.cache_key != key.cache_key
+        || asset.range_key != key.range_key
+        || asset.proof_path != key.proof_path
+        || asset.expert_id != key.expert_id
+    {
+        return Err(StarfoldError::new("Starfold proof/SHA/mmap 强身份漂移"));
+    }
+
+    asset.payload_rehashed_by_builder = true;
+    let identity = StarfoldVerifiedLeaseIdentity {
+        tensor: asset.tensor.clone(),
+        cache_key: asset.cache_key.clone(),
+        range_key: asset.range_key.clone(),
+        payload_path: key.payload_path.clone(),
+        payload_bytes: asset.bytes,
+        payload_sha256: asset.sha256.clone(),
+        proof_path: key.proof_path.clone(),
+        proof_sha256: asset.proof_sha256.clone(),
+        hash_authority: asset.hash_authority.clone(),
+        expert_id,
+    };
+    Ok(StarfoldVerifiedMappedLease {
+        identity,
+        asset,
+        mapped,
+        proof_file,
+        payload_stamp: payload_after,
+        proof_stamp: proof_after,
+    })
+}
+
+fn file_stamp(path: &Path) -> StarfoldResult<StarfoldFileStamp> {
+    let metadata = path.metadata().map_err(|error| {
+        StarfoldError::new(format!(
+            "stat Starfold verified file {}: {error}",
+            path.display()
+        ))
+    })?;
+    if !metadata.is_file() {
+        return Err(StarfoldError::new(format!(
+            "Starfold verified path 不是文件: {}",
+            path.display()
+        )));
+    }
+    let modified = metadata.modified().map_err(|error| {
+        StarfoldError::new(format!(
+            "读取 Starfold verified file mtime {}: {error}",
+            path.display()
+        ))
+    })?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        Ok(StarfoldFileStamp {
+            bytes: metadata.len(),
+            modified,
+            device: metadata.dev(),
+            inode: metadata.ino(),
+        })
+    }
+    #[cfg(not(unix))]
+    {
+        Ok(StarfoldFileStamp {
+            bytes: metadata.len(),
+            modified,
+        })
+    }
+}
+
+fn open_immutable_with_stamp(
+    path: &Path,
+    label: &str,
+) -> StarfoldResult<(File, StarfoldFileStamp)> {
+    let file = open_starfold_immutable(path).map_err(|error| {
+        StarfoldError::new(format!(
+            "打开 Starfold verified {label} {}: {error}",
+            path.display()
+        ))
+    })?;
+    let metadata = file.metadata().map_err(|error| {
+        StarfoldError::new(format!(
+            "stat Starfold verified {label} handle {}: {error}",
+            path.display()
+        ))
+    })?;
+    let stamp = file_stamp_from_metadata(path, &metadata)?;
+    Ok((file, stamp))
+}
+
+fn file_stamp_from_metadata(
+    path: &Path,
+    metadata: &std::fs::Metadata,
+) -> StarfoldResult<StarfoldFileStamp> {
+    if !metadata.is_file() {
+        return Err(StarfoldError::new(format!(
+            "Starfold verified handle 不是文件: {}",
+            path.display()
+        )));
+    }
+    let modified = metadata.modified().map_err(|error| {
+        StarfoldError::new(format!(
+            "读取 Starfold verified handle mtime {}: {error}",
+            path.display()
+        ))
+    })?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        Ok(StarfoldFileStamp {
+            bytes: metadata.len(),
+            modified,
+            device: metadata.dev(),
+            inode: metadata.ino(),
+        })
+    }
+    #[cfg(not(unix))]
+    {
+        Ok(StarfoldFileStamp {
+            bytes: metadata.len(),
+            modified,
+        })
+    }
+}
+
+#[cfg(windows)]
+fn open_starfold_immutable(path: &Path) -> std::io::Result<File> {
+    use std::os::windows::fs::OpenOptionsExt;
+    OpenOptions::new()
+        .read(true)
+        .share_mode(0x0000_0001)
+        .open(path)
+}
+
+#[cfg(not(windows))]
+fn open_starfold_immutable(path: &Path) -> std::io::Result<File> {
+    OpenOptions::new().read(true).open(path)
+}
+
+fn validate_lower_sha256(value: &str, label: &str) -> StarfoldResult<()> {
+    if value.len() != 64
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(StarfoldError::new(format!(
+            "Starfold {label} SHA-256 必须是 64 位小写十六进制"
+        )));
+    }
+    Ok(())
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+static PROCESS_VERIFIED_LEASE_CACHE: OnceLock<StarfoldVerifiedLeaseCache> = OnceLock::new();
+
+/// 默认进程级 owner。production root 应借用它而不是为每个请求创建 mmap store。
+pub fn process_starfold_verified_lease_cache() -> &'static StarfoldVerifiedLeaseCache {
+    PROCESS_VERIFIED_LEASE_CACHE.get_or_init(|| {
+        StarfoldVerifiedLeaseCache::new(STARFOLD_DEFAULT_VERIFIED_LEASES)
+            .expect("固定 Starfold verified lease capacity 必须合法")
+    })
 }
 
 // ---- demand/speculative 两级队列与可取消预取 -------------------------------------

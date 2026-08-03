@@ -282,6 +282,29 @@ impl S14RuntimeConfig {
         self
     }
 
+    /// 调整 StarFold 物理流的单窗口粒度，不改变 K4、路由、权重身份或提交语义。
+    ///
+    /// 1 MiB 是最小兼容粒度；production 可用 2/4/8/16/32/64 MiB supertile
+    /// 减少每个专家投影的 transfer/compute submit 数。仍只分配 A/B 两个窗口，
+    /// 因此最大额外 device-local 占用为 128 MiB，不恢复旧的 GiB union bank。
+    pub fn with_starfold_microtile_bytes(mut self, microtile_bytes: u32) -> Result<Self> {
+        const ONE_MIB: u32 = 1024 * 1024;
+        const MAX_MICROTILE_BYTES: u32 = 64 * ONE_MIB;
+        if microtile_bytes < ONE_MIB
+            || microtile_bytes > MAX_MICROTILE_BYTES
+            || !microtile_bytes.is_power_of_two()
+        {
+            bail!(
+                "S14 StarFold microtile bytes 必须是 1..=64 MiB 的2次幂，actual={microtile_bytes}"
+            );
+        }
+        S14StarfoldDoubleWindowContract::new(microtile_bytes)
+            .context("验证 S14 StarFold supertile 双窗口合同")?;
+        self.causal_block_weight_storage =
+            S14RuntimeCausalBlockWeightStorage::StarfoldDoubleMicrotile { microtile_bytes };
+        Ok(self)
+    }
+
     pub fn for_token_major_chat(mut self) -> Self {
         self.causal_block_weight_storage =
             S14RuntimeCausalBlockWeightStorage::StarfoldDoubleMicrotile {

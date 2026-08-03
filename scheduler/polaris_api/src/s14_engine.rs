@@ -3,7 +3,12 @@ use crate::{
     EngineEventSender, FinishReason, ResidentChatBackend,
 };
 use sha2::{Digest, Sha256};
-use ssd_inference::s14_runtime::{S14Runtime, S14Session};
+use ssd_inference::{
+    s14_runtime::{S14Runtime, S14Session},
+    s14_starfold_cache::{
+        STARFOLD_DEFAULT_VERIFIED_LEASES, STARFOLD_VERIFIED_LEASE_CACHE_CONTRACT_VERSION,
+    },
+};
 use std::{fs, path::Path};
 use tokenizers::Tokenizer;
 
@@ -38,6 +43,10 @@ pub trait S14ChatCodec: 'static {
     fn encode_chat(&mut self, request: &EngineChatRequest) -> Result<Vec<u32>, EngineError>;
     fn decode_completion(&mut self, token_ids: &[u32]) -> Result<String, EngineError>;
     fn is_eos(&self, token_id: u32) -> bool;
+    /// 只有经过同一 codec 自检的权威 EOS 才能给 StarWave 签发多 token 边界。
+    fn eos_token_id(&self) -> Option<u32> {
+        None
+    }
 }
 
 /// 官方 DeepSeek-V4 encoding 的最小 Rust production profile。
@@ -128,6 +137,10 @@ impl S14ChatCodec for DeepSeekV4ChatCodec {
 
     fn is_eos(&self, token_id: u32) -> bool {
         token_id == EOS_TOKEN_ID
+    }
+
+    fn eos_token_id(&self) -> Option<u32> {
+        Some(EOS_TOKEN_ID)
     }
 }
 
@@ -487,8 +500,10 @@ pub struct S14ResidentK4CommittedBlock {
     pub wall_ms: f64,
 }
 
-pub const S14_RESIDENT_K4_RESOURCE_CONTRACT_VERSION: u32 = 2;
+pub const S14_RESIDENT_K4_RESOURCE_CONTRACT_VERSION: u32 = 3;
+/// StarFold production supertile 的最小兼容粒度；实际值由启动合同携带并参与 SHA。
 pub const S14_RESIDENT_K4_MICROTILE_BYTES: u32 = 1_048_576;
+const S14_RESIDENT_K4_MAX_MICROTILE_BYTES: u32 = 64 * S14_RESIDENT_K4_MICROTILE_BYTES;
 
 /// 最短可聊天链允许存在的唯一 resident 物理资源拓扑。这里没有“backend kind”字符串：
 /// 只有 StarFold FullDepth43/K4 一种可验证形态，因而 v38/v47/Transformer 不能伪装成
@@ -508,6 +523,9 @@ pub struct S14ResidentK4ResourceInventory {
     pub positions_per_physical_block: u32,
     pub routed_experts_per_position: u32,
     pub verified_mapped_store_owners: u32,
+    pub verified_lease_cache_owners: u32,
+    pub verified_lease_cache_capacity_entries: u32,
+    pub verified_lease_cache_contract_version: u32,
     pub terminal_head_uploader_owners: u32,
     pub starwave_commit_owners: u32,
     pub legacy_union_calls: u64,
@@ -570,8 +588,9 @@ pub trait S14ResidentK4Request {
     fn close(self) -> Result<(), EngineError>;
 }
 
-/// 长驻 decoder 保有 Vulkan、paged arena、唯一 StarFold runtime 与 verified mapped store；
-/// `begin_request` 只创建请求状态，不得新启动第二模型实例。
+/// 长驻 decoder 保有 Vulkan、paged arena、唯一 StarFold runtime 与 terminal mapped store，
+/// 并借用合同签名的进程级 verified lease cache；`begin_request` 只创建请求状态，不得
+/// 新启动第二模型实例。
 pub trait S14ResidentK4Decoder: 'static {
     type Request: S14ResidentK4Request;
 
@@ -1028,6 +1047,9 @@ fn stable_visible_len(text: &str, stops: &[String]) -> usize {
 fn validate_resident_k4_inventory(
     inventory: S14ResidentK4ResourceInventory,
 ) -> Result<(), EngineError> {
+    let valid_supertile = inventory.starfold_microtile_bytes >= S14_RESIDENT_K4_MICROTILE_BYTES
+        && inventory.starfold_microtile_bytes <= S14_RESIDENT_K4_MAX_MICROTILE_BYTES
+        && inventory.starfold_microtile_bytes.is_power_of_two();
     let exact_topology = inventory.request_decoder_owners == 0
         && inventory.request_owners_deferred_until_prompt
         && inventory.vulkan_context_owners == 1
@@ -1035,13 +1057,18 @@ fn validate_resident_k4_inventory(
         && inventory.compute_queue_owners == 1
         && inventory.paged_arena_owners == 1
         && inventory.starfold_microtile_windows == 2
-        && inventory.starfold_microtile_bytes == S14_RESIDENT_K4_MICROTILE_BYTES
+        && valid_supertile
         && inventory.starfold_physical_allocation_bytes
-            == u64::from(S14_RESIDENT_K4_MICROTILE_BYTES) * 2
+            == u64::from(inventory.starfold_microtile_bytes) * 2
         && inventory.full_depth_layers == 43
         && inventory.positions_per_physical_block == 4
         && inventory.routed_experts_per_position == 6
         && inventory.verified_mapped_store_owners == 1
+        && inventory.verified_lease_cache_owners == 1
+        && inventory.verified_lease_cache_capacity_entries
+            == STARFOLD_DEFAULT_VERIFIED_LEASES as u32
+        && inventory.verified_lease_cache_contract_version
+            == STARFOLD_VERIFIED_LEASE_CACHE_CONTRACT_VERSION
         && inventory.terminal_head_uploader_owners == 1
         && inventory.starwave_commit_owners == 1;
     let forbidden_paths = inventory.legacy_union_calls
@@ -1063,7 +1090,7 @@ fn validate_resident_k4_inventory(
 
 fn resident_k4_resource_sha256(inventory: S14ResidentK4ResourceInventory) -> [u8; 32] {
     let mut sha256 = Sha256::new();
-    sha256.update(b"polaris-s14-resident-k4-resource-contract-v2");
+    sha256.update(b"polaris-s14-resident-k4-resource-contract-v3");
     for value in [
         S14_RESIDENT_K4_RESOURCE_CONTRACT_VERSION,
         inventory.request_decoder_owners,
@@ -1082,6 +1109,9 @@ fn resident_k4_resource_sha256(inventory: S14ResidentK4ResourceInventory) -> [u8
         inventory.positions_per_physical_block,
         inventory.routed_experts_per_position,
         inventory.verified_mapped_store_owners,
+        inventory.verified_lease_cache_owners,
+        inventory.verified_lease_cache_capacity_entries,
+        inventory.verified_lease_cache_contract_version,
         inventory.terminal_head_uploader_owners,
         inventory.starwave_commit_owners,
     ] {

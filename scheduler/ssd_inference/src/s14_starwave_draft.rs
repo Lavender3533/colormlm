@@ -8,8 +8,9 @@
 //!
 //! 默认 deterministic policy 不把 filler 冒充成模型预测，并把 `effective_commit_limit`
 //! 固定为 1。这样即使 filler 偶然匹配，也不会在一个 K4 内越过未观测的 EOS 隐藏提交。
-//! 只有实现 [`S14StarwaveNavigator`] 的替换导航器显式提供
-//! [`S14StarwaveEosAwarePrefixCap`] 时，proposal 才能允许提交更长的匹配前缀。
+//! 只有实现 [`S14StarwaveProductionNavigator`] 的真实导航器经
+//! [`S14StarwaveProductionNavigatorAdapter`] 绑定候选/EOS/horizon 后，proposal 才能
+//! 允许提交更长的匹配前缀。
 
 use crate::{
     s14_starfold_k4_rebind::S14StarfoldK4BlockMode,
@@ -77,7 +78,7 @@ impl S14StarwaveNoFallbackTelemetry {
 /// 其已验证预测 horizon、EOS token 身份和首个 EOS lane。`effective_limit` 永远是
 /// `min(horizon, first_eos_lane + 1)`；
 /// 因此 EOS 本身可以提交，但 EOS 之后的隐藏 lane 永远不会进入 terminal commit limit。
-/// 只有 [`S14StarwaveNavigatorDraft::eos_aware`] 能构造与 draft 绑定的提交声明。
+/// production 只能经 [`S14StarwaveProductionNavigatorAdapter`] 构造与 draft 绑定的声明。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct S14StarwaveEosAwarePrefixCap {
     authoritative_position: u32,
@@ -316,7 +317,7 @@ impl S14StarwaveNavigatorDraft {
         }
     }
 
-    pub fn eos_aware(
+    fn eos_aware(
         context: S14StarwaveNavigatorContext<'_>,
         draft_token_ids: [u32; S14_STARWAVE_DRAFT_PHYSICAL_K],
         eos_token_id: u32,
@@ -359,14 +360,179 @@ impl S14StarwaveNavigatorDraft {
     }
 }
 
-/// 将来可由信息增益导航器实现；trait 本身不要求也不提供第二草稿模型。实现者若要
-/// 放宽到2--4，必须在本次 `propose` 内把收到的 context 交给
-/// [`S14StarwaveNavigatorDraft::eos_aware`]，从而把 EOS 证书锁定到当前 position/epoch。
+/// 真实 production navigator 的一次候选输出。`candidate_count` 只统计导航器实际产生的
+/// token；物理 K4 多出的 lane 仅以最后一个真实候选做 execution padding，并永远不会
+/// 超过证书 horizon 提交。字段私有，防止调用方事后把 padding 冒充真实候选。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct S14StarwaveProductionNavigatorOutput {
+    authoritative_position: u32,
+    authoritative_commit_epoch: u64,
+    draft_token_ids: [u32; S14_STARWAVE_DRAFT_PHYSICAL_K],
+    candidate_count: usize,
+    eos_token_id: Option<u32>,
+    navigator_horizon: Option<usize>,
+    no_fallback_telemetry: S14StarwaveNoFallbackTelemetry,
+}
+
+impl S14StarwaveProductionNavigatorOutput {
+    /// `candidate_token_ids` 必须是本次 navigator 真正产生的连续候选，长度为1..=4。
+    /// `navigator_horizon` 只有在 navigator 能证明前 N 个候选均属于同一因果轨迹时才传
+    /// `Some(N)`；缺少 EOS、horizon 越界或 horizon 超过真实候选数时不报假成功，而是
+    /// 在转换 proposal 时 fail-closed 为 lane0-only。
+    pub fn from_real_candidates(
+        context: S14StarwaveNavigatorContext<'_>,
+        candidate_token_ids: &[u32],
+        eos_token_id: Option<u32>,
+        navigator_horizon: Option<usize>,
+        no_fallback_telemetry: S14StarwaveNoFallbackTelemetry,
+    ) -> S14StarwaveDraftResult<Self> {
+        if candidate_token_ids.is_empty()
+            || candidate_token_ids.len() > S14_STARWAVE_DRAFT_PHYSICAL_K
+        {
+            return Err(S14StarwaveDraftError::new(
+                "S14 StarWave production navigator 必须返回1..=4个真实候选 token",
+            ));
+        }
+        if candidate_token_ids
+            .iter()
+            .any(|&token_id| token_id >= VOCAB_SIZE)
+        {
+            return Err(S14StarwaveDraftError::new(
+                "S14 StarWave production navigator 候选 token 越出冻结 vocab",
+            ));
+        }
+        if !no_fallback_telemetry.is_no_fallback() {
+            return Err(S14StarwaveDraftError::new(
+                "S14 StarWave production navigator 触发禁止的模型/runtime fallback",
+            ));
+        }
+
+        let candidate_count = candidate_token_ids.len();
+        let mut draft_token_ids =
+            [candidate_token_ids[candidate_count - 1]; S14_STARWAVE_DRAFT_PHYSICAL_K];
+        draft_token_ids[..candidate_count].copy_from_slice(candidate_token_ids);
+
+        // 错误或缺失的 EOS/horizon 只能降级为 lane0-only。这里不把调用方声明的
+        // horizon 截断成一个看似有效的值，避免把“无法证明”伪装成较短证明。
+        let eos_token_id = eos_token_id.filter(|&token_id| token_id < VOCAB_SIZE);
+        let navigator_horizon = navigator_horizon.filter(|&horizon| {
+            (2..=S14_STARWAVE_DRAFT_PHYSICAL_K).contains(&horizon)
+                && horizon <= candidate_count
+                && eos_token_id.is_some()
+        });
+
+        Ok(Self {
+            authoritative_position: context.authoritative().position,
+            authoritative_commit_epoch: context.authoritative().commit_epoch,
+            draft_token_ids,
+            candidate_count,
+            eos_token_id,
+            navigator_horizon,
+            no_fallback_telemetry,
+        })
+    }
+
+    pub const fn candidate_count(&self) -> usize {
+        self.candidate_count
+    }
+
+    pub const fn certified_horizon(&self) -> Option<usize> {
+        self.navigator_horizon
+    }
+
+    pub const fn eos_token_id(&self) -> Option<u32> {
+        self.eos_token_id
+    }
+
+    fn into_navigator_draft(
+        self,
+        context: S14StarwaveNavigatorContext<'_>,
+    ) -> S14StarwaveDraftResult<S14StarwaveNavigatorDraft> {
+        if self.authoritative_position != context.authoritative().position
+            || self.authoritative_commit_epoch != context.authoritative().commit_epoch
+            || !(1..=S14_STARWAVE_DRAFT_PHYSICAL_K).contains(&self.candidate_count)
+            || !self.no_fallback_telemetry.is_no_fallback()
+        {
+            return Err(S14StarwaveDraftError::new(
+                "S14 StarWave production navigator output authoritative/candidate identity 已陈旧",
+            ));
+        }
+
+        match (self.eos_token_id, self.navigator_horizon) {
+            (Some(eos_token_id), Some(horizon))
+                if (2..=self.candidate_count).contains(&horizon) =>
+            {
+                S14StarwaveNavigatorDraft::eos_aware(
+                    context,
+                    self.draft_token_ids,
+                    eos_token_id,
+                    horizon,
+                    self.no_fallback_telemetry,
+                )
+            }
+            _ => Ok(S14StarwaveNavigatorDraft::lane0_only(
+                self.draft_token_ids,
+                self.no_fallback_telemetry,
+            )),
+        }
+    }
+}
+
+/// proposal builder 的通用窄接口；trait 本身不要求也不提供第二草稿模型。production
+/// 的2--4提交只能通过 [`S14StarwaveProductionNavigatorAdapter`] 进入，普通实现者只能
+/// 构造 lane0-only 输出，不能绕过 adapter 私自签发 EOS-aware 证书。
 pub trait S14StarwaveNavigator {
     fn propose(
         &mut self,
         context: S14StarwaveNavigatorContext<'_>,
     ) -> S14StarwaveDraftResult<S14StarwaveNavigatorDraft>;
+}
+
+/// production navigator 的最窄接口。实现者只负责产生真实候选及其 horizon/EOS 证据；
+/// adapter 统一负责 authoritative 绑定、物理 K4 padding 与 fail-closed commit limit。
+pub trait S14StarwaveProductionNavigator {
+    fn propose_real_candidates(
+        &mut self,
+        context: S14StarwaveNavigatorContext<'_>,
+    ) -> S14StarwaveDraftResult<S14StarwaveProductionNavigatorOutput>;
+}
+
+/// 把真实 production navigator 接到现有 proposal builder，不允许 session 直接拼装
+/// `S14StarwaveNavigatorDraft`。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct S14StarwaveProductionNavigatorAdapter<N> {
+    navigator: N,
+}
+
+impl<N> S14StarwaveProductionNavigatorAdapter<N> {
+    pub const fn new(navigator: N) -> Self {
+        Self { navigator }
+    }
+
+    pub fn navigator(&self) -> &N {
+        &self.navigator
+    }
+
+    pub fn navigator_mut(&mut self) -> &mut N {
+        &mut self.navigator
+    }
+
+    pub fn into_inner(self) -> N {
+        self.navigator
+    }
+}
+
+impl<N: S14StarwaveProductionNavigator> S14StarwaveNavigator
+    for S14StarwaveProductionNavigatorAdapter<N>
+{
+    fn propose(
+        &mut self,
+        context: S14StarwaveNavigatorContext<'_>,
+    ) -> S14StarwaveDraftResult<S14StarwaveNavigatorDraft> {
+        self.navigator
+            .propose_real_candidates(context)?
+            .into_navigator_draft(context)
+    }
 }
 
 /// 默认无模型实现。`None` 重复 authoritative input；`Some(token)` 使用调用方已验证语义

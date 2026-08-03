@@ -21,6 +21,21 @@
   serial-token forward 或 whole-model fallback。结构化证据见
   `scheduler/ssd_inference/evidence/s14_starfold_multi_request_chat_20260804.json`。
 
+### 2026-08-04 StarFold 候选性能架构接线（尚未速度验收）
+
+- 已接入4096项进程级 verified Range lease cache，跨 K4 block/HTTP 请求复用 proof、SHA 与
+  mmap；single-flight、文件漂移失效、LRU 和飞行中 lease 生命周期已闭合。cache hit 仍会把
+  完整 planned Range identity 重新绑定到 lease，不能只凭路径/mtime 命中。
+- StarFold 双窗口可由 `POLARIS_S14_STARFOLD_MICROTILE_MIB` 选择1/2/4/8/16/32/64 MiB，
+  默认8 MiB；物理窗口始终只有 A/B 两个。startup resource contract v3 已签入实际窗口大小、
+  进程级 lease cache owner、容量与合同版本，不恢复旧 GiB union bank。
+- routed projection 已接入显式 transfer block epoch 与 Prepared/Armed/Idle 回滚合同；StarWave
+  已接入基于已提交输入历史的1–4 token navigator，并由同一官方 codec EOS、position/epoch、
+  horizon 和 proposal safe limit 约束。无历史命中或无权威 EOS 时仍只允许 lane0。
+- 精确12文件候选已在隔离 worktree 通过
+  `cargo check -p polaris_api --release --offline`。本轮未启动模型、未占 GPU、未跑 benchmark；
+  因此尚不能宣称8 MiB更快或多 token 命中率已经提升，下一次只做一次1 MiB/8 MiB同提示真门。
+
 ## 2026-08-03 Polaris S14 主线
 
 - S14 新 Rust/Vulkan 本体已完成 production K=4 两个连续 block 的真实提交：第一块从

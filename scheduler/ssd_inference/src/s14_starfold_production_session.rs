@@ -9,7 +9,10 @@ use crate::{
     s14_causal_block_production_bundle::S14CausalBlockProductionHcQkvResourceProvider,
     s14_position0_paged_weight_arena::S14Position0PagedWeightArena,
     s14_runtime::{S14Runtime, S14Session},
-    s14_starfold_cache::{STARFOLD_ONE_MIB, STARFOLD_TOP_K},
+    s14_starfold_cache::{
+        process_starfold_verified_lease_cache, STARFOLD_ONE_MIB, STARFOLD_TOP_K,
+        STARFOLD_VERIFIED_LEASE_CACHE_CONTRACT_VERSION,
+    },
     s14_starfold_k4_adapter::S14StarfoldK4FullDepthReceipt,
     s14_starfold_k4_rebind::{
         rebind_next_committed_k4_block, rebind_next_teacher_forced_prefill_block,
@@ -30,8 +33,10 @@ use crate::{
     },
     s14_starfold_runtime::S14_STARFOLD_WINDOW_COUNT,
     s14_starwave_draft::{
-        propose_s14_starwave_draft, S14StarwaveDraftProposal, S14StarwavePosition0CommittedOrigin,
+        propose_s14_starwave_draft, propose_s14_starwave_draft_with_navigator,
+        S14StarwaveDraftProposal, S14StarwavePosition0CommittedOrigin,
     },
+    s14_starwave_history_navigator::S14StarwaveHistoryNavigator,
     s14_whole_token_device::{
         WholeTokenDetachedCommittedState, WholeTokenDeviceCommittedCheckpointBinding,
     },
@@ -123,6 +128,9 @@ pub struct S14StarfoldResidentResourceContract {
     pub physical_block_lanes: usize,
     pub routed_top_k: usize,
     pub verified_mapped_asset_store_owners: usize,
+    pub verified_lease_cache_owners: usize,
+    pub verified_lease_cache_capacity_entries: usize,
+    pub verified_lease_cache_contract_version: u32,
     pub terminal_head_uploader_owners: usize,
     pub starwave_commit_owners: usize,
     pub request_owned: S14StarfoldRequestOwnerReadiness,
@@ -248,6 +256,7 @@ pub struct S14StarfoldProductionRoot<F: S14StarfoldBlockResourceFactory> {
     runtime: Option<S14Runtime>,
     factory: Option<F>,
     commit_chain: Option<S14StarfoldK4TerminalChainOwner>,
+    starwave_eos_token_id: Option<u32>,
     lease: S14StarfoldProductionLeaseState,
 }
 
@@ -257,8 +266,26 @@ impl<F: S14StarfoldBlockResourceFactory> S14StarfoldProductionRoot<F> {
             runtime: Some(runtime),
             factory: Some(factory),
             commit_chain: Some(S14StarfoldK4TerminalChainOwner::new()),
+            starwave_eos_token_id: None,
             lease: S14StarfoldProductionLeaseState::Ready,
         }
+    }
+
+    /// 由同一个已验签 chat codec 注入 EOS；root Busy 后禁止改变生成协议。
+    pub fn configure_starwave_eos_token_id(&mut self, eos_token_id: u32) -> Result<()> {
+        if self.lease != S14StarfoldProductionLeaseState::Ready {
+            bail!("S14 production root Busy/Exhausted 时禁止切换 StarWave EOS");
+        }
+        if eos_token_id >= polaris_s14_runner::VOCAB_SIZE {
+            bail!("S14 StarWave EOS token 越出冻结 vocab");
+        }
+        match self.starwave_eos_token_id {
+            Some(current) if current != eos_token_id => {
+                bail!("S14 production root 禁止在请求间切换 EOS token")
+            }
+            _ => self.starwave_eos_token_id = Some(eos_token_id),
+        }
+        Ok(())
     }
 
     pub fn lease_state(&self) -> S14StarfoldProductionLeaseState {
@@ -289,14 +316,18 @@ impl<F: S14StarfoldBlockResourceFactory> S14StarfoldProductionRoot<F> {
             .context("resident contract 缺少 StarFold physical allocation")?;
         let factory_inventory = factory.resident_owner_inventory(context, paged_arena)?;
         let forbidden = factory_inventory.forbidden;
-        let expected_physical_allocation = u64::from(STARFOLD_ONE_MIB)
+        let verified_lease_cache = process_starfold_verified_lease_cache();
+        let expected_physical_allocation = u64::from(windows.microtile_bytes)
             .checked_mul(u64::try_from(S14_STARFOLD_WINDOW_COUNT)?)
             .context("resident StarFold window bytes overflow")?;
+        let valid_supertile = windows.microtile_bytes >= STARFOLD_ONE_MIB
+            && windows.microtile_bytes <= 64 * STARFOLD_ONE_MIB
+            && windows.microtile_bytes.is_power_of_two();
         let valid = context.q_graphics != vk::Queue::null()
             && context.q_transfer != vk::Queue::null()
             && context.has_dedicated_transfer()
             && windows.window_count == S14_STARFOLD_WINDOW_COUNT
-            && windows.microtile_bytes == STARFOLD_ONE_MIB
+            && valid_supertile
             && physical_allocation == expected_physical_allocation
             && FULL_DEPTH_LAYERS.len() == 43
             && K4 == 4
@@ -324,6 +355,9 @@ impl<F: S14StarfoldBlockResourceFactory> S14StarfoldProductionRoot<F> {
             routed_top_k: STARFOLD_TOP_K,
             verified_mapped_asset_store_owners: factory_inventory
                 .verified_mapped_asset_store_owners,
+            verified_lease_cache_owners: 1,
+            verified_lease_cache_capacity_entries: verified_lease_cache.capacity_entries(),
+            verified_lease_cache_contract_version: STARFOLD_VERIFIED_LEASE_CACHE_CONTRACT_VERSION,
             terminal_head_uploader_owners: factory_inventory.terminal_head_uploader_owners,
             starwave_commit_owners: usize::from(self.commit_chain.is_some()),
             request_owned: S14StarfoldRequestOwnerReadiness::DeferredUntilPrompt,
@@ -337,6 +371,11 @@ impl<F: S14StarfoldBlockResourceFactory> S14StarfoldProductionRoot<F> {
         max_seq_len: u32,
     ) -> Result<S14StarfoldProductionSession<F>> {
         let plan = S14StarfoldPromptPrefillPlan::build(prompt)?;
+        let navigator = self.starwave_eos_token_id.map(|eos_token_id| {
+            crate::s14_starwave_draft::S14StarwaveProductionNavigatorAdapter::new(
+                S14StarwaveHistoryNavigator::new(eos_token_id),
+            )
+        });
         if prompt.len() > max_seq_len as usize {
             bail!("prompt 长度超过 max_seq_len");
         }
@@ -414,6 +453,7 @@ impl<F: S14StarfoldBlockResourceFactory> S14StarfoldProductionRoot<F> {
             pending_external: None,
             retired_external: Vec::new(),
             last_prefill_commit: None,
+            navigator,
             forbidden: S14StarfoldForbiddenPathCounters::default(),
             closed: false,
         };
@@ -503,6 +543,11 @@ where
     pending_external: Option<F::ExternalOwners>,
     retired_external: Vec<F::ExternalOwners>,
     last_prefill_commit: Option<S14StarfoldSealedTeacherForcedBlockCommitReceipt>,
+    navigator: Option<
+        crate::s14_starwave_draft::S14StarwaveProductionNavigatorAdapter<
+            S14StarwaveHistoryNavigator,
+        >,
+    >,
     forbidden: S14StarfoldForbiddenPathCounters,
     closed: bool,
 }
@@ -568,8 +613,9 @@ where
         })
     }
 
-    /// 返回 `decision.committed_token_ids` 的完整 ledger 增量。deterministic filler 的
-    /// proposal safe limit 为1，因此 effective limit 始终是 `min(API limit, 1)`。
+    /// 返回 `decision.committed_token_ids` 的完整 ledger 增量。effective limit 始终是
+    /// `min(requested_limit, proposal_safe_limit)`；只有无 EOS、无历史命中或确定性
+    /// fallback 路径才会 fail-closed 为 lane0-only。
     pub fn commit_next_block(
         &mut self,
         requested_limit: usize,
@@ -812,8 +858,15 @@ where
         } else {
             None
         };
-        propose_s14_starwave_draft(authoritative, position0_origin, None)
-            .map_err(|error| anyhow!(error.to_string()))
+        match self.navigator.as_mut() {
+            Some(navigator) => propose_s14_starwave_draft_with_navigator(
+                authoritative,
+                position0_origin,
+                navigator,
+            ),
+            None => propose_s14_starwave_draft(authoritative, position0_origin, None),
+        }
+        .map_err(|error| anyhow!(error.to_string()))
     }
 
     fn execute_generation_block(

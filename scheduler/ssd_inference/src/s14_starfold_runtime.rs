@@ -12,12 +12,10 @@ use crate::{
         RoutedRangePart,
     },
     s14_input_asset_plan::S14PlannedRangeAsset,
-    s14_position0_mapped_assets::{
-        VerifiedMappedAsset, VerifiedMappedAssetStats, VerifiedMappedAssetStore,
-    },
     s14_starfold_cache::{
-        StarfoldB4MicroUnionPlan, StarfoldB4RouteBlock, StarfoldMicrotileLayout,
-        StarfoldMicrotileSpan, StarfoldPageKey, StarfoldRouteEntry, StarfoldTensorSegment,
+        process_starfold_verified_lease_cache, StarfoldB4MicroUnionPlan, StarfoldB4RouteBlock,
+        StarfoldMicrotileLayout, StarfoldMicrotileSpan, StarfoldPageKey, StarfoldRouteEntry,
+        StarfoldTensorSegment, StarfoldVerifiedLeaseCacheStats, StarfoldVerifiedMappedLease,
         STARFOLD_B4_LANES, STARFOLD_ONE_MIB, STARFOLD_TOP_K,
     },
     s14_starfold_transfer_executor::S14StarfoldTransferExecutor,
@@ -742,7 +740,7 @@ fn validate_mxfp4_proof_pair(
 pub struct S14StarfoldSingleProofLease {
     source: S14StarfoldMicrotileSource,
     asset: Position0Asset,
-    mapped: Arc<VerifiedMappedAsset>,
+    hot_lease: Arc<StarfoldVerifiedMappedLease>,
 }
 
 /// Packed MXFP4 的稳定 payload 布局：`[weight bytes][scale bytes]`。
@@ -798,11 +796,7 @@ impl S14StarfoldVerifiedMicrotile {
 
     pub fn bytes(&self) -> &[u8] {
         match self {
-            Self::Single(single) => {
-                let start = single.source.span.source_segment_offset as usize;
-                let end = start + single.source.span.byte_len as usize;
-                &single.mapped.bytes()[start..end]
-            }
+            Self::Single(single) => single.bytes(),
             Self::PackedMxfp4(packed) => &packed.bytes,
         }
     }
@@ -839,9 +833,12 @@ impl S14StarfoldSingleProofLease {
     }
 
     pub fn bytes(&self) -> &[u8] {
-        let start = self.source.span.source_segment_offset as usize;
-        let end = start + self.source.span.byte_len as usize;
-        &self.mapped.bytes()[start..end]
+        self.hot_lease
+            .microtile(
+                self.source.span.source_segment_offset,
+                self.source.span.byte_len,
+            )
+            .expect("S14 StarFold proof-bound microtile 已在构造时验证")
     }
 }
 
@@ -999,15 +996,15 @@ impl S14StarfoldComputeSubmissionReceipt {
     }
 }
 
-/// 生产 owner：常驻持有 proof/SHA mmap store 与唯一 Vulkan 双窗口物理 executor。
-/// 下面的票据接口让同一 proof lease 穿过 upload→ready→compute；这里不发布 token。
+/// 生产 owner：借用进程级 proof/SHA mmap 热 lease 缓存，并独占唯一 Vulkan 双窗口
+/// 物理 executor。下面的票据接口让同一 proof lease 穿过 upload→ready→compute；
+/// 这里不发布 token。
 pub struct S14StarfoldRuntime {
     cache_root: PathBuf,
     page_fetch_mode: DynamicPageFetchMode,
     contract: S14StarfoldDoubleWindowContract,
     resource_owner: Option<S14StarfoldVulkanResourceOwner>,
     transfer_executor: Option<S14StarfoldTransferExecutor>,
-    mapped_store: VerifiedMappedAssetStore,
 }
 
 impl S14StarfoldRuntime {
@@ -1027,8 +1024,6 @@ impl S14StarfoldRuntime {
         page_fetch_mode: DynamicPageFetchMode,
     ) -> Result<Self> {
         let contract = S14StarfoldDoubleWindowContract::new(microtile_bytes)?;
-        let mapped_store = VerifiedMappedAssetStore::new(cache_root)
-            .context("初始化 S14 StarFold proof/SHA mmap store")?;
         let resource_owner = S14StarfoldVulkanResourceOwner::new(ctx, microtile_bytes)
             .context("初始化 S14 StarFold Vulkan 双窗口物理 owner")?;
         let transfer_executor = S14StarfoldTransferExecutor::new(
@@ -1042,7 +1037,6 @@ impl S14StarfoldRuntime {
             contract,
             resource_owner: Some(resource_owner),
             transfer_executor: Some(transfer_executor),
-            mapped_store,
         })
     }
 
@@ -1084,8 +1078,11 @@ impl S14StarfoldRuntime {
             .windows_mut())
     }
 
-    pub fn mapped_store_stats(&self) -> VerifiedMappedAssetStats {
-        self.mapped_store.stats()
+    pub fn verified_lease_cache_stats(&self) -> Result<StarfoldVerifiedLeaseCacheStats> {
+        process_starfold_verified_lease_cache()
+            .stats()
+            .map_err(anyhow::Error::new)
+            .context("读取 S14 StarFold 进程级 verified lease cache stats")
     }
 
     pub fn physical_allocation_bytes(&self) -> u64 {
@@ -1132,31 +1129,34 @@ impl S14StarfoldRuntime {
         if end > source.planned.bytes {
             bail!("S14 StarFold verified microtile 越出 planned Range");
         }
-        let mut asset = source
-            .planned
-            .resolve_cached_position0_asset(&self.cache_root, Some(source.span.key.expert_id))
-            .context("解析 S14 StarFold microtile cache proof")?;
-        let mapped = self
-            .mapped_store
-            .map_verified_batch(std::slice::from_ref(&asset))
-            .context("校验 S14 StarFold microtile payload SHA-256")?
-            .pop()
-            .context("S14 StarFold verified mmap lease 缺失")?;
+        let hot_lease = process_starfold_verified_lease_cache()
+            .acquire_planned(
+                &self.cache_root,
+                &source.planned,
+                Some(source.span.key.expert_id),
+            )
+            .map_err(anyhow::Error::new)
+            .context("取得 S14 StarFold 进程级 proof/SHA/mmap 热 lease")?;
+        let asset = hot_lease.asset().clone();
         source
             .planned
             .validate_resolved_position0_asset(&asset, Some(source.span.key.expert_id))?;
-        if mapped.tensor() != source.planned.tensor
-            || mapped.expected_sha256() != asset.sha256
-            || mapped.bytes().len() as u64 != source.planned.bytes
+        let microtile = hot_lease
+            .microtile(source.span.source_segment_offset, source.span.byte_len)
+            .map_err(anyhow::Error::new)
+            .context("切出 S14 StarFold proof-bound microtile")?;
+        if hot_lease.identity().tensor != source.planned.tensor
+            || hot_lease.identity().payload_sha256 != asset.sha256
+            || hot_lease.identity().payload_bytes != source.planned.bytes
+            || microtile.len() != source.span.byte_len as usize
         {
             bail!("S14 StarFold proof/SHA/mmap identity 漂移");
         }
-        asset.payload_rehashed_by_builder = true;
         Ok(Arc::new(S14StarfoldVerifiedMicrotile::Single(
             S14StarfoldSingleProofLease {
                 source: source.clone(),
                 asset,
-                mapped,
+                hot_lease,
             },
         )))
     }
@@ -1318,6 +1318,105 @@ impl S14StarfoldRuntime {
                 }
             }
         }
+    }
+
+    pub fn begin_transfer_block_epoch(&mut self, block_epoch: u64) -> Result<()> {
+        self.transfer_executor
+            .as_mut()
+            .context("S14 StarFold transfer executor 已销毁")?
+            .begin_block_epoch(block_epoch)
+            .context("开启 S14 StarFold transfer block epoch")
+    }
+
+    /// 显式 epoch 热路径：verified lease → Prepared staging → Armed → queue submit。
+    /// 任一 queue-submit 失败都归还 transfer slot 与 window reservation。
+    pub fn upload_verified_microtile_in_epoch(
+        &mut self,
+        block_epoch: u64,
+        ticket: S14StarfoldUploadTicket,
+    ) -> Result<S14StarfoldReadyMicrotile> {
+        let prepared = match self
+            .transfer_executor
+            .as_mut()
+            .context("S14 StarFold transfer executor 已销毁")?
+            .prepare_verified_upload(block_epoch, &ticket)
+        {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                let cancel = self
+                    .resource_owner
+                    .as_mut()
+                    .context("S14 StarFold Vulkan owner 已销毁")?
+                    .windows_mut()
+                    .cancel_upload(ticket.ticket)
+                    .map_err(anyhow::Error::new);
+                return Err(anyhow!(
+                    "准备 S14 StarFold epoch microtile upload: {error:#}; window cancel={cancel:?}"
+                ));
+            }
+        };
+        let committed = match self
+            .transfer_executor
+            .as_mut()
+            .context("S14 StarFold transfer executor 已销毁")?
+            .commit_prepared_upload(&ticket, prepared)
+        {
+            Ok(committed) => committed,
+            Err(error) => {
+                let cancel = self
+                    .resource_owner
+                    .as_mut()
+                    .context("S14 StarFold Vulkan owner 已销毁")?
+                    .windows_mut()
+                    .cancel_upload(ticket.ticket)
+                    .map_err(anyhow::Error::new);
+                return Err(anyhow!(
+                    "提交 S14 StarFold Prepared upload owner: {error:#}; window cancel={cancel:?}"
+                ));
+            }
+        };
+        let recorded = committed.into_recorded();
+        let submit = unsafe {
+            self.resource_owner
+                .as_mut()
+                .context("S14 StarFold Vulkan owner 已销毁")?
+                .submit_upload(ticket.ticket, recorded.command_buffer(), recorded.fence())
+        };
+        match submit {
+            Ok(binding) => Ok(S14StarfoldReadyMicrotile {
+                binding,
+                verified: ticket.verified,
+            }),
+            Err(error) => {
+                let abandon = unsafe {
+                    self.transfer_executor
+                        .as_mut()
+                        .context("S14 StarFold transfer executor 已销毁")?
+                        .abandon_unsubmitted(recorded)
+                };
+                let cancel = self
+                    .resource_owner
+                    .as_mut()
+                    .context("S14 StarFold Vulkan owner 已销毁")?
+                    .windows_mut()
+                    .cancel_upload(ticket.ticket)
+                    .map_err(anyhow::Error::new);
+                match (abandon, cancel) {
+                    (Ok(()), Ok(())) => Err(error),
+                    (abandon, cancel) => Err(anyhow!(
+                        "{error:#}; epoch upload rollback: transfer={abandon:?} window={cancel:?}"
+                    )),
+                }
+            }
+        }
+    }
+
+    pub fn drain_transfer_block_epoch(&mut self, block_epoch: u64) -> Result<()> {
+        self.transfer_executor
+            .as_mut()
+            .context("S14 StarFold transfer executor 已销毁")?
+            .drain_block_epoch(block_epoch)
+            .context("drain S14 StarFold transfer block epoch")
     }
 
     pub fn reserve_compute(

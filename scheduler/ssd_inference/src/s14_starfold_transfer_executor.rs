@@ -1,12 +1,13 @@
 //! StarFold verified microtile 的双 staging Vulkan transfer 录制器。
 //!
 //! 本模块拥有两个常驻 HOST_VISIBLE staging buffer、一个 transfer command pool、两个
-//! command buffer 与对应 fence。它只负责把已经由 runtime 校验过的 microtile 字节精确
-//! 录制成 `staging -> StarFold window` copy；真正的 queue submit 仍由
-//! `S14StarfoldRuntime::submit_upload` 完成。
+//! command buffer 与对应 fence。显式 block-epoch 流水允许当前 window 在 GPU compute 时，
+//! host 把下一份已通过 proof/SHA 的 microtile 写入另一 staging 并录制 command；只有
+//! Prepared 在同一 epoch 下 commit 后才会暴露给 `S14StarfoldRuntime::submit_upload`。
+//! 本模块本身始终不 queue-submit，也不分配第三个 staging/window。
 
 use crate::{
-    s14_starfold_runtime::S14StarfoldUploadTicket,
+    s14_starfold_runtime::{S14StarfoldUploadTicket, S14StarfoldVerifiedMicrotile},
     s14_starfold_vulkan_windows::{
         S14StarfoldBufferBarrier, S14StarfoldUploadRecording, S14StarfoldWindowId,
     },
@@ -24,9 +25,18 @@ static NEXT_TRANSFER_EXECUTOR_ID: AtomicU64 = AtomicU64::new(1);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TransferSlotState {
     Idle,
+    /// immutable proof/SHA lease 已写入 staging 且 command buffer 已结束录制，但尚未授权
+    /// runtime queue submit。该状态没有可等待 fence；只能 commit 或 cancel。
+    Prepared {
+        recording_serial: u64,
+        block_epoch: u64,
+        window_generation: u64,
+    },
     /// fence 尚未完成时既可能在等待 runtime submit，也可能已经 in-flight。
     Armed {
         recording_serial: u64,
+        /// `None` 只保留给旧的同步 record API；显式流水一律为 `Some(block_epoch)`。
+        block_epoch: Option<u64>,
         window_generation: u64,
     },
 }
@@ -45,6 +55,7 @@ struct TransferSlot {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct S14StarfoldRecordedTransfer {
     executor_id: u64,
+    block_epoch: Option<u64>,
     window: S14StarfoldWindowId,
     window_generation: u64,
     recording_serial: u64,
@@ -57,6 +68,11 @@ pub struct S14StarfoldRecordedTransfer {
 }
 
 impl S14StarfoldRecordedTransfer {
+    /// `Some` 表示该录制由显式 block-epoch 流水产生；`None` 是旧同步入口。
+    pub const fn block_epoch(self) -> Option<u64> {
+        self.block_epoch
+    }
+
     pub const fn command_buffer(self) -> vk::CommandBuffer {
         self.command_buffer
     }
@@ -90,8 +106,78 @@ impl S14StarfoldRecordedTransfer {
     }
 }
 
-/// 常驻双 staging transfer 资源。正常热路径不等待 fence：目标槽位尚未完成时直接返回错误，
-/// 由上层继续使用另一个 StarFold window 或稍后重试。
+/// 已完成 proof/SHA 验证、host staging 写入和 command 录制，但还不能提交到 device 的
+/// 有界流水所有权。
+///
+/// 对象额外强持有 verified proof lease；唯一 upload ticket 仍由调用方持有，因此正常背压
+/// 不会吞掉窗口 reservation。调用方必须在同一 `block_epoch` 内二选一：
+///
+/// - [`S14StarfoldTransferExecutor::commit_prepared_upload`]；
+/// - [`S14StarfoldTransferExecutor::cancel_prepared_upload`]。
+///
+/// 直接丢弃会让对应槽 fail-closed 地停留在 Prepared，防止未证明的跨 epoch 复用。
+#[derive(Debug)]
+pub struct S14StarfoldPreparedUpload {
+    block_epoch: u64,
+    proof: Arc<S14StarfoldVerifiedMicrotile>,
+    recorded: S14StarfoldRecordedTransfer,
+}
+
+impl S14StarfoldPreparedUpload {
+    pub const fn block_epoch(&self) -> u64 {
+        self.block_epoch
+    }
+
+    pub const fn window(&self) -> S14StarfoldWindowId {
+        self.recorded.window()
+    }
+
+    pub const fn window_generation(&self) -> u64 {
+        self.recorded.window_generation()
+    }
+
+    pub const fn byte_len(&self) -> vk::DeviceSize {
+        self.recorded.byte_len()
+    }
+
+    pub fn proof(&self) -> &Arc<S14StarfoldVerifiedMicrotile> {
+        &self.proof
+    }
+}
+
+/// Prepared 状态已经在同一 block epoch 下获准提交后的唯一所有权。
+///
+/// `into_recorded` 后应立即把调用方持有的原 ticket、command buffer 和 fence 原样交给
+/// `S14StarfoldRuntime::submit_upload`；queue submit 失败时仍须调用
+/// [`S14StarfoldTransferExecutor::abandon_unsubmitted`] 并取消窗口 reservation。
+#[derive(Debug)]
+pub struct S14StarfoldCommittedUpload {
+    block_epoch: u64,
+    proof: Arc<S14StarfoldVerifiedMicrotile>,
+    recorded: S14StarfoldRecordedTransfer,
+}
+
+impl S14StarfoldCommittedUpload {
+    pub const fn block_epoch(&self) -> u64 {
+        self.block_epoch
+    }
+
+    pub const fn recorded(&self) -> S14StarfoldRecordedTransfer {
+        self.recorded
+    }
+
+    pub fn proof(&self) -> &Arc<S14StarfoldVerifiedMicrotile> {
+        &self.proof
+    }
+
+    pub fn into_recorded(self) -> S14StarfoldRecordedTransfer {
+        self.recorded
+    }
+}
+
+/// 常驻双 staging transfer 资源。显式流水热路径不等待 fence：目标槽位尚未完成时直接返回
+/// 背压，由上层继续当前 compute 或稍后重试。旧 `record_verified_upload` 为兼容入口，仍只
+/// 等待它即将复用的单个 transfer fence。
 pub struct S14StarfoldTransferExecutor {
     executor_id: u64,
     context: Arc<VulkanContext>,
@@ -99,6 +185,8 @@ pub struct S14StarfoldTransferExecutor {
     command_pool: vk::CommandPool,
     slots: [TransferSlot; 2],
     next_recording_serial: u64,
+    /// 显式流水的唯一活动 block。存在时禁止旧同步入口混入 epoch-less recording。
+    active_block_epoch: Option<u64>,
     destroyed: bool,
 }
 
@@ -240,12 +328,219 @@ impl S14StarfoldTransferExecutor {
                 },
             ],
             next_recording_serial: 1,
+            active_block_epoch: None,
             destroyed: false,
         })
     }
 
     pub const fn staging_bytes(&self) -> vk::DeviceSize {
         self.staging_bytes
+    }
+
+    pub const fn active_block_epoch(&self) -> Option<u64> {
+        self.active_block_epoch
+    }
+
+    /// 开启一个显式计算—传输流水 epoch。
+    ///
+    /// epoch 切换只允许发生在两个 transfer 槽都 idle 时；同一 epoch 的重复调用是幂等的。
+    /// 该门使当前 microtile 的 device compute 与下一 microtile 的 host prepare 可以重叠，
+    /// 同时禁止下一 block 的 recording 混入尚未退休的 A/B 槽。
+    pub fn begin_block_epoch(&mut self, block_epoch: u64) -> Result<()> {
+        if self.destroyed {
+            bail!("S14 StarFold transfer executor 已销毁");
+        }
+        if self.active_block_epoch == Some(block_epoch) {
+            return Ok(());
+        }
+        if let Some(active) = self.active_block_epoch {
+            bail!(
+                "S14 StarFold transfer block epoch 尚未结束: active={}, requested={}",
+                active,
+                block_epoch
+            );
+        }
+        self.refresh_slot(0)?;
+        self.refresh_slot(1)?;
+        if self
+            .slots
+            .iter()
+            .any(|slot| slot.state != TransferSlotState::Idle)
+        {
+            bail!("S14 StarFold transfer 仍有旧录制或 in-flight command，不能开始新 block epoch");
+        }
+        self.active_block_epoch = Some(block_epoch);
+        Ok(())
+    }
+
+    /// 非阻塞准备一个已验证 microtile：写入目标 window 对应的 host staging，并完成 Vulkan
+    /// command 录制，但不向 runtime 暴露可提交 command/fence。
+    ///
+    /// ticket 只能由 runtime 的 verified proof/SHA 路径构造；本入口再次核对 proof key、长度和
+    /// recording range。目标槽不空闲时直接返回背压，不等待 fence，因此不会阻塞当前 GPU
+    /// compute；有界容量始终为 A/B 两个槽。
+    pub fn try_prepare_verified_upload(
+        &mut self,
+        block_epoch: u64,
+        ticket: &S14StarfoldUploadTicket,
+    ) -> Result<S14StarfoldPreparedUpload> {
+        if !self.can_prepare_verified_upload(block_epoch, ticket)? {
+            bail!(
+                "S14 StarFold transfer {} 预取槽忙；保持当前 compute 并稍后重试",
+                ticket.ticket().window()
+            );
+        }
+
+        let recorded = self.record_into_idle_slot(ticket, Some(block_epoch), false)?;
+        Ok(S14StarfoldPreparedUpload {
+            block_epoch,
+            proof: Arc::clone(ticket.proof()),
+            recorded,
+        })
+    }
+
+    /// 有界背压版本：只等待即将复用的同一 A/B transfer 槽，不等待另一槽或整 device。
+    /// 适用于 production 顺序流；前一窗口的 compute 仍可与本次 host prepare 并发。
+    pub fn prepare_verified_upload(
+        &mut self,
+        block_epoch: u64,
+        ticket: &S14StarfoldUploadTicket,
+    ) -> Result<S14StarfoldPreparedUpload> {
+        self.require_active_epoch(block_epoch)?;
+        validate_verified_ticket(ticket)?;
+        let index = ticket.ticket().window().index();
+        self.wait_slot(index)?;
+        let recorded = self.record_into_idle_slot(ticket, Some(block_epoch), false)?;
+        Ok(S14StarfoldPreparedUpload {
+            block_epoch,
+            proof: Arc::clone(ticket.proof()),
+            recorded,
+        })
+    }
+
+    /// 查询目标 A/B 槽是否可立即执行 host prepare。该调用只刷新目标 transfer fence，
+    /// 不等待、不写 staging、不改变 ticket/slot 所有权。
+    pub fn can_prepare_verified_upload(
+        &mut self,
+        block_epoch: u64,
+        ticket: &S14StarfoldUploadTicket,
+    ) -> Result<bool> {
+        self.require_active_epoch(block_epoch)?;
+        validate_verified_ticket(ticket)?;
+        let index = ticket.ticket().window().index();
+        self.refresh_slot(index)?;
+        Ok(self.slots[index].state == TransferSlotState::Idle)
+    }
+
+    /// 把 Prepared 槽在同一 block epoch 下原子推进为 Armed，随后才允许 runtime device
+    /// submit。此函数本身仍不 queue-submit。
+    pub fn commit_prepared_upload(
+        &mut self,
+        ticket: &S14StarfoldUploadTicket,
+        prepared: S14StarfoldPreparedUpload,
+    ) -> Result<S14StarfoldCommittedUpload> {
+        let block_epoch = prepared.block_epoch;
+        if let Err(error) = self.require_active_epoch(block_epoch) {
+            let cleanup = self.abandon_prepared_owned(&prepared);
+            return Err(anyhow::anyhow!(
+                "{error:#}; prepared owner cleanup={cleanup:?}"
+            ));
+        }
+        if prepared.recorded.block_epoch() != Some(block_epoch) {
+            let cleanup = self.abandon_prepared_owned(&prepared);
+            bail!("S14 StarFold prepared upload 的 recording epoch 漂移; cleanup={cleanup:?}");
+        }
+        let index = match self.validate_prepared(&prepared, ticket) {
+            Ok(index) => index,
+            Err(error) => {
+                let cleanup = self.abandon_prepared_owned(&prepared);
+                return Err(anyhow::anyhow!(
+                    "{error:#}; prepared owner cleanup={cleanup:?}"
+                ));
+            }
+        };
+        self.slots[index].state = TransferSlotState::Armed {
+            recording_serial: prepared.recorded.recording_serial,
+            block_epoch: Some(block_epoch),
+            window_generation: prepared.recorded.window_generation,
+        };
+        Ok(S14StarfoldCommittedUpload {
+            block_epoch,
+            proof: prepared.proof,
+            recorded: prepared.recorded,
+        })
+    }
+
+    fn abandon_prepared_owned(&mut self, prepared: &S14StarfoldPreparedUpload) -> Result<()> {
+        let recorded = prepared.recorded;
+        if recorded.executor_id != self.executor_id {
+            bail!("S14 StarFold prepared cleanup 来自其他 executor");
+        }
+        let index = recorded.window.index();
+        let expected = TransferSlotState::Prepared {
+            recording_serial: recorded.recording_serial,
+            block_epoch: prepared.block_epoch,
+            window_generation: recorded.window_generation,
+        };
+        if self.slots[index].state != expected {
+            bail!("S14 StarFold prepared cleanup slot identity 漂移");
+        }
+        unsafe {
+            self.context.device.reset_command_buffer(
+                self.slots[index].command_buffer,
+                vk::CommandBufferResetFlags::empty(),
+            )
+        }
+        .context("回收 S14 StarFold Prepared command buffer")?;
+        self.slots[index].state = TransferSlotState::Idle;
+        Ok(())
+    }
+
+    /// 放弃尚未提交的 Prepared 槽。成功后调用方必须用仍由自己持有的 ticket 同步取消
+    /// runtime window reservation；本 executor 不拥有 Vulkan window 状态机。
+    pub fn cancel_prepared_upload(
+        &mut self,
+        ticket: &S14StarfoldUploadTicket,
+        prepared: S14StarfoldPreparedUpload,
+    ) -> Result<()> {
+        let block_epoch = prepared.block_epoch;
+        self.require_active_epoch(block_epoch)?;
+        let index = self.validate_prepared(&prepared, ticket)?;
+        unsafe {
+            self.context.device.reset_command_buffer(
+                self.slots[index].command_buffer,
+                vk::CommandBufferResetFlags::empty(),
+            )
+        }
+        .context("取消 S14 StarFold prepared command buffer")?;
+        self.slots[index].state = TransferSlotState::Idle;
+        Ok(())
+    }
+
+    /// 结束显式 block epoch。该操作非阻塞；任一 Prepared/Armed/in-flight 槽仍存在时拒绝
+    /// 结束。调用方还必须在更高层证明该 block 的 compute receipt 已完成。
+    pub fn finish_block_epoch(&mut self, block_epoch: u64) -> Result<()> {
+        self.require_active_epoch(block_epoch)?;
+        self.refresh_slot(0)?;
+        self.refresh_slot(1)?;
+        if self
+            .slots
+            .iter()
+            .any(|slot| slot.state != TransferSlotState::Idle)
+        {
+            bail!("S14 StarFold transfer block epoch 仍有 prepared/armed/in-flight 槽");
+        }
+        self.active_block_epoch = None;
+        Ok(())
+    }
+
+    /// projection/block 边界的唯一有界 drain：只等待两个 transfer fence，随后结束 epoch。
+    /// 上层仍须独立持有并验证 compute completion；这里不调用 device-idle。
+    pub fn drain_block_epoch(&mut self, block_epoch: u64) -> Result<()> {
+        self.require_active_epoch(block_epoch)?;
+        self.wait_slot(0)?;
+        self.wait_slot(1)?;
+        self.finish_block_epoch(block_epoch)
     }
 
     /// 把 ticket 中 SHA 已验证的 immutable mmap bytes 写入对应 A/B staging，并录制：
@@ -259,6 +554,86 @@ impl S14StarfoldTransferExecutor {
         if self.destroyed {
             bail!("S14 StarFold transfer executor 已销毁");
         }
+        if let Some(active) = self.active_block_epoch {
+            bail!(
+                "S14 StarFold 显式 block epoch {} 活动时禁止 epoch-less record API",
+                active
+            );
+        }
+        validate_verified_ticket(ticket)?;
+        let index = ticket.ticket().window().index();
+        self.wait_slot(index)?;
+        self.record_into_idle_slot(ticket, None, true)
+    }
+
+    /// runtime submit 失败或 ticket 在 submit 前取消时，归还尚未提交的录制槽。
+    ///
+    /// # Safety
+    /// `recorded.command_buffer()` 必须从未传给 queue submit，或外部已经证明 queue 不再引用它。
+    pub unsafe fn abandon_unsubmitted(
+        &mut self,
+        recorded: S14StarfoldRecordedTransfer,
+    ) -> Result<()> {
+        let index = self.validate_recorded(recorded)?;
+        unsafe {
+            self.context.device.reset_command_buffer(
+                self.slots[index].command_buffer,
+                vk::CommandBufferResetFlags::empty(),
+            )
+        }
+        .context("放弃 S14 StarFold 未提交 command buffer")?;
+        self.slots[index].state = TransferSlotState::Idle;
+        Ok(())
+    }
+
+    /// 非阻塞清理：只有两个槽都 idle/已完成时才销毁资源。热路径无需调用。
+    pub fn try_destroy(&mut self) -> Result<()> {
+        if self.destroyed {
+            return Ok(());
+        }
+        if let Some(active) = self.active_block_epoch {
+            bail!(
+                "S14 StarFold transfer block epoch {} 尚未显式结束，拒绝销毁 executor",
+                active
+            );
+        }
+        self.refresh_slot(0)?;
+        self.refresh_slot(1)?;
+        if self
+            .slots
+            .iter()
+            .any(|slot| slot.state != TransferSlotState::Idle)
+        {
+            bail!("S14 StarFold transfer 仍有未提交或 in-flight command");
+        }
+        self.destroy_resources();
+        Ok(())
+    }
+
+    fn require_active_epoch(&self, block_epoch: u64) -> Result<()> {
+        if self.destroyed {
+            bail!("S14 StarFold transfer executor 已销毁");
+        }
+        match self.active_block_epoch {
+            Some(active) if active == block_epoch => Ok(()),
+            Some(active) => bail!(
+                "S14 StarFold transfer block epoch 漂移: active={}, requested={}",
+                active,
+                block_epoch
+            ),
+            None => bail!(
+                "S14 StarFold transfer block epoch {} 尚未 begin",
+                block_epoch
+            ),
+        }
+    }
+
+    fn record_into_idle_slot(
+        &mut self,
+        ticket: &S14StarfoldUploadTicket,
+        block_epoch: Option<u64>,
+        arm_immediately: bool,
+    ) -> Result<S14StarfoldRecordedTransfer> {
         let upload_ticket = ticket.ticket();
         let recording = ticket.recording();
         let bytes = ticket.bytes();
@@ -271,12 +646,14 @@ impl S14StarfoldTransferExecutor {
         )?;
 
         let index = upload_ticket.window().index();
-        self.wait_slot(index)?;
         if self.slots[index].state != TransferSlotState::Idle {
             bail!(
-                "S14 StarFold transfer {} staging/command buffer 仍在等待提交或执行完成",
+                "S14 StarFold transfer {} staging/command buffer 不是 idle",
                 upload_ticket.window()
             );
+        }
+        if !arm_immediately && block_epoch.is_none() {
+            bail!("S14 StarFold Prepared transfer 必须绑定 block epoch");
         }
 
         let recording_serial = self.next_recording_serial;
@@ -326,12 +703,22 @@ impl S14StarfoldTransferExecutor {
             return Err(error).context("end S14 StarFold transfer command buffer");
         }
 
-        slot.state = TransferSlotState::Armed {
-            recording_serial,
-            window_generation: upload_ticket.window_generation(),
+        slot.state = if arm_immediately {
+            TransferSlotState::Armed {
+                recording_serial,
+                block_epoch,
+                window_generation: upload_ticket.window_generation(),
+            }
+        } else {
+            TransferSlotState::Prepared {
+                recording_serial,
+                block_epoch: block_epoch.expect("上面已证明 Prepared 绑定 block epoch"),
+                window_generation: upload_ticket.window_generation(),
+            }
         };
         Ok(S14StarfoldRecordedTransfer {
             executor_id: self.executor_id,
+            block_epoch,
             window: upload_ticket.window(),
             window_generation: upload_ticket.window_generation(),
             recording_serial,
@@ -344,47 +731,10 @@ impl S14StarfoldTransferExecutor {
         })
     }
 
-    /// runtime submit 失败或 ticket 在 submit 前取消时，归还尚未提交的录制槽。
-    ///
-    /// # Safety
-    /// `recorded.command_buffer()` 必须从未传给 queue submit，或外部已经证明 queue 不再引用它。
-    pub unsafe fn abandon_unsubmitted(
-        &mut self,
-        recorded: S14StarfoldRecordedTransfer,
-    ) -> Result<()> {
-        let index = self.validate_recorded(recorded)?;
-        unsafe {
-            self.context.device.reset_command_buffer(
-                self.slots[index].command_buffer,
-                vk::CommandBufferResetFlags::empty(),
-            )
-        }
-        .context("放弃 S14 StarFold 未提交 command buffer")?;
-        self.slots[index].state = TransferSlotState::Idle;
-        Ok(())
-    }
-
-    /// 非阻塞清理：只有两个槽都 idle/已完成时才销毁资源。热路径无需调用。
-    pub fn try_destroy(&mut self) -> Result<()> {
-        if self.destroyed {
-            return Ok(());
-        }
-        self.refresh_slot(0)?;
-        self.refresh_slot(1)?;
-        if self
-            .slots
-            .iter()
-            .any(|slot| slot.state != TransferSlotState::Idle)
-        {
-            bail!("S14 StarFold transfer 仍有未提交或 in-flight command");
-        }
-        self.destroy_resources();
-        Ok(())
-    }
-
     fn refresh_slot(&mut self, index: usize) -> Result<()> {
-        if self.slots[index].state == TransferSlotState::Idle {
-            return Ok(());
+        match self.slots[index].state {
+            TransferSlotState::Idle | TransferSlotState::Prepared { .. } => return Ok(()),
+            TransferSlotState::Armed { .. } => {}
         }
         let completed = unsafe {
             self.context
@@ -409,8 +759,13 @@ impl S14StarfoldTransferExecutor {
     /// 仍可并发，避免第三个 tile 因瞬时 fence 未完成而把整层执行当成错误退出。
     fn wait_slot(&mut self, index: usize) -> Result<()> {
         self.refresh_slot(index)?;
-        if self.slots[index].state == TransferSlotState::Idle {
-            return Ok(());
+        match self.slots[index].state {
+            TransferSlotState::Idle => return Ok(()),
+            TransferSlotState::Prepared { block_epoch, .. } => bail!(
+                "S14 StarFold transfer slot 处于 block epoch {} Prepared；没有可等待 fence",
+                block_epoch
+            ),
+            TransferSlotState::Armed { .. } => {}
         }
         unsafe {
             self.context.device.wait_for_fences(
@@ -427,6 +782,32 @@ impl S14StarfoldTransferExecutor {
         Ok(())
     }
 
+    fn validate_prepared(
+        &self,
+        prepared: &S14StarfoldPreparedUpload,
+        ticket: &S14StarfoldUploadTicket,
+    ) -> Result<usize> {
+        let recorded = prepared.recorded;
+        if recorded.executor_id != self.executor_id {
+            bail!("S14 StarFold prepared upload 来自其他 executor");
+        }
+        if !Arc::ptr_eq(&prepared.proof, ticket.proof()) {
+            bail!("S14 StarFold prepared upload 的 proof lease 与 ticket 不同源");
+        }
+        validate_ticket_matches_recorded(ticket, recorded)?;
+        let index = recorded.window.index();
+        let expected = TransferSlotState::Prepared {
+            recording_serial: recorded.recording_serial,
+            block_epoch: prepared.block_epoch,
+            window_generation: recorded.window_generation,
+        };
+        let slot = &self.slots[index];
+        if slot.state != expected || !recorded_matches_slot(recorded, slot) {
+            bail!("S14 StarFold prepared upload 已过期或身份漂移");
+        }
+        Ok(index)
+    }
+
     fn validate_recorded(&self, recorded: S14StarfoldRecordedTransfer) -> Result<usize> {
         if recorded.executor_id != self.executor_id {
             bail!("S14 StarFold transfer recording 来自其他 executor");
@@ -434,14 +815,11 @@ impl S14StarfoldTransferExecutor {
         let index = recorded.window.index();
         let expected = TransferSlotState::Armed {
             recording_serial: recorded.recording_serial,
+            block_epoch: recorded.block_epoch,
             window_generation: recorded.window_generation,
         };
         let slot = &self.slots[index];
-        if slot.state != expected
-            || slot.command_buffer != recorded.command_buffer
-            || slot.fence != recorded.fence
-            || slot.staging.handle() != recorded.staging_buffer
-        {
+        if slot.state != expected || !recorded_matches_slot(recorded, slot) {
             bail!("S14 StarFold transfer recording 已过期或身份漂移");
         }
         Ok(index)
@@ -460,6 +838,7 @@ impl S14StarfoldTransferExecutor {
         }
         self.slots[1].staging.destroy(&self.context);
         self.slots[0].staging.destroy(&self.context);
+        self.active_block_epoch = None;
         self.destroyed = true;
     }
 }
@@ -473,6 +852,54 @@ impl Drop for S14StarfoldTransferExecutor {
         let _ = unsafe { self.context.device.device_wait_idle() };
         self.destroy_resources();
     }
+}
+
+fn recorded_matches_slot(recorded: S14StarfoldRecordedTransfer, slot: &TransferSlot) -> bool {
+    slot.command_buffer == recorded.command_buffer
+        && slot.fence == recorded.fence
+        && slot.staging.handle() == recorded.staging_buffer
+}
+
+/// `S14StarfoldUploadTicket` 的字段私有且只能由 runtime verified 路径创建；这里仍复核
+/// proof key/长度，防止后续重构把“只有类型名可信”误当成可提交证明。
+fn validate_verified_ticket(ticket: &S14StarfoldUploadTicket) -> Result<()> {
+    let upload = ticket.ticket();
+    let proof = ticket.proof();
+    if upload.key() != proof.key() {
+        bail!("S14 StarFold upload ticket 与 proof page key 漂移");
+    }
+    if upload.byte_len() != proof.byte_len() {
+        bail!(
+            "S14 StarFold upload ticket 与 proof 长度漂移: ticket={}, proof={}",
+            upload.byte_len(),
+            proof.byte_len()
+        );
+    }
+    if upload.byte_len()
+        != u64::try_from(ticket.bytes().len()).context("S14 StarFold proof bytes 超出 u64")?
+    {
+        bail!("S14 StarFold upload ticket 与 immutable proof bytes 长度漂移");
+    }
+    Ok(())
+}
+
+fn validate_ticket_matches_recorded(
+    ticket: &S14StarfoldUploadTicket,
+    recorded: S14StarfoldRecordedTransfer,
+) -> Result<()> {
+    validate_verified_ticket(ticket)?;
+    let upload = ticket.ticket();
+    let recording = ticket.recording();
+    if upload.window() != recorded.window
+        || upload.window_generation() != recorded.window_generation
+        || upload.byte_len() != recorded.byte_len
+        || recording.buffer != recorded.destination_buffer
+        || recording.dst_buffer_offset != recorded.destination_offset
+        || recording.byte_len != recorded.byte_len
+    {
+        bail!("S14 StarFold prepared recording 与 upload ticket 身份漂移");
+    }
+    Ok(())
 }
 
 fn validate_recording(

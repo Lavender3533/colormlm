@@ -522,7 +522,7 @@ pub type S14StarfoldConcreteSsdChatBackend<Codec> = S14StarfoldSsdProductionChat
 
 pub fn build_s14_starfold_ssd_production_chat_backend<Codec, Factory, Contract>(
     codec: Codec,
-    root: S14StarfoldProductionRoot<Factory>,
+    mut root: S14StarfoldProductionRoot<Factory>,
     startup_contract: Contract,
     max_seq_len: u32,
     default_max_tokens: u32,
@@ -532,6 +532,10 @@ where
     Factory: S14StarfoldBlockResourceFactory + 'static,
     Contract: S14StarfoldSsdStartupContract,
 {
+    if let Some(eos_token_id) = codec.eos_token_id() {
+        root.configure_starwave_eos_token_id(eos_token_id)
+            .map_err(|error| ssd_internal(S14StarfoldSsdAdapterStage::StartupContract, error))?;
+    }
     let factory = S14StarfoldSsdProductionFactory::new(root, startup_contract)?;
     build_s14_starfold_production_chat_backend(codec, factory, max_seq_len, default_max_tokens)
 }
@@ -539,7 +543,7 @@ where
 /// 直接消费 SSD root 自签 resident contract 的 production 构造入口。
 pub fn build_s14_starfold_ssd_root_chat_backend<Codec, Factory>(
     codec: Codec,
-    root: S14StarfoldProductionRoot<Factory>,
+    mut root: S14StarfoldProductionRoot<Factory>,
     max_seq_len: u32,
     default_max_tokens: u32,
 ) -> Result<
@@ -550,6 +554,10 @@ where
     Codec: S14ChatCodec + 'static,
     Factory: S14StarfoldBlockResourceFactory + 'static,
 {
+    if let Some(eos_token_id) = codec.eos_token_id() {
+        root.configure_starwave_eos_token_id(eos_token_id)
+            .map_err(|error| ssd_internal(S14StarfoldSsdAdapterStage::StartupContract, error))?;
+    }
     let factory = S14StarfoldSsdProductionFactory::from_ssd_root(root)?;
     build_s14_starfold_production_chat_backend(codec, factory, max_seq_len, default_max_tokens)
 }
@@ -644,6 +652,15 @@ fn resident_inventory_from_ssd(
             receipt.verified_mapped_asset_store_owners,
             "verified_mapped_asset_store_owners",
         )?,
+        verified_lease_cache_owners: count_u32(
+            receipt.verified_lease_cache_owners,
+            "verified_lease_cache_owners",
+        )?,
+        verified_lease_cache_capacity_entries: count_u32(
+            receipt.verified_lease_cache_capacity_entries,
+            "verified_lease_cache_capacity_entries",
+        )?,
+        verified_lease_cache_contract_version: receipt.verified_lease_cache_contract_version,
         terminal_head_uploader_owners: count_u32(
             receipt.terminal_head_uploader_owners,
             "terminal_head_uploader_owners",

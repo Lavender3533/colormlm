@@ -20,6 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let default_max_tokens = env_u32("POLARIS_S14_DEFAULT_MAX_TOKENS", 16)?;
     let queue_capacity = env_usize("POLARIS_S14_QUEUE_CAPACITY", 1)?;
     let explicit_page_fetch = env_bool("POLARIS_S14_EXPLICIT_PAGE_FETCH", false)?;
+    let starfold_microtile_mib = env_u32("POLARIS_S14_STARFOLD_MICROTILE_MIB", 8)?;
     if explicit_page_fetch {
         require_proxy_policy()?;
     }
@@ -31,8 +32,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .into());
     }
 
-    let runtime_config =
-        S14RuntimeConfig::production_defaults().with_explicit_page_fetch(explicit_page_fetch);
+    let starfold_microtile_bytes =
+        starfold_microtile_mib
+            .checked_mul(1024 * 1024)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "POLARIS_S14_STARFOLD_MICROTILE_MIB 换算字节溢出",
+                )
+            })?;
+    let runtime_config = S14RuntimeConfig::production_defaults()
+        .with_explicit_page_fetch(explicit_page_fetch)
+        .with_starfold_microtile_bytes(starfold_microtile_bytes)?;
     let engine = spawn_s14_starfold_ssd_root_worker(
         queue_capacity,
         max_seq_len,
