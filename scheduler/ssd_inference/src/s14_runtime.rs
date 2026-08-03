@@ -9,6 +9,10 @@ use crate::{
     compute::StorageBufferSlice,
     s14_causal_block_layer::{S14CausalBlockPublishReceipt, S14CausalBlockSealedFuture},
     s14_causal_block_resources::S14CausalBlockUnionBanks,
+    s14_durable_checkpoint::{
+        persist_committed_block, restore_committed_block, S14DurableCheckpointIdentity,
+        S14DurableCheckpointReceipt,
+    },
     s14_dynamic_page_cache_readiness::{
         materialize_dynamic_page_plan, materialize_planned_range_asset, DynamicPageFetchMode,
     },
@@ -48,7 +52,11 @@ use anyhow::{anyhow, bail, Context, Result};
 use ash::vk;
 use polaris_s14_runner::{DecoderStateV1, Position0WholeTokenManifest, VOCAB_SIZE};
 use sha2::{Digest, Sha256};
-use std::{path::PathBuf, sync::Arc, time::Instant};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Instant,
+};
 
 const LAYER_COUNT: usize = 43;
 const LAYER_TRANSFER_START: usize = 0;
@@ -255,6 +263,7 @@ impl S14RuntimeConfig {
 pub struct S14Runtime {
     ctx: Arc<VulkanContext>,
     manifest: Position0WholeTokenManifest,
+    checkpoint_identity: S14DurableCheckpointIdentity,
     weights: S14Position0HybridWeightPlan,
     arena: Option<S14Position0PagedWeightArena>,
     causal_block_union_banks: Option<S14CausalBlockUnionBanks>,
@@ -341,6 +350,12 @@ impl S14Runtime {
             Position0WholeTokenManifest::load(&config.manifest_path).with_context(|| {
                 format!("加载 S14 manifest 失败: {}", config.manifest_path.display())
             })?;
+        let checkpoint_identity = S14DurableCheckpointIdentity::from_runtime_assets(
+            &manifest,
+            &config.manifest_path,
+            &config.catalog_path,
+        )
+        .context("绑定 S14 durable checkpoint runtime identity")?;
         let weights = S14Position0HybridWeightPlan::build(&manifest)?;
         let ctx = Arc::new(VulkanContext::init()?);
         if !ctx.timeline_semaphore || !ctx.has_dedicated_transfer() {
@@ -411,6 +426,7 @@ impl S14Runtime {
         Ok(Self {
             ctx,
             manifest,
+            checkpoint_identity,
             weights,
             arena: Some(arena),
             causal_block_union_banks: Some(causal_block_union_banks),
@@ -433,6 +449,38 @@ impl S14Runtime {
             host,
             device: Some(device),
         })
+    }
+
+    /// 在新进程中恢复一个已持久的 K=4/8 committed block，并交付与
+    /// position0 exporter 相同的 production owner 集合。恢复前会重新校验当前
+    /// manifest/catalog/revision/proof identity，不允许把旧 checkpoint 套到新资产。
+    pub fn resume_committed_causal_block_parts(
+        config: S14RuntimeConfig,
+        checkpoint_path: &Path,
+    ) -> Result<S14Position0CommittedRuntimeParts> {
+        let runtime = Self::load(config)?;
+        let restored = restore_committed_block(checkpoint_path, &runtime.checkpoint_identity)
+            .with_context(|| {
+                format!(
+                    "恢复 S14 committed causal-block checkpoint: {}",
+                    checkpoint_path.display()
+                )
+            })?;
+        let host = restored.authoritative;
+        let active_bank = usize::from(host.active_fixed_bank);
+        let device = WholeTokenDeviceState::from_committed_checkpoint(
+            &runtime.ctx,
+            host.native_arena.bytes(),
+            host.commit_epoch,
+            active_bank,
+        )
+        .context("从 durable checkpoint 重建 whole-token device banks")?;
+        let session = S14Session {
+            ctx: Arc::clone(&runtime.ctx),
+            host,
+            device: Some(device),
+        };
+        runtime.into_committed_causal_block_parts(session)
     }
 
     pub(crate) fn causal_block_union_banks(&self) -> Option<&S14CausalBlockUnionBanks> {
@@ -480,8 +528,8 @@ impl S14Runtime {
     /// 预测，但ledger仍必须保留真实`0→5`，不能伪造position0输出。昂贵paged arena、union
     /// bank、verified uploader/store与active committed device bank保持同一Arc context。
     pub fn into_position0_committed_causal_block_parts(
-        mut self,
-        mut session: S14Session,
+        self,
+        session: S14Session,
         expected_next_input: u32,
     ) -> Result<S14Position0CommittedRuntimeParts> {
         if expected_next_input >= VOCAB_SIZE {
@@ -504,6 +552,27 @@ impl S14Runtime {
             bail!(
                 "causal-block exporter必须消费真实position0 0→5 committed state并绑定请求next input={expected_next_input}"
             );
+        }
+        self.into_committed_causal_block_parts(session)
+    }
+
+    fn into_committed_causal_block_parts(
+        mut self,
+        mut session: S14Session,
+    ) -> Result<S14Position0CommittedRuntimeParts> {
+        if !self.owns_session(&session) {
+            bail!("causal-block committed exporter拒绝外来session");
+        }
+        session
+            .host
+            .validate()
+            .context("validate causal-block committed exporter host")?;
+        if session.host.position == 0
+            || session.host.commit_epoch != u64::from(session.host.position)
+            || usize::from(session.host.active_fixed_bank)
+                != (session.host.commit_epoch as usize & 1)
+        {
+            bail!("causal-block committed exporter拒绝非已提交block identity");
         }
         let device = session
             .device
@@ -1154,6 +1223,42 @@ impl S14CausalBlockRuntimeContinuation {
 
     pub fn authoritative_state(&self) -> &DecoderStateV1 {
         &self.session.host
+    }
+
+    /// 只在一个 block 已通过两阶段 publish 且 device 回到 idle 后发布持久检查点。
+    /// 这是 block 级路径，不得每 token 调用。
+    pub fn persist_committed_block_checkpoint(
+        &mut self,
+        path: &Path,
+    ) -> Result<S14DurableCheckpointReceipt> {
+        if !self.runtime.owns_session(&self.session) {
+            bail!("durable checkpoint continuation runtime/session context漂移");
+        }
+        self.session
+            .host
+            .validate()
+            .context("validate durable continuation host state")?;
+        let device = self
+            .session
+            .device
+            .as_mut()
+            .context("durable checkpoint continuation缺少device state")?;
+        if device.epoch() != self.session.host.commit_epoch
+            || device.active_bank() != usize::from(self.session.host.active_fixed_bank)
+            || device.state_bytes() != self.session.host.native_arena.len() as u64
+            || device.candidate_position().is_some()
+        {
+            bail!("durable checkpoint continuation host/device committed identity漂移");
+        }
+        let device_bytes = device
+            .read_active_for_audit(&self.runtime.ctx)
+            .context("readback committed device bank for durable checkpoint")?;
+        persist_committed_block(
+            path,
+            &self.runtime.checkpoint_identity,
+            &self.session.host,
+            &device_bytes,
+        )
     }
 
     /// 复用`S14Runtime::publish_causal_block_longest_prefix`；这里不复制提交算法。

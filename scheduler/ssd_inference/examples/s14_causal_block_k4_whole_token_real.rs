@@ -67,6 +67,15 @@ use std::{
 };
 
 const BLOCK_SIZE: usize = 4;
+
+fn durable_checkpoint_path() -> PathBuf {
+    env::var_os("POLARIS_S14_DURABLE_CHECKPOINT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../.tmp-polaris-runs/s14-k4-checkpoints/latest.s14ckpt")
+        })
+}
 const BASE_POSITION: u32 = 1;
 const REFERENCE_TOKEN_CHAIN: [u32; BLOCK_SIZE + 1] = [5, 223, 939, 21, 695];
 const INITIAL_HIDDEN_BANK: usize = 0;
@@ -971,6 +980,21 @@ where
                 BASE_POSITION,
                 &decision,
             )?;
+            let first_checkpoint = reusable
+                .continuation
+                .persist_committed_block_checkpoint(&durable_checkpoint_path())
+                .context(
+                    "第一块已commit，但durable checkpoint发布失败；可在当前continuation上重试",
+                )?;
+            println!(
+                "checkpoint=committed position={} epoch={} bank={} bytes={} sha256={} path={}",
+                first_checkpoint.position,
+                first_checkpoint.commit_epoch,
+                first_checkpoint.active_bank,
+                first_checkpoint.arena_bytes,
+                first_checkpoint.file_sha256,
+                first_checkpoint.path.display(),
+            );
 
             bundle
                 .as_mut()
@@ -1009,8 +1033,14 @@ where
                 second_base_position,
                 &second_decision,
             )?;
+            let second_checkpoint = reusable
+                .continuation
+                .persist_committed_block_checkpoint(&durable_checkpoint_path())
+                .context(
+                    "第二块已commit，但durable checkpoint发布失败；可在当前continuation上重试",
+                )?;
             println!(
-                "status=pass mode=polaris_s14_production_k4_two_blocks first_base={} second_base={} final_position={} first_committed={:?} second_committed={:?} first_drafts={:?} second_drafts={:?} blocks=2 committed=true",
+                "status=pass mode=polaris_s14_production_k4_two_blocks first_base={} second_base={} final_position={} first_committed={:?} second_committed={:?} first_drafts={:?} second_drafts={:?} blocks=2 committed=true checkpoint_position={} checkpoint_epoch={} checkpoint_sha256={} checkpoint_path={}",
                 BASE_POSITION,
                 second_base_position,
                 reusable.continuation.authoritative_state().position,
@@ -1018,6 +1048,10 @@ where
                 second_decision.committed_token_ids,
                 draft_token_ids,
                 next_drafts,
+                second_checkpoint.position,
+                second_checkpoint.commit_epoch,
+                second_checkpoint.file_sha256,
+                second_checkpoint.path.display(),
             );
         } else {
             let authoritative_before_rollback = authoritative.clone();

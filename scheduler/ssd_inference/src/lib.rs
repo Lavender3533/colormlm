@@ -51,6 +51,7 @@ pub mod s14_causal_block_terminal_owner;
 pub mod s14_causal_block_union_materializer;
 pub mod s14_causal_block_vulkan_backend;
 pub mod s14_dual_queue_timeline;
+pub mod s14_durable_checkpoint;
 pub mod s14_dynamic_page_cache_readiness;
 pub mod s14_dynamic_routed_packing;
 pub mod s14_dynamic_routed_page_plan;

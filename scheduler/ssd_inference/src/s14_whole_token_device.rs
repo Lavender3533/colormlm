@@ -110,6 +110,29 @@ pub struct WholeTokenDeviceState {
 
 impl WholeTokenDeviceState {
     pub fn new(ctx: &VulkanContext, initial_state: &[u8], epoch: u64) -> Result<Self> {
+        Self::from_committed_checkpoint(ctx, initial_state, epoch, 0)
+    }
+
+    /// 从已通过 durable checkpoint 长度/SHA/身份校验的 active bank 镜像恢复。
+    /// 两个 bank 初始写入同一份已提交字节，但 epoch/active bank 保留持久身份。
+    pub fn from_committed_checkpoint(
+        ctx: &VulkanContext,
+        committed_state: &[u8],
+        epoch: u64,
+        active_bank: usize,
+    ) -> Result<Self> {
+        if active_bank > 1 {
+            bail!("whole-token durable checkpoint active bank越界: {active_bank}");
+        }
+        Self::new_with_active_bank(ctx, committed_state, epoch, active_bank)
+    }
+
+    fn new_with_active_bank(
+        ctx: &VulkanContext,
+        initial_state: &[u8],
+        epoch: u64,
+        active_bank: usize,
+    ) -> Result<Self> {
         if initial_state.is_empty() || initial_state.len() % 4 != 0 {
             bail!("whole-token device state 必须非空且 4-byte 对齐");
         }
@@ -197,7 +220,7 @@ impl WholeTokenDeviceState {
             block_publish_scratch,
             sticky_status,
             state_bytes,
-            active_bank: 0,
+            active_bank,
             epoch,
             candidate_position: None,
             phase: CandidatePhase::Idle,
