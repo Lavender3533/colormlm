@@ -9,9 +9,11 @@ mod s14_engine;
 
 pub use resident::{ResidentChatBackend, ResidentChatEngine};
 pub use s14_engine::{
-    DeepSeekV4ChatCodec, S14ChatCodec, S14N8Evidence, S14RuntimeChatBackend, S14RuntimeChatConfig,
-    VerifiedS14NumericalGate, DEFAULT_S14_N8_EVIDENCE_PATH, DEFAULT_S14_TOKENIZER_PATH,
-    OFFICIAL_CHAT_ENCODING_REVISION, S14_N8_EVIDENCE_SHA256,
+    DeepSeekV4ChatCodec, S14ChatCodec, S14N8Evidence, S14ResidentK4ChatBackend,
+    S14ResidentK4Checkpoint, S14ResidentK4CommittedBlock, S14ResidentK4Decoder,
+    S14ResidentK4Request, S14RuntimeChatBackend, S14RuntimeChatConfig, VerifiedS14NumericalGate,
+    DEFAULT_S14_N8_EVIDENCE_PATH, DEFAULT_S14_TOKENIZER_PATH, OFFICIAL_CHAT_ENCODING_REVISION,
+    S14_N8_EVIDENCE_SHA256,
 };
 
 use axum::{

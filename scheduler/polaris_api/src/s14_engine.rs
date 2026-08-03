@@ -442,6 +442,220 @@ impl<C: S14ChatCodec> ResidentChatBackend for S14RuntimeChatBackend<C> {
     }
 }
 
+/// Resident K=4 decoder 与 ChatEngine 之间的可恢复 checkpoint 身份。
+/// SHA 由 production decoder 的 durable checkpoint 回执提供，API 层只做链式验收。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct S14ResidentK4Checkpoint {
+    pub position: u32,
+    pub commit_epoch: u64,
+    pub sha256: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct S14ResidentK4CommittedBlock {
+    pub consumed: S14ResidentK4Checkpoint,
+    pub committed: S14ResidentK4Checkpoint,
+    pub token_ids: Vec<u32>,
+    pub wall_ms: f64,
+}
+
+/// 每个 HTTP 请求独占的 K=4 continuation。实现必须消费上一块的
+/// 真实 committed checkpoint，不能从 position0 重启或用 fixture 替换。
+pub trait S14ResidentK4Request: Send {
+    fn checkpoint(&self) -> &S14ResidentK4Checkpoint;
+
+    fn execute_next_block(
+        &mut self,
+        remaining_tokens: u32,
+    ) -> Result<S14ResidentK4CommittedBlock, EngineError>;
+
+    fn close(self) -> Result<(), EngineError>;
+}
+
+/// 长驻 decoder 保有 Vulkan、paged arena、union banks 与 verified mapped store；
+/// `begin_request` 只创建请求状态，不得新启动第二模型实例。
+pub trait S14ResidentK4Decoder: Send + 'static {
+    type Request: S14ResidentK4Request;
+
+    fn begin_request(
+        &mut self,
+        prompt_token_ids: &[u32],
+        max_seq_len: u32,
+    ) -> Result<Self::Request, EngineError>;
+}
+
+/// ChatEngine 的 resident K=4 接线。此类型不提供 mock/fallback production
+/// 实现；只有注入真实 `S14ResidentK4Decoder` 后才能构造。
+pub struct S14ResidentK4ChatBackend<C, D> {
+    codec: C,
+    decoder: D,
+    max_seq_len: u32,
+    default_max_tokens: u32,
+}
+
+impl<C: S14ChatCodec, D: S14ResidentK4Decoder> S14ResidentK4ChatBackend<C, D> {
+    pub fn new(
+        codec: C,
+        decoder: D,
+        max_seq_len: u32,
+        default_max_tokens: u32,
+    ) -> Result<Self, EngineError> {
+        if max_seq_len == 0 || default_max_tokens == 0 {
+            return Err(EngineError::new(
+                EngineErrorKind::InvalidRequest,
+                "resident K4 max_seq_len/default_max_tokens 必须大于0",
+            ));
+        }
+        Ok(Self {
+            codec,
+            decoder,
+            max_seq_len,
+            default_max_tokens,
+        })
+    }
+
+    fn run_request(
+        &mut self,
+        request: EngineChatRequest,
+        events: &EngineEventSender,
+    ) -> Result<(), EngineError> {
+        if request.tools.is_some()
+            || request.tool_choice.is_some()
+            || request.temperature.is_some_and(|value| value != 0.0)
+        {
+            return Err(EngineError::new(
+                EngineErrorKind::InvalidRequest,
+                "resident K4 当前只接受无tools、greedy temperature=0 请求",
+            ));
+        }
+        let prompt = self.codec.encode_chat(&request)?;
+        let max_tokens = request.max_tokens.unwrap_or(self.default_max_tokens);
+        if prompt.is_empty()
+            || max_tokens == 0
+            || u32::try_from(prompt.len())
+                .ok()
+                .and_then(|value| value.checked_add(max_tokens))
+                .is_none_or(|required| required > self.max_seq_len)
+        {
+            return Err(EngineError::new(
+                EngineErrorKind::InvalidRequest,
+                "resident K4 prompt/max_tokens 越界",
+            ));
+        }
+
+        let mut resident = self.decoder.begin_request(&prompt, self.max_seq_len)?;
+        let result = self.run_blocks(&mut resident, prompt.len(), max_tokens, &request.stop, events);
+        let cleanup = resident.close();
+        match (result, cleanup) {
+            (Err(mut error), Err(cleanup)) => {
+                error.message = format!("{}; 同时 resident K4 close 失败: {}", error.message, cleanup.message);
+                Err(error)
+            }
+            (Err(error), _) => Err(error),
+            (Ok(()), Err(error)) => Err(error),
+            (Ok(()), Ok(())) => Ok(()),
+        }
+    }
+
+    fn run_blocks<R: S14ResidentK4Request>(
+        &mut self,
+        resident: &mut R,
+        prompt_tokens: usize,
+        max_tokens: u32,
+        stops: &[String],
+        events: &EngineEventSender,
+    ) -> Result<(), EngineError> {
+        let mut completion_ids = Vec::with_capacity(max_tokens as usize);
+        let mut emitted = String::new();
+        while completion_ids.len() < max_tokens as usize {
+            let expected = resident.checkpoint().clone();
+            let remaining = max_tokens - completion_ids.len() as u32;
+            let block = resident.execute_next_block(remaining)?;
+            if block.consumed != expected
+                || block.committed.position <= block.consumed.position
+                || block.committed.commit_epoch <= block.consumed.commit_epoch
+                || block.token_ids.is_empty()
+                || block.token_ids.len() > 4
+                || block.token_ids.len() > remaining as usize
+                || block.committed.position - block.consumed.position
+                    != block.token_ids.len() as u32
+                || block.committed.sha256.len() != 64
+                || block.committed != *resident.checkpoint()
+            {
+                return Err(EngineError::new(
+                    EngineErrorKind::Internal,
+                    "resident K4 block checkpoint/commit/token 链漂移",
+                ));
+            }
+
+            for token_id in block.token_ids {
+                completion_ids.push(token_id);
+                let decoded = self.codec.decode_completion(&completion_ids)?;
+                if !decoded.starts_with(&emitted) {
+                    return Err(EngineError::new(
+                        EngineErrorKind::Internal,
+                        "resident K4 codec 输出不是追加式前缀",
+                    ));
+                }
+                let stop_at = stops.iter().filter_map(|stop| decoded.find(stop)).min();
+                let eos = self.codec.is_eos(token_id);
+                let length = completion_ids.len() == max_tokens as usize;
+                let finish = if stop_at.is_some() || eos {
+                    Some(FinishReason::Stop)
+                } else if length {
+                    Some(FinishReason::Length)
+                } else {
+                    None
+                };
+                let visible_len = match (stop_at, finish) {
+                    (Some(offset), _) => offset,
+                    (None, Some(_)) => decoded.len(),
+                    (None, None) => stable_visible_len(&decoded, stops),
+                };
+                if visible_len > emitted.len() {
+                    let delta = decoded[emitted.len()..visible_len].to_owned();
+                    emitted.push_str(&delta);
+                    if events
+                        .blocking_send(Ok(EngineEvent::Delta(EngineDelta {
+                            text: delta,
+                            token_id: Some(token_id),
+                        })))
+                        .is_err()
+                    {
+                        return Ok(());
+                    }
+                }
+                if let Some(finish_reason) = finish {
+                    let _ = events.blocking_send(Ok(EngineEvent::Done(EngineDone {
+                        finish_reason,
+                        prompt_tokens: Some(prompt_tokens as u64),
+                        completion_tokens: Some(completion_ids.len() as u64),
+                    })));
+                    return Ok(());
+                }
+            }
+        }
+        Err(EngineError::new(
+            EngineErrorKind::Internal,
+            "resident K4 生成循环异常退出",
+        ))
+    }
+}
+
+impl<C, D> ResidentChatBackend for S14ResidentK4ChatBackend<C, D>
+where
+    C: S14ChatCodec + Send + 'static,
+    D: S14ResidentK4Decoder,
+{
+    fn run_chat(
+        &mut self,
+        request: EngineChatRequest,
+        events: &EngineEventSender,
+    ) -> Result<(), EngineError> {
+        self.run_request(request, events)
+    }
+}
+
 fn render_official_forced_prefill(request: &EngineChatRequest) -> Result<String, EngineError> {
     if request.tools.is_some() || request.tool_choice.is_some() {
         return Err(codec_invalid(
