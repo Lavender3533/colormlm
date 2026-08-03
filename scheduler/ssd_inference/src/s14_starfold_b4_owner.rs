@@ -67,7 +67,7 @@ impl S14StarfoldB4RoutedLayerOwner {
             S14StarfoldB4ExpertSchedule::build(layer_plan, runtime.contract().microtile_bytes)?;
         let buffers = self.prepare.routed_buffers(input_f32)?;
         let layout = self.prepare.layout();
-        let w1 = self.routed.execute_projection(
+        let w1 = self.execute_projection(
             runtime,
             layer_plan,
             &schedule,
@@ -75,7 +75,7 @@ impl S14StarfoldB4RoutedLayerOwner {
             buffers,
             layout,
         )?;
-        let w3 = self.routed.execute_projection(
+        let w3 = self.execute_projection(
             runtime,
             layer_plan,
             &schedule,
@@ -84,7 +84,7 @@ impl S14StarfoldB4RoutedLayerOwner {
             layout,
         )?;
         let prepare = self.prepare.submit_prepare(&schedule)?;
-        let w2 = self.routed.execute_projection(
+        let w2 = self.execute_projection(
             runtime,
             layer_plan,
             &schedule,
@@ -155,6 +155,44 @@ impl S14StarfoldB4RoutedLayerOwner {
                 branches_per_position: STARFOLD_TOP_K as u32,
             },
         ))
+    }
+
+    fn execute_projection(
+        &mut self,
+        runtime: &mut S14StarfoldRuntime,
+        layer_plan: &S14StarfoldB4LayerPlan,
+        schedule: &S14StarfoldB4ExpertSchedule,
+        projection: S14StarfoldExpertProjection,
+        buffers: crate::s14_starfold_routed_executor::S14StarfoldRoutedBuffers,
+        layout: crate::s14_starfold_routed_executor::S14StarfoldRoutedWorkspaceLayout,
+    ) -> Result<S14StarfoldProjectionExecutionReceipt> {
+        let window_bytes = runtime.contract().microtile_bytes;
+        let mib = crate::s14_starfold_cache::STARFOLD_ONE_MIB;
+        if [mib, 2 * mib, 4 * mib, 8 * mib].contains(&window_bytes) {
+            self.routed.execute_projection(
+                runtime,
+                layer_plan,
+                schedule,
+                projection,
+                buffers,
+                layout,
+            )
+        } else if [16 * mib, 32 * mib, 64 * mib].contains(&window_bytes) {
+            let packets = self.routed.materialize_projection_constellations(
+                runtime,
+                layer_plan,
+                schedule,
+                projection,
+                buffers,
+                layout,
+            )?;
+            self.routed
+                .execute_materialized_constellations_with_hook(runtime, packets)
+        } else {
+            bail!(
+                "S14 StarFold production window {window_bytes} bytes 不属于 1/2/4/8 microtile 或 16/32/64 constellation 合同"
+            )
+        }
     }
 
     pub fn try_destroy(&mut self) -> Result<()> {

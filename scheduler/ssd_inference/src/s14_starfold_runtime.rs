@@ -1,7 +1,8 @@
 //! Polaris S14 StarFold 的 production host 接线。
 //!
 //! 本层只接权威 GPU top-6 路由、catalog proof identity、payload SHA lease 与恒定双
-//! microtile 窗口；它不发布 token，也不替代既有最长可靠前缀事务提交。
+//! resident 窗口；单专家 microtile 与多专家 constellation 共用同一组
+//! A/B 物理 owner。它不发布 token，也不替代既有最长可靠前缀事务提交。
 
 use crate::{
     s14_dynamic_page_cache_readiness::{
@@ -22,6 +23,10 @@ use crate::{
     s14_starfold_packed_l2::{
         S14StarfoldPackedL2Cache, S14StarfoldPackedL2Config, S14StarfoldPackedL2Key,
         S14StarfoldPackedL2Stats,
+    },
+    s14_starfold_routed_executor::constellation_packet::{
+        S14StarfoldConstellationReadyPacket, S14StarfoldConstellationRuntimeHook,
+        S14StarfoldConstellationPacket, S14StarfoldResidentWindowKey,
     },
     s14_starfold_transfer_executor::S14StarfoldTransferExecutor,
     s14_starfold_vulkan_windows::{
@@ -106,7 +111,7 @@ impl S14StarfoldVulkanWindowsFactory {
         config: S14StarfoldVulkanConfig,
         window_buffers: [S14StarfoldBufferSpec; S14_STARFOLD_WINDOW_COUNT],
         scratch_buffers: &[S14StarfoldScratchBufferSpec],
-    ) -> Result<S14StarfoldVulkanWindows<StarfoldPageKey>> {
+    ) -> Result<S14StarfoldVulkanWindows<S14StarfoldResidentWindowKey>> {
         if config.window_bytes != u64::from(self.contract.microtile_bytes) {
             bail!(
                 "S14 StarFold Vulkan window bytes 与 runtime 合同漂移: config={} contract={}",
@@ -125,7 +130,7 @@ impl S14StarfoldVulkanWindowsFactory {
 /// scratch 当前为空；后续只能按真实 kernel 生命周期追加，不能恢复完整 union bank。
 pub struct S14StarfoldVulkanResourceOwner {
     ctx: Arc<VulkanContext>,
-    windows: Option<S14StarfoldVulkanWindows<StarfoldPageKey>>,
+    windows: Option<S14StarfoldVulkanWindows<S14StarfoldResidentWindowKey>>,
     arena: Option<S14VulkanArena>,
     window_buffers: [vk::Buffer; S14_STARFOLD_WINDOW_COUNT],
     memory: vk::DeviceMemory,
@@ -240,13 +245,13 @@ impl S14StarfoldVulkanResourceOwner {
             .unwrap_or_default()
     }
 
-    pub fn windows(&self) -> &S14StarfoldVulkanWindows<StarfoldPageKey> {
+    pub fn windows(&self) -> &S14StarfoldVulkanWindows<S14StarfoldResidentWindowKey> {
         self.windows
             .as_ref()
             .expect("S14 StarFold Vulkan owner 已销毁")
     }
 
-    pub fn windows_mut(&mut self) -> &mut S14StarfoldVulkanWindows<StarfoldPageKey> {
+    pub fn windows_mut(&mut self) -> &mut S14StarfoldVulkanWindows<S14StarfoldResidentWindowKey> {
         self.windows
             .as_mut()
             .expect("S14 StarFold Vulkan owner 已销毁")
@@ -254,10 +259,10 @@ impl S14StarfoldVulkanResourceOwner {
 
     unsafe fn submit_upload(
         &mut self,
-        ticket: VulkanUploadTicket<StarfoldPageKey>,
+        ticket: VulkanUploadTicket<S14StarfoldResidentWindowKey>,
         command_buffer: vk::CommandBuffer,
         fence: vk::Fence,
-    ) -> Result<VulkanReadyBinding<StarfoldPageKey>> {
+    ) -> Result<VulkanReadyBinding<S14StarfoldResidentWindowKey>> {
         let device = self.ctx.device.clone();
         unsafe {
             self.windows_mut()
@@ -269,10 +274,10 @@ impl S14StarfoldVulkanResourceOwner {
 
     unsafe fn submit_compute(
         &mut self,
-        ticket: VulkanComputeTicket<StarfoldPageKey>,
+        ticket: VulkanComputeTicket<S14StarfoldResidentWindowKey>,
         command_buffer: vk::CommandBuffer,
         fence: vk::Fence,
-    ) -> Result<VulkanComputeReceipt<StarfoldPageKey>> {
+    ) -> Result<VulkanComputeReceipt<S14StarfoldResidentWindowKey>> {
         let device = self.ctx.device.clone();
         unsafe {
             self.windows_mut()
@@ -284,10 +289,10 @@ impl S14StarfoldVulkanResourceOwner {
 
     unsafe fn submit_compute_pair(
         &mut self,
-        ticket: S14StarfoldComputePairTicket<StarfoldPageKey>,
+        ticket: S14StarfoldComputePairTicket<S14StarfoldResidentWindowKey>,
         command_buffer: vk::CommandBuffer,
         fence: vk::Fence,
-    ) -> Result<[VulkanComputeReceipt<StarfoldPageKey>; 2]> {
+    ) -> Result<[VulkanComputeReceipt<S14StarfoldResidentWindowKey>; 2]> {
         let device = self.ctx.device.clone();
         unsafe {
             self.windows_mut()
@@ -867,13 +872,13 @@ impl S14StarfoldPackedMxfp4ProofLease {
 
 #[derive(Debug)]
 pub struct S14StarfoldUploadTicket {
-    ticket: VulkanUploadTicket<StarfoldPageKey>,
+    ticket: VulkanUploadTicket<S14StarfoldResidentWindowKey>,
     recording: S14StarfoldUploadRecording,
     verified: Arc<S14StarfoldVerifiedMicrotile>,
 }
 
 impl S14StarfoldUploadTicket {
-    pub fn ticket(&self) -> VulkanUploadTicket<StarfoldPageKey> {
+    pub fn ticket(&self) -> VulkanUploadTicket<S14StarfoldResidentWindowKey> {
         self.ticket
     }
 
@@ -892,12 +897,12 @@ impl S14StarfoldUploadTicket {
 
 #[derive(Clone, Debug)]
 pub struct S14StarfoldReadyMicrotile {
-    binding: VulkanReadyBinding<StarfoldPageKey>,
+    binding: VulkanReadyBinding<S14StarfoldResidentWindowKey>,
     verified: Arc<S14StarfoldVerifiedMicrotile>,
 }
 
 impl S14StarfoldReadyMicrotile {
-    pub fn binding(&self) -> VulkanReadyBinding<StarfoldPageKey> {
+    pub fn binding(&self) -> VulkanReadyBinding<S14StarfoldResidentWindowKey> {
         self.binding
     }
 
@@ -912,13 +917,13 @@ impl S14StarfoldReadyMicrotile {
 
 #[derive(Debug)]
 pub struct S14StarfoldComputeMicrotile {
-    ticket: VulkanComputeTicket<StarfoldPageKey>,
+    ticket: VulkanComputeTicket<S14StarfoldResidentWindowKey>,
     recording: S14StarfoldComputeRecording,
     verified: Arc<S14StarfoldVerifiedMicrotile>,
 }
 
 impl S14StarfoldComputeMicrotile {
-    pub fn ticket(&self) -> VulkanComputeTicket<StarfoldPageKey> {
+    pub fn ticket(&self) -> VulkanComputeTicket<S14StarfoldResidentWindowKey> {
         self.ticket
     }
 
@@ -938,19 +943,19 @@ impl S14StarfoldComputeMicrotile {
 /// compute 已提交后的 proof/SHA lease；调用方至少保留到 `receipt.completion` 完成。
 #[derive(Debug)]
 pub struct S14StarfoldComputeSubmissionReceipt {
-    receipt: VulkanComputeReceipt<StarfoldPageKey>,
+    receipt: VulkanComputeReceipt<S14StarfoldResidentWindowKey>,
     verified: Arc<S14StarfoldVerifiedMicrotile>,
 }
 
 #[derive(Debug)]
 pub struct S14StarfoldComputePairMicrotile {
-    ticket: S14StarfoldComputePairTicket<StarfoldPageKey>,
+    ticket: S14StarfoldComputePairTicket<S14StarfoldResidentWindowKey>,
     recording: S14StarfoldComputePairRecording,
     verified: [Arc<S14StarfoldVerifiedMicrotile>; 2],
 }
 
 impl S14StarfoldComputePairMicrotile {
-    pub fn ticket(&self) -> S14StarfoldComputePairTicket<StarfoldPageKey> {
+    pub fn ticket(&self) -> S14StarfoldComputePairTicket<S14StarfoldResidentWindowKey> {
         self.ticket
     }
 
@@ -969,12 +974,12 @@ impl S14StarfoldComputePairMicrotile {
 
 #[derive(Debug)]
 pub struct S14StarfoldComputePairSubmissionReceipt {
-    receipts: [VulkanComputeReceipt<StarfoldPageKey>; 2],
+    receipts: [VulkanComputeReceipt<S14StarfoldResidentWindowKey>; 2],
     verified: [Arc<S14StarfoldVerifiedMicrotile>; 2],
 }
 
 impl S14StarfoldComputePairSubmissionReceipt {
-    pub fn receipts(&self) -> [VulkanComputeReceipt<StarfoldPageKey>; 2] {
+    pub fn receipts(&self) -> [VulkanComputeReceipt<S14StarfoldResidentWindowKey>; 2] {
         self.receipts
     }
 
@@ -988,7 +993,7 @@ impl S14StarfoldComputePairSubmissionReceipt {
 }
 
 impl S14StarfoldComputeSubmissionReceipt {
-    pub fn receipt(&self) -> VulkanComputeReceipt<StarfoldPageKey> {
+    pub fn receipt(&self) -> VulkanComputeReceipt<S14StarfoldResidentWindowKey> {
         self.receipt
     }
 
@@ -1085,7 +1090,7 @@ impl S14StarfoldRuntime {
     /// 外部执行器只能在一次调用期间借用，不能复制或替换物理 owner。
     pub(crate) fn vulkan_windows_mut(
         &mut self,
-    ) -> Result<&mut S14StarfoldVulkanWindows<StarfoldPageKey>> {
+    ) -> Result<&mut S14StarfoldVulkanWindows<S14StarfoldResidentWindowKey>> {
         Ok(self
             .resource_owner
             .as_mut()
@@ -1267,7 +1272,11 @@ impl S14StarfoldRuntime {
             .as_mut()
             .context("S14 StarFold Vulkan owner 已销毁")?
             .windows_mut()
-            .reserve_upload(verified.key(), byte_len, consumer_count)
+            .reserve_upload(
+                S14StarfoldResidentWindowKey::Microtile(verified.key()),
+                byte_len,
+                consumer_count,
+            )
             .map_err(anyhow::Error::new)
             .context("预留 S14 StarFold microtile upload window")?;
         Ok(S14StarfoldUploadTicket {
@@ -1580,5 +1589,135 @@ impl S14StarfoldRuntime {
             transfer.try_destroy()?;
         }
         Ok(())
+    }
+}
+
+impl S14StarfoldConstellationRuntimeHook for S14StarfoldRuntime {
+    fn begin_constellation_epoch(&mut self, epoch: u64) -> Result<()> {
+        self.begin_transfer_block_epoch(epoch)
+    }
+
+    fn upload_constellation_packet_in_epoch(
+        &mut self,
+        epoch: u64,
+        packet: Arc<S14StarfoldConstellationPacket>,
+    ) -> Result<S14StarfoldConstellationReadyPacket> {
+        packet.validate()?;
+        if packet.payload_bytes == 0
+            || packet.payload_bytes > u64::from(self.contract.microtile_bytes)
+        {
+            bail!("S14 StarFold constellation packet bytes 超出 resident window 合同");
+        }
+        let (ticket, recording) = self
+            .resource_owner
+            .as_mut()
+            .context("S14 StarFold Vulkan owner 已销毁")?
+            .windows_mut()
+            .reserve_upload(
+                S14StarfoldResidentWindowKey::Constellation(packet.key()),
+                packet.payload_bytes,
+                1,
+            )
+            .map_err(anyhow::Error::new)
+            .context("预留 S14 StarFold constellation upload window")?;
+        if ticket.key() != S14StarfoldResidentWindowKey::Constellation(packet.key())
+            || ticket.byte_len() != packet.payload_bytes
+            || recording.byte_len != packet.payload_bytes
+        {
+            let cancel = self
+                .resource_owner
+                .as_mut()
+                .context("S14 StarFold Vulkan owner 已销毁")?
+                .windows_mut()
+                .cancel_upload(ticket)
+                .map_err(anyhow::Error::new);
+            return Err(anyhow!(
+                "S14 StarFold constellation reserve key/bytes 回执漂移; window cancel={cancel:?}"
+            ));
+        }
+
+        let prepared = match self
+            .transfer_executor
+            .as_mut()
+            .context("S14 StarFold transfer executor 已销毁")?
+            .prepare_constellation_upload(epoch, ticket, recording, &packet)
+        {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                let cancel = self
+                    .resource_owner
+                    .as_mut()
+                    .context("S14 StarFold Vulkan owner 已销毁")?
+                    .windows_mut()
+                    .cancel_upload(ticket)
+                    .map_err(anyhow::Error::new);
+                return Err(anyhow!(
+                    "准备 S14 StarFold constellation upload: {error:#}; window cancel={cancel:?}"
+                ));
+            }
+        };
+        let committed = match self
+            .transfer_executor
+            .as_mut()
+            .context("S14 StarFold transfer executor 已销毁")?
+            .commit_prepared_constellation_upload(ticket, recording, &packet, prepared)
+        {
+            Ok(committed) => committed,
+            Err(error) => {
+                let cancel = self
+                    .resource_owner
+                    .as_mut()
+                    .context("S14 StarFold Vulkan owner 已销毁")?
+                    .windows_mut()
+                    .cancel_upload(ticket)
+                    .map_err(anyhow::Error::new);
+                return Err(anyhow!(
+                    "提交 S14 StarFold constellation Prepared owner: {error:#}; window cancel={cancel:?}"
+                ));
+            }
+        };
+        let (recorded, packet) = committed.into_parts();
+        let submit = unsafe {
+            self.resource_owner
+                .as_mut()
+                .context("S14 StarFold Vulkan owner 已销毁")?
+                .submit_upload(ticket, recorded.command_buffer(), recorded.fence())
+        };
+        match submit {
+            Ok(binding) => Ok(S14StarfoldConstellationReadyPacket::from_verified_parts(
+                binding, packet,
+            )),
+            Err(error) => {
+                let abandon = unsafe {
+                    self.transfer_executor
+                        .as_mut()
+                        .context("S14 StarFold transfer executor 已销毁")?
+                        .abandon_unsubmitted(recorded)
+                };
+                let cancel = self
+                    .resource_owner
+                    .as_mut()
+                    .context("S14 StarFold Vulkan owner 已销毁")?
+                    .windows_mut()
+                    .cancel_upload(ticket)
+                    .map_err(anyhow::Error::new);
+                match (abandon, cancel) {
+                    (Ok(()), Ok(())) => Err(error),
+                    (abandon, cancel) => Err(anyhow!(
+                        "{error:#}; constellation upload rollback: transfer={abandon:?} window={cancel:?}"
+                    )),
+                }
+            }
+        }
+    }
+
+    fn constellation_windows_mut(
+        &mut self,
+    ) -> Result<&mut S14StarfoldVulkanWindows<S14StarfoldResidentWindowKey>> {
+        self.vulkan_windows_mut()
+    }
+
+    fn drain_constellation_epoch(&mut self, epoch: u64) -> Result<()> {
+        self.drain_transfer_block_epoch(epoch)
     }
 }

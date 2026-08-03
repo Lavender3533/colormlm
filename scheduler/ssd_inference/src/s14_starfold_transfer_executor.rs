@@ -1,15 +1,20 @@
-//! StarFold verified microtile 的双 staging Vulkan transfer 录制器。
+//! StarFold verified microtile/constellation immutable payload 的双 staging Vulkan transfer
+//! 录制器。
 //!
 //! 本模块拥有两个常驻 HOST_VISIBLE staging buffer、一个 transfer command pool、两个
 //! command buffer 与对应 fence。显式 block-epoch 流水允许当前 window 在 GPU compute 时，
-//! host 把下一份已通过 proof/SHA 的 microtile 写入另一 staging 并录制 command；只有
+//! host 把下一份已通过 proof/SHA 的 payload 写入另一 staging 并录制 command；只有
 //! Prepared 在同一 epoch 下 commit 后才会暴露给 `S14StarfoldRuntime::submit_upload`。
 //! 本模块本身始终不 queue-submit，也不分配第三个 staging/window。
 
 use crate::{
+    s14_starfold_routed_executor::constellation_packet::{
+        S14StarfoldConstellationPacket, S14StarfoldResidentWindowKey,
+    },
     s14_starfold_runtime::{S14StarfoldUploadTicket, S14StarfoldVerifiedMicrotile},
     s14_starfold_vulkan_windows::{
         S14StarfoldBufferBarrier, S14StarfoldUploadRecording, S14StarfoldWindowId,
+        S14StarfoldUploadTicket as VulkanUploadTicket,
     },
     GpuBuffer, VulkanContext,
 };
@@ -172,6 +177,73 @@ impl S14StarfoldCommittedUpload {
 
     pub fn into_recorded(self) -> S14StarfoldRecordedTransfer {
         self.recorded
+    }
+}
+
+/// 星座 packet 已写入现有 A/B staging 并完成 command 录制，但尚未获准
+/// queue submit 的有界所有权。
+///
+/// 本对象强持有 immutable packet，保证 host payload 与多专家 proof lease 在
+/// Prepared 期间不会失活；物理 staging/window 仍是 executor 原有的 A/B 两个。
+#[derive(Debug)]
+pub struct S14StarfoldPreparedConstellationUpload {
+    block_epoch: u64,
+    packet: Arc<S14StarfoldConstellationPacket>,
+    recorded: S14StarfoldRecordedTransfer,
+}
+
+impl S14StarfoldPreparedConstellationUpload {
+    pub const fn block_epoch(&self) -> u64 {
+        self.block_epoch
+    }
+
+    pub const fn window(&self) -> S14StarfoldWindowId {
+        self.recorded.window()
+    }
+
+    pub const fn window_generation(&self) -> u64 {
+        self.recorded.window_generation()
+    }
+
+    pub const fn byte_len(&self) -> vk::DeviceSize {
+        self.recorded.byte_len()
+    }
+
+    pub fn packet(&self) -> &Arc<S14StarfoldConstellationPacket> {
+        &self.packet
+    }
+}
+
+/// 同一 block epoch 下已从 Prepared 推进到 Armed 的星座上传所有权。
+#[derive(Debug)]
+pub struct S14StarfoldCommittedConstellationUpload {
+    block_epoch: u64,
+    packet: Arc<S14StarfoldConstellationPacket>,
+    recorded: S14StarfoldRecordedTransfer,
+}
+
+impl S14StarfoldCommittedConstellationUpload {
+    pub const fn block_epoch(&self) -> u64 {
+        self.block_epoch
+    }
+
+    pub const fn recorded(&self) -> S14StarfoldRecordedTransfer {
+        self.recorded
+    }
+
+    pub fn packet(&self) -> &Arc<S14StarfoldConstellationPacket> {
+        &self.packet
+    }
+
+    /// 提交给 runtime 时一并转移 packet lease，使 queue submit 成功后可直接
+    /// 构造 ready packet，不需要二次 payload owner。
+    pub fn into_parts(
+        self,
+    ) -> (
+        S14StarfoldRecordedTransfer,
+        Arc<S14StarfoldConstellationPacket>,
+    ) {
+        (self.recorded, self.packet)
     }
 }
 
@@ -432,6 +504,165 @@ impl S14StarfoldTransferExecutor {
         Ok(self.slots[index].state == TransferSlotState::Idle)
     }
 
+    /// 非阻塞查询星座 packet 目标 A/B 槽是否可立即录制。这与 microtile
+    /// 共用同一 active epoch 和同一组 transfer fence。
+    pub fn can_prepare_constellation_upload(
+        &mut self,
+        block_epoch: u64,
+        ticket: VulkanUploadTicket<S14StarfoldResidentWindowKey>,
+        recording: S14StarfoldUploadRecording,
+        packet: &Arc<S14StarfoldConstellationPacket>,
+    ) -> Result<bool> {
+        self.require_active_epoch(block_epoch)?;
+        validate_constellation_ticket(ticket, recording, packet)?;
+        let index = ticket.window().index();
+        self.refresh_slot(index)?;
+        Ok(self.slots[index].state == TransferSlotState::Idle)
+    }
+
+    /// 非阻塞准备一个 immutable constellation packet。槽忙时只返回背压，不分配
+    /// 第三个 staging，也不建立第二套 window owner。
+    pub fn try_prepare_constellation_upload(
+        &mut self,
+        block_epoch: u64,
+        ticket: VulkanUploadTicket<S14StarfoldResidentWindowKey>,
+        recording: S14StarfoldUploadRecording,
+        packet: &Arc<S14StarfoldConstellationPacket>,
+    ) -> Result<S14StarfoldPreparedConstellationUpload> {
+        if !self.can_prepare_constellation_upload(block_epoch, ticket, recording, packet)? {
+            bail!(
+                "S14 StarFold constellation transfer {} 预取槽忙；保持当前 compute 并稍后重试",
+                ticket.window()
+            );
+        }
+        let recorded = self.record_immutable_payload_into_idle_slot(
+            ticket,
+            recording,
+            packet.payload(),
+            Some(block_epoch),
+            false,
+        )?;
+        Ok(S14StarfoldPreparedConstellationUpload {
+            block_epoch,
+            packet: Arc::clone(packet),
+            recorded,
+        })
+    }
+
+    /// 有界背压地准备星座 packet：只等待 ticket 指定的同一 A/B 槽。
+    pub fn prepare_constellation_upload(
+        &mut self,
+        block_epoch: u64,
+        ticket: VulkanUploadTicket<S14StarfoldResidentWindowKey>,
+        recording: S14StarfoldUploadRecording,
+        packet: &Arc<S14StarfoldConstellationPacket>,
+    ) -> Result<S14StarfoldPreparedConstellationUpload> {
+        self.require_active_epoch(block_epoch)?;
+        validate_constellation_ticket(ticket, recording, packet)?;
+        let index = ticket.window().index();
+        self.wait_slot(index)?;
+        let recorded = self.record_immutable_payload_into_idle_slot(
+            ticket,
+            recording,
+            packet.payload(),
+            Some(block_epoch),
+            false,
+        )?;
+        Ok(S14StarfoldPreparedConstellationUpload {
+            block_epoch,
+            packet: Arc::clone(packet),
+            recorded,
+        })
+    }
+
+    /// 把星座 Prepared 槽在同一 epoch 下原子推进为 Armed。本函数仍不
+    /// queue-submit；返回值继续强持有 packet lease。
+    pub fn commit_prepared_constellation_upload(
+        &mut self,
+        ticket: VulkanUploadTicket<S14StarfoldResidentWindowKey>,
+        recording: S14StarfoldUploadRecording,
+        packet: &Arc<S14StarfoldConstellationPacket>,
+        prepared: S14StarfoldPreparedConstellationUpload,
+    ) -> Result<S14StarfoldCommittedConstellationUpload> {
+        let block_epoch = prepared.block_epoch;
+        if let Err(error) = self.require_active_epoch(block_epoch) {
+            let cleanup = self.abandon_prepared_recording(
+                prepared.recorded,
+                block_epoch,
+                "constellation",
+            );
+            return Err(anyhow::anyhow!(
+                "{error:#}; constellation prepared owner cleanup={cleanup:?}"
+            ));
+        }
+        if prepared.recorded.block_epoch() != Some(block_epoch) {
+            let cleanup = self.abandon_prepared_recording(
+                prepared.recorded,
+                block_epoch,
+                "constellation",
+            );
+            bail!(
+                "S14 StarFold constellation prepared recording epoch 漂移; cleanup={cleanup:?}"
+            );
+        }
+        let index = match self.validate_prepared_constellation(
+            &prepared,
+            ticket,
+            recording,
+            packet,
+        ) {
+            Ok(index) => index,
+            Err(error) => {
+                let cleanup = self.abandon_prepared_recording(
+                    prepared.recorded,
+                    block_epoch,
+                    "constellation",
+                );
+                return Err(anyhow::anyhow!(
+                    "{error:#}; constellation prepared owner cleanup={cleanup:?}"
+                ));
+            }
+        };
+        self.slots[index].state = TransferSlotState::Armed {
+            recording_serial: prepared.recorded.recording_serial,
+            block_epoch: Some(block_epoch),
+            window_generation: prepared.recorded.window_generation,
+        };
+        Ok(S14StarfoldCommittedConstellationUpload {
+            block_epoch,
+            packet: prepared.packet,
+            recorded: prepared.recorded,
+        })
+    }
+
+    /// 放弃尚未提交的星座 Prepared 槽。运行时仍须用自己持有的 ticket
+    /// 同步取消 window reservation。
+    pub fn cancel_prepared_constellation_upload(
+        &mut self,
+        ticket: VulkanUploadTicket<S14StarfoldResidentWindowKey>,
+        recording: S14StarfoldUploadRecording,
+        packet: &Arc<S14StarfoldConstellationPacket>,
+        prepared: S14StarfoldPreparedConstellationUpload,
+    ) -> Result<()> {
+        let block_epoch = prepared.block_epoch;
+        self.require_active_epoch(block_epoch)?;
+        let index = self.validate_prepared_constellation(
+            &prepared,
+            ticket,
+            recording,
+            packet,
+        )?;
+        unsafe {
+            self.context.device.reset_command_buffer(
+                self.slots[index].command_buffer,
+                vk::CommandBufferResetFlags::empty(),
+            )
+        }
+        .context("取消 S14 StarFold constellation prepared command buffer")?;
+        self.slots[index].state = TransferSlotState::Idle;
+        Ok(())
+    }
+
     /// 把 Prepared 槽在同一 block epoch 下原子推进为 Armed，随后才允许 runtime device
     /// submit。此函数本身仍不 queue-submit。
     pub fn commit_prepared_upload(
@@ -472,18 +703,26 @@ impl S14StarfoldTransferExecutor {
     }
 
     fn abandon_prepared_owned(&mut self, prepared: &S14StarfoldPreparedUpload) -> Result<()> {
-        let recorded = prepared.recorded;
+        self.abandon_prepared_recording(prepared.recorded, prepared.block_epoch, "microtile")
+    }
+
+    fn abandon_prepared_recording(
+        &mut self,
+        recorded: S14StarfoldRecordedTransfer,
+        block_epoch: u64,
+        payload_kind: &str,
+    ) -> Result<()> {
         if recorded.executor_id != self.executor_id {
-            bail!("S14 StarFold prepared cleanup 来自其他 executor");
+            bail!("S14 StarFold {payload_kind} prepared cleanup 来自其他 executor");
         }
         let index = recorded.window.index();
         let expected = TransferSlotState::Prepared {
             recording_serial: recorded.recording_serial,
-            block_epoch: prepared.block_epoch,
+            block_epoch,
             window_generation: recorded.window_generation,
         };
         if self.slots[index].state != expected {
-            bail!("S14 StarFold prepared cleanup slot identity 漂移");
+            bail!("S14 StarFold {payload_kind} prepared cleanup slot identity 漂移");
         }
         unsafe {
             self.context.device.reset_command_buffer(
@@ -491,7 +730,7 @@ impl S14StarfoldTransferExecutor {
                 vk::CommandBufferResetFlags::empty(),
             )
         }
-        .context("回收 S14 StarFold Prepared command buffer")?;
+        .with_context(|| format!("回收 S14 StarFold {payload_kind} Prepared command buffer"))?;
         self.slots[index].state = TransferSlotState::Idle;
         Ok(())
     }
@@ -634,9 +873,29 @@ impl S14StarfoldTransferExecutor {
         block_epoch: Option<u64>,
         arm_immediately: bool,
     ) -> Result<S14StarfoldRecordedTransfer> {
-        let upload_ticket = ticket.ticket();
-        let recording = ticket.recording();
-        let bytes = ticket.bytes();
+        validate_verified_ticket(ticket)?;
+        self.record_immutable_payload_into_idle_slot(
+            ticket.ticket(),
+            ticket.recording(),
+            ticket.bytes(),
+            block_epoch,
+            arm_immediately,
+        )
+    }
+
+    /// microtile proof 与 constellation packet 的唯一 host payload 录制内核。
+    ///
+    /// 调用方必须在进入前完成 payload key/proof 身份校验，并在返回的
+    /// Prepared/Committed owner 中强持有对应 `Arc`。本函数只处理通用的
+    /// immutable bytes→staging→copy command 状态转移。
+    fn record_immutable_payload_into_idle_slot(
+        &mut self,
+        upload_ticket: VulkanUploadTicket<S14StarfoldResidentWindowKey>,
+        recording: S14StarfoldUploadRecording,
+        bytes: &[u8],
+        block_epoch: Option<u64>,
+        arm_immediately: bool,
+    ) -> Result<S14StarfoldRecordedTransfer> {
         validate_recording(
             recording,
             upload_ticket.byte_len(),
@@ -808,6 +1067,34 @@ impl S14StarfoldTransferExecutor {
         Ok(index)
     }
 
+    fn validate_prepared_constellation(
+        &self,
+        prepared: &S14StarfoldPreparedConstellationUpload,
+        ticket: VulkanUploadTicket<S14StarfoldResidentWindowKey>,
+        recording: S14StarfoldUploadRecording,
+        packet: &Arc<S14StarfoldConstellationPacket>,
+    ) -> Result<usize> {
+        let recorded = prepared.recorded;
+        if recorded.executor_id != self.executor_id {
+            bail!("S14 StarFold constellation prepared upload 来自其他 executor");
+        }
+        if !Arc::ptr_eq(&prepared.packet, packet) {
+            bail!("S14 StarFold constellation prepared upload 的 packet lease 与 ticket 不同源");
+        }
+        validate_constellation_matches_recorded(ticket, recording, packet, recorded)?;
+        let index = recorded.window.index();
+        let expected = TransferSlotState::Prepared {
+            recording_serial: recorded.recording_serial,
+            block_epoch: prepared.block_epoch,
+            window_generation: recorded.window_generation,
+        };
+        let slot = &self.slots[index];
+        if slot.state != expected || !recorded_matches_slot(recorded, slot) {
+            bail!("S14 StarFold constellation prepared upload 已过期或身份漂移");
+        }
+        Ok(index)
+    }
+
     fn validate_recorded(&self, recorded: S14StarfoldRecordedTransfer) -> Result<usize> {
         if recorded.executor_id != self.executor_id {
             bail!("S14 StarFold transfer recording 来自其他 executor");
@@ -865,7 +1152,7 @@ fn recorded_matches_slot(recorded: S14StarfoldRecordedTransfer, slot: &TransferS
 fn validate_verified_ticket(ticket: &S14StarfoldUploadTicket) -> Result<()> {
     let upload = ticket.ticket();
     let proof = ticket.proof();
-    if upload.key() != proof.key() {
+    if upload.key() != S14StarfoldResidentWindowKey::Microtile(proof.key()) {
         bail!("S14 StarFold upload ticket 与 proof page key 漂移");
     }
     if upload.byte_len() != proof.byte_len() {
@@ -879,6 +1166,34 @@ fn validate_verified_ticket(ticket: &S14StarfoldUploadTicket) -> Result<()> {
         != u64::try_from(ticket.bytes().len()).context("S14 StarFold proof bytes 超出 u64")?
     {
         bail!("S14 StarFold upload ticket 与 immutable proof bytes 长度漂移");
+    }
+    Ok(())
+}
+
+fn validate_constellation_ticket(
+    ticket: VulkanUploadTicket<S14StarfoldResidentWindowKey>,
+    recording: S14StarfoldUploadRecording,
+    packet: &Arc<S14StarfoldConstellationPacket>,
+) -> Result<()> {
+    packet
+        .validate()
+        .context("校验 S14 StarFold constellation immutable packet")?;
+    if ticket.key() != S14StarfoldResidentWindowKey::Constellation(packet.key()) {
+        bail!("S14 StarFold constellation upload ticket 与 packet key 漂移");
+    }
+    let payload_bytes =
+        u64::try_from(packet.payload().len()).context("S14 StarFold constellation payload 超出 u64")?;
+    if ticket.byte_len() != packet.payload_bytes
+        || packet.payload_bytes != payload_bytes
+        || recording.byte_len != ticket.byte_len()
+    {
+        bail!(
+            "S14 StarFold constellation upload 长度漂移: ticket={}, recording={}, packet={}, host={}",
+            ticket.byte_len(),
+            recording.byte_len,
+            packet.payload_bytes,
+            payload_bytes
+        );
     }
     Ok(())
 }
@@ -898,6 +1213,25 @@ fn validate_ticket_matches_recorded(
         || recording.byte_len != recorded.byte_len
     {
         bail!("S14 StarFold prepared recording 与 upload ticket 身份漂移");
+    }
+    Ok(())
+}
+
+fn validate_constellation_matches_recorded(
+    ticket: VulkanUploadTicket<S14StarfoldResidentWindowKey>,
+    recording: S14StarfoldUploadRecording,
+    packet: &Arc<S14StarfoldConstellationPacket>,
+    recorded: S14StarfoldRecordedTransfer,
+) -> Result<()> {
+    validate_constellation_ticket(ticket, recording, packet)?;
+    if ticket.window() != recorded.window
+        || ticket.window_generation() != recorded.window_generation
+        || ticket.byte_len() != recorded.byte_len
+        || recording.buffer != recorded.destination_buffer
+        || recording.dst_buffer_offset != recorded.destination_offset
+        || recording.byte_len != recorded.byte_len
+    {
+        bail!("S14 StarFold constellation prepared recording 与 upload ticket 身份漂移");
     }
     Ok(())
 }

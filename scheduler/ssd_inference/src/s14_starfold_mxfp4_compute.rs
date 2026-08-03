@@ -1,7 +1,6 @@
 //! Starfold packed-row MXFP4 tile 的常驻 compute command owner。
 
 use crate::{
-    s14_starfold_cache::StarfoldPageKey,
     s14_starfold_mxfp4_tile::{
         S14StarfoldMxfp4ExternalSlice, S14StarfoldMxfp4ScaleAudit, S14StarfoldMxfp4TileBindings,
         S14StarfoldMxfp4TileDispatch, S14StarfoldMxfp4TileRecorder,
@@ -9,8 +8,9 @@ use crate::{
     },
     s14_starfold_routed_executor::constellation_packet::{
         S14StarfoldConstellationMemberReceipt, S14StarfoldConstellationPacket,
-        S14StarfoldConstellationPacketKey, S14StarfoldConstellationPacketReceipt,
-        S14StarfoldConstellationReadyPacket, S14_STARFOLD_CONSTELLATION_CONTRACT_VERSION,
+        S14StarfoldConstellationPacketReceipt,
+        S14StarfoldConstellationReadyPacket, S14StarfoldResidentWindowKey,
+        S14_STARFOLD_CONSTELLATION_CONTRACT_VERSION,
     },
     s14_starfold_runtime::S14StarfoldVerifiedMicrotile,
     s14_starfold_vulkan_windows::{
@@ -56,7 +56,7 @@ pub struct S14StarfoldMxfp4ComputeSubmissionReceipt {
     pub consumer_id: u64,
     pub wait_transfer: S14StarfoldTimelinePoint,
     pub signal_compute: S14StarfoldTimelinePoint,
-    pub compute: S14StarfoldComputeReceipt<StarfoldPageKey>,
+    pub compute: S14StarfoldComputeReceipt<S14StarfoldResidentWindowKey>,
     pub tiles: Vec<S14StarfoldMxfp4TileRecordingReceipt>,
     pub lane_dispatches: u32,
     pub acquire_barrier_calls: u32,
@@ -78,6 +78,10 @@ impl S14StarfoldMxfp4ComputeSubmissionReceipt {
         let expected_release = if self.compute.residency_retired { 1 } else { 0 };
         if self.owner_id == 0
             || self.submission_serial == 0
+            || !matches!(
+                self.compute.key,
+                S14StarfoldResidentWindowKey::Microtile(_)
+            )
             || self.window != self.compute.window
             || self.window_generation != self.compute.window_generation
             || self.consumer_id != self.compute.consumer_id
@@ -104,7 +108,7 @@ pub struct S14StarfoldConstellationComputeSubmissionReceipt {
     pub consumer_id: u64,
     pub wait_transfer: S14StarfoldTimelinePoint,
     pub signal_compute: S14StarfoldTimelinePoint,
-    pub compute: S14StarfoldComputeReceipt<S14StarfoldConstellationPacketKey>,
+    pub compute: S14StarfoldComputeReceipt<S14StarfoldResidentWindowKey>,
     pub tiles: Vec<S14StarfoldMxfp4TileRecordingReceipt>,
     pub lane_dispatches: u32,
     pub acquire_barrier_calls: u32,
@@ -127,7 +131,7 @@ impl S14StarfoldConstellationComputeSubmissionReceipt {
         let expected_release = self.compute.residency_retired as u32;
         if self.owner_id == 0
             || self.submission_serial == 0
-            || self.packet.key != self.compute.key
+            || S14StarfoldResidentWindowKey::Constellation(self.packet.key) != self.compute.key
             || self.packet.window != self.compute.window
             || self.packet.window_generation != self.compute.window_generation
             || self.consumer_id != self.compute.consumer_id
@@ -296,8 +300,8 @@ impl S14StarfoldMxfp4ComputeOwner {
     #[allow(clippy::too_many_arguments)]
     pub fn submit_ready_tile_batch(
         &mut self,
-        windows: &mut S14StarfoldVulkanWindows<StarfoldPageKey>,
-        ready: S14StarfoldReadyBinding<StarfoldPageKey>,
+        windows: &mut S14StarfoldVulkanWindows<S14StarfoldResidentWindowKey>,
+        ready: S14StarfoldReadyBinding<S14StarfoldResidentWindowKey>,
         proof: Arc<S14StarfoldVerifiedMicrotile>,
         consumer_id: u64,
         shape: S14StarfoldMxfp4TileShape,
@@ -320,7 +324,9 @@ impl S14StarfoldMxfp4ComputeOwner {
         }
 
         let spec = shape.tile(tile_index)?;
-        if proof.key() != ready.key() || proof.byte_len() != ready.byte_len() {
+        if ready.key() != S14StarfoldResidentWindowKey::Microtile(proof.key())
+            || proof.byte_len() != ready.byte_len()
+        {
             bail!("S14 Starfold MXFP4 ready binding 与 proof identity/bytes 漂移");
         }
         if lanes.is_empty() || lanes.len() > 4 {
@@ -468,7 +474,7 @@ impl S14StarfoldMxfp4ComputeOwner {
     /// 直到对应 A/B fence 完成才会从 slot 释放。
     pub fn submit_ready_constellation_batch(
         &mut self,
-        windows: &mut S14StarfoldVulkanWindows<S14StarfoldConstellationPacketKey>,
+        windows: &mut S14StarfoldVulkanWindows<S14StarfoldResidentWindowKey>,
         ready: S14StarfoldConstellationReadyPacket,
         consumer_id: u64,
     ) -> Result<S14StarfoldConstellationComputeSubmissionReceipt> {
@@ -489,7 +495,9 @@ impl S14StarfoldMxfp4ComputeOwner {
         if self.slots[slot_index].state != ComputeSlotState::Idle {
             bail!("S14 StarFold 星座 {} compute slot 仍在执行", ready.window());
         }
-        if ready.key() != packet.key() || ready.byte_len() != packet.payload_bytes {
+        if ready.key() != S14StarfoldResidentWindowKey::Constellation(packet.key())
+            || ready.byte_len() != packet.payload_bytes
+        {
             bail!("S14 StarFold 星座 ready binding identity/bytes 漂移");
         }
 

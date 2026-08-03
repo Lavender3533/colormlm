@@ -30,7 +30,7 @@ use std::{collections::BTreeSet, sync::Arc};
 use constellation_packet::{
     build_starfold_constellation_packets, S14StarfoldConstellationCandidate,
     S14StarfoldConstellationLane, S14StarfoldConstellationPacket,
-    S14StarfoldConstellationRuntimeHook,
+    S14StarfoldConstellationRuntimeHook, S14StarfoldResidentWindowKey,
 };
 
 const F32_BYTES: u64 = 4;
@@ -177,6 +177,11 @@ impl S14StarfoldRoutedExecutor {
                         .context("S14 StarFold compute consumer id overflow")?;
                     let ready_binding = ready.binding();
                     let ready_proof = Arc::clone(ready.proof());
+                    if ready_binding.key()
+                        != S14StarfoldResidentWindowKey::Microtile(ready_proof.key())
+                    {
+                        bail!("S14 StarFold microtile ready binding 未使用统一 resident key");
+                    }
                     let receipt = self.compute.submit_ready_tile_batch(
                         runtime.vulkan_windows_mut()?,
                         ready_binding,
@@ -230,8 +235,8 @@ impl S14StarfoldRoutedExecutor {
     }
 
     /// 只完成 proof-bound host materialize 与确定性星座分包，不触碰 Vulkan window。
-    /// 当前 production runtime 尚未把单页 key 提升为 constellation key，因此调用方
-    /// 必须随后使用显式 [`S14StarfoldConstellationRuntimeHook`]，不能静默回退旧上传。
+    /// 调用方必须随后使用统一 resident window owner 上的显式
+    /// [`S14StarfoldConstellationRuntimeHook`]，不能静默回退旧逐专家上传。
     pub fn materialize_projection_constellations(
         &mut self,
         runtime: &mut S14StarfoldRuntime,

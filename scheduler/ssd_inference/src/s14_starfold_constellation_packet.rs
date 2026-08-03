@@ -31,6 +31,16 @@ pub struct S14StarfoldConstellationPacketKey {
     pub identity_sha256: [u8; 32],
 }
 
+/// StarFold 同一组 A/B Vulkan resident windows 的统一物理身份。
+///
+/// 单专家 microtile 与多专家 constellation 共享窗口 owner，但身份空间必须保持显式
+/// 隔离，禁止把 constellation packet 冒充成普通 `StarfoldPageKey`。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum S14StarfoldResidentWindowKey {
+    Microtile(StarfoldPageKey),
+    Constellation(S14StarfoldConstellationPacketKey),
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct S14StarfoldConstellationLane {
     pub lane: u8,
@@ -276,35 +286,34 @@ pub fn build_starfold_constellation_packets(
 
 #[derive(Debug)]
 pub struct S14StarfoldConstellationReadyPacket {
-    binding: S14StarfoldReadyBinding<S14StarfoldConstellationPacketKey>,
+    binding: S14StarfoldReadyBinding<S14StarfoldResidentWindowKey>,
     packet: Arc<S14StarfoldConstellationPacket>,
 }
 
 impl S14StarfoldConstellationReadyPacket {
-    pub fn new(
-        binding: S14StarfoldReadyBinding<S14StarfoldConstellationPacketKey>,
+    /// runtime 在 queue submit 前已完整验证 packet、ticket、recording 的
+    /// key/bytes 同源时使用。`submit_upload` 成功后窗口已进入 Ready，
+    /// 因此这里必须是不可失败的 owner 转换，禁止丢失 resident consumer。
+    pub(crate) fn from_verified_parts(
+        binding: S14StarfoldReadyBinding<S14StarfoldResidentWindowKey>,
         packet: Arc<S14StarfoldConstellationPacket>,
-    ) -> Result<Self> {
-        packet.validate()?;
-        if binding.key() != packet.key() || binding.byte_len() != packet.payload_bytes {
-            bail!("S14 StarFold 星座包 ready binding identity/bytes 漂移");
-        }
-        Ok(Self { binding, packet })
+    ) -> Self {
+        Self { binding, packet }
     }
 
     pub fn into_parts(
         self,
     ) -> (
-        S14StarfoldReadyBinding<S14StarfoldConstellationPacketKey>,
+        S14StarfoldReadyBinding<S14StarfoldResidentWindowKey>,
         Arc<S14StarfoldConstellationPacket>,
     ) {
         (self.binding, self.packet)
     }
 }
 
-/// 主线接入星座包所需的最小 runtime hook。现有 runtime 的窗口 key 仍是单页
-/// `StarfoldPageKey`，因此本 trait 暂不为它提供伪实现；主线应把 resident key 提升为
-/// `Microtile | Constellation` 后，在同一 A/B owner 上实现这些方法。
+/// 主线接入星座包所需的最小 runtime hook。生产实现必须在同一组
+/// `Microtile | Constellation` A/B resident windows 上完成上传、计算与 drain；
+/// 不允许为 constellation 另建第二套窗口 owner。
 pub trait S14StarfoldConstellationRuntimeHook {
     fn begin_constellation_epoch(&mut self, epoch: u64) -> Result<()>;
 
@@ -316,7 +325,7 @@ pub trait S14StarfoldConstellationRuntimeHook {
 
     fn constellation_windows_mut(
         &mut self,
-    ) -> Result<&mut S14StarfoldVulkanWindows<S14StarfoldConstellationPacketKey>>;
+    ) -> Result<&mut S14StarfoldVulkanWindows<S14StarfoldResidentWindowKey>>;
 
     fn drain_constellation_epoch(&mut self, epoch: u64) -> Result<()>;
 }
