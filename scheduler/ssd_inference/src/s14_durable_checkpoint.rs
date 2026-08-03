@@ -463,7 +463,9 @@ fn sync_parent_directory(_parent: &Path) -> Result<()> {
 fn sha256_file(path: &Path) -> Result<String> {
     let mut reader = BufReader::new(File::open(path)?);
     let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 1024 * 1024];
+    // Windows 主线程默认栈通常只有 1 MiB；这是 runtime load 公共路径，
+    // 不能要求每个调用者额外扩栈。
+    let mut buffer = vec![0u8; 1024 * 1024];
     loop {
         let read = reader.read(&mut buffer)?;
         if read == 0 {
