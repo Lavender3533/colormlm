@@ -9,10 +9,14 @@ import http.client
 import json
 import os
 import sys
+import threading
 import time
 import urllib.error
 from pathlib import Path
 from typing import Any
+
+import requests
+import urllib3
 
 try:
     from . import online_range
@@ -26,8 +30,7 @@ MANIFEST_FORMAT = "polaris-s14-dynamic-page-fetch-manifest-v1"
 MAX_RANGE_COUNT = 8 * 36
 
 
-def _load_manifest(path: Path) -> list[dict[str, Any]]:
-    value = json.loads(path.read_text(encoding="utf-8"))
+def _validate_manifest(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, dict) or value.get("format") != MANIFEST_FORMAT:
         raise online_range.rp.ContractError("dynamic Range fetch manifest format 漂移")
     entries = value.get("entries")
@@ -41,6 +44,116 @@ def _load_manifest(path: Path) -> list[dict[str, Any]]:
     if any(not key for key in keys) or len(set(keys)) != len(keys):
         raise online_range.rp.ContractError("dynamic Range fetch range_key 为空或重复")
     return entries
+
+
+def _load_manifest(path: Path) -> dict[str, Any]:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    _validate_manifest(value)
+    return value
+
+
+class _RequestsResponse:
+    """Expose the narrow ``online_range.ResponseLike`` contract."""
+
+    def __init__(self, response: requests.Response) -> None:
+        self._response = response
+        self.status = response.status_code
+        self.headers = response.headers
+
+    def read(self, size: int = -1) -> bytes:
+        try:
+            return self._response.raw.read(size, decode_content=False)
+        except urllib3.exceptions.HTTPError as error:
+            # Preserve RangeCache's resumable-prefix retry path.
+            raise ConnectionError(str(error)) from error
+
+    def geturl(self) -> str:
+        return self._response.url
+
+    def __enter__(self) -> "_RequestsResponse":
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> None:
+        self._response.close()
+
+
+class _ThreadLocalRequestsRangeTransport:
+    """Persistent per-worker-thread HTTPS pools with normal proxy support.
+
+    ``urllib.request.urlopen`` creates no reusable application-level pool.  The
+    resident Python process therefore still paid repeated TLS setup.  A stable
+    executor thread now owns one ``requests.Session`` and reuses connections to
+    both the Hugging Face resolve host and its redirected CDN.  RangeCache
+    remains the sole owner of the exact 206/Content-Range/length/SHA checks.
+    """
+
+    def __init__(self) -> None:
+        self._local = threading.local()
+        self._stats_lock = threading.Lock()
+        self._sessions = 0
+        self._requests = 0
+
+    def _session(self) -> requests.Session:
+        session = getattr(self._local, "session", None)
+        if session is None:
+            session = requests.Session()
+            adapter = requests.adapters.HTTPAdapter(
+                pool_connections=4,
+                pool_maxsize=1,
+                max_retries=0,
+                pool_block=True,
+            )
+            session.mount("https://", adapter)
+            self._local.session = session
+            with self._stats_lock:
+                self._sessions += 1
+        return session
+
+    def open_range(
+        self, url: str, start: int, end: int, timeout: float
+    ) -> _RequestsResponse:
+        online_range._require_https(url)
+        for attempt in range(4):
+            try:
+                response = self._session().get(
+                    url,
+                    headers={
+                        "Range": f"bytes={start}-{end}",
+                        "Accept-Encoding": "identity",
+                    },
+                    allow_redirects=True,
+                    stream=True,
+                    timeout=timeout,
+                )
+                with self._stats_lock:
+                    self._requests += 1
+                online_range._require_https(response.url)
+                if response.status_code >= 400:
+                    status = response.status_code
+                    reason = response.reason
+                    headers = response.headers
+                    final_url = response.url
+                    response.close()
+                    raise urllib.error.HTTPError(
+                        final_url, status, reason, headers, None
+                    )
+                return _RequestsResponse(response)
+            except urllib.error.HTTPError:
+                raise
+            except (requests.ConnectionError, requests.Timeout) as error:
+                if attempt == 3:
+                    raise ConnectionError(str(error)) from error
+                time.sleep(0.5 * (2**attempt))
+        raise AssertionError("unreachable")
+
+    @property
+    def telemetry(self) -> dict[str, int | str]:
+        with self._stats_lock:
+            return {
+                "kind": "thread_local_requests_session_pool",
+                "sessions": self._sessions,
+                "requests": self._requests,
+            }
 
 
 def _runtime_limits() -> tuple[int, int]:
@@ -59,15 +172,16 @@ def _runtime_limits() -> tuple[int, int]:
 
 def _execute_request(
     *,
-    manifest_path: Path,
+    manifest: dict[str, Any],
     cache_root: Path,
     download_budget_bytes: int,
     cache_pool: dict[tuple[str, str], online_range.RangeCache],
     executor: concurrent.futures.ThreadPoolExecutor,
+    transport: _ThreadLocalRequestsRangeTransport,
     retries: int,
 ) -> dict[str, Any]:
     request_started = time.perf_counter()
-    entries = _load_manifest(manifest_path)
+    entries = _validate_manifest(manifest)
     sizes = [entry.get("bytes") for entry in entries]
     if any(
         isinstance(size, bool) or not isinstance(size, int) or size <= 0
@@ -90,6 +204,7 @@ def _execute_request(
             allow_fetch=True,
             download_budget_bytes=download_budget_bytes,
             endpoint=endpoint,
+            transport=transport,
         )
         cache_pool[pool_key] = cache
     else:
@@ -106,6 +221,10 @@ def _execute_request(
             try:
                 cached = cache.fetch(entry)
                 break
+            except urllib.error.HTTPError:
+                # An explicit remote HTTP status is not a transient transport
+                # break; do not multiply a 4xx/5xx across the outer retry loop.
+                raise
             except retryable:
                 if attempt + 1 >= retries:
                     raise
@@ -160,12 +279,14 @@ def _execute_request(
         ),
         "ranges": rows,
         "proof_cache": cache.proof_cache_telemetry,
+        "transport": transport.telemetry,
     }
 
 
 def _serve() -> int:
     retries, workers = _runtime_limits()
     cache_pool: dict[tuple[str, str], online_range.RangeCache] = {}
+    transport = _ThreadLocalRequestsRangeTransport()
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
         for raw in sys.stdin:
             request_id: Any = None
@@ -179,18 +300,18 @@ def _serve() -> int:
                 manifest = request.get("manifest")
                 cache_root = request.get("cache_root")
                 budget = request.get("download_budget_bytes")
-                if not isinstance(manifest, str) or not manifest:
-                    raise online_range.rp.ContractError("worker manifest 必须为非空UTF-8路径")
+                _validate_manifest(manifest)
                 if not isinstance(cache_root, str) or not cache_root:
                     raise online_range.rp.ContractError("worker cache_root 必须为非空UTF-8路径")
                 if isinstance(budget, bool) or not isinstance(budget, int) or budget <= 0:
                     raise online_range.rp.ContractError("worker download budget 必须为正整数")
                 result = _execute_request(
-                    manifest_path=Path(manifest),
+                    manifest=manifest,
                     cache_root=Path(cache_root),
                     download_budget_bytes=budget,
                     cache_pool=cache_pool,
                     executor=executor,
+                    transport=transport,
                     retries=retries,
                 )
                 response = {"request_id": request_id, "ok": True, "result": result}
@@ -219,13 +340,16 @@ def main() -> int:
     if args.manifest is None or args.cache_root is None or args.download_budget_bytes is None:
         raise online_range.rp.ContractError("单次模式必须提供manifest/cache-root/download-budget")
     retries, workers = _runtime_limits()
+    manifest = _load_manifest(args.manifest)
+    transport = _ThreadLocalRequestsRangeTransport()
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
         result = _execute_request(
-            manifest_path=args.manifest,
+            manifest=manifest,
             cache_root=args.cache_root,
             download_budget_bytes=args.download_budget_bytes,
             cache_pool={},
             executor=executor,
+            transport=transport,
             retries=retries,
         )
     print(json.dumps(result, ensure_ascii=False))

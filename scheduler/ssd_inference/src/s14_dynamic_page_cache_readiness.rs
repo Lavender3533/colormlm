@@ -843,12 +843,14 @@ fn fetch_required_error(
     })
 }
 
+#[cfg(test)]
 struct DynamicFetchArtifacts {
     manifest: PathBuf,
     stdout: PathBuf,
     stderr: PathBuf,
 }
 
+#[cfg(test)]
 impl DynamicFetchArtifacts {
     fn write(
         manifest: &DynamicPageFetchManifest,
@@ -936,7 +938,6 @@ struct PersistentDynamicFetchWorker {
 
 #[derive(Debug)]
 struct DynamicPageTransportReceipt {
-    raw_response: String,
     cache_hits: u64,
     cache_misses: u64,
     downloaded_bytes: u64,
@@ -1011,7 +1012,7 @@ impl PersistentDynamicFetchWorker {
 
     fn request(
         &mut self,
-        manifest_path: &Path,
+        manifest: &DynamicPageFetchManifest,
         cache_root: &Path,
         download_budget_bytes: u64,
         timeout: Duration,
@@ -1036,9 +1037,6 @@ impl PersistentDynamicFetchWorker {
             .next_request_id
             .checked_add(1)
             .context("persistent fetch request_id overflow")?;
-        let manifest_utf8 = manifest_path
-            .to_str()
-            .context("persistent fetch manifest path 必须为UTF-8")?;
         let cache_root_utf8 = cache_root
             .to_str()
             .context("persistent fetch cache root 必须为UTF-8")?;
@@ -1047,7 +1045,10 @@ impl PersistentDynamicFetchWorker {
             &serde_json::json!({
                 "op": "fetch_manifest",
                 "request_id": request_id,
-                "manifest": manifest_utf8,
+                // Inline the already validated/merged manifest.  The resident
+                // worker no longer needs a per-layer manifest tempfile and the
+                // Rust side no longer re-opens that file to count entries.
+                "manifest": manifest,
                 "cache_root": cache_root_utf8,
                 "download_budget_bytes": download_budget_bytes,
             }),
@@ -1143,7 +1144,7 @@ impl PersistentDynamicFetchWorker {
         {
             bail!("persistent dynamic fetch result format/budget 漂移");
         }
-        let expected_ranges = u64::try_from(manifest_entry_count(manifest_path)?)
+        let expected_ranges = u64::try_from(manifest.entries.len())
             .context("persistent fetch manifest range count overflow")?;
         let range_count = result
             .get("range_count")
@@ -1177,26 +1178,12 @@ impl PersistentDynamicFetchWorker {
             bail!("persistent dynamic fetch result timing/download bytes 非法");
         }
         Ok(DynamicPageTransportReceipt {
-            raw_response: line,
             cache_hits,
             cache_misses,
             downloaded_bytes,
             request_wall_ms,
         })
     }
-}
-
-fn manifest_entry_count(path: &Path) -> Result<usize> {
-    let value: serde_json::Value = serde_json::from_reader(
-        fs::File::open(path)
-            .with_context(|| format!("open persistent fetch manifest {}", path.display()))?,
-    )
-    .context("decode persistent fetch manifest for receipt")?;
-    value
-        .get("entries")
-        .and_then(serde_json::Value::as_array)
-        .map(Vec::len)
-        .context("persistent fetch manifest 缺少entries")
 }
 
 impl Drop for PersistentDynamicFetchWorker {
@@ -1215,20 +1202,6 @@ fn invoke_persistent_range_transport(
     download_budget_bytes: u64,
     timeout: Duration,
 ) -> Result<DynamicPageTransportReceipt> {
-    let (artifacts, mut stdout_log, mut stderr_log) =
-        DynamicFetchArtifacts::write(manifest, cache_root)?;
-    writeln!(
-        stderr_log,
-        "rust_persistent_transport_request manifest={} budget_bytes={} timeout_seconds={}",
-        artifacts.manifest.display(),
-        download_budget_bytes,
-        timeout.as_secs()
-    )
-    .context("write persistent dynamic fetch request metadata")?;
-    stderr_log
-        .flush()
-        .context("flush persistent dynamic fetch request metadata")?;
-
     let worker_lock = PERSISTENT_DYNAMIC_FETCH_WORKER.get_or_init(|| Mutex::new(None));
     let mut slot = worker_lock
         .lock()
@@ -1246,24 +1219,13 @@ fn invoke_persistent_range_transport(
         *slot = Some(PersistentDynamicFetchWorker::spawn(transport, cache_root)?);
     }
     let result = slot.as_mut().expect("worker just initialized").request(
-        &artifacts.manifest,
+        manifest,
         cache_root,
         download_budget_bytes,
         timeout,
     );
     match result {
-        Ok(response) => {
-            stdout_log
-                .write_all(response.raw_response.as_bytes())
-                .context("write persistent dynamic fetch response log")?;
-            stdout_log
-                .flush()
-                .context("flush persistent dynamic fetch response log")?;
-            drop(stdout_log);
-            drop(stderr_log);
-            artifacts.cleanup_success();
-            Ok(response)
-        }
+        Ok(response) => Ok(response),
         Err(error) => {
             if let Some(mut worker) = slot.take() {
                 worker.stop();
