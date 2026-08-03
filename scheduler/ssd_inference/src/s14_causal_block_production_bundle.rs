@@ -511,6 +511,7 @@ where
         &cache_root,
         fetch_mode,
         static_arena,
+        hidden_banks.clone(),
     )?;
     let prefix_state_producer = provider
         .take_prefix_state_producer()

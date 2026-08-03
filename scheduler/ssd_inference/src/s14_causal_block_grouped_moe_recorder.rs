@@ -10,6 +10,7 @@ use crate::{
     s14_causal_block_grouped_graph::{
         S14CausalBlockGroupedMoeRecorder, S14CausalBlockRecordedGroupedMoe,
     },
+    s14_causal_block_hc_qkv_recorder::S14CausalBlockHiddenBank,
     s14_causal_block_layer::{
         S14CausalBlockHiddenBinding, S14CausalBlockLayerRangePlan, S14CausalBlockUnionBankBinding,
     },
@@ -279,6 +280,9 @@ pub struct S14CausalBlockGroupedMoeVulkanRecorder {
     workspace: Option<GpuBuffer>,
     control: Option<GpuBuffer>,
     outputs: [Option<GpuBuffer>; 2],
+    /// production whole-layer A/B owner。存在时 grouped MoE 必须把 HC-post
+    /// 写回与 post-attention bank 相反的注册 bank，供下一层直接继续。
+    external_outputs: Option<[S14CausalBlockHiddenBank; 2]>,
     workspace_layout: WorkspaceLayout,
     control_layout: ControlLayout,
     binders: Vec<DescriptorBinder>,
@@ -308,9 +312,13 @@ pub fn build_s14_causal_block_paged_moe_adapter(
     cache_root: &Path,
     fetch_mode: DynamicPageFetchMode,
     static_arena: Arc<S14Position0PagedWeightArena>,
+    hidden_banks: [S14CausalBlockHiddenBank; 2],
 ) -> Result<S14CausalBlockConcreteMoeAdapter> {
-    let recorder =
-        S14CausalBlockGroupedMoeVulkanRecorder::new_paged(Arc::clone(&ctx), static_arena)?;
+    let recorder = S14CausalBlockGroupedMoeVulkanRecorder::new_paged(
+        Arc::clone(&ctx),
+        static_arena,
+        hidden_banks,
+    )?;
     S14CausalBlockProductionMoeAdapter::new(ctx, catalog, cache_root, fetch_mode, recorder)
 }
 
@@ -335,8 +343,43 @@ impl S14CausalBlockGroupedMoeVulkanRecorder {
     pub fn new_paged(
         ctx: Arc<VulkanContext>,
         static_arena: Arc<S14Position0PagedWeightArena>,
+        hidden_banks: [S14CausalBlockHiddenBank; 2],
     ) -> Result<Self> {
-        Self::new_with_static_source(ctx, StaticLayerSource::Paged(static_arena))
+        let mut recorder =
+            Self::new_with_static_source(ctx, StaticLayerSource::Paged(static_arena))?;
+        let required = MAX_K as u64 * HC_STREAMS * HIDDEN as u64 * 2;
+        for bank in &hidden_banks {
+            if bank.offset % 4 != 0
+                || bank.capacity_bytes < required
+                || bank
+                    .offset
+                    .checked_add(required)
+                    .is_none_or(|end| end > bank.buffer.size())
+            {
+                recorder.destroy_inner();
+                bail!("grouped MoE production hidden bank capacity/alignment 非法");
+            }
+        }
+        if hidden_banks[0].buffer.handle() == hidden_banks[1].buffer.handle()
+            && ranges_overlap(
+                hidden_banks[0].offset,
+                required,
+                hidden_banks[1].offset,
+                required,
+            )?
+        {
+            recorder.destroy_inner();
+            bail!("grouped MoE production hidden A/B banks 重叠");
+        }
+        // Common constructor allocates private compatibility outputs. production改为
+        // 复用同一A/B owner后立即释放它们，避免第三套hidden与下一层身份断裂。
+        for output in recorder.outputs.iter_mut().rev() {
+            if let Some(buffer) = output.take() {
+                buffer.destroy(&recorder.ctx);
+            }
+        }
+        recorder.external_outputs = Some(hidden_banks);
+        Ok(recorder)
     }
 
     pub fn new_with_static_layer(
@@ -367,6 +410,7 @@ impl S14CausalBlockGroupedMoeVulkanRecorder {
             workspace: None,
             control: None,
             outputs: [None, None],
+            external_outputs: None,
             workspace_layout,
             control_layout,
             binders: Vec::new(),
@@ -417,9 +461,7 @@ impl S14CausalBlockGroupedMoeVulkanRecorder {
         let plan = build_layer_record_plan(routes, batch_plan, range_plan, static_view.shared)?;
         let workspace = self.workspace()?;
         let control = self.control()?;
-        let output = self.outputs[layer_index % 2]
-            .as_ref()
-            .context("grouped MoE output buffer 已销毁")?;
+        let (output, output_base) = self.output_bank(post_attention_hidden, layer_index)?;
         let numeric = self.numeric.as_ref().context("numeric pipeline 已销毁")?;
         let numeric_exact = self
             .numeric_exact
@@ -753,7 +795,7 @@ impl S14CausalBlockGroupedMoeVulkanRecorder {
                 },
                 StorageBufferSlice {
                     buffer: output,
-                    offset: lane as u64 * HC_STREAMS * HIDDEN as u64 * 2,
+                    offset: output_base + lane as u64 * HC_STREAMS * HIDDEN as u64 * 2,
                 },
                 StorageBufferSlice {
                     buffer: control,
@@ -770,7 +812,7 @@ impl S14CausalBlockGroupedMoeVulkanRecorder {
         Ok(S14CausalBlockRecordedGroupedMoe {
             output_hidden: S14CausalBlockHiddenBinding {
                 buffer: output.handle(),
-                offset: 0,
+                offset: output_base,
                 bytes: expected_hidden_bytes,
                 block_size: k,
                 generation: post_attention_hidden
@@ -881,6 +923,37 @@ impl S14CausalBlockGroupedMoeVulkanRecorder {
         self.control.as_ref().context("grouped MoE control 已销毁")
     }
 
+    fn output_bank(
+        &self,
+        post_attention_hidden: S14CausalBlockHiddenBinding,
+        layer_index: usize,
+    ) -> Result<(&GpuBuffer, u64)> {
+        if let Some(banks) = &self.external_outputs {
+            let mut output = None;
+            let mut post_attention_is_registered = false;
+            for bank in banks {
+                if bank.buffer.handle() == post_attention_hidden.buffer
+                    && bank.offset == post_attention_hidden.offset
+                {
+                    post_attention_is_registered = true;
+                } else {
+                    if output.is_some() {
+                        bail!("grouped MoE production hidden bank identity 非唯一");
+                    }
+                    output = Some((bank.buffer.as_ref(), bank.offset));
+                }
+            }
+            if !post_attention_is_registered {
+                bail!("grouped MoE post-attention hidden 不属于 production A/B banks");
+            }
+            return output.context("grouped MoE production output bank 缺失");
+        }
+        let output = self.outputs[layer_index % 2]
+            .as_ref()
+            .context("grouped MoE output buffer 已销毁")?;
+        Ok((output, 0))
+    }
+
     fn release_binders(&mut self) {
         for binder in self.binders.drain(..).rev() {
             binder.destroy(&self.ctx);
@@ -897,6 +970,7 @@ impl S14CausalBlockGroupedMoeVulkanRecorder {
                 buffer.destroy(&self.ctx);
             }
         }
+        self.external_outputs.take();
         if let Some(buffer) = self.control.take() {
             buffer.destroy(&self.ctx);
         }
@@ -986,13 +1060,17 @@ impl S14CausalBlockGroupedMoeRecorder for S14CausalBlockGroupedMoeVulkanRecorder
 
     fn owns_output_hidden(&self, binding: S14CausalBlockHiddenBinding) -> bool {
         matches!(binding.block_size, 4 | 8)
-            && binding.offset == 0
             && binding.bytes == binding.block_size as u64 * HC_STREAMS * HIDDEN as u64 * 2
-            && self
-                .outputs
-                .iter()
-                .flatten()
-                .any(|output| output.handle() == binding.buffer && output.size() >= binding.bytes)
+            && (self.external_outputs.as_ref().is_some_and(|banks| {
+                banks.iter().any(|bank| {
+                    bank.buffer.handle() == binding.buffer
+                        && bank.offset == binding.offset
+                        && binding.bytes <= bank.capacity_bytes
+                })
+            }) || (binding.offset == 0
+                && self.outputs.iter().flatten().any(|output| {
+                    output.handle() == binding.buffer && output.size() >= binding.bytes
+                })))
     }
 
     fn finish_block_after_drain(&mut self, aborted: bool) -> Result<()> {
@@ -1280,6 +1358,16 @@ fn align_up(value: u64, alignment: u64) -> Result<u64> {
         .checked_add(alignment - 1)
         .map(|value| value & !(alignment - 1))
         .context("alignment overflow")
+}
+
+fn ranges_overlap(left: u64, left_bytes: u64, right: u64, right_bytes: u64) -> Result<bool> {
+    let left_end = left
+        .checked_add(left_bytes)
+        .context("left hidden range overflow")?;
+    let right_end = right
+        .checked_add(right_bytes)
+        .context("right hidden range overflow")?;
+    Ok(left < right_end && right < left_end)
 }
 
 fn to_u32(value: u64) -> Result<u32> {
