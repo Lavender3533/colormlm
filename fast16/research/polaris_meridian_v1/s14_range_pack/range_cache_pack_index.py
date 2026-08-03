@@ -93,6 +93,160 @@ class FileRecord:
     allocated_bytes_estimate: int
 
 
+def _entry_identity_signature(
+    *,
+    bytes_value: int,
+    observed_sha256: str,
+    authoritative: bool,
+    identity: dict[str, Any],
+) -> tuple[int, str, bool, bytes]:
+    return (
+        bytes_value,
+        observed_sha256,
+        authoritative,
+        _canonical_bytes(identity),
+    )
+
+
+def _audit_existing_index(
+    path: Path | None, entries: Iterable[CacheEntry]
+) -> dict[str, Any]:
+    if path is None:
+        return {"provided": False}
+    path = path.resolve()
+    try:
+        lines = path.read_bytes().splitlines(keepends=True)
+    except OSError as exc:
+        raise AuditError(f"无法读取 existing index {path}: {exc}") from exc
+    if len(lines) < 2:
+        raise AuditError(f"existing index 行数不足: {path}")
+    values: list[Any] = []
+    for number, line in enumerate(lines, start=1):
+        if not line.endswith(b"\n") or line.endswith(b"\r\n"):
+            raise AuditError(f"existing index 第{number}行不是规范 LF 结尾")
+        try:
+            text = line[:-1].decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise AuditError(f"existing index 第{number}行不是 UTF-8: {exc}") from exc
+        value = _json_without_duplicate_keys(text, path)
+        if line[:-1] != _canonical_bytes(value):
+            raise AuditError(f"existing index 第{number}行不是规范 JSON")
+        values.append(value)
+
+    header = values[0]
+    footer = values[-1]
+    rows = values[1:-1]
+    if not isinstance(header, dict) or header.get("format") != INDEX_FORMAT:
+        raise AuditError("existing index header format 漂移")
+    if header.get("kind") != "header":
+        raise AuditError("existing index 首行不是 header")
+    if not isinstance(footer, dict) or footer.get("format") != INDEX_FORMAT:
+        raise AuditError("existing index footer format 漂移")
+    if footer.get("kind") != "footer":
+        raise AuditError("existing index 尾行不是 footer")
+    header_count = _require_int(header.get("entry_count"), "entry_count", path)
+    footer_count = _require_int(footer.get("entry_count"), "entry_count", path)
+    if header_count != len(rows) or footer_count != len(rows):
+        raise AuditError(
+            "existing index header/footer/实际 entry_count 不一致 "
+            f"({header_count}/{footer_count}/{len(rows)})"
+        )
+
+    digest = hashlib.sha256()
+    indexed: dict[str, tuple[int, str, bool, bytes]] = {}
+    indexed_bytes: dict[str, int] = {}
+    for number, row in enumerate(rows, start=2):
+        if not isinstance(row, dict) or row.get("kind") != "entry":
+            raise AuditError(f"existing index 第{number}行不是 entry")
+        key = _require_sha(row.get("cache_key"), "cache_key", path)
+        if key in indexed:
+            raise AuditError(f"existing index cache_key 重复: {key}")
+        bytes_value = _require_int(row.get("bytes"), "bytes", path)
+        observed = _require_sha(row.get("observed_sha256"), "observed_sha256", path)
+        authoritative = row.get("authoritative")
+        identity = row.get("identity")
+        storage = row.get("storage")
+        if bytes_value <= 0:
+            raise AuditError(f"existing index {key}: bytes 必须为正数")
+        if not isinstance(authoritative, bool) or not isinstance(identity, dict):
+            raise AuditError(f"existing index {key}: proof identity 类型错误")
+        if not isinstance(storage, dict) or storage.get("kind") not in {
+            "loose_hot",
+            "immutable_pack",
+        }:
+            raise AuditError(f"existing index {key}: storage 类型错误")
+        indexed[key] = _entry_identity_signature(
+            bytes_value=bytes_value,
+            observed_sha256=observed,
+            authoritative=authoritative,
+            identity=identity,
+        )
+        indexed_bytes[key] = bytes_value
+        digest.update(_canonical_bytes(row))
+        digest.update(b"\n")
+    expected_digest = _require_sha(
+        footer.get("entries_jsonl_sha256"), "entries_jsonl_sha256", path
+    )
+    if digest.hexdigest() != expected_digest:
+        raise AuditError("existing index entries_jsonl_sha256 不匹配")
+
+    current: dict[str, tuple[int, str, bool, bytes]] = {}
+    current_bytes: dict[str, int] = {}
+    for entry in entries:
+        identity = {
+            "repo": entry.repo,
+            "revision": entry.revision,
+            "source_file": entry.source_file,
+            "source_file_bytes": entry.source_file_bytes,
+            "start": entry.start,
+            "end": entry.end,
+            "header_tensor_table_sha256": entry.header_tensor_table_sha256,
+        }
+        current[entry.cache_key] = _entry_identity_signature(
+            bytes_value=entry.bytes,
+            observed_sha256=entry.observed_sha256,
+            authoritative=entry.authoritative,
+            identity=identity,
+        )
+        current_bytes[entry.cache_key] = entry.bytes
+
+    indexed_keys = set(indexed)
+    current_keys = set(current)
+    shared_keys = indexed_keys & current_keys
+    changed_keys = {key for key in shared_keys if indexed[key] != current[key]}
+    unchanged_keys = shared_keys - changed_keys
+    new_keys = current_keys - indexed_keys
+    retired_keys = indexed_keys - current_keys
+    if changed_keys or retired_keys:
+        state = "diverged"
+    elif new_keys:
+        state = "stale_append_only"
+    else:
+        state = "current"
+    return {
+        "provided": True,
+        "path": str(path),
+        "state": state,
+        "indexed_entries": len(indexed),
+        "current_entries": len(current),
+        "unchanged_entries": len(unchanged_keys),
+        "new_loose_entries": len(new_keys),
+        "retired_entries": len(retired_keys),
+        "changed_proof_entries": len(changed_keys),
+        "indexed_payload_bytes": sum(indexed_bytes.values()),
+        "current_payload_bytes": sum(current_bytes.values()),
+        "new_loose_payload_bytes": sum(current_bytes[key] for key in new_keys),
+        "retired_payload_bytes": sum(indexed_bytes[key] for key in retired_keys),
+        "changed_current_payload_bytes": sum(current_bytes[key] for key in changed_keys),
+        "coverage_fraction": len(unchanged_keys) / max(1, len(current)),
+        "activation_safe": state == "current",
+        "note": (
+            "append-only stale 只允许旧索引继续作为规划快照；新增页保持 loose，"
+            "发布新 delta/base index 前不得宣称完整 pack coverage。"
+        ),
+    }
+
+
 def _validate_sidecar(path: Path, payload_path: Path, payload_bytes: int) -> CacheEntry:
     raw = _json_without_duplicate_keys(path.read_text(encoding="utf-8"), path)
     if not isinstance(raw, dict) or raw.get("format") != CACHE_META_FORMAT:
@@ -345,6 +499,7 @@ def main() -> int:
     parser.add_argument("--cache-root", type=Path, required=True)
     parser.add_argument("--index-output", type=Path)
     parser.add_argument("--report-output", type=Path)
+    parser.add_argument("--existing-index", type=Path)
     parser.add_argument("--hot-keys", type=Path)
     parser.add_argument("--pack-target-bytes", type=int, default=4 * GIB)
     parser.add_argument("--min-free-bytes", type=int, default=20 * GIB)
@@ -406,6 +561,7 @@ def main() -> int:
         entries, hot_keys & sidecar_keys, args.pack_target_bytes
     )
     planning_seconds = time.perf_counter() - planning_started
+    existing_index = _audit_existing_index(args.existing_index, entries)
     payload_bytes = sum(entry.bytes for entry in entries)
     pack_bytes = sum(pack_sizes)
     authoritative_count = sum(entry.authoritative for entry in entries)
@@ -524,6 +680,7 @@ def main() -> int:
             "update_policy": "新增页只写 loose-hot；达到阈值后封成新 delta pack，禁止为单页重写 base pack",
             "writer_gate": "流式复制时必须重算每项 SHA、核对长度，并在完整 pack+index fsync 后原子发布",
         },
+        "existing_index": existing_index,
         "repo_revisions": [
             {"repo": repo, "revision": revision}
             for repo, revision in repo_revisions
