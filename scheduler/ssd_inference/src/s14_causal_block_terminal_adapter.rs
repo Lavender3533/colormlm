@@ -19,7 +19,9 @@ use crate::{
     },
     s14_causal_block_vulkan_backend::S14CausalBlockVulkanTerminalRecorder,
     s14_head_chunk_argmax::{S14HeadArgmaxResult, S14HeadChunkArgmaxShape},
-    GpuBuffer,
+    s14_position0_hybrid_upload::S14Position0HeadChunkReceipt,
+    s14_position0_paged_weight_arena::S14Position0PagedWeightArena,
+    GpuBuffer, VulkanContext,
 };
 use anyhow::{bail, Context, Result};
 use ash::vk;
@@ -36,7 +38,7 @@ pub enum S14CausalBlockTerminalResource {
     FinalHidden,
     NormalizedHeadRows,
     CandidateCheckpoint(usize),
-    HeadChunk(usize),
+    HeadBank(usize),
 }
 
 /// 43 层 K-lane recorder 对 terminal 输入资源的真实 owner 边界。
@@ -46,6 +48,34 @@ pub enum S14CausalBlockTerminalResource {
 pub trait S14CausalBlockTerminalResourceOwner: fmt::Debug {
     fn buffer(&self, resource: S14CausalBlockTerminalResource) -> Option<&GpuBuffer>;
     fn producer_timeline(&self) -> vk::Semaphore;
+
+    /// 32个逻辑 chunk 只能流经同一 paged arena 的两个真实 bank。
+    fn paged_weight_arena(&self) -> Option<&Arc<S14Position0PagedWeightArena>> {
+        None
+    }
+
+    /// 只录制当前 chunk 的 staging→`bank=chunk%2` copy，不读取 payload、不 submit。
+    unsafe fn record_next_head_chunk_copy(
+        &self,
+        _ctx: &VulkanContext,
+        _command: vk::CommandBuffer,
+        _chunk: u32,
+    ) -> Result<S14Position0HeadChunkReceipt, String> {
+        Err("terminal resource owner 未实现 paged head copy recorder".into())
+    }
+
+    /// timeline 已确认 staging bank 可复用后，必须通过 verified store 完成
+    /// proof/SHA/mmap，并把当前 chunk payload 写入录制 copy 所引用的 staging bank。
+    fn stage_recorded_head_chunk(
+        &self,
+        _receipt: S14Position0HeadChunkReceipt,
+        _timeline_bank: usize,
+    ) -> Result<S14Position0HeadChunkReceipt, String> {
+        Err("terminal resource owner 未实现 verified paged head staging".into())
+    }
+
+    /// 仅在 transfer/compute 已排空后回滚 uploader 游标。
+    fn abort_head_stream_after_drain(&self) {}
 
     /// terminal recorder 已等待 producer timeline 且完成 GPU batched head 后调用。
     /// concrete owner 必须在这里校验同一 timeline 覆盖的 HC/norm sticky status；
@@ -78,7 +108,7 @@ pub struct S14CausalBlockTerminalProductionSource {
     pub final_hidden: S14CausalBlockHiddenBinding,
     pub normalized_head_rows_offset: u64,
     pub checkpoint_offsets: Vec<u64>,
-    pub head_chunk_offsets: Vec<u64>,
+    pub head_chunk_count: usize,
     pub producer_timeline_value: u64,
     pub routes_by_position: Vec<Vec<RouteDecision>>,
     pub host_candidates: Box<dyn S14CausalBlockHostCandidateFinalizer>,
@@ -283,26 +313,12 @@ impl S14CausalBlockTerminalProductionAdapter {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
-        let head_chunks = source
-            .head_chunk_offsets
-            .iter()
-            .enumerate()
-            .map(|(chunk, &offset)| {
-                Ok(StorageBufferSlice {
-                    buffer: required_buffer(
-                        source.resources.as_ref(),
-                        S14CausalBlockTerminalResource::HeadChunk(chunk),
-                    )?,
-                    offset,
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
         let input = S14CausalBlockTerminalInputBinding {
             base_position: source.base_position,
             final_hidden: source.final_hidden,
             normalized_head_rows,
             checkpoints: &checkpoints,
-            head_chunks: &head_chunks,
+            head_stream: source.resources.as_ref(),
             producer_timeline: source.resources.producer_timeline(),
             producer_timeline_value: source.producer_timeline_value,
         };
@@ -389,7 +405,7 @@ fn validate_source_envelope(source: &S14CausalBlockTerminalProductionSource) -> 
         || source.final_hidden.buffer == vk::Buffer::null()
         || source.final_hidden.bytes != expected_hidden_bytes
         || source.checkpoint_offsets.len() != block_size
-        || source.head_chunk_offsets.len() != shape.chunk_count() as usize
+        || source.head_chunk_count != shape.chunk_count() as usize
         || source.routes_by_position.len() != block_size
         || source
             .routes_by_position
@@ -438,15 +454,24 @@ fn validate_source_envelope(source: &S14CausalBlockTerminalProductionSource) -> 
             "candidate checkpoint",
         )?;
     }
-    for (chunk, &offset) in source.head_chunk_offsets.iter().enumerate() {
+    let arena = source
+        .resources
+        .paged_weight_arena()
+        .context("K-lane terminal resource owner 缺少 paged arena")?;
+    for bank in 0..2 {
+        let expected = arena.head_chunk(bank)?;
+        let observed = required_buffer(
+            source.resources.as_ref(),
+            S14CausalBlockTerminalResource::HeadBank(bank),
+        )?;
+        if expected.handle() != observed.handle() {
+            bail!("K-lane terminal head bank 未与 paged arena 强绑定");
+        }
         validate_owned_range(
-            required_buffer(
-                source.resources.as_ref(),
-                S14CausalBlockTerminalResource::HeadChunk(chunk),
-            )?,
-            offset,
-            shape.chunk(chunk as u32)?.weight_bytes(shape)?,
-            "head chunk",
+            observed,
+            0,
+            shape.max_chunk_weight_bytes()?,
+            "head bank",
         )?;
     }
 

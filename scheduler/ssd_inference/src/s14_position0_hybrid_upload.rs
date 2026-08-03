@@ -36,6 +36,19 @@ pub trait S14Position0HybridUploadTarget {
     ) -> Result<S14Position0UploadDestination<'_>>;
     fn routed_bank(&self, bank: usize) -> Result<&GpuBuffer>;
     fn head_chunk_bank(&self, bank: usize) -> Result<&GpuBuffer>;
+
+    /// verified store 已完成 proof/SHA/mmap 且本次同步 transfer 已 wait 后才会调用。
+    /// 非 paged target 无需维护换页 identity。
+    fn publish_static_layer_ready(
+        &self,
+        _layer: u8,
+        _resident_hit: bool,
+        _bank: Option<usize>,
+        _assets: usize,
+        _uploaded_bytes: u64,
+    ) -> Result<()> {
+        Ok(())
+    }
 }
 
 pub struct S14Position0UploadDestination<'a> {
@@ -132,6 +145,24 @@ impl S14Position0HybridUploadTarget for S14Position0PagedWeightArena {
 
     fn head_chunk_bank(&self, bank: usize) -> Result<&GpuBuffer> {
         self.head_chunk(bank)
+    }
+
+    fn publish_static_layer_ready(
+        &self,
+        layer: u8,
+        resident_hit: bool,
+        bank: Option<usize>,
+        assets: usize,
+        uploaded_bytes: u64,
+    ) -> Result<()> {
+        S14Position0PagedWeightArena::publish_static_layer_ready(
+            self,
+            layer,
+            resident_hit,
+            bank,
+            assets,
+            uploaded_bytes,
+        )
     }
 }
 
@@ -495,6 +526,17 @@ impl S14Position0HybridUploader {
         self.progress.all_complete(plan)
     }
 
+    /// FullDepth43 已完成 static/routed 游标、尚未开始 head 扫描时才成立。
+    /// production terminal 用它阻止提前扫描或复用半完成 token 的 uploader。
+    pub fn ready_for_paged_head_stream(&self, plan: &S14Position0HybridWeightPlan) -> bool {
+        self.progress.static_complete(plan)
+            && self.progress.next_runtime_static_layer == plan.routed_layers.len()
+            && self.progress.next_routed_layer == plan.routed_layers.len()
+            && self.progress.pending_layer.is_none()
+            && self.progress.next_head_chunk == 0
+            && self.progress.pending_head_chunk.is_none()
+    }
+
     /// 为跨 token 常驻 uploader 打开下一次事务。首个 token 只校验初始化态；
     /// 后续 token 必须确认上一 token 已完整走过43层和32个head chunk，随后只
     /// 重置游标/pending，不重新分配 staging、command pool、command buffer或fence。
@@ -692,6 +734,7 @@ impl S14Position0HybridUploader {
                 "streamed static bytes",
             )?;
         }
+        target.publish_static_layer_ready(layer, resident_hit, bank, placements.len(), bytes)?;
         self.progress.next_runtime_static_layer += 1;
         Ok(S14Position0StaticLayerUploadReceipt {
             layer,

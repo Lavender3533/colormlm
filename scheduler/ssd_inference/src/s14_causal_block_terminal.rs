@@ -1,13 +1,14 @@
 //! K=4/8 causal-block 的 production checkpoint arena 与 batched terminal/head 数据面。
 //!
 //! 本模块不生成或伪造 K 份 candidate state。调用方必须绑定由43层图真实产生的 K 个
-//! 完整 device checkpoint、同源 K-row normalized head input、32个 production head chunk
-//! 以及 producer timeline。recorder 在一个 command submit 中复制 K-prefix checkpoints、
-//! 用 `production_batched(K)` 扫描一次32个 chunk、回读 K 行 top-1，并以 owned lease
+//! 完整 device checkpoint、同源 K-row normalized head input、同一 paged arena 的双 head bank
+//! 以及 producer timeline。recorder 逐块执行 verified transfer→K-row compute timeline，
+//! 用 `production_batched(K)` 让每块权重只扫描一次、最终只回读一次 K 行 top-1，并以 owned lease
 //! 保活 arena/timeline；任一步失败都先 drain 已提交工作再释放 reservation。
 
 use crate::{
     compute::StorageBufferSlice,
+    s14_causal_block_terminal_adapter::S14CausalBlockTerminalResourceOwner,
     s14_causal_block_layer::{
         S14CausalBlockDeviceCheckpointStorage, S14CausalBlockDeviceFutureReceipt,
         S14CausalBlockFinalOutput, S14CausalBlockHiddenBinding, S14CausalBlockOwnedDeviceFuture,
@@ -21,6 +22,7 @@ use crate::{
         S14HeadChunkArgmaxPipeline, S14HeadChunkArgmaxRecorder, S14HeadChunkArgmaxRecordingReceipt,
         S14HeadChunkArgmaxShape, S14HeadChunkWorkspace, S14_HEAD_ARGMAX_WORDS,
     },
+    s14_position0_hybrid_upload::S14Position0HeadChunkReceipt,
     GpuBuffer, VulkanContext,
 };
 use anyhow::{bail, Context, Result};
@@ -397,7 +399,7 @@ pub struct S14CausalBlockTerminalInputBinding<'a> {
     pub final_hidden: S14CausalBlockHiddenBinding,
     pub normalized_head_rows: StorageBufferSlice<'a>,
     pub checkpoints: &'a [S14CausalBlockCheckpointSource<'a>],
-    pub head_chunks: &'a [StorageBufferSlice<'a>],
+    pub head_stream: &'a dyn S14CausalBlockTerminalResourceOwner,
     pub producer_timeline: vk::Semaphore,
     pub producer_timeline_value: u64,
 }
@@ -431,6 +433,62 @@ impl TerminalWorkspaceLayout {
             logits_offset,
             accumulator_offset,
             total_bytes,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct HeadStreamTicket {
+    chunk: u32,
+    bank: usize,
+    transfer_value: u64,
+    compute_value: u64,
+    staging_wait_transfer: Option<u64>,
+    reuse_after_compute: Option<u64>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct HeadStreamSchedule {
+    tickets: Vec<HeadStreamTicket>,
+    last_compute_value: u64,
+    next_transfer_value: u64,
+    next_compute_value: u64,
+}
+
+impl HeadStreamSchedule {
+    fn build(first_transfer: u64, first_compute: u64, chunks: u32) -> Result<Self> {
+        if first_transfer == 0 || first_compute == 0 || chunks == 0 {
+            bail!("causal-block head timeline 起始值/chunks 非法");
+        }
+        let mut tickets = Vec::with_capacity(chunks as usize);
+        let mut transfer_value = first_transfer;
+        let mut compute_value = first_compute;
+        let mut staging_last_transfer = [None; 2];
+        let mut device_last_compute = [None; 2];
+        for chunk in 0..chunks {
+            let bank = chunk as usize % 2;
+            tickets.push(HeadStreamTicket {
+                chunk,
+                bank,
+                transfer_value,
+                compute_value,
+                staging_wait_transfer: staging_last_transfer[bank],
+                reuse_after_compute: device_last_compute[bank],
+            });
+            staging_last_transfer[bank] = Some(transfer_value);
+            device_last_compute[bank] = Some(compute_value);
+            transfer_value = transfer_value
+                .checked_add(1)
+                .context("causal-block head transfer timeline overflow")?;
+            compute_value = compute_value
+                .checked_add(1)
+                .context("causal-block head compute timeline overflow")?;
+        }
+        Ok(Self {
+            last_compute_value: tickets.last().unwrap().compute_value,
+            tickets,
+            next_transfer_value: transfer_value,
+            next_compute_value: compute_value,
         })
     }
 }
@@ -480,8 +538,14 @@ impl S14CausalBlockTerminalGpuExport {
 pub struct S14CausalBlockBatchedTerminalRecorder {
     ctx: Arc<VulkanContext>,
     pool: Arc<S14CausalBlockCheckpointArenaPool>,
-    command_pool: vk::CommandPool,
-    command: vk::CommandBuffer,
+    transfer_command_pool: vk::CommandPool,
+    transfer_commands: Vec<vk::CommandBuffer>,
+    compute_command_pool: vk::CommandPool,
+    compute_commands: Vec<vk::CommandBuffer>,
+    head_transfer_timeline: vk::Semaphore,
+    head_compute_timeline: vk::Semaphore,
+    next_transfer_value: u64,
+    next_compute_value: u64,
     workspace: Option<GpuBuffer>,
     readback: Option<GpuBuffer>,
     head_pipeline: Option<S14HeadChunkArgmaxPipeline>,
@@ -536,7 +600,12 @@ impl S14CausalBlockBatchedTerminalRecorder {
                 return Err(error.context("create causal-block batched head pipeline"));
             }
         };
-        let (command_pool, command) = match allocate_terminal_command(&ctx) {
+        let command_count = max_shape.chunk_count() as usize;
+        let (transfer_command_pool, transfer_commands) = match allocate_terminal_commands(
+            &ctx,
+            ctx.qf_transfer,
+            command_count,
+        ) {
             Ok(resources) => resources,
             Err(error) => {
                 head_pipeline.destroy(&ctx);
@@ -545,11 +614,58 @@ impl S14CausalBlockBatchedTerminalRecorder {
                 return Err(error);
             }
         };
+        let (compute_command_pool, compute_commands) = match allocate_terminal_commands(
+            &ctx,
+            ctx.qf_graphics,
+            command_count + 1,
+        ) {
+            Ok(resources) => resources,
+            Err(error) => {
+                unsafe { ctx.device.destroy_command_pool(transfer_command_pool, None) };
+                head_pipeline.destroy(&ctx);
+                readback.destroy(&ctx);
+                workspace.destroy(&ctx);
+                return Err(error);
+            }
+        };
+        let head_transfer_timeline = match create_terminal_timeline(&ctx) {
+            Ok(timeline) => timeline,
+            Err(error) => {
+                unsafe {
+                    ctx.device.destroy_command_pool(compute_command_pool, None);
+                    ctx.device.destroy_command_pool(transfer_command_pool, None);
+                }
+                head_pipeline.destroy(&ctx);
+                readback.destroy(&ctx);
+                workspace.destroy(&ctx);
+                return Err(error.context("create causal-block head transfer timeline"));
+            }
+        };
+        let head_compute_timeline = match create_terminal_timeline(&ctx) {
+            Ok(timeline) => timeline,
+            Err(error) => {
+                unsafe {
+                    ctx.device.destroy_semaphore(head_transfer_timeline, None);
+                    ctx.device.destroy_command_pool(compute_command_pool, None);
+                    ctx.device.destroy_command_pool(transfer_command_pool, None);
+                }
+                head_pipeline.destroy(&ctx);
+                readback.destroy(&ctx);
+                workspace.destroy(&ctx);
+                return Err(error.context("create causal-block head compute timeline"));
+            }
+        };
         Ok(Self {
             ctx,
             pool,
-            command_pool,
-            command,
+            transfer_command_pool,
+            transfer_commands,
+            compute_command_pool,
+            compute_commands,
+            head_transfer_timeline,
+            head_compute_timeline,
+            next_transfer_value: 1,
+            next_compute_value: 1,
             workspace: Some(workspace),
             readback: Some(readback),
             head_pipeline: Some(head_pipeline),
@@ -582,100 +698,166 @@ impl S14CausalBlockBatchedTerminalRecorder {
             layout.logits_offset,
             layout.accumulator_offset,
         );
-        let mut dispatches =
-            Vec::<S14HeadChunkArgmaxDispatch<'_>>::with_capacity(shape.chunk_count() as usize);
-        for (chunk, &weight) in input.head_chunks.iter().enumerate() {
-            match head_pipeline.bind_chunk(&self.ctx, shape, chunk as u32, weight, workspace) {
-                Ok(dispatch) => dispatches.push(dispatch),
-                Err(error) => {
-                    destroy_dispatches(&self.ctx, dispatches);
-                    return Err(error.context("bind causal-block production batched head chunk"));
-                }
-            }
-        }
-
         let reservation = self.pool.acquire(block_size)?;
         let arena_offset = reservation.arena_offset()?;
         let ready_value = self.pool.next_ready_value()?;
-        unsafe {
+        let schedule = HeadStreamSchedule::build(
+            self.next_transfer_value,
+            self.next_compute_value,
+            shape.chunk_count(),
+        )?;
+        self.next_transfer_value = schedule.next_transfer_value;
+        self.next_compute_value = schedule.next_compute_value;
+        let mut dispatches =
+            Vec::<S14HeadChunkArgmaxDispatch<'_>>::with_capacity(shape.chunk_count() as usize);
+        let result = (|| -> Result<S14CausalBlockTerminalGpuExport> { unsafe {
             self.ctx
                 .device
-                .reset_command_pool(self.command_pool, vk::CommandPoolResetFlags::empty())?;
+                .reset_command_pool(self.transfer_command_pool, vk::CommandPoolResetFlags::empty())?;
+            self.ctx
+                .device
+                .reset_command_pool(self.compute_command_pool, vk::CommandPoolResetFlags::empty())?;
+            let mut head_recorder = S14HeadChunkArgmaxRecorder::new(shape)?;
+            let arena = input
+                .head_stream
+                .paged_weight_arena()
+                .context("causal-block terminal head stream 缺少 paged arena")?;
+            for ticket in &schedule.tickets {
+                let transfer_command = self.transfer_commands[ticket.chunk as usize];
+                let compute_command = self.compute_commands[ticket.chunk as usize];
+                self.ctx.device.begin_command_buffer(
+                    transfer_command,
+                    &vk::CommandBufferBeginInfo::default()
+                        .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+                )?;
+                let receipt = input
+                    .head_stream
+                    .record_next_head_chunk_copy(&self.ctx, transfer_command, ticket.chunk)
+                    .map_err(anyhow::Error::msg)
+                    .with_context(|| format!("record causal-block head copy {}", ticket.chunk))?;
+                self.ctx.device.end_command_buffer(transfer_command)?;
+                validate_head_stream_receipt(receipt, *ticket, shape)?;
+
+                let dispatch = head_pipeline.bind_chunk(
+                    &self.ctx,
+                    shape,
+                    ticket.chunk,
+                    StorageBufferSlice {
+                        buffer: arena.head_chunk(ticket.bank)?,
+                        offset: 0,
+                    },
+                    workspace,
+                )?;
+                dispatches.push(dispatch);
+                let dispatch = dispatches.last().expect("head dispatch just pushed");
+                self.ctx.device.begin_command_buffer(
+                    compute_command,
+                    &vk::CommandBufferBeginInfo::default()
+                        .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+                )?;
+                if ticket.chunk == 0 {
+                    self.ctx.device.cmd_copy_buffer(
+                        compute_command,
+                        input.normalized_head_rows.buffer.handle(),
+                        workspace_buffer.handle(),
+                        &[vk::BufferCopy::default()
+                            .src_offset(input.normalized_head_rows.offset)
+                            .dst_offset(layout.normalized_offset)
+                            .size(shape.normalized_input_bytes()?)],
+                    );
+                    for (lane, source) in input.checkpoints.iter().enumerate() {
+                        let destination = arena_offset
+                            .checked_add(self.pool.layout.checkpoint_stride_bytes * lane as u64)
+                            .context("causal-block checkpoint destination overflow")?;
+                        self.ctx.device.cmd_copy_buffer(
+                            compute_command,
+                            source.state.buffer.handle(),
+                            self.pool.arena.handle(),
+                            &[vk::BufferCopy::default()
+                                .src_offset(source.state.offset)
+                                .dst_offset(destination)
+                                .size(self.pool.layout.checkpoint_state_bytes)],
+                        );
+                    }
+                    transfer_to_compute_barrier(
+                        &self.ctx,
+                        compute_command,
+                        workspace_buffer,
+                        layout,
+                        shape,
+                    );
+                    head_recorder.cmd_reset(&self.ctx, compute_command, dispatch)?;
+                }
+                head_recorder.cmd_chunk(&self.ctx, compute_command, head_pipeline, dispatch)?;
+                compute_to_compute_barrier(&self.ctx, compute_command);
+                self.ctx.device.end_command_buffer(compute_command)?;
+
+                if let Some(previous_transfer) = ticket.staging_wait_transfer {
+                    wait_timeline(
+                        &self.ctx,
+                        self.head_transfer_timeline,
+                        previous_transfer,
+                        TERMINAL_WAIT_TIMEOUT_NS,
+                    )?;
+                }
+                let staged = input
+                    .head_stream
+                    .stage_recorded_head_chunk(receipt, ticket.bank)
+                    .map_err(anyhow::Error::msg)
+                    .with_context(|| format!("stage causal-block head chunk {}", ticket.chunk))?;
+                if staged != receipt {
+                    bail!("causal-block terminal staged head receipt 漂移");
+                }
+                submit_head_transfer(
+                    &self.ctx,
+                    transfer_command,
+                    self.head_transfer_timeline,
+                    ticket.transfer_value,
+                    self.head_compute_timeline,
+                    ticket.reuse_after_compute,
+                )?;
+                submit_head_compute(
+                    &self.ctx,
+                    compute_command,
+                    self.head_transfer_timeline,
+                    ticket.transfer_value,
+                    self.head_compute_timeline,
+                    ticket.compute_value,
+                    (ticket.chunk == 0)
+                        .then_some((input.producer_timeline, input.producer_timeline_value)),
+                )?;
+            }
+            let head_recording = head_recorder.finish_recording()?;
+            let final_command = self.compute_commands[shape.chunk_count() as usize];
             self.ctx.device.begin_command_buffer(
-                self.command,
+                final_command,
                 &vk::CommandBufferBeginInfo::default()
                     .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
             )?;
+            compute_to_transfer_barrier(&self.ctx, final_command, workspace_buffer, layout, shape);
             self.ctx.device.cmd_copy_buffer(
-                self.command,
-                input.normalized_head_rows.buffer.handle(),
-                workspace_buffer.handle(),
-                &[vk::BufferCopy::default()
-                    .src_offset(input.normalized_head_rows.offset)
-                    .dst_offset(layout.normalized_offset)
-                    .size(shape.normalized_input_bytes()?)],
-            );
-            for (lane, source) in input.checkpoints.iter().enumerate() {
-                let destination = arena_offset
-                    .checked_add(self.pool.layout.checkpoint_stride_bytes * lane as u64)
-                    .context("causal-block checkpoint destination overflow")?;
-                self.ctx.device.cmd_copy_buffer(
-                    self.command,
-                    source.state.buffer.handle(),
-                    self.pool.arena.handle(),
-                    &[vk::BufferCopy::default()
-                        .src_offset(source.state.offset)
-                        .dst_offset(destination)
-                        .size(self.pool.layout.checkpoint_state_bytes)],
-                );
-            }
-            transfer_to_compute_barrier(&self.ctx, self.command, workspace_buffer, layout, shape);
-
-            let mut head_recorder = S14HeadChunkArgmaxRecorder::new(shape)?;
-            head_recorder.cmd_reset(&self.ctx, self.command, &dispatches[0])?;
-            for dispatch in &dispatches {
-                head_recorder.cmd_chunk(&self.ctx, self.command, head_pipeline, dispatch)?;
-            }
-            let head_recording = head_recorder.finish_recording()?;
-            compute_to_transfer_barrier(&self.ctx, self.command, workspace_buffer, layout, shape);
-            self.ctx.device.cmd_copy_buffer(
-                self.command,
+                final_command,
                 workspace_buffer.handle(),
                 readback.handle(),
                 &[vk::BufferCopy::default()
                     .src_offset(layout.accumulator_offset)
                     .size(shape.argmax_bytes()?)],
             );
-            self.ctx.device.end_command_buffer(self.command)?;
-            if let Err(error) = submit_terminal(
+            self.ctx.device.end_command_buffer(final_command)?;
+            submit_terminal_after_head(
                 &self.ctx,
-                self.command,
-                input.producer_timeline,
-                input.producer_timeline_value,
+                final_command,
+                self.head_compute_timeline,
+                schedule.last_compute_value,
                 self.pool.ready_timeline,
                 ready_value,
-            ) {
-                destroy_dispatches(&self.ctx, dispatches);
-                return Err(error);
-            }
-            if let Err(error) = wait_timeline(
+            )?;
+            wait_timeline(
                 &self.ctx,
                 self.pool.ready_timeline,
                 ready_value,
                 TERMINAL_WAIT_TIMEOUT_NS,
-            ) {
-                // 已提交 command 的 descriptor/source/arena 不能提前释放。等待失败时以
-                // queue idle 作为错误路径 drain，不把半完成 future 发布给 orchestrator。
-                let drain = self.ctx.device.queue_wait_idle(self.ctx.q_graphics);
-                destroy_dispatches(&self.ctx, dispatches);
-                if let Err(drain_error) = drain {
-                    return Err(anyhow::anyhow!(
-                        "causal-block terminal timeline wait失败: {error}; queue drain失败: {drain_error}"
-                    ));
-                }
-                return Err(error);
-            }
-            destroy_dispatches(&self.ctx, dispatches);
+            )?;
 
             let word_count = block_size
                 .checked_mul(S14_HEAD_ARGMAX_WORDS)
@@ -706,7 +888,18 @@ impl S14CausalBlockBatchedTerminalRecorder {
                 device_future,
                 ready_timeline_value: ready_value,
             })
+        }})();
+        if result.is_err() {
+            unsafe {
+                let _ = self.ctx.device.queue_wait_idle(self.ctx.q_transfer);
+                if self.ctx.q_graphics != self.ctx.q_transfer {
+                    let _ = self.ctx.device.queue_wait_idle(self.ctx.q_graphics);
+                }
+            }
+            input.head_stream.abort_head_stream_after_drain();
         }
+        destroy_dispatches(&self.ctx, dispatches);
+        result
     }
 }
 
@@ -714,6 +907,9 @@ impl Drop for S14CausalBlockBatchedTerminalRecorder {
     fn drop(&mut self) {
         unsafe {
             let _ = self.ctx.device.queue_wait_idle(self.ctx.q_graphics);
+            if self.ctx.q_transfer != self.ctx.q_graphics {
+                let _ = self.ctx.device.queue_wait_idle(self.ctx.q_transfer);
+            }
         }
         if let Some(pipeline) = self.head_pipeline.take() {
             pipeline.destroy(&self.ctx);
@@ -725,9 +921,14 @@ impl Drop for S14CausalBlockBatchedTerminalRecorder {
             workspace.destroy(&self.ctx);
         }
         unsafe {
+            self.ctx.device.destroy_semaphore(self.head_compute_timeline, None);
+            self.ctx.device.destroy_semaphore(self.head_transfer_timeline, None);
             self.ctx
                 .device
-                .destroy_command_pool(self.command_pool, None);
+                .destroy_command_pool(self.compute_command_pool, None);
+            self.ctx
+                .device
+                .destroy_command_pool(self.transfer_command_pool, None);
         }
     }
 }
@@ -746,7 +947,7 @@ fn validate_terminal_input(
         || input.final_hidden.buffer == vk::Buffer::null()
         || input.final_hidden.bytes != expected_hidden_bytes
         || input.checkpoints.len() != block_size
-        || input.head_chunks.len() != shape.chunk_count() as usize
+        || input.head_stream.paged_weight_arena().is_none()
         || input.producer_timeline == vk::Semaphore::null()
         || input.producer_timeline_value == 0
         || input.producer_timeline == pool.ready_timeline
@@ -772,12 +973,17 @@ fn validate_terminal_input(
             bail!("causal-block checkpoint source 不能 alias lease arena");
         }
     }
-    for (chunk, &weight) in input.head_chunks.iter().enumerate() {
-        validate_slice(
-            weight,
-            shape.chunk(chunk as u32)?.weight_bytes(shape)?,
-            &format!("head chunk {chunk}"),
-        )?;
+    let arena = input.head_stream.paged_weight_arena().unwrap();
+    for bank in 0..2 {
+        let buffer = arena.head_chunk(bank)?;
+        if buffer.handle() == vk::Buffer::null()
+            || buffer.size() != shape.max_chunk_weight_bytes()?
+        {
+            bail!("causal-block terminal paged head bank {bank} capacity 漂移");
+        }
+    }
+    if arena.head_chunk(0)?.handle() == arena.head_chunk(1)?.handle() {
+        bail!("causal-block terminal paged head 双 bank 发生别名");
     }
     Ok(())
 }
@@ -795,28 +1001,47 @@ fn validate_slice(slice: StorageBufferSlice<'_>, bytes: u64, name: &str) -> Resu
     Ok(())
 }
 
-fn allocate_terminal_command(ctx: &VulkanContext) -> Result<(vk::CommandPool, vk::CommandBuffer)> {
+fn allocate_terminal_commands(
+    ctx: &VulkanContext,
+    queue_family: u32,
+    count: usize,
+) -> Result<(vk::CommandPool, Vec<vk::CommandBuffer>)> {
+    if count == 0 {
+        bail!("causal-block terminal command count 不能为0");
+    }
     unsafe {
         let pool = ctx.device.create_command_pool(
             &vk::CommandPoolCreateInfo::default()
-                .queue_family_index(ctx.qf_graphics)
+                .queue_family_index(queue_family)
                 .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER),
             None,
         )?;
-        let command = match ctx.device.allocate_command_buffers(
+        let commands = match ctx.device.allocate_command_buffers(
             &vk::CommandBufferAllocateInfo::default()
                 .command_pool(pool)
                 .level(vk::CommandBufferLevel::PRIMARY)
-                .command_buffer_count(1),
+                .command_buffer_count(u32::try_from(count)?),
         ) {
-            Ok(commands) => commands[0],
+            Ok(commands) => commands,
             Err(error) => {
                 ctx.device.destroy_command_pool(pool, None);
                 return Err(error.into());
             }
         };
-        Ok((pool, command))
+        Ok((pool, commands))
     }
+}
+
+fn create_terminal_timeline(ctx: &VulkanContext) -> Result<vk::Semaphore> {
+    let mut type_info = vk::SemaphoreTypeCreateInfo::default()
+        .semaphore_type(vk::SemaphoreType::TIMELINE)
+        .initial_value(0);
+    Ok(unsafe {
+        ctx.device.create_semaphore(
+            &vk::SemaphoreCreateInfo::default().push_next(&mut type_info),
+            None,
+        )?
+    })
 }
 
 unsafe fn transfer_to_compute_barrier(
@@ -839,6 +1064,21 @@ unsafe fn transfer_to_compute_barrier(
         vk::DependencyFlags::empty(),
         &[],
         &[barrier],
+        &[],
+    );
+}
+
+unsafe fn compute_to_compute_barrier(ctx: &VulkanContext, command: vk::CommandBuffer) {
+    let barrier = vk::MemoryBarrier::default()
+        .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+        .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::SHADER_WRITE);
+    ctx.device.cmd_pipeline_barrier(
+        command,
+        vk::PipelineStageFlags::COMPUTE_SHADER,
+        vk::PipelineStageFlags::COMPUTE_SHADER,
+        vk::DependencyFlags::empty(),
+        &[barrier],
+        &[],
         &[],
     );
 }
@@ -867,19 +1107,101 @@ unsafe fn compute_to_transfer_barrier(
     );
 }
 
-unsafe fn submit_terminal(
+fn validate_head_stream_receipt(
+    receipt: S14Position0HeadChunkReceipt,
+    ticket: HeadStreamTicket,
+    shape: S14HeadChunkArgmaxShape,
+) -> Result<()> {
+    let spec = shape.chunk(ticket.chunk)?;
+    if receipt.chunk != u64::from(ticket.chunk)
+        || receipt.bank != ticket.bank
+        || receipt.first_row != u64::from(spec.token_start)
+        || receipt.rows != u64::from(spec.rows)
+        || receipt.bytes != spec.weight_bytes(shape)?
+    {
+        bail!("causal-block terminal head proof/upload receipt 与 chunk/bank/range 漂移");
+    }
+    Ok(())
+}
+
+unsafe fn submit_head_transfer(
     ctx: &VulkanContext,
     command: vk::CommandBuffer,
-    producer_timeline: vk::Semaphore,
-    producer_value: u64,
+    transfer_timeline: vk::Semaphore,
+    transfer_value: u64,
+    compute_timeline: vk::Semaphore,
+    reuse_after_compute: Option<u64>,
+) -> Result<()> {
+    let commands = [command];
+    let waits = reuse_after_compute
+        .map(|_| compute_timeline)
+        .into_iter()
+        .collect::<Vec<_>>();
+    let wait_values = reuse_after_compute.into_iter().collect::<Vec<_>>();
+    let wait_stages = vec![vk::PipelineStageFlags::TRANSFER; waits.len()];
+    let signals = [transfer_timeline];
+    let signal_values = [transfer_value];
+    let mut timeline = vk::TimelineSemaphoreSubmitInfo::default()
+        .wait_semaphore_values(&wait_values)
+        .signal_semaphore_values(&signal_values);
+    let submit = vk::SubmitInfo::default()
+        .command_buffers(&commands)
+        .wait_semaphores(&waits)
+        .wait_dst_stage_mask(&wait_stages)
+        .signal_semaphores(&signals)
+        .push_next(&mut timeline);
+    ctx.device
+        .queue_submit(ctx.q_transfer, &[submit], vk::Fence::null())?;
+    Ok(())
+}
+
+unsafe fn submit_head_compute(
+    ctx: &VulkanContext,
+    command: vk::CommandBuffer,
+    transfer_timeline: vk::Semaphore,
+    transfer_value: u64,
+    compute_timeline: vk::Semaphore,
+    compute_value: u64,
+    producer: Option<(vk::Semaphore, u64)>,
+) -> Result<()> {
+    let commands = [command];
+    let mut waits = vec![transfer_timeline];
+    let mut wait_values = vec![transfer_value];
+    let mut wait_stages = vec![vk::PipelineStageFlags::COMPUTE_SHADER];
+    if let Some((producer_timeline, producer_value)) = producer {
+        waits.push(producer_timeline);
+        wait_values.push(producer_value);
+        wait_stages.push(vk::PipelineStageFlags::ALL_COMMANDS);
+    }
+    let signals = [compute_timeline];
+    let signal_values = [compute_value];
+    let mut timeline = vk::TimelineSemaphoreSubmitInfo::default()
+        .wait_semaphore_values(&wait_values)
+        .signal_semaphore_values(&signal_values);
+    let submit = vk::SubmitInfo::default()
+        .command_buffers(&commands)
+        .wait_semaphores(&waits)
+        .wait_dst_stage_mask(&wait_stages)
+        .signal_semaphores(&signals)
+        .push_next(&mut timeline);
+    ctx.device
+        .queue_submit(ctx.q_graphics, &[submit], vk::Fence::null())?;
+    Ok(())
+}
+
+unsafe fn submit_terminal_after_head(
+    ctx: &VulkanContext,
+    command: vk::CommandBuffer,
+    head_compute_timeline: vk::Semaphore,
+    head_compute_value: u64,
     ready_timeline: vk::Semaphore,
     ready_value: u64,
 ) -> Result<()> {
     let commands = [command];
-    let waits = [producer_timeline];
-    let wait_stages = [vk::PipelineStageFlags::ALL_COMMANDS];
+    let waits = [head_compute_timeline];
+    let wait_stages = [vk::PipelineStageFlags::TRANSFER];
     let signals = [ready_timeline];
-    let wait_values = [producer_value];
+    let wait_values = [head_compute_value];
     let signal_values = [ready_value];
     let mut timeline = vk::TimelineSemaphoreSubmitInfo::default()
         .wait_semaphore_values(&wait_values)
@@ -930,6 +1252,32 @@ fn align_up(value: u64, alignment: u64) -> Result<u64> {
 mod tests {
     use super::*;
     use ash::vk::Handle;
+
+    #[test]
+    fn paged_k_row_head_schedule_uses_two_banks_with_timeline_reuse() {
+        let schedule = HeadStreamSchedule::build(7, 11, 32).unwrap();
+        assert_eq!(schedule.tickets.len(), 32);
+        assert_eq!(schedule.last_compute_value, 42);
+        assert_eq!(schedule.next_transfer_value, 39);
+        assert_eq!(schedule.next_compute_value, 43);
+        for (index, ticket) in schedule.tickets.iter().enumerate() {
+            assert_eq!(ticket.chunk as usize, index);
+            assert_eq!(ticket.bank, index % 2);
+            if index < 2 {
+                assert_eq!(ticket.staging_wait_transfer, None);
+                assert_eq!(ticket.reuse_after_compute, None);
+            } else {
+                assert_eq!(
+                    ticket.staging_wait_transfer,
+                    Some(schedule.tickets[index - 2].transfer_value)
+                );
+                assert_eq!(
+                    ticket.reuse_after_compute,
+                    Some(schedule.tickets[index - 2].compute_value)
+                );
+            }
+        }
+    }
 
     #[test]
     fn k_prefix_layout_and_lease_ledger_reject_stale_release() {

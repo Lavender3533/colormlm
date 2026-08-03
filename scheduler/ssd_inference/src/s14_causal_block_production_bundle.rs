@@ -6,23 +6,19 @@
 //! FullDepth catalog、arena ledger 与 provider readiness；任一缺项均 fail-closed。
 
 use crate::{
-    s14_causal_block_grouped_moe_recorder::build_s14_causal_block_concrete_moe_adapter,
-    s14_causal_block_hc_qkv_adapter::{
-        S14CausalBlockProductionHcQkvAdapter,
-    },
+    s14_causal_block_grouped_moe_recorder::build_s14_causal_block_paged_moe_adapter,
+    s14_causal_block_hc_qkv_adapter::S14CausalBlockProductionHcQkvAdapter,
     s14_causal_block_hc_qkv_recorder::{
         S14CausalBlockHcQkvResourceProvider, S14CausalBlockHiddenBank,
         S14CausalBlockProductionHcQkvLayerRecorder,
     },
     s14_causal_block_layer::{
         S14CausalBlockAbortReceipt, S14CausalBlockAttentionRouterOutput,
-        S14CausalBlockBeginReceipt, S14CausalBlockCheckpointBackend,
-        S14CausalBlockFinalOutput, S14CausalBlockFullDepthBackend,
-        S14CausalBlockGroupedMoeOutput, S14CausalBlockHiddenBinding,
-        S14CausalBlockLayerBackend, S14CausalBlockLayerInput, S14CausalBlockLayerRangePlan,
-        S14CausalBlockPostSealReceipt, S14CausalBlockSealReceipt,
-        S14CausalBlockUnionBankBinding,
-        S14CausalBlockUnionMaterializeReceipt,
+        S14CausalBlockBeginReceipt, S14CausalBlockCheckpointBackend, S14CausalBlockFinalOutput,
+        S14CausalBlockFullDepthBackend, S14CausalBlockGroupedMoeOutput,
+        S14CausalBlockHiddenBinding, S14CausalBlockLayerBackend, S14CausalBlockLayerInput,
+        S14CausalBlockLayerRangePlan, S14CausalBlockPostSealReceipt, S14CausalBlockSealReceipt,
+        S14CausalBlockUnionBankBinding, S14CausalBlockUnionMaterializeReceipt,
     },
     s14_causal_block_moe_adapter::S14CausalBlockVulkanMoeAdapter,
     s14_causal_block_terminal::{
@@ -37,20 +33,21 @@ use crate::{
     s14_causal_block_terminal_owner::{
         S14CausalBlockProductionTerminalResourceOwner, S14CausalBlockTerminalPublishReceipt,
     },
-    s14_head_chunk_argmax::S14_HEAD_CHUNK_COUNT,
     s14_causal_block_vulkan_backend::S14CausalBlockVulkanBackend,
     s14_dynamic_page_cache_readiness::DynamicPageFetchMode,
     s14_dynamic_routed_page_plan::{FullDepthExpertCatalog, OnlineTop6},
-    s14_position0_hybrid_weight_arena::{
-        S14Position0HybridWeightArena, S14_POSITION0_HYBRID_ALLOCATION_COUNT,
+    s14_head_chunk_argmax::S14_HEAD_CHUNK_COUNT,
+    s14_position0_paged_weight_arena::{
+        S14Position0PagedArenaPlan, S14Position0PagedWeightArena, S14Position0StaticLayerBinding,
+        S14_POSITION0_STATIC_STREAM_BANKS,
     },
+    s14_position0_weight_plan::S14_POSITION0_ROLLING_BANKS,
     VulkanContext,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use ash::vk;
 use polaris_s14_runner::{
-    LayerCausalBatchPlan, RouteDecision, EXPERTS_PER_TOKEN, FULL_DEPTH_LAYERS,
-    N_ROUTED_EXPERTS,
+    LayerCausalBatchPlan, RouteDecision, EXPERTS_PER_TOKEN, FULL_DEPTH_LAYERS, N_ROUTED_EXPERTS,
 };
 use std::{
     fmt,
@@ -59,7 +56,6 @@ use std::{
 };
 
 const HIDDEN_BANK_COUNT: usize = 2;
-const HYBRID_ROLLING_BANKS: usize = 2;
 
 /// 将 loader 已在某个 context 下创建的资源与其 owner identity 一并移动到 factory。
 ///
@@ -103,6 +99,11 @@ impl<T: fmt::Debug> fmt::Debug for S14CausalBlockContextBound<T> {
 pub trait S14CausalBlockProductionHcQkvResourceProvider:
     S14CausalBlockHcQkvResourceProvider
 {
+    /// HC/QKV 必须从与 grouped-MoE 相同的 paged arena 取得 static/routed owner。
+    /// `prepare_layer` 对 streamed static 层还必须先完成 verified proof/SHA/mmap/upload，
+    /// 使 arena 的 `ready_static_layer(layer)` 在返回资源前成立。
+    fn paged_weight_arena(&self) -> &Arc<S14Position0PagedWeightArena>;
+
     fn validate_production_bundle(&self, block_size: usize) -> Result<(), String>;
 }
 
@@ -217,7 +218,7 @@ pub struct S14CausalBlockProductionBundleInputs<P> {
     pub catalog: FullDepthExpertCatalog,
     pub cache_root: PathBuf,
     pub fetch_mode: DynamicPageFetchMode,
-    pub static_arena: S14CausalBlockContextBound<Arc<S14Position0HybridWeightArena>>,
+    pub static_arena: S14CausalBlockContextBound<Arc<S14Position0PagedWeightArena>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -274,13 +275,17 @@ impl S14CausalBlockProductionTerminalPublisher {
         let mut phase = lock_phase(&self.phase)?;
         let base_position = match *phase {
             BundlePhase::LayersSealed { base_position } => base_position,
-            _ => return Err("terminal production source 只能在同一 FullDepth43 seal 后发布".into()),
+            _ => {
+                return Err("terminal production source 只能在同一 FullDepth43 seal 后发布".into())
+            }
         };
         if source.base_position != base_position
             || source.final_hidden.block_size != self.block_size
             || source.completed_layers != FULL_DEPTH_LAYERS.len()
         {
-            return Err("terminal production source 与 bundle base/K/FullDepth43 identity 漂移".into());
+            return Err(
+                "terminal production source 与 bundle base/K/FullDepth43 identity 漂移".into(),
+            );
         }
         self.inner.publish(source)?;
         *phase = BundlePhase::TerminalSourcePublished { base_position };
@@ -296,13 +301,13 @@ impl S14CausalBlockProductionTerminalPublisher {
 #[must_use = "production bundle 必须由 orchestrator 持有，并在 VulkanContext 前显式 destroy"]
 pub struct S14CausalBlockProductionBundle {
     context: Arc<VulkanContext>,
+    paged_arena: Arc<S14Position0PagedWeightArena>,
     block_size: usize,
     backend: Option<S14CausalBlockVulkanBackend>,
     terminal_publisher: S14CausalBlockProductionTerminalPublisher,
     checkpoint_pool: Arc<S14CausalBlockCheckpointArenaPool>,
     hidden_banks: [S14CausalBlockHiddenBank; HIDDEN_BANK_COUNT],
-    post_seal_terminal_producer:
-        Option<Box<dyn S14CausalBlockProductionPostSealTerminalProducer>>,
+    post_seal_terminal_producer: Option<Box<dyn S14CausalBlockProductionPostSealTerminalProducer>>,
     phase: SharedBundlePhase,
 }
 
@@ -346,6 +351,7 @@ impl S14CausalBlockProductionBundle {
             return Err("production bundle terminal provider 已有 pending source".into());
         }
         if !Arc::ptr_eq(&self.context, owner.context())
+            || !Arc::ptr_eq(&self.paged_arena, owner.paged_weight_arena())
             || owner.block_size() != self.block_size
             || owner.checkpoint_state_bytes()
                 != self.checkpoint_pool.layout().checkpoint_state_bytes
@@ -360,12 +366,11 @@ impl S14CausalBlockProductionBundle {
                     .into(),
             );
         }
-        self.post_seal_terminal_producer = Some(Box::new(
-            S14CausalBlockProductionOwnedTerminalProducer {
+        self.post_seal_terminal_producer =
+            Some(Box::new(S14CausalBlockProductionOwnedTerminalProducer {
                 owner,
                 host_candidates,
-            },
-        ));
+            }));
         Ok(())
     }
 
@@ -411,7 +416,9 @@ impl S14CausalBlockProductionBundle {
 
         if let Err(error) = self.terminal_publisher.inner.rollback_pending() {
             set_phase(&self.phase, BundlePhase::Poisoned);
-            return Err(format!("terminal provider pending source rollback 失败: {error}"));
+            return Err(format!(
+                "terminal provider pending source rollback 失败: {error}"
+            ));
         }
         self.post_seal_terminal_producer.take();
         let backend = self
@@ -459,7 +466,14 @@ where
     }
     validate_context_owner(&context, hc_qkv_provider.context(), "HC/QKV provider")?;
     validate_context_owner(&context, hidden_banks.context(), "hidden banks")?;
-    validate_context_owner(&context, static_arena.context(), "hybrid static arena")?;
+    validate_context_owner(&context, static_arena.context(), "paged static arena")?;
+
+    if !Arc::ptr_eq(
+        hc_qkv_provider.value().paged_weight_arena(),
+        static_arena.value(),
+    ) {
+        bail!("S14 production bundle HC/QKV 与 grouped-MoE paged arena identity 漂移");
+    }
 
     let (_, provider) = hc_qkv_provider.into_parts();
     provider
@@ -470,6 +484,7 @@ where
     validate_hidden_banks(&hidden_banks)?;
     let (_, static_arena) = static_arena.into_parts();
     validate_static_arena(&static_arena)?;
+    let bundle_paged_arena = Arc::clone(&static_arena);
     validate_full_depth_catalog(&catalog)?;
 
     // terminal recorder 先构造；其 Drop 会 queue-drain 并释放自身资源，便于后续任一 factory
@@ -484,7 +499,8 @@ where
         Arc::clone(&checkpoint_pool),
     )?;
 
-    let mut moe_adapter = build_s14_causal_block_concrete_moe_adapter(
+    let hc_static_arena = Arc::clone(&static_arena);
+    let mut moe_adapter = build_s14_causal_block_paged_moe_adapter(
         Arc::clone(&context),
         catalog,
         &cache_root,
@@ -493,6 +509,7 @@ where
     )?;
     let hc_recorder = match S14CausalBlockProductionHcQkvLayerRecorder::new(
         Arc::clone(&context),
+        hc_static_arena,
         provider,
         hidden_banks.clone(),
     ) {
@@ -509,7 +526,8 @@ where
     };
     let hc_adapter = S14CausalBlockProductionHcQkvAdapter::new(hc_recorder);
     let (publisher, provider) = s14_causal_block_terminal_production_channel();
-    let terminal_adapter = S14CausalBlockTerminalProductionAdapter::new(terminal_recorder, provider);
+    let terminal_adapter =
+        S14CausalBlockTerminalProductionAdapter::new(terminal_recorder, provider);
 
     let mut backend = S14CausalBlockVulkanBackend::with_moe_adapter(moe_adapter);
     backend
@@ -533,6 +551,7 @@ where
     };
     Ok(S14CausalBlockProductionBundle {
         context,
+        paged_arena: bundle_paged_arena,
         block_size: shape.block_size,
         backend: Some(backend),
         terminal_publisher,
@@ -558,7 +577,8 @@ impl S14CausalBlockLayerBackend for S14CausalBlockProductionBundle {
         range_plan: &S14CausalBlockLayerRangePlan,
     ) -> Result<S14CausalBlockUnionMaterializeReceipt, String> {
         validate_recording_k(&self.phase, self.block_size, range_plan.block_size)?;
-        self.backend_mut()?.materialize_union_ranges(bank, range_plan)
+        self.backend_mut()?
+            .materialize_union_ranges(bank, range_plan)
     }
 
     fn run_grouped_moe(
@@ -609,18 +629,15 @@ impl S14CausalBlockFullDepthBackend for S14CausalBlockProductionBundle {
         if *phase != BundlePhase::Idle {
             return Err("production bundle 已有未释放 block/future".into());
         }
-        let producer = self
-            .post_seal_terminal_producer
-            .as_ref()
-            .ok_or_else(|| "production bundle 开始前缺少真实 terminal owner/finalizer".to_owned())?;
+        let producer = self.post_seal_terminal_producer.as_ref().ok_or_else(|| {
+            "production bundle 开始前缺少真实 terminal owner/finalizer".to_owned()
+        })?;
         if producer.block_size() != block_size || producer.base_position() != base_position {
             return Err("production terminal producer 与本次 block K/base position 漂移".into());
         }
-        let receipt = self.backend_mut()?.begin_full_depth_block(
-            bank,
-            base_position,
-            block_size,
-        )?;
+        let receipt =
+            self.backend_mut()?
+                .begin_full_depth_block(bank, base_position, block_size)?;
         *phase = BundlePhase::Recording {
             base_position,
             completed_layers: 0,
@@ -656,7 +673,10 @@ impl S14CausalBlockFullDepthBackend for S14CausalBlockProductionBundle {
     ) -> Result<S14CausalBlockAbortReceipt, String> {
         let phase_owner = Arc::clone(&self.phase);
         let mut phase = lock_phase(&phase_owner)?;
-        if matches!(*phase, BundlePhase::Idle | BundlePhase::Destroying | BundlePhase::Destroyed) {
+        if matches!(
+            *phase,
+            BundlePhase::Idle | BundlePhase::Destroying | BundlePhase::Destroyed
+        ) {
             return Err("production bundle 当前没有可 abort 的 block".into());
         }
         let result = self
@@ -730,7 +750,9 @@ impl S14CausalBlockCheckpointBackend for S14CausalBlockProductionBundle {
                 } if published_base == base_position
             )
         {
-            return Err("production post-seal producer 未精确发布一份同 block terminal source".into());
+            return Err(
+                "production post-seal producer 未精确发布一份同 block terminal source".into(),
+            );
         }
         Ok(S14CausalBlockPostSealReceipt {
             hook_calls: 1,
@@ -813,11 +835,12 @@ fn validate_context_owner(
     Ok(())
 }
 
-fn validate_hidden_banks(
-    banks: &[S14CausalBlockHiddenBank; HIDDEN_BANK_COUNT],
-) -> Result<()> {
+fn validate_hidden_banks(banks: &[S14CausalBlockHiddenBank; HIDDEN_BANK_COUNT]) -> Result<()> {
     let bindings = [banks[0].binding(8, 0)?, banks[1].binding(8, 0)?];
-    if bindings.iter().any(|binding| binding.buffer == vk::Buffer::null()) {
+    if bindings
+        .iter()
+        .any(|binding| binding.buffer == vk::Buffer::null())
+    {
         bail!("S14 production bundle hidden bank handle 为空");
     }
     let left_end = bindings[0]
@@ -837,41 +860,167 @@ fn validate_hidden_banks(
     Ok(())
 }
 
-fn validate_static_arena(arena: &S14Position0HybridWeightArena) -> Result<()> {
-    let layout = arena.layout();
-    if arena.allocation_count() != S14_POSITION0_HYBRID_ALLOCATION_COUNT
-        || layout.static_layers.len() != FULL_DEPTH_LAYERS.len()
-        || arena.requested_device_bytes() != layout.requested_device_bytes
-        || arena.allocated_device_bytes() < arena.requested_device_bytes()
+fn validate_static_arena(arena: &S14Position0PagedWeightArena) -> Result<()> {
+    let plan = arena.plan();
+    let layout = &plan.physical;
+    let resident_layers = arena.resident_static_layers();
+    let streamed_layers = arena.streamed_static_layers();
+    let mut resident_requested_bytes = 0u64;
+    let mut streamed_requested_bytes = 0u64;
+
+    validate_paged_plan_ledger(
+        plan,
+        resident_layers,
+        streamed_layers,
+        arena.recurring_static_upload_bytes(),
+    )?;
+    arena
+        .workspace_layout()
+        .validate()
+        .context("S14 production bundle paged workspace layout")?;
+    if arena.workspace().handle() == vk::Buffer::null()
+        || arena.workspace().size() != plan.workspace_bytes
+        || arena.workspace_layout().capacity_bytes() != plan.workspace_bytes
+        || arena.resident_small().handle() == vk::Buffer::null()
+        || arena.resident_small().size() != layout.resident_small.requested_bytes
     {
-        bail!("S14 production bundle hybrid arena allocation/ledger 不完整");
+        bail!("S14 production bundle paged workspace/resident-small arena 不完整");
     }
-    for (&layer, placement) in FULL_DEPTH_LAYERS.iter().zip(&layout.static_layers) {
-        let buffer = arena.static_layer(layer)?;
+
+    for (index, (&layer, placement)) in FULL_DEPTH_LAYERS
+        .iter()
+        .zip(&layout.static_layers)
+        .enumerate()
+    {
+        let (buffer, binding_layout, resident) = match arena.static_layer(layer)? {
+            S14Position0StaticLayerBinding::Resident { buffer, layout } => {
+                resident_requested_bytes = resident_requested_bytes
+                    .checked_add(layout.requested_bytes)
+                    .context("paged resident static bytes overflow")?;
+                (buffer, layout, true)
+            }
+            S14Position0StaticLayerBinding::Streamed {
+                bank,
+                buffer,
+                layout,
+            } => {
+                if bank != index % S14_POSITION0_STATIC_STREAM_BANKS
+                    || buffer.handle() != arena.static_stream_bank(bank)?.handle()
+                {
+                    bail!("S14 production bundle paged static L{layer} stream bank identity 漂移");
+                }
+                streamed_requested_bytes = streamed_requested_bytes
+                    .checked_add(layout.requested_bytes)
+                    .context("paged streamed static bytes overflow")?;
+                (buffer, layout, false)
+            }
+        };
         if placement.layer != layer
+            || binding_layout.layer != layer
+            || binding_layout != placement
             || placement.requested_bytes == 0
             || buffer.handle() == vk::Buffer::null()
             || buffer.size() < placement.requested_bytes
         {
-            bail!("S14 production bundle hybrid static layer L{layer} identity/capacity 漂移");
+            bail!("S14 production bundle paged static L{layer} identity/capacity 漂移");
+        }
+        if resident != (index < resident_layers) {
+            bail!("S14 production bundle paged static resident prefix 漂移");
         }
     }
-    if layout.resident_small.requested_bytes == 0
-        || arena.resident_small().handle() == vk::Buffer::null()
-        || arena.resident_small().size() < layout.resident_small.requested_bytes
+    if resident_requested_bytes
+        .checked_add(streamed_requested_bytes)
+        .context("paged static requested bytes overflow")?
+        != layout.static_requested_bytes
+        || resident_requested_bytes != arena.allocated_static_resident_bytes()
+        || streamed_requested_bytes != arena.recurring_static_upload_bytes()
+        || arena.allocated_essential_bytes() != plan.essential_device_bytes
+        || arena.allocated_device_bytes()
+            != plan
+                .essential_device_bytes
+                .checked_add(resident_requested_bytes)
+                .context("paged allocated device bytes overflow")?
     {
-        bail!("S14 production bundle hybrid resident-small arena 不完整");
+        bail!("S14 production bundle paged static/essential/allocated byte ledger 漂移");
     }
-    for bank in 0..HYBRID_ROLLING_BANKS {
+
+    let mut static_handles = Vec::with_capacity(S14_POSITION0_STATIC_STREAM_BANKS);
+    for bank in 0..S14_POSITION0_STATIC_STREAM_BANKS {
+        let buffer = arena.static_stream_bank(bank)?;
+        if buffer.handle() == vk::Buffer::null() || buffer.size() != plan.static_stream_bank_bytes {
+            bail!("S14 production bundle paged static stream bank {bank} 不完整");
+        }
+        static_handles.push(buffer.handle());
+    }
+    if static_handles[0] == static_handles[1] {
+        bail!("S14 production bundle paged static stream 双 bank 发生别名");
+    }
+
+    let mut routed_handles = Vec::with_capacity(S14_POSITION0_ROLLING_BANKS);
+    let mut head_handles = Vec::with_capacity(S14_POSITION0_ROLLING_BANKS);
+    for bank in 0..S14_POSITION0_ROLLING_BANKS {
         let routed = arena.routed(bank)?;
         let head = arena.head_chunk(bank)?;
         if routed.handle() == vk::Buffer::null()
-            || routed.size() < layout.routed_bank_bytes
+            || routed.size() != layout.routed_bank_bytes
             || head.handle() == vk::Buffer::null()
-            || head.size() < layout.head_chunk_bytes
+            || head.size() != layout.head_chunk_bytes
         {
-            bail!("S14 production bundle hybrid rolling arena bank {bank} 不完整");
+            bail!("S14 production bundle paged routed/head rolling bank {bank} 不完整");
         }
+        routed_handles.push(routed.handle());
+        head_handles.push(head.handle());
+    }
+    if routed_handles[0] == routed_handles[1] || head_handles[0] == head_handles[1] {
+        bail!("S14 production bundle paged routed/head 双 bank 发生别名");
+    }
+    Ok(())
+}
+
+fn validate_paged_plan_ledger(
+    plan: &S14Position0PagedArenaPlan,
+    resident_layers: usize,
+    streamed_layers: usize,
+    recurring_static_upload_bytes: u64,
+) -> Result<()> {
+    let physical = &plan.physical;
+    let static_stream_bytes = plan
+        .static_stream_bank_bytes
+        .checked_mul(S14_POSITION0_STATIC_STREAM_BANKS as u64)
+        .context("paged static stream bytes overflow")?;
+    let routed_bytes = physical
+        .routed_bank_bytes
+        .checked_mul(S14_POSITION0_ROLLING_BANKS as u64)
+        .context("paged routed bytes overflow")?;
+    let head_bytes = physical
+        .head_chunk_bytes
+        .checked_mul(S14_POSITION0_ROLLING_BANKS as u64)
+        .context("paged head bytes overflow")?;
+    let expected_essential = plan
+        .workspace_bytes
+        .checked_add(physical.resident_small.requested_bytes)
+        .and_then(|bytes| bytes.checked_add(routed_bytes))
+        .and_then(|bytes| bytes.checked_add(head_bytes))
+        .and_then(|bytes| bytes.checked_add(static_stream_bytes))
+        .context("paged essential bytes overflow")?;
+    let expected_recurring = physical
+        .static_layers
+        .iter()
+        .skip(resident_layers)
+        .try_fold(0u64, |sum, layer| {
+            sum.checked_add(layer.requested_bytes)
+                .context("paged recurring static bytes overflow")
+        })?;
+    if physical.static_layers.len() != FULL_DEPTH_LAYERS.len()
+        || resident_layers + streamed_layers != FULL_DEPTH_LAYERS.len()
+        || resident_layers > FULL_DEPTH_LAYERS.len()
+        || plan.workspace_bytes == 0
+        || plan.static_stream_bank_bytes == 0
+        || plan.static_stream_device_bytes != static_stream_bytes
+        || plan.essential_device_bytes != expected_essential
+        || recurring_static_upload_bytes != expected_recurring
+    {
+        bail!("S14 production bundle paged arena plan/essential/recurring ledger 不完整");
     }
     Ok(())
 }
@@ -898,7 +1047,10 @@ fn validate_full_depth_catalog(catalog: &FullDepthExpertCatalog) -> Result<()> {
                     route_weights: [1.0 / EXPERTS_PER_TOKEN as f32; EXPERTS_PER_TOKEN],
                 })
                 .with_context(|| {
-                    format!("S14 production bundle catalog L{layer} experts {first}..{} 拒绝", first + EXPERTS_PER_TOKEN - 1)
+                    format!(
+                        "S14 production bundle catalog L{layer} experts {first}..{} 拒绝",
+                        first + EXPERTS_PER_TOKEN - 1
+                    )
                 })?;
             start = start.saturating_add(EXPERTS_PER_TOKEN);
         }
@@ -969,22 +1121,40 @@ mod tests {
             head_chunk_count: S14_HEAD_CHUNK_COUNT as usize,
             predicted_tokens_prebuilt: false,
         };
-        validate_terminal_publish_receipt(
-            valid,
-            FULL_DEPTH_LAYERS.len(),
-            1,
-            4,
-        )
-        .unwrap();
+        validate_terminal_publish_receipt(valid, FULL_DEPTH_LAYERS.len(), 1, 4).unwrap();
 
         let mut invalid = valid;
         invalid.predicted_tokens_prebuilt = true;
-        assert!(validate_terminal_publish_receipt(
-            invalid,
-            FULL_DEPTH_LAYERS.len(),
-            1,
-            4,
-        )
-        .is_err());
+        assert!(
+            validate_terminal_publish_receipt(invalid, FULL_DEPTH_LAYERS.len(), 1, 4,).is_err()
+        );
+    }
+
+    #[test]
+    fn paged_plan_ledger_accepts_full_depth_resident_plus_streamed_split() {
+        use crate::s14_position0_weight_plan::S14Position0HybridWeightPlan;
+        use polaris_s14_runner::Position0WholeTokenManifest;
+
+        let manifest_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "../../fast16/research/polaris_meridian_v1/whole_token_runtime/position0_whole_token_manifest.json",
+        );
+        let manifest = Position0WholeTokenManifest::load(&manifest_path).unwrap();
+        let weights = S14Position0HybridWeightPlan::build(&manifest).unwrap();
+        let plan = S14Position0PagedArenaPlan::build(&weights).unwrap();
+        let resident_layers = 32;
+        let streamed_layers = FULL_DEPTH_LAYERS.len() - resident_layers;
+        let recurring = plan
+            .physical
+            .static_layers
+            .iter()
+            .skip(resident_layers)
+            .map(|layer| layer.requested_bytes)
+            .sum();
+        validate_paged_plan_ledger(&plan, resident_layers, streamed_layers, recurring).unwrap();
+
+        assert!(
+            validate_paged_plan_ledger(&plan, resident_layers, streamed_layers, recurring - 1,)
+                .is_err()
+        );
     }
 }

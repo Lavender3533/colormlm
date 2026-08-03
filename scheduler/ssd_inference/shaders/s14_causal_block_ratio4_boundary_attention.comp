@@ -1,0 +1,283 @@
+#version 450
+
+// base_position=1/K=4/ratio4 boundary-aware attention。
+// lane0/1 consume contiguous window；lane2 consumes freshly finalized block0；lane3
+// consumes the block selected by the real position4 indexer. Rollover only changes
+// remainder state, so all four lanes execute in one (64,4,1) dispatch afterwards.
+
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer Query { uint packed_bf16[]; } query;
+layout(set = 0, binding = 1, std430) readonly buffer CommittedKv { uint packed_bf16[]; } committed_kv;
+layout(set = 0, binding = 2, std430) readonly buffer CurrentKv { uint packed_bf16[]; } current_kv;
+layout(set = 0, binding = 3, std430) readonly buffer CompressedKv { uint packed_bf16[]; } compressed_kv;
+layout(set = 0, binding = 4, std430) readonly buffer CompressedIndex { uint values[]; } compressed_index;
+layout(set = 0, binding = 5, std430) readonly buffer Sink { float values[]; } sink;
+layout(set = 0, binding = 6, std430) readonly buffer Rope { vec2 values[]; } rope;
+layout(set = 0, binding = 7, std430) writeonly buffer Output { uint packed_bf16[]; } output_state;
+layout(set = 0, binding = 8, std430) buffer StickyStatus { uint status_code; };
+
+layout(push_constant) uniform Push {
+    uint heads;
+    uint head_dim;
+    uint base_position;
+    uint block_size;
+} pc;
+
+const uint STATUS_INVALID_SHAPE = 1u;
+const uint STATUS_NON_FINITE = 2u;
+const uint STATUS_INVALID_COMPRESSED_INDEX = 4u;
+
+shared float partial[64];
+shared float scores[8];
+shared float probabilities[8];
+
+bool finite_f32(float value) {
+    return !isnan(value) && !isinf(value);
+}
+
+float checked(float value) {
+    if (!finite_f32(value)) {
+        atomicOr(status_code, STATUS_NON_FINITE);
+        return 0.0;
+    }
+    return value;
+}
+
+float load_bf16_word(const uint word, uint scalar_index) {
+    uint bits = ((scalar_index & 1u) == 0u) ? (word & 0xffffu) : (word >> 16u);
+    return checked(uintBitsToFloat(bits << 16u));
+}
+
+float load_query_raw(uint block_lane, uint head, uint d) {
+    uint scalar_index = (block_lane * pc.heads + head) * pc.head_dim + d;
+    return load_bf16_word(query.packed_bf16[scalar_index >> 1u], scalar_index);
+}
+
+float load_committed(uint d) {
+    return load_bf16_word(committed_kv.packed_bf16[d >> 1u], d);
+}
+
+float load_current_raw(uint block_lane, uint d) {
+    uint scalar_index = block_lane * pc.head_dim + d;
+    return load_bf16_word(current_kv.packed_bf16[scalar_index >> 1u], scalar_index);
+}
+
+float load_compressed(uint compressed_row, uint d) {
+    uint scalar_index = compressed_row * pc.head_dim + d;
+    return load_bf16_word(compressed_kv.packed_bf16[scalar_index >> 1u], scalar_index);
+}
+
+uint float_to_bf16_bits(float value) {
+    uint bits = floatBitsToUint(value);
+    uint exponent = bits & 0x7f800000u;
+    if (exponent == 0x7f800000u) return bits >> 16u;
+    uint rounded = bits + 0x00007fffu + ((bits >> 16u) & 1u);
+    return rounded >> 16u;
+}
+
+float round_bf16(float value) {
+    return uintBitsToFloat(float_to_bf16_bits(value) << 16u);
+}
+
+float reciprocal_rte_positive_normal(float value) {
+    uint bits = floatBitsToUint(value);
+    uint exponent = (bits >> 23u) & 0xffu;
+    uint fraction = bits & 0x007fffffu;
+    if (fraction == 0u) return uintBitsToFloat((254u - exponent) << 23u);
+    uint divisor = 0x00800000u | fraction;
+    uint quotient = 0u;
+    uint remainder = 0u;
+    for (int bit_index = 47; bit_index >= 0; --bit_index) {
+        remainder = (remainder << 1u) | ((bit_index == 47) ? 1u : 0u);
+        if (remainder >= divisor) {
+            remainder -= divisor;
+            if (bit_index < 32) quotient |= 1u << uint(bit_index);
+        }
+    }
+    uint twice_remainder = remainder << 1u;
+    if (twice_remainder > divisor ||
+        (twice_remainder == divisor && (quotient & 1u) != 0u)) quotient += 1u;
+    uint reciprocal_exponent = 253u - exponent;
+    if (quotient == 0x01000000u) {
+        quotient >>= 1u;
+        reciprocal_exponent += 1u;
+    }
+    return uintBitsToFloat((reciprocal_exponent << 23u) |
+                           (quotient & 0x007fffffu));
+}
+
+float scale_pow2_rte_positive_normal(float value, int exponent_delta) {
+    uint bits = floatBitsToUint(value);
+    int target_exponent = int((bits >> 23u) & 0xffu) + exponent_delta;
+    uint fraction = bits & 0x007fffffu;
+    if (target_exponent >= 255) return uintBitsToFloat(0x7f800000u);
+    if (target_exponent > 0)
+        return uintBitsToFloat((uint(target_exponent) << 23u) | fraction);
+    int shift = 1 - target_exponent;
+    if (shift >= 32) return 0.0;
+    uint significand = 0x00800000u | fraction;
+    uint truncated = significand >> uint(shift);
+    uint remainder = significand & ((1u << uint(shift)) - 1u);
+    uint halfway = 1u << uint(shift - 1);
+    if (remainder > halfway ||
+        (remainder == halfway && (truncated & 1u) != 0u)) truncated += 1u;
+    return uintBitsToFloat(truncated);
+}
+
+float exp_rte_softmax(float value) {
+    uint magnitude_bits = floatBitsToUint(value) & 0x7fffffffu;
+    if (magnitude_bits >= 0x42cff1b5u) return 0.0;
+    precise float scaled = value * uintBitsToFloat(0x3fb8aa3bu) + 0.5;
+    int exponent = int(floor(scaled));
+    precise float exponent_f32 = float(exponent);
+    precise float reduced = value - exponent_f32 * uintBitsToFloat(0x3f318000u);
+    reduced = reduced - exponent_f32 * uintBitsToFloat(0xb95e8083u);
+    precise float squared = reduced * reduced;
+    precise float polynomial = uintBitsToFloat(0x39506967u);
+    polynomial = polynomial * reduced + uintBitsToFloat(0x3ab743ceu);
+    polynomial = polynomial * reduced + uintBitsToFloat(0x3c088908u);
+    polynomial = polynomial * reduced + uintBitsToFloat(0x3d2aa9c1u);
+    polynomial = polynomial * reduced + uintBitsToFloat(0x3e2aaaaau);
+    polynomial = polynomial * reduced + uintBitsToFloat(0x3f000000u);
+    polynomial = polynomial * squared + reduced;
+    polynomial = polynomial + 1.0;
+    return scale_pow2_rte_positive_normal(polynomial, exponent);
+}
+
+vec2 rope_value(uint block_lane, uint pair) {
+    vec2 value = rope.values[block_lane * 32u + pair];
+    return vec2(checked(value.x), checked(value.y));
+}
+
+vec2 rotate_forward(vec2 value, uint block_lane, uint pair) {
+    vec2 cs = rope_value(block_lane, pair);
+    return vec2(value.x * cs.x - value.y * cs.y,
+                value.x * cs.y + value.y * cs.x);
+}
+
+vec2 rotate_inverse(vec2 value, uint block_lane, uint pair) {
+    vec2 cs = rope_value(block_lane, pair);
+    return vec2(value.x * cs.x + value.y * cs.y,
+                -value.x * cs.y + value.y * cs.x);
+}
+
+float load_query_position(uint block_lane, uint head, uint d) {
+    if (d < pc.head_dim - 64u) return load_query_raw(block_lane, head, d);
+    uint local = d - (pc.head_dim - 64u);
+    uint pair = local >> 1u;
+    uint d0 = pc.head_dim - 64u + pair * 2u;
+    vec2 rotated = rotate_forward(
+        vec2(load_query_raw(block_lane, head, d0),
+             load_query_raw(block_lane, head, d0 + 1u)),
+        block_lane,
+        pair
+    );
+    return round_bf16(((local & 1u) == 0u) ? rotated.x : rotated.y);
+}
+
+float load_current_position(uint block_lane, uint d) {
+    if (d < pc.head_dim - 64u) return load_current_raw(block_lane, d);
+    uint local = d - (pc.head_dim - 64u);
+    uint pair = local >> 1u;
+    uint d0 = pc.head_dim - 64u + pair * 2u;
+    vec2 rotated = rotate_forward(
+        vec2(load_current_raw(block_lane, d0), load_current_raw(block_lane, d0 + 1u)),
+        block_lane,
+        pair
+    );
+    return round_bf16(((local & 1u) == 0u) ? rotated.x : rotated.y);
+}
+
+float load_window(uint token, uint d) {
+    return token == 0u ? load_committed(d) : load_current_position(token - 1u, d);
+}
+
+float load_sequence(uint block_lane, uint token, uint window_count, uint d) {
+    if (token < window_count) return load_window(token, d);
+    uint selected = block_lane == 2u ? 0u : compressed_index.values[0];
+    return load_compressed(selected, d);
+}
+
+void main() {
+    uint head = gl_WorkGroupID.x;
+    uint block_lane = gl_WorkGroupID.y;
+    uint lane = gl_LocalInvocationID.x;
+    if (pc.heads != 64u || pc.head_dim != 512u || pc.base_position != 1u ||
+        pc.block_size != 4u) {
+        if (lane == 0u) atomicOr(status_code, STATUS_INVALID_SHAPE);
+        return;
+    }
+    if (head >= pc.heads || block_lane >= pc.block_size) return;
+    if (block_lane == 3u && lane == 0u && compressed_index.values[0] != 0u)
+        atomicOr(status_code, STATUS_INVALID_COMPRESSED_INDEX);
+    barrier();
+    if (status_code != 0u) return;
+
+    uint window_count = pc.base_position + block_lane + 1u;
+    uint compressed_count = block_lane >= 2u ? 1u : 0u;
+    uint token_count = window_count + compressed_count;
+    for (uint token = 0u; token < token_count; ++token) {
+        float dot_value = 0.0;
+        for (uint d = lane; d < pc.head_dim; d += 64u)
+            dot_value += load_query_position(block_lane, head, d) *
+                         load_sequence(block_lane, token, window_count, d);
+        partial[lane] = dot_value;
+        barrier();
+        for (uint stride = 32u; stride > 0u; stride >>= 1u) {
+            if (lane < stride) partial[lane] += partial[lane + stride];
+            barrier();
+        }
+        if (lane == 0u) scores[token] = partial[0] * uintBitsToFloat(0x3d3504f3u);
+        barrier();
+    }
+
+    if (lane == 0u) {
+        float sink_value = checked(sink.values[head]);
+        float maximum = sink_value;
+        for (uint token = 0u; token < token_count; ++token)
+            maximum = max(maximum, scores[token]);
+        float denominator = exp_rte_softmax(sink_value - maximum);
+        for (uint token = 0u; token < token_count; ++token) {
+            probabilities[token] = exp_rte_softmax(scores[token] - maximum);
+            denominator += probabilities[token];
+        }
+        if (!finite_f32(denominator) || denominator <= 0.0) {
+            atomicOr(status_code, STATUS_NON_FINITE);
+            denominator = 1.0;
+        }
+        float reciprocal = reciprocal_rte_positive_normal(denominator);
+        for (uint token = 0u; token < token_count; ++token)
+            probabilities[token] *= reciprocal;
+    }
+    barrier();
+
+    uint packed_per_head = pc.head_dim >> 1u;
+    for (uint pair = lane; pair < packed_per_head; pair += 64u) {
+        uint d0 = pair * 2u;
+        uint d1 = d0 + 1u;
+        precise float value0 = 0.0;
+        precise float value1 = 0.0;
+        for (uint token = 0u; token < token_count; ++token) {
+            precise float product0 = probabilities[token] *
+                load_sequence(block_lane, token, window_count, d0);
+            precise float product1 = probabilities[token] *
+                load_sequence(block_lane, token, window_count, d1);
+            value0 = value0 + product0;
+            value1 = value1 + product1;
+        }
+        vec2 value = vec2(value0, value1);
+        if (d0 >= pc.head_dim - 64u) {
+            value = vec2(round_bf16(value.x), round_bf16(value.y));
+            value = rotate_inverse(
+                value,
+                block_lane,
+                (d0 - (pc.head_dim - 64u)) >> 1u
+            );
+        }
+        uint y0 = float_to_bf16_bits(value.x);
+        uint y1 = float_to_bf16_bits(value.y);
+        uint output_word = (block_lane * pc.heads + head) * packed_per_head + pair;
+        output_state.packed_bf16[output_word] = y0 | (y1 << 16u);
+    }
+}

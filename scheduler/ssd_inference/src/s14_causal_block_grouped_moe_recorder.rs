@@ -22,6 +22,9 @@ use crate::{
     s14_position0_hybrid_weight_arena::{
         S14Position0HybridWeightArena, S14Position0StaticLayerLayout,
     },
+    s14_position0_paged_weight_arena::{
+        S14Position0PagedWeightArena, S14Position0StaticLayerBinding,
+    },
     s14_vulkan::{
         S14F32MatvecShape, S14HcPreShape, S14MatvecShape, S14NumericPipelines,
         S14RaggedBranchOffsets, S14RaggedMatvecShape, S14RaggedProjection,
@@ -259,6 +262,9 @@ impl fmt::Debug for S14CausalBlockGroupedMoeStaticLayerResources {
 
 enum StaticLayerSource {
     Hybrid(Arc<S14Position0HybridWeightArena>),
+    /// RX 5700 XT production owner。resident 与 streamed static 层都由同一个 paged arena
+    /// 保活；上游 provider 必须在本层 recorder 被调用前把 streamed bank 填成当前层。
+    Paged(Arc<S14Position0PagedWeightArena>),
     Direct(BTreeMap<u8, S14CausalBlockGroupedMoeStaticLayerResources>),
 }
 
@@ -296,6 +302,18 @@ pub fn build_s14_causal_block_concrete_moe_adapter(
     S14CausalBlockProductionMoeAdapter::new(ctx, catalog, cache_root, fetch_mode, recorder)
 }
 
+pub fn build_s14_causal_block_paged_moe_adapter(
+    ctx: Arc<VulkanContext>,
+    catalog: FullDepthExpertCatalog,
+    cache_root: &Path,
+    fetch_mode: DynamicPageFetchMode,
+    static_arena: Arc<S14Position0PagedWeightArena>,
+) -> Result<S14CausalBlockConcreteMoeAdapter> {
+    let recorder =
+        S14CausalBlockGroupedMoeVulkanRecorder::new_paged(Arc::clone(&ctx), static_arena)?;
+    S14CausalBlockProductionMoeAdapter::new(ctx, catalog, cache_root, fetch_mode, recorder)
+}
+
 impl fmt::Debug for S14CausalBlockGroupedMoeVulkanRecorder {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("S14CausalBlockGroupedMoeVulkanRecorder")
@@ -314,6 +332,13 @@ impl S14CausalBlockGroupedMoeVulkanRecorder {
         Self::new_with_static_source(ctx, StaticLayerSource::Hybrid(static_arena))
     }
 
+    pub fn new_paged(
+        ctx: Arc<VulkanContext>,
+        static_arena: Arc<S14Position0PagedWeightArena>,
+    ) -> Result<Self> {
+        Self::new_with_static_source(ctx, StaticLayerSource::Paged(static_arena))
+    }
+
     pub fn new_with_static_layer(
         ctx: Arc<VulkanContext>,
         resources: S14CausalBlockGroupedMoeStaticLayerResources,
@@ -324,7 +349,10 @@ impl S14CausalBlockGroupedMoeVulkanRecorder {
         Self::new_with_static_source(ctx, StaticLayerSource::Direct(layers))
     }
 
-    fn new_with_static_source(ctx: Arc<VulkanContext>, static_layers: StaticLayerSource) -> Result<Self> {
+    fn new_with_static_source(
+        ctx: Arc<VulkanContext>,
+        static_layers: StaticLayerSource,
+    ) -> Result<Self> {
         let alignment = storage_alignment(&ctx);
         let workspace_layout = WorkspaceLayout::build(alignment)?;
         let control_layout = ControlLayout::build(alignment)?;
@@ -773,22 +801,32 @@ impl S14CausalBlockGroupedMoeVulkanRecorder {
                 shared: resources.shared,
             });
         }
-        let StaticLayerSource::Hybrid(static_arena) = &self.static_layers else {
-            unreachable!()
-        };
         let index = FULL_DEPTH_LAYERS
             .iter()
             .position(|&candidate| candidate == layer)
             .context("static layer 越出 FullDepth43")?;
-        let layout = static_arena
-            .layout()
-            .static_layers
-            .get(index)
-            .context("hybrid static layout 缺层")?;
+        let (buffer, layout, source_name) = match &self.static_layers {
+            StaticLayerSource::Hybrid(static_arena) => {
+                let layout = static_arena
+                    .layout()
+                    .static_layers
+                    .get(index)
+                    .context("hybrid static layout 缺层")?;
+                (static_arena.static_layer(layer)?, layout, "hybrid")
+            }
+            StaticLayerSource::Paged(static_arena) => {
+                match static_arena.ready_static_layer(layer)? {
+                    S14Position0StaticLayerBinding::Resident { buffer, layout }
+                    | S14Position0StaticLayerBinding::Streamed { buffer, layout, .. } => {
+                        (buffer, layout, "paged")
+                    }
+                }
+            }
+            StaticLayerSource::Direct(_) => unreachable!(),
+        };
         if layout.layer != layer {
-            bail!("hybrid static layer identity 漂移");
+            bail!("{source_name} static layer identity 漂移");
         }
-        let buffer = static_arena.static_layer(layer)?;
         let hc_fn = static_asset(layout, layer, "hc_ffn_fn", 24 * HC_FLAT as u64 * 4)?;
         let hc_scale = static_asset(layout, layer, "hc_ffn_scale", 3 * 4)?;
         let hc_base = static_asset(layout, layer, "hc_ffn_base", 24 * 4)?;
@@ -950,9 +988,11 @@ impl S14CausalBlockGroupedMoeRecorder for S14CausalBlockGroupedMoeVulkanRecorder
         matches!(binding.block_size, 4 | 8)
             && binding.offset == 0
             && binding.bytes == binding.block_size as u64 * HC_STREAMS * HIDDEN as u64 * 2
-            && self.outputs.iter().flatten().any(|output| {
-                output.handle() == binding.buffer && output.size() >= binding.bytes
-            })
+            && self
+                .outputs
+                .iter()
+                .flatten()
+                .any(|output| output.handle() == binding.buffer && output.size() >= binding.bytes)
     }
 
     fn finish_block_after_drain(&mut self, aborted: bool) -> Result<()> {

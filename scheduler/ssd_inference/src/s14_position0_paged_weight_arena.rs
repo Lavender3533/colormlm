@@ -18,6 +18,7 @@ use crate::{
 use anyhow::{anyhow, bail, Context, Result};
 use ash::vk;
 use polaris_s14_runner::FULL_DEPTH_LAYERS;
+use std::sync::Mutex;
 
 pub const S14_POSITION0_STATIC_STREAM_BANKS: usize = 2;
 
@@ -108,6 +109,15 @@ pub struct S14Position0PagedWeightArena {
     allocated_essential_bytes: u64,
     allocated_static_resident_bytes: u64,
     allocated_device_bytes: u64,
+    /// 只由 verified mmap/SHA 上传器在同步 transfer 完成后发布。resident 层逐层置位；
+    /// streamed bank 保存最后一次真实装入的层 identity，禁止 consumer 把空页或旧页当当前层。
+    static_readiness: Mutex<S14Position0StaticReadiness>,
+}
+
+#[derive(Debug)]
+struct S14Position0StaticReadiness {
+    resident_layers: Vec<bool>,
+    streamed_banks: [Option<u8>; S14_POSITION0_STATIC_STREAM_BANKS],
 }
 
 impl S14Position0PagedWeightArena {
@@ -226,6 +236,10 @@ impl S14Position0PagedWeightArena {
             allocated_essential_bytes: allocated_device_bytes - static_bytes,
             allocated_static_resident_bytes: static_bytes,
             allocated_device_bytes,
+            static_readiness: Mutex::new(S14Position0StaticReadiness {
+                resident_layers: vec![false; FULL_DEPTH_LAYERS.len()],
+                streamed_banks: [None; S14_POSITION0_STATIC_STREAM_BANKS],
+            }),
         })
     }
 
@@ -274,6 +288,84 @@ impl S14Position0PagedWeightArena {
                 }
             }
         })
+    }
+
+    /// production consumer 的 fail-closed 入口。只有 verified payload store 已完成
+    /// proof/SHA/mmap 且同步 transfer 已 wait 成功后，上传器才会发布 readiness。
+    pub fn ready_static_layer(&self, layer: u8) -> Result<S14Position0StaticLayerBinding<'_>> {
+        let binding = self.static_layer(layer)?;
+        let index = FULL_DEPTH_LAYERS
+            .iter()
+            .position(|&expected| expected == layer)
+            .ok_or_else(|| anyhow!("invalid position0 static layer L{layer}"))?;
+        let readiness = self
+            .static_readiness
+            .lock()
+            .map_err(|_| anyhow!("position0 static readiness poisoned"))?;
+        let ready = match &binding {
+            S14Position0StaticLayerBinding::Resident { .. } => readiness.resident_layers[index],
+            S14Position0StaticLayerBinding::Streamed { bank, .. } => {
+                readiness.streamed_banks[*bank] == Some(layer)
+            }
+        };
+        if !ready {
+            bail!("position0 static L{layer} 尚无 verified proof/SHA/mmap/upload readiness");
+        }
+        Ok(binding)
+    }
+
+    /// 只能由 crate 内正式上传器在同步 copy+wait 成功后调用。
+    pub(crate) fn publish_static_layer_ready(
+        &self,
+        layer: u8,
+        resident_hit: bool,
+        bank: Option<usize>,
+        assets: usize,
+        uploaded_bytes: u64,
+    ) -> Result<()> {
+        let index = FULL_DEPTH_LAYERS
+            .iter()
+            .position(|&expected| expected == layer)
+            .ok_or_else(|| anyhow!("invalid position0 static readiness L{layer}"))?;
+        let layout = &self.plan.physical.static_layers[index];
+        let expected_payload_bytes = layout.assets.iter().try_fold(0u64, |sum, asset| {
+            sum.checked_add(asset.bytes)
+                .ok_or_else(|| anyhow!("position0 static L{layer} payload bytes overflow"))
+        })?;
+        if assets != layout.assets.len() {
+            bail!("position0 static L{layer} readiness asset count 漂移");
+        }
+        let mut readiness = self
+            .static_readiness
+            .lock()
+            .map_err(|_| anyhow!("position0 static readiness poisoned"))?;
+        match self.static_layer(layer)? {
+            S14Position0StaticLayerBinding::Resident { .. } => {
+                if !resident_hit || bank.is_some() || uploaded_bytes != 0 {
+                    bail!("position0 resident static L{layer} readiness receipt 漂移");
+                }
+                readiness.resident_layers[index] = true;
+            }
+            S14Position0StaticLayerBinding::Streamed {
+                bank: expected_bank,
+                ..
+            } => {
+                if resident_hit
+                    || bank != Some(expected_bank)
+                    || uploaded_bytes != expected_payload_bytes
+                {
+                    bail!("position0 streamed static L{layer} readiness receipt 漂移");
+                }
+                readiness.streamed_banks[expected_bank] = Some(layer);
+            }
+        }
+        Ok(())
+    }
+
+    pub fn static_stream_bank(&self, bank: usize) -> Result<&GpuBuffer> {
+        self.static_stream
+            .get(bank)
+            .ok_or_else(|| anyhow!("invalid position0 static stream bank {bank}"))
     }
 
     /// 把 hybrid 逻辑 placement 映射到真实分段 buffer。上传器必须使用这个

@@ -31,11 +31,19 @@ use crate::{
         S14FinalHcHeadPipeline, S14FinalHcHeadShape,
     },
     s14_head_chunk_argmax::{S14HeadChunkArgmaxShape, S14_HEAD_CHUNK_COUNT},
+    s14_position0_hybrid_upload::{
+        S14Position0HeadChunkReceipt, S14Position0HybridUploader,
+    },
+    s14_position0_mapped_assets::VerifiedMappedAssetStore,
+    s14_position0_paged_weight_arena::S14Position0PagedWeightArena,
+    s14_position0_weight_plan::S14Position0HybridWeightPlan,
     GpuBuffer, VulkanContext,
 };
 use anyhow::{bail, Context, Result};
 use ash::vk;
-use polaris_s14_runner::{RouteDecision, FULL_DEPTH_LAYERS};
+use polaris_s14_runner::{
+    Position0WholeTokenManifest, RouteDecision, FULL_DEPTH_LAYERS,
+};
 use std::{fmt, sync::{Arc, Mutex}};
 
 const TERMINAL_ALIGNMENT: u64 = 256;
@@ -74,9 +82,23 @@ impl S14CausalBlockOwnedBufferSlice {
     }
 }
 
+pub struct S14CausalBlockTerminalHeadUploadState {
+    pub uploader: S14Position0HybridUploader,
+    pub store: VerifiedMappedAssetStore,
+}
+
+impl fmt::Debug for S14CausalBlockTerminalHeadUploadState {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("S14CausalBlockTerminalHeadUploadState")
+            .field("upload_stats", &self.uploader.stats())
+            .finish_non_exhaustive()
+    }
+}
+
 /// 外部 FullDepth43 producer 必须一次性提供的强 owner 输入。checkpoint slices 必须
-/// 全部属于同一 arena；head chunks 可属于一个完整 head arena 的不同 offset，也可由32个
-/// 独立 owner 持有。所有 Arc 只保活真实 allocation，不从裸 handle 重建资源。
+/// 全部属于同一 arena；32个逻辑 head chunk 只由同一个 paged arena 的两个 bank 承载。
+/// uploader/store 必须是执行本 token 43层上传的同一份 persistent verified owner。
 pub struct S14CausalBlockTerminalResourceOwnerInputs {
     pub context: Arc<VulkanContext>,
     pub block_size: usize,
@@ -87,7 +109,10 @@ pub struct S14CausalBlockTerminalResourceOwnerInputs {
     pub final_norm_weight: S14CausalBlockOwnedBufferSlice,
     pub checkpoint_state_bytes: u64,
     pub checkpoints: Vec<S14CausalBlockOwnedBufferSlice>,
-    pub head_chunks: Vec<S14CausalBlockOwnedBufferSlice>,
+    pub paged_arena: Arc<S14Position0PagedWeightArena>,
+    pub head_manifest: Arc<Position0WholeTokenManifest>,
+    pub head_weight_plan: Arc<S14Position0HybridWeightPlan>,
+    pub head_upload: Arc<Mutex<S14CausalBlockTerminalHeadUploadState>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -196,7 +221,10 @@ pub struct S14CausalBlockProductionTerminalResourceOwner {
     final_hidden: S14CausalBlockOwnedBufferSlice,
     checkpoint_state_bytes: u64,
     checkpoints: Vec<S14CausalBlockOwnedBufferSlice>,
-    head_chunks: Vec<S14CausalBlockOwnedBufferSlice>,
+    paged_arena: Arc<S14Position0PagedWeightArena>,
+    head_manifest: Arc<Position0WholeTokenManifest>,
+    head_weight_plan: Arc<S14Position0HybridWeightPlan>,
+    head_upload: Arc<Mutex<S14CausalBlockTerminalHeadUploadState>>,
     layout: S14CausalBlockTerminalArenaLayout,
     arena: Option<GpuBuffer>,
     status_readback: Option<GpuBuffer>,
@@ -216,7 +244,8 @@ impl fmt::Debug for S14CausalBlockProductionTerminalResourceOwner {
             .field("final_hidden", &self.final_hidden)
             .field("checkpoint_state_bytes", &self.checkpoint_state_bytes)
             .field("checkpoint_count", &self.checkpoints.len())
-            .field("head_chunk_count", &self.head_chunks.len())
+            .field("head_chunk_count", &(S14_HEAD_CHUNK_COUNT as usize))
+            .field("paged_arena", &Arc::as_ptr(&self.paged_arena))
             .field("layout", &self.layout)
             .field("producer_timeline", &self.producer_timeline)
             .field("phase", &self.phase.lock().ok().map(|phase| *phase))
@@ -236,7 +265,10 @@ impl S14CausalBlockProductionTerminalResourceOwner {
             final_norm_weight,
             checkpoint_state_bytes,
             checkpoints,
-            head_chunks,
+            paged_arena,
+            head_manifest,
+            head_weight_plan,
+            head_upload,
         } = inputs;
         if !context.timeline_semaphore || !matches!(block_size, 4 | 8) {
             bail!("production terminal owner 要求 timeline semaphore 与 K=4/8");
@@ -250,7 +282,9 @@ impl S14CausalBlockProductionTerminalResourceOwner {
             &final_norm_weight,
             checkpoint_state_bytes,
             &checkpoints,
-            &head_chunks,
+            &paged_arena,
+            &head_manifest,
+            &head_weight_plan,
         )?;
         let device_alignment = unsafe {
             context
@@ -328,7 +362,10 @@ impl S14CausalBlockProductionTerminalResourceOwner {
             final_hidden,
             checkpoint_state_bytes,
             checkpoints,
-            head_chunks,
+            paged_arena,
+            head_manifest,
+            head_weight_plan,
+            head_upload,
             layout,
             arena: Some(arena),
             status_readback: Some(status_readback),
@@ -350,6 +387,10 @@ impl S14CausalBlockProductionTerminalResourceOwner {
 
     pub fn checkpoint_state_bytes(&self) -> u64 {
         self.checkpoint_state_bytes
+    }
+
+    pub fn paged_weight_arena(&self) -> &Arc<S14Position0PagedWeightArena> {
+        &self.paged_arena
     }
 
     pub fn layout(&self) -> S14CausalBlockTerminalArenaLayout {
@@ -380,7 +421,7 @@ impl S14CausalBlockProductionTerminalResourceOwner {
             final_hidden,
             normalized_head_rows_offset: self.layout.normalized_f32_offset,
             checkpoint_offsets: self.checkpoints.iter().map(|slice| slice.offset).collect(),
-            head_chunk_offsets: self.head_chunks.iter().map(|slice| slice.offset).collect(),
+            head_chunk_count: S14_HEAD_CHUNK_COUNT as usize,
             producer_timeline_value: PRODUCER_TIMELINE_VALUE,
             routes_by_position,
             host_candidates,
@@ -410,7 +451,7 @@ impl S14CausalBlockProductionTerminalResourceOwner {
             producer_timeline_value: PRODUCER_TIMELINE_VALUE,
             normalized_head_rows_offset: self.layout.normalized_f32_offset,
             checkpoint_count: self.checkpoints.len(),
-            head_chunk_count: self.head_chunks.len(),
+            head_chunk_count: S14_HEAD_CHUNK_COUNT as usize,
             predicted_tokens_prebuilt: false,
         })
     }
@@ -590,15 +631,81 @@ impl S14CausalBlockTerminalResourceOwner for S14CausalBlockProductionTerminalRes
                 .checkpoints
                 .get(lane)
                 .map(|slice| slice.buffer.as_ref()),
-            S14CausalBlockTerminalResource::HeadChunk(chunk) => self
-                .head_chunks
-                .get(chunk)
-                .map(|slice| slice.buffer.as_ref()),
+            S14CausalBlockTerminalResource::HeadBank(bank) => {
+                self.paged_arena.head_chunk(bank).ok()
+            }
         }
     }
 
     fn producer_timeline(&self) -> vk::Semaphore {
         self.producer_timeline
+    }
+
+    fn paged_weight_arena(&self) -> Option<&Arc<S14Position0PagedWeightArena>> {
+        Some(&self.paged_arena)
+    }
+
+    unsafe fn record_next_head_chunk_copy(
+        &self,
+        ctx: &VulkanContext,
+        command: vk::CommandBuffer,
+        chunk: u32,
+    ) -> Result<S14Position0HeadChunkReceipt, String> {
+        if !std::ptr::eq(ctx, self.context.as_ref()) {
+            return Err("production terminal head copy VulkanContext 漂移".into());
+        }
+        let mut state = self
+            .head_upload
+            .lock()
+            .map_err(|_| "production terminal head uploader poisoned".to_owned())?;
+        if chunk == 0
+            && !state
+                .uploader
+                .ready_for_paged_head_stream(&self.head_weight_plan)
+        {
+            return Err("production terminal head uploader 尚未完成本 token 43层上传".into());
+        }
+        let receipt = state
+            .uploader
+            .record_next_head_chunk_copy(
+                ctx,
+                command,
+                &self.head_manifest,
+                &self.head_weight_plan,
+                self.paged_arena.as_ref(),
+            )
+            .map_err(|error| error.to_string())?;
+        if receipt.chunk != u64::from(chunk) || receipt.bank != chunk as usize % 2 {
+            return Err("production terminal head copy receipt chunk/bank 漂移".into());
+        }
+        Ok(receipt)
+    }
+
+    fn stage_recorded_head_chunk(
+        &self,
+        receipt: S14Position0HeadChunkReceipt,
+        timeline_bank: usize,
+    ) -> Result<S14Position0HeadChunkReceipt, String> {
+        let mut state = self
+            .head_upload
+            .lock()
+            .map_err(|_| "production terminal head uploader poisoned".to_owned())?;
+        let S14CausalBlockTerminalHeadUploadState { uploader, store } = &mut *state;
+        uploader
+            .stage_recorded_head_chunk(
+                &self.head_manifest,
+                &self.head_weight_plan,
+                store,
+                receipt,
+                timeline_bank,
+            )
+            .map_err(|error| error.to_string())
+    }
+
+    fn abort_head_stream_after_drain(&self) {
+        if let Ok(mut state) = self.head_upload.lock() {
+            state.uploader.abort_persistent_token_after_drain();
+        }
     }
 
     fn validate_after_producer_timeline(&self, expected_value: u64) -> Result<(), String> {
@@ -783,13 +890,13 @@ fn validate_external_resources(
     norm_weight: &S14CausalBlockOwnedBufferSlice,
     checkpoint_state_bytes: u64,
     checkpoints: &[S14CausalBlockOwnedBufferSlice],
-    head_chunks: &[S14CausalBlockOwnedBufferSlice],
+    paged_arena: &S14Position0PagedWeightArena,
+    head_manifest: &Position0WholeTokenManifest,
+    head_weight_plan: &S14Position0HybridWeightPlan,
 ) -> Result<()> {
-    if checkpoint_state_bytes == 0
-        || checkpoints.len() != block_size
-        || head_chunks.len() != S14_HEAD_CHUNK_COUNT as usize
-    {
-        bail!("production terminal checkpoint/head chunk 数量或 state bytes 非法");
+    head_weight_plan.validate(head_manifest)?;
+    if checkpoint_state_bytes == 0 || checkpoints.len() != block_size {
+        bail!("production terminal checkpoint 数量或 state bytes 非法");
     }
     let final_shape = S14FinalHcHeadShape::production();
     for (slice, bytes, label) in [
@@ -812,12 +919,22 @@ fn validate_external_resources(
     }
     validate_non_overlapping(&checkpoint_ranges, "candidate checkpoint")?;
     let head_shape = S14HeadChunkArgmaxShape::production_batched(block_size as u32)?;
-    for (chunk, slice) in head_chunks.iter().enumerate() {
-        validate_slice(
-            slice,
-            head_shape.chunk(chunk as u32)?.weight_bytes(head_shape)?,
-            "head chunk",
-        )?;
+    if head_weight_plan.head_chunk_count != u64::from(S14_HEAD_CHUNK_COUNT)
+        || head_weight_plan.head_chunk_bytes != head_shape.max_chunk_weight_bytes()?
+        || paged_arena.plan().physical.head_chunk_bytes != head_weight_plan.head_chunk_bytes
+    {
+        bail!("production terminal paged head plan/chunk count/capacity 漂移");
+    }
+    for bank in 0..2 {
+        let buffer = paged_arena.head_chunk(bank)?;
+        if buffer.handle() == vk::Buffer::null()
+            || buffer.size() != head_weight_plan.head_chunk_bytes
+        {
+            bail!("production terminal paged head bank {bank} 不完整");
+        }
+    }
+    if paged_arena.head_chunk(0)?.handle() == paged_arena.head_chunk(1)?.handle() {
+        bail!("production terminal paged head 双 bank 发生别名");
     }
     Ok(())
 }

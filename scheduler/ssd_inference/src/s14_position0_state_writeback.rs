@@ -515,23 +515,58 @@ impl S14Position0StateWritebackLayout {
         layer: u8,
         kind: S14Position0StateRowKind,
     ) -> Result<Range<u64>> {
-        let layer_layout = self
-            .layer(layer)
-            .ok_or_else(|| anyhow!("position0 state layout 缺少 L{layer}"))?;
-        let row = layer_layout.row(kind)?;
-        record_exact_row_writeback(
+        self.record_row_writeback_at(
             ctx,
             command,
             source,
             source_offset,
             candidate_state,
+            0,
+            layer,
+            kind,
+        )
+    }
+
+    /// `record_row_writeback` 的 prefix-arena 版本。所有 recipe state range 都相对
+    /// `candidate_base_offset` 解释，从而可以把 K 份完整 NativeState 放进同一 VkBuffer。
+    ///
+    /// # Safety
+    /// 与 `record_row_writeback` 相同；此外 base+arena_bytes 必须位于 candidate buffer 内。
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn record_row_writeback_at(
+        &self,
+        ctx: &VulkanContext,
+        command: vk::CommandBuffer,
+        source: &GpuBuffer,
+        source_offset: u64,
+        candidate_state: &GpuBuffer,
+        candidate_base_offset: u64,
+        layer: u8,
+        kind: S14Position0StateRowKind,
+    ) -> Result<Range<u64>> {
+        let layer_layout = self
+            .layer(layer)
+            .ok_or_else(|| anyhow!("position0 state layout 缺少 L{layer}"))?;
+        let row = layer_layout.row(kind)?;
+        record_exact_row_writeback_at(
+            ctx,
+            command,
+            source,
+            source_offset,
+            candidate_state,
+            candidate_base_offset,
             layer,
             kind,
             &row.state_range,
             source.size(),
             self.candidate_state_bytes,
         )?;
-        Ok(row.state_range.clone())
+        translate_state_range(
+            candidate_base_offset,
+            &row.state_range,
+            self.candidate_state_bytes,
+            candidate_state.size(),
+        )
     }
 }
 
@@ -646,6 +681,34 @@ impl S14Position0LayerStateRecordingRecipe {
         workspace: &GpuBuffer,
         candidate_state: &GpuBuffer,
     ) -> Result<Vec<DescriptorBinder>> {
+        self.record_compressor_remainder_at(
+            ctx,
+            command,
+            numeric,
+            ape,
+            static_arena,
+            workspace,
+            candidate_state,
+            0,
+        )
+    }
+
+    /// `record_compressor_remainder` 的 prefix-arena 版本。
+    ///
+    /// # Safety
+    /// 与原入口相同；`candidate_base_offset` 必须指向一份完整 NativeState slice。
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn record_compressor_remainder_at(
+        &self,
+        ctx: &VulkanContext,
+        command: vk::CommandBuffer,
+        numeric: &S14NumericPipelines,
+        ape: &S14Position0ApeAddPipeline,
+        static_arena: &GpuBuffer,
+        workspace: &GpuBuffer,
+        candidate_state: &GpuBuffer,
+        candidate_base_offset: u64,
+    ) -> Result<Vec<DescriptorBinder>> {
         let mut binders = Vec::with_capacity(self.compressor_ops.len());
         let result = (|| -> Result<()> {
             for op in &self.compressor_ops {
@@ -698,12 +761,13 @@ impl S14Position0LayerStateRecordingRecipe {
                         source_offset,
                         state_range,
                     } => {
-                        record_exact_row_writeback(
+                        record_exact_row_writeback_at(
                             ctx,
                             command,
                             workspace,
                             *source_offset,
                             candidate_state,
+                            candidate_base_offset,
                             self.layer,
                             *target,
                             state_range,
@@ -737,6 +801,20 @@ impl S14Position0LayerStateRecordingRecipe {
         command: vk::CommandBuffer,
         candidate_state: &GpuBuffer,
     ) -> Result<()> {
+        self.record_rollover_at(ctx, command, candidate_state, 0)
+    }
+
+    /// `record_rollover` 的 prefix-arena 版本。
+    ///
+    /// # Safety
+    /// 与原入口相同；source/target 均限制在同一个 prefix slice 内。
+    pub unsafe fn record_rollover_at(
+        &self,
+        ctx: &VulkanContext,
+        command: vk::CommandBuffer,
+        candidate_state: &GpuBuffer,
+        candidate_base_offset: u64,
+    ) -> Result<()> {
         if !self.rollover_copies.is_empty() && (self.position % 4 != 3 || self.compress_ratio != 4)
         {
             bail!(
@@ -744,10 +822,11 @@ impl S14Position0LayerStateRecordingRecipe {
                 self.layer
             );
         }
-        record_ratio4_rollover(
+        record_ratio4_rollover_at(
             ctx,
             command,
             candidate_state,
+            candidate_base_offset,
             self.candidate_state_bytes,
             self.layer,
             &self.rollover_copies,
@@ -766,20 +845,67 @@ impl S14Position0LayerStateRecordingRecipe {
         workspace: &GpuBuffer,
         candidate_state: &GpuBuffer,
     ) -> Result<Range<u64>> {
-        record_exact_row_writeback(
+        self.record_window_kv_at(ctx, command, workspace, candidate_state, 0)
+    }
+
+    /// `record_window_kv` 的 prefix-arena 版本。
+    ///
+    /// # Safety
+    /// 与原入口相同；base+state range 必须落在同一个 prefix slice 内。
+    pub unsafe fn record_window_kv_at(
+        &self,
+        ctx: &VulkanContext,
+        command: vk::CommandBuffer,
+        workspace: &GpuBuffer,
+        candidate_state: &GpuBuffer,
+        candidate_base_offset: u64,
+    ) -> Result<Range<u64>> {
+        record_exact_row_writeback_at(
             ctx,
             command,
             workspace,
             self.window_kv_source_offset,
             candidate_state,
+            candidate_base_offset,
             self.layer,
             S14Position0StateRowKind::WindowKv,
             &self.window_kv_state_range,
             self.workspace_bytes,
             self.candidate_state_bytes,
         )?;
-        Ok(self.window_kv_state_range.clone())
+        translate_state_range(
+            candidate_base_offset,
+            &self.window_kv_state_range,
+            self.candidate_state_bytes,
+            candidate_state.size(),
+        )
     }
+}
+
+fn translate_state_range(
+    candidate_base_offset: u64,
+    state_range: &Range<u64>,
+    candidate_logical_bytes: u64,
+    candidate_buffer_bytes: u64,
+) -> Result<Range<u64>> {
+    let candidate_end = candidate_base_offset
+        .checked_add(candidate_logical_bytes)
+        .context("prefix candidate range overflow")?;
+    let start = candidate_base_offset
+        .checked_add(state_range.start)
+        .context("prefix dirty range start overflow")?;
+    let end = candidate_base_offset
+        .checked_add(state_range.end)
+        .context("prefix dirty range end overflow")?;
+    if candidate_base_offset % 4 != 0
+        || state_range.start >= state_range.end
+        || state_range.end > candidate_logical_bytes
+        || end > candidate_end
+        || candidate_end > candidate_buffer_bytes
+    {
+        bail!("prefix dirty range/base/capacity 漂移");
+    }
+    Ok(start..end)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1225,12 +1351,13 @@ fn exact_static_weight<'a>(
 }
 
 #[allow(clippy::too_many_arguments)]
-unsafe fn record_exact_row_writeback(
+unsafe fn record_exact_row_writeback_at(
     ctx: &VulkanContext,
     command: vk::CommandBuffer,
     source: &GpuBuffer,
     source_offset: u64,
     candidate_state: &GpuBuffer,
+    candidate_base_offset: u64,
     layer: u8,
     kind: S14Position0StateRowKind,
     state_range: &Range<u64>,
@@ -1245,12 +1372,23 @@ unsafe fn record_exact_row_writeback(
     let source_end = source_offset
         .checked_add(bytes)
         .ok_or_else(|| anyhow!("L{layer} {kind:?} source range overflow"))?;
+    let candidate_end = candidate_base_offset
+        .checked_add(candidate_logical_bytes)
+        .ok_or_else(|| anyhow!("L{layer} {kind:?} prefix candidate range overflow"))?;
+    let target_start = candidate_base_offset
+        .checked_add(state_range.start)
+        .ok_or_else(|| anyhow!("L{layer} {kind:?} prefix target offset overflow"))?;
+    let target_end = candidate_base_offset
+        .checked_add(state_range.end)
+        .ok_or_else(|| anyhow!("L{layer} {kind:?} prefix target range overflow"))?;
     if source_offset % 4 != 0
+        || candidate_base_offset % 4 != 0
         || state_range.start % 4 != 0
         || source_end > source_logical_bytes
         || source_end > source.size()
         || state_range.end > candidate_logical_bytes
-        || state_range.end > candidate_state.size()
+        || candidate_end > candidate_state.size()
+        || target_end > candidate_end
     {
         bail!("L{layer} {kind:?} source/candidate logical or physical range 漂移");
     }
@@ -1271,7 +1409,7 @@ unsafe fn record_exact_row_writeback(
             )
             .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE)
             .buffer(candidate_state.handle())
-            .offset(state_range.start)
+            .offset(target_start)
             .size(bytes),
     ];
     ctx.device.cmd_pipeline_barrier(
@@ -1289,7 +1427,7 @@ unsafe fn record_exact_row_writeback(
         candidate_state.handle(),
         &[vk::BufferCopy::default()
             .src_offset(source_offset)
-            .dst_offset(state_range.start)
+            .dst_offset(target_start)
             .size(bytes)],
     );
     let publish = [
@@ -1303,7 +1441,7 @@ unsafe fn record_exact_row_writeback(
             .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
             .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::TRANSFER_READ)
             .buffer(candidate_state.handle())
-            .offset(state_range.start)
+            .offset(target_start)
             .size(bytes),
     ];
     ctx.device.cmd_pipeline_barrier(
@@ -1318,16 +1456,24 @@ unsafe fn record_exact_row_writeback(
     Ok(())
 }
 
-unsafe fn record_ratio4_rollover(
+unsafe fn record_ratio4_rollover_at(
     ctx: &VulkanContext,
     command: vk::CommandBuffer,
     candidate_state: &GpuBuffer,
+    candidate_base_offset: u64,
     candidate_logical_bytes: u64,
     layer: u8,
     copies: &[S14Position0StateRolloverCopy],
 ) -> Result<()> {
     if copies.is_empty() {
         return Ok(());
+    }
+
+    let candidate_end = candidate_base_offset
+        .checked_add(candidate_logical_bytes)
+        .ok_or_else(|| anyhow!("L{layer} ratio4 prefix candidate range overflow"))?;
+    if candidate_base_offset % 4 != 0 || candidate_end > candidate_state.size() {
+        bail!("L{layer} ratio4 prefix candidate base/capacity 漂移");
     }
 
     let mut occupied = Vec::<Range<u64>>::with_capacity(copies.len() * 2);
@@ -1362,8 +1508,12 @@ unsafe fn record_ratio4_rollover(
             || copy.target_range.start % 4 != 0
             || copy.source_range.end > candidate_logical_bytes
             || copy.target_range.end > candidate_logical_bytes
-            || copy.source_range.end > candidate_state.size()
-            || copy.target_range.end > candidate_state.size()
+            || candidate_base_offset
+                .checked_add(copy.source_range.end)
+                .is_none_or(|end| end > candidate_end)
+            || candidate_base_offset
+                .checked_add(copy.target_range.end)
+                .is_none_or(|end| end > candidate_end)
         {
             bail!("L{layer} ratio4 rollover source/target 字节、对齐或边界漂移");
         }
@@ -1379,8 +1529,8 @@ unsafe fn record_ratio4_rollover(
 
         regions.push(
             vk::BufferCopy::default()
-                .src_offset(copy.source_range.start)
-                .dst_offset(copy.target_range.start)
+                .src_offset(candidate_base_offset + copy.source_range.start)
+                .dst_offset(candidate_base_offset + copy.target_range.start)
                 .size(source_bytes),
         );
         acquire.extend([
@@ -1393,7 +1543,7 @@ unsafe fn record_ratio4_rollover(
                 )
                 .dst_access_mask(vk::AccessFlags::TRANSFER_READ)
                 .buffer(candidate_state.handle())
-                .offset(copy.source_range.start)
+                .offset(candidate_base_offset + copy.source_range.start)
                 .size(source_bytes),
             vk::BufferMemoryBarrier::default()
                 .src_access_mask(
@@ -1404,7 +1554,7 @@ unsafe fn record_ratio4_rollover(
                 )
                 .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE)
                 .buffer(candidate_state.handle())
-                .offset(copy.target_range.start)
+                .offset(candidate_base_offset + copy.target_range.start)
                 .size(target_bytes),
         ]);
         publish.extend([
@@ -1412,13 +1562,13 @@ unsafe fn record_ratio4_rollover(
                 .src_access_mask(vk::AccessFlags::TRANSFER_READ)
                 .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::TRANSFER_READ)
                 .buffer(candidate_state.handle())
-                .offset(copy.source_range.start)
+                .offset(candidate_base_offset + copy.source_range.start)
                 .size(source_bytes),
             vk::BufferMemoryBarrier::default()
                 .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
                 .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::TRANSFER_READ)
                 .buffer(candidate_state.handle())
-                .offset(copy.target_range.start)
+                .offset(candidate_base_offset + copy.target_range.start)
                 .size(target_bytes),
         ]);
     }
@@ -1994,6 +2144,16 @@ mod tests {
     use crate::s14_position0_weight_plan::S14Position0HybridWeightPlan;
     use polaris_s14_runner::{DecoderStateV1, Position0WholeTokenManifest};
     use std::{collections::BTreeMap, path::PathBuf};
+
+    #[test]
+    fn prefix_dirty_range_translation_is_absolute_and_fail_closed() {
+        assert_eq!(
+            translate_state_range(4096, &(128..256), 1024, 8192).unwrap(),
+            4224..4352
+        );
+        assert!(translate_state_range(4096, &(128..256), 1024, 5000).is_err());
+        assert!(translate_state_range(u64::MAX - 3, &(0..4), 4, u64::MAX).is_err());
+    }
 
     fn real_graph_and_state() -> (
         S14Position0FullDepthLayerProgram,

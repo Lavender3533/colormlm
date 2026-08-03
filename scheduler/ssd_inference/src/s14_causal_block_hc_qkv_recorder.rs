@@ -25,6 +25,9 @@ use crate::{
     s14_e4m3_qdq::{S14E4m3QdqPipeline, S14E4m3QdqShape},
     s14_f32_to_bf16::{S14F32ToBf16Pipeline, S14F32ToBf16Shape},
     s14_position0_layer_backend::S14Position0L0GraphPlan,
+    s14_position0_paged_weight_arena::{
+        S14Position0PagedWeightArena, S14Position0StaticLayerBinding,
+    },
     s14_route_postprocess_gpu::S14RoutePostprocessGpuMode,
     s14_vulkan::{S14F32MatvecShape, S14NumericPipelines},
     GpuBuffer, VulkanContext,
@@ -179,8 +182,8 @@ impl S14CausalBlockHcQkvWeightOffsets {
 #[derive(Clone)]
 pub struct S14CausalBlockHcQkvLayerResources {
     pub layer: u8,
-    pub static_arena: Arc<GpuBuffer>,
-    pub static_logical_bytes: u64,
+    static_arena: Arc<S14Position0PagedWeightArena>,
+    static_binding: S14CausalBlockHcQkvPagedStaticLayerBinding,
     pub weights: S14CausalBlockHcQkvWeightOffsets,
     pub route_mode: S14RoutePostprocessGpuMode,
     pub committed_window_kv_bf16: S14CausalBlockOwnedBufferSlice,
@@ -189,13 +192,105 @@ pub struct S14CausalBlockHcQkvLayerResources {
     pub route_aux: S14CausalBlockOwnedBufferSlice,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum S14CausalBlockHcQkvPagedStaticLayerLocation {
+    Resident,
+    Streamed { bank: usize },
+}
+
+/// 可跨过 provider 返回边界的 paged static 层 identity。权重 offset 均相对
+/// `buffer_offset`；当前 paged arena 每层/每 stream bank 都是独立 buffer，因此 offset 为0。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct S14CausalBlockHcQkvPagedStaticLayerBinding {
+    pub layer: u8,
+    pub location: S14CausalBlockHcQkvPagedStaticLayerLocation,
+    pub buffer_offset: u64,
+    pub logical_bytes: u64,
+}
+
+#[derive(Clone, Copy)]
+struct S14CausalBlockHcQkvResolvedStaticLayer<'a> {
+    buffer: &'a GpuBuffer,
+    buffer_offset: u64,
+    logical_bytes: u64,
+}
+
+impl S14CausalBlockHcQkvLayerResources {
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_ready_paged_static_layer(
+        layer: u8,
+        static_arena: Arc<S14Position0PagedWeightArena>,
+        weights: S14CausalBlockHcQkvWeightOffsets,
+        route_mode: S14RoutePostprocessGpuMode,
+        committed_window_kv_bf16: S14CausalBlockOwnedBufferSlice,
+        rotated_current_block_kv_bf16: S14CausalBlockOwnedBufferSlice,
+        rope_f32: S14CausalBlockOwnedBufferSlice,
+        route_aux: S14CausalBlockOwnedBufferSlice,
+    ) -> Result<Self> {
+        let static_binding = ready_paged_static_binding(&static_arena, layer)?;
+        Ok(Self {
+            layer,
+            static_arena,
+            static_binding,
+            weights,
+            route_mode,
+            committed_window_kv_bf16,
+            rotated_current_block_kv_bf16,
+            rope_f32,
+            route_aux,
+        })
+    }
+
+    pub fn paged_weight_arena(&self) -> &Arc<S14Position0PagedWeightArena> {
+        &self.static_arena
+    }
+
+    pub fn static_binding(&self) -> S14CausalBlockHcQkvPagedStaticLayerBinding {
+        self.static_binding
+    }
+
+    /// 再次穿过 arena readiness 门。stream bank 若已被另一层覆写，这里会在 descriptor
+    /// 创建与 command recording 前 fail-closed，旧 resource clone 不能继续使用旧页。
+    fn resolve_ready_static_layer(&self) -> Result<S14CausalBlockHcQkvResolvedStaticLayer<'_>> {
+        let ready = self.static_arena.ready_static_layer(self.layer)?;
+        let (buffer, location, logical_bytes) = match ready {
+            S14Position0StaticLayerBinding::Resident { buffer, layout } => (
+                buffer,
+                S14CausalBlockHcQkvPagedStaticLayerLocation::Resident,
+                layout.requested_bytes,
+            ),
+            S14Position0StaticLayerBinding::Streamed {
+                bank,
+                buffer,
+                layout,
+            } => (
+                buffer,
+                S14CausalBlockHcQkvPagedStaticLayerLocation::Streamed { bank },
+                layout.requested_bytes,
+            ),
+        };
+        let observed = S14CausalBlockHcQkvPagedStaticLayerBinding {
+            layer: self.layer,
+            location,
+            buffer_offset: 0,
+            logical_bytes,
+        };
+        validate_paged_static_binding(self.static_binding, observed)?;
+        Ok(S14CausalBlockHcQkvResolvedStaticLayer {
+            buffer,
+            buffer_offset: observed.buffer_offset,
+            logical_bytes: observed.logical_bytes,
+        })
+    }
+}
+
 impl fmt::Debug for S14CausalBlockHcQkvLayerResources {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("S14CausalBlockHcQkvLayerResources")
             .field("layer", &self.layer)
-            .field("static_arena", &self.static_arena.handle())
-            .field("static_logical_bytes", &self.static_logical_bytes)
+            .field("static_arena", &Arc::as_ptr(&self.static_arena))
+            .field("static_binding", &self.static_binding)
             .field("route_mode", &self.route_mode)
             .finish_non_exhaustive()
     }
@@ -417,6 +512,7 @@ enum RecorderPhase {
 
 pub struct S14CausalBlockProductionHcQkvLayerRecorder<P: S14CausalBlockHcQkvResourceProvider> {
     ctx: Arc<VulkanContext>,
+    static_arena: Arc<S14Position0PagedWeightArena>,
     provider: P,
     hidden_banks: [S14CausalBlockHiddenBank; 2],
     layout: WorkspaceLayout,
@@ -451,6 +547,7 @@ impl<P: S14CausalBlockHcQkvResourceProvider> fmt::Debug
 impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerRecorder<P> {
     pub fn new(
         ctx: Arc<VulkanContext>,
+        static_arena: Arc<S14Position0PagedWeightArena>,
         provider: P,
         hidden_banks: [S14CausalBlockHiddenBank; 2],
     ) -> Result<Self> {
@@ -504,6 +601,7 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
         };
         Ok(Self {
             ctx,
+            static_arena,
             provider,
             hidden_banks,
             layout,
@@ -565,6 +663,9 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
             .provider
             .prepare_layer(input)
             .map_err(anyhow::Error::msg)?;
+        if !Arc::ptr_eq(&self.static_arena, resources.paged_weight_arena()) {
+            bail!("causal-block HC/QKV provider 返回了非 production paged arena 的静态层");
+        }
         self.validate_resources(&resources, input)?;
         self.reset_recording_owner()?;
         unsafe { self.status()?.write_at(0, &0u32.to_le_bytes()) };
@@ -650,7 +751,9 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
             buffer: &self.hidden_banks[output_bank].buffer,
             offset: self.hidden_banks[output_bank].offset,
         };
-        let static_arena = &resources.static_arena;
+        let static_layer = resources.resolve_ready_static_layer()?;
+        let static_arena = static_layer.buffer;
+        let static_base = static_layer.buffer_offset;
         let weights = resources.weights;
 
         self.record_hc_pre(
@@ -660,7 +763,7 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
             weights.hc_attn_scale,
             weights.hc_attn_base,
             weights.attn_norm,
-            resources,
+            static_layer,
         )?;
         self.record_fp8(
             &pipelines.fp8,
@@ -668,8 +771,8 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
             Q_LOW,
             HIDDEN,
             static_arena,
-            weights.wq_a_weight,
-            weights.wq_a_scale,
+            static_base + weights.wq_a_weight,
+            static_base + weights.wq_a_scale,
             self.layout.slice(workspace, self.layout.hc_branch_f32),
             self.layout.slice(workspace, self.layout.q_low_f32),
         )?;
@@ -677,11 +780,11 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
         self.record_rmsnorm(
             batch,
             Q_LOW,
-            weights.q_norm,
+            static_base + weights.q_norm,
             self.layout.q_low_bf16,
             self.layout.q_inverse,
             self.layout.q_low_norm_bf16,
-            resources,
+            static_layer,
         )?;
         self.record_qdq(
             batch,
@@ -696,8 +799,8 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
             QUERY,
             Q_LOW,
             static_arena,
-            weights.wq_b_weight,
-            weights.wq_b_scale,
+            static_base + weights.wq_b_weight,
+            static_base + weights.wq_b_scale,
             self.layout.slice(workspace, self.layout.q_low_f32),
             self.layout.slice(workspace, self.layout.q_f32),
         )?;
@@ -710,8 +813,8 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
             KV,
             HIDDEN,
             static_arena,
-            weights.wkv_weight,
-            weights.wkv_scale,
+            static_base + weights.wkv_weight,
+            static_base + weights.wkv_scale,
             self.layout.slice(workspace, self.layout.hc_branch_f32),
             self.layout.slice(workspace, self.layout.kv_f32),
         )?;
@@ -719,11 +822,11 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
         self.record_rmsnorm(
             batch,
             KV,
-            weights.kv_norm,
+            static_base + weights.kv_norm,
             self.layout.kv_temp_bf16,
             self.layout.kv_inverse,
             self.layout.kv_norm_bf16,
-            resources,
+            static_layer,
         )?;
         self.record_kv_finalize(batch, resources)?;
 
@@ -742,13 +845,13 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
                 current_block_kv_bf16: self.layout.slice(workspace, self.layout.kv_raw_bf16),
                 sink_f32: StorageBufferSlice {
                     buffer: static_arena,
-                    offset: weights.attention_sink,
+                    offset: static_base + weights.attention_sink,
                 },
                 rope_f32: resources.rope_f32.storage(),
                 attention_output_bf16: self.layout.slice(workspace, self.layout.attention_bf16),
                 router_weight_bf16: StorageBufferSlice {
                     buffer: static_arena,
-                    offset: weights.router_weight,
+                    offset: static_base + weights.router_weight,
                 },
                 router_input_f32: self.layout.slice(workspace, self.layout.hc_branch_f32),
                 router_logits_f32: self.layout.slice(workspace, self.layout.router_logits),
@@ -766,7 +869,7 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
             self.layout.attention_bf16,
             self.layout.attention_f32,
         )?;
-        self.record_grouped_wo_a(batch, resources)?;
+        self.record_grouped_wo_a(batch, static_layer, resources.weights)?;
         self.record_f32_to_bf16(batch * WO_A, self.layout.wo_a_f32, self.layout.wo_a_bf16)?;
         self.record_qdq(
             batch,
@@ -781,8 +884,8 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
             HIDDEN,
             WO_A,
             static_arena,
-            weights.wo_b_weight,
-            weights.wo_b_scale,
+            static_base + weights.wo_b_weight,
+            static_base + weights.wo_b_scale,
             self.layout.slice(workspace, self.layout.wo_a_f32),
             self.layout
                 .slice(workspace, self.layout.attention_branch_f32),
@@ -800,7 +903,7 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
             weights.hc_ffn_scale,
             weights.hc_ffn_base,
             weights.ffn_norm,
-            resources,
+            static_layer,
         )?;
         let pending_attention = self.pending_attention.borrow();
         unsafe {
@@ -820,7 +923,7 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
         scale_offset: u64,
         base_offset: u64,
         norm_offset: u64,
-        resources: &S14CausalBlockHcQkvLayerResources,
+        static_layer: S14CausalBlockHcQkvResolvedStaticLayer<'_>,
     ) -> Result<()> {
         let workspace = self.workspace()?;
         let pipelines = self.pipelines()?;
@@ -846,9 +949,15 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
         let dispatch = pipelines.numeric.bind_f32_matvec_arenas(
             &self.ctx,
             S14F32MatvecShape::new(HC_MIXES, HC_FLAT, batch)?,
-            &resources.static_arena,
-            resources.static_logical_bytes,
-            fn_offset,
+            static_layer.buffer,
+            static_layer
+                .buffer_offset
+                .checked_add(static_layer.logical_bytes)
+                .context("paged static binding end overflow")?,
+            static_layer
+                .buffer_offset
+                .checked_add(fn_offset)
+                .context("HC fn offset overflow")?,
             workspace,
             workspace.size(),
             self.layout.hc_expanded.offset,
@@ -873,9 +982,30 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
                     self.layout.hc_mixes.offset,
                     batch as u64 * 24 * 4,
                 ),
-                (&resources.static_arena, scale_offset, 3 * 4),
-                (&resources.static_arena, base_offset, 24 * 4),
-                (&resources.static_arena, norm_offset, HIDDEN as u64 * 2),
+                (
+                    static_layer.buffer,
+                    static_layer
+                        .buffer_offset
+                        .checked_add(scale_offset)
+                        .context("HC scale offset overflow")?,
+                    3 * 4,
+                ),
+                (
+                    static_layer.buffer,
+                    static_layer
+                        .buffer_offset
+                        .checked_add(base_offset)
+                        .context("HC base offset overflow")?,
+                    24 * 4,
+                ),
+                (
+                    static_layer.buffer,
+                    static_layer
+                        .buffer_offset
+                        .checked_add(norm_offset)
+                        .context("HC norm offset overflow")?,
+                    HIDDEN as u64 * 2,
+                ),
                 (
                     workspace,
                     self.layout.hc_branch_bf16.offset,
@@ -986,7 +1116,7 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
         input: Region,
         inverse: Region,
         output: Region,
-        resources: &S14CausalBlockHcQkvLayerResources,
+        static_layer: S14CausalBlockHcQkvResolvedStaticLayer<'_>,
     ) -> Result<()> {
         let workspace = self.workspace()?;
         let pipelines = self.pipelines()?;
@@ -996,7 +1126,7 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
             NORM_EPS,
             self.layout.slice(workspace, input),
             StorageBufferSlice {
-                buffer: &resources.static_arena,
+                buffer: static_layer.buffer,
                 offset: weight_offset,
             },
             self.layout.slice(workspace, inverse),
@@ -1134,7 +1264,8 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
     fn record_grouped_wo_a(
         &self,
         batch: u32,
-        resources: &S14CausalBlockHcQkvLayerResources,
+        static_layer: S14CausalBlockHcQkvResolvedStaticLayer<'_>,
+        weights: S14CausalBlockHcQkvWeightOffsets,
     ) -> Result<()> {
         let workspace = self.workspace()?;
         let pipeline = &self.pipelines()?.grouped_wo_a;
@@ -1148,13 +1279,19 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
                     batch as u64 * QUERY as u64 * 4,
                 ),
                 (
-                    &resources.static_arena,
-                    resources.weights.wo_a_weight,
+                    static_layer.buffer,
+                    static_layer
+                        .buffer_offset
+                        .checked_add(weights.wo_a_weight)
+                        .context("wo_a weight offset overflow")?,
                     WO_A as u64 * HIDDEN as u64,
                 ),
                 (
-                    &resources.static_arena,
-                    resources.weights.wo_a_scale,
+                    static_layer.buffer,
+                    static_layer
+                        .buffer_offset
+                        .checked_add(weights.wo_a_scale)
+                        .context("wo_a scale offset overflow")?,
                     (WO_A / 128) as u64 * (HIDDEN / 128) as u64,
                 ),
                 (
@@ -1234,9 +1371,15 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
         input: &S14CausalBlockLayerInput<'_>,
     ) -> Result<()> {
         let batch = input.input_token_ids.len() as u64;
+        let static_layer = resources.resolve_ready_static_layer()?;
+        let static_end = static_layer
+            .buffer_offset
+            .checked_add(static_layer.logical_bytes)
+            .context("paged static layer range overflow")?;
         if resources.layer != input.layer
-            || resources.static_logical_bytes > resources.static_arena.size()
-            || resources.static_logical_bytes == 0
+            || resources.static_binding.layer != input.layer
+            || static_end > static_layer.buffer.size()
+            || static_layer.logical_bytes == 0
         {
             bail!("causal-block HC/QKV layer/static arena identity 漂移");
         }
@@ -1278,7 +1421,7 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
             ),
         ] {
             let end = offset.checked_add(bytes).context("weight range overflow")?;
-            if offset % 4 != 0 || end > resources.static_logical_bytes {
+            if offset % 4 != 0 || end > static_layer.logical_bytes {
                 bail!("causal-block HC/QKV {label} weight range 越界");
             }
         }
@@ -1540,6 +1683,43 @@ unsafe fn compute_barrier(ctx: &VulkanContext, command: vk::CommandBuffer) {
     );
 }
 
+fn ready_paged_static_binding(
+    arena: &S14Position0PagedWeightArena,
+    layer: u8,
+) -> Result<S14CausalBlockHcQkvPagedStaticLayerBinding> {
+    let (location, logical_bytes) = match arena.ready_static_layer(layer)? {
+        S14Position0StaticLayerBinding::Resident { layout, .. } => (
+            S14CausalBlockHcQkvPagedStaticLayerLocation::Resident,
+            layout.requested_bytes,
+        ),
+        S14Position0StaticLayerBinding::Streamed { bank, layout, .. } => (
+            S14CausalBlockHcQkvPagedStaticLayerLocation::Streamed { bank },
+            layout.requested_bytes,
+        ),
+    };
+    if logical_bytes == 0 {
+        bail!("causal-block HC/QKV paged static L{layer} logical bytes 不能为0");
+    }
+    Ok(S14CausalBlockHcQkvPagedStaticLayerBinding {
+        layer,
+        location,
+        buffer_offset: 0,
+        logical_bytes,
+    })
+}
+
+fn validate_paged_static_binding(
+    expected: S14CausalBlockHcQkvPagedStaticLayerBinding,
+    observed: S14CausalBlockHcQkvPagedStaticLayerBinding,
+) -> Result<()> {
+    if expected != observed {
+        bail!(
+            "causal-block HC/QKV paged static binding 漂移: expected={expected:?} observed={observed:?}"
+        );
+    }
+    Ok(())
+}
+
 fn hidden_bytes(block_size: usize) -> Result<u64> {
     u64::try_from(
         block_size
@@ -1592,4 +1772,37 @@ fn host_buffer(ctx: &VulkanContext, bytes: u64) -> Result<GpuBuffer> {
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
         true,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn paged_static_binding_rejects_stale_stream_layer_bank_or_offset() {
+        let expected = S14CausalBlockHcQkvPagedStaticLayerBinding {
+            layer: 7,
+            location: S14CausalBlockHcQkvPagedStaticLayerLocation::Streamed { bank: 1 },
+            buffer_offset: 0,
+            logical_bytes: 4096,
+        };
+        validate_paged_static_binding(expected, expected).unwrap();
+
+        for observed in [
+            S14CausalBlockHcQkvPagedStaticLayerBinding {
+                layer: 8,
+                ..expected
+            },
+            S14CausalBlockHcQkvPagedStaticLayerBinding {
+                location: S14CausalBlockHcQkvPagedStaticLayerLocation::Streamed { bank: 0 },
+                ..expected
+            },
+            S14CausalBlockHcQkvPagedStaticLayerBinding {
+                buffer_offset: 256,
+                ..expected
+            },
+        ] {
+            assert!(validate_paged_static_binding(expected, observed).is_err());
+        }
+    }
 }
