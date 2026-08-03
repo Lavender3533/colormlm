@@ -21,7 +21,7 @@ use crate::{
     s14_causal_block_route_prefetch::S14CausalBlockRoutePrefetchTicket,
     s14_causal_block_union_materializer::{
         build_causal_block_route_plans, build_causal_block_union_identity_plan,
-        S14CausalBlockUnionMaterializer,
+        S14CausalBlockSharedMappedAssetStore, S14CausalBlockUnionMaterializer,
     },
     s14_dynamic_page_cache_readiness::DynamicPageFetchMode,
     s14_dynamic_routed_page_plan::FullDepthExpertCatalog,
@@ -147,10 +147,23 @@ impl<R: S14CausalBlockGroupedMoeRecorder> S14CausalBlockProductionMoeAdapter<R> 
         fetch_mode: DynamicPageFetchMode,
         recorder: R,
     ) -> Result<Self> {
+        let store = S14CausalBlockSharedMappedAssetStore::new(cache_root)?;
+        Self::new_with_shared_store(ctx, catalog, cache_root, fetch_mode, recorder, store)
+    }
+
+    pub fn new_with_shared_store(
+        ctx: Arc<VulkanContext>,
+        catalog: FullDepthExpertCatalog,
+        cache_root: &Path,
+        fetch_mode: DynamicPageFetchMode,
+        recorder: R,
+        store: S14CausalBlockSharedMappedAssetStore,
+    ) -> Result<Self> {
         let max_union_bytes = S14CausalBlockUnionBankPlan::build(8)
             .map_err(|error| anyhow::anyhow!(error))?
             .allocated_bank_bytes;
-        let materializer = S14CausalBlockUnionMaterializer::new(cache_root, fetch_mode)?;
+        let materializer =
+            S14CausalBlockUnionMaterializer::with_shared_store(cache_root, fetch_mode, store)?;
         let graph = S14CausalBlockGroupedGraph::new(ctx, max_union_bytes)?;
         Ok(Self {
             graph: Some(graph),

@@ -28,7 +28,7 @@ use polaris_s14_runner::{
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Mutex, MutexGuard},
 };
 
 const PHYSICAL_RANGES_PER_EXPERT: usize = 6;
@@ -154,24 +154,89 @@ impl S14CausalBlockMaterializedUnion {
     }
 }
 
+/// 跨 bundle/block 共享的 verified mmap/SHA owner。只共享不可变的文件
+/// lease，不共享 route、union placement、GPU upload 或任何模型状态。
+#[derive(Clone, Debug)]
+pub struct S14CausalBlockSharedMappedAssetStore {
+    cache_root: PathBuf,
+    inner: Arc<Mutex<VerifiedMappedAssetStore>>,
+}
+
+impl S14CausalBlockSharedMappedAssetStore {
+    pub fn new(cache_root: &Path) -> Result<Self> {
+        let cache_root = cache_root
+            .canonicalize()
+            .with_context(|| {
+                format!(
+                    "resolve causal-block shared cache root {}",
+                    cache_root.display()
+                )
+            })?;
+        let store = VerifiedMappedAssetStore::new(&cache_root)?;
+        Ok(Self {
+            cache_root,
+            inner: Arc::new(Mutex::new(store)),
+        })
+    }
+
+    pub fn stats(&self) -> Result<VerifiedMappedAssetStats> {
+        Ok(self.lock()?.stats())
+    }
+
+    fn validate_cache_root(&self, cache_root: &Path) -> Result<()> {
+        let observed = cache_root
+            .canonicalize()
+            .with_context(|| {
+                format!(
+                    "resolve causal-block materializer cache root {}",
+                    cache_root.display()
+                )
+            })?;
+        if observed != self.cache_root {
+            bail!(
+                "causal-block shared mapped store cache root漂移: shared={} observed={}",
+                self.cache_root.display(),
+                observed.display()
+            );
+        }
+        Ok(())
+    }
+
+    fn lock(&self) -> Result<MutexGuard<'_, VerifiedMappedAssetStore>> {
+        self.inner
+            .lock()
+            .map_err(|_| anyhow::anyhow!("causal-block shared mapped store mutex poisoned"))
+    }
+}
+
 /// 跨层、跨 token 常驻。重复 Range 只命中 mmap lease，不重复做 payload SHA。
 #[derive(Debug)]
 pub struct S14CausalBlockUnionMaterializer {
     cache_root: PathBuf,
     fetch_mode: DynamicPageFetchMode,
-    store: VerifiedMappedAssetStore,
+    store: S14CausalBlockSharedMappedAssetStore,
 }
 
 impl S14CausalBlockUnionMaterializer {
     pub fn new(cache_root: &Path, fetch_mode: DynamicPageFetchMode) -> Result<Self> {
+        let store = S14CausalBlockSharedMappedAssetStore::new(cache_root)?;
+        Self::with_shared_store(cache_root, fetch_mode, store)
+    }
+
+    pub fn with_shared_store(
+        cache_root: &Path,
+        fetch_mode: DynamicPageFetchMode,
+        store: S14CausalBlockSharedMappedAssetStore,
+    ) -> Result<Self> {
+        store.validate_cache_root(cache_root)?;
         Ok(Self {
             cache_root: cache_root.to_path_buf(),
             fetch_mode,
-            store: VerifiedMappedAssetStore::new(cache_root)?,
+            store,
         })
     }
 
-    pub fn store_stats(&self) -> VerifiedMappedAssetStats {
+    pub fn store_stats(&self) -> Result<VerifiedMappedAssetStats> {
         self.store.stats()
     }
 
@@ -201,12 +266,15 @@ impl S14CausalBlockUnionMaterializer {
             }
         };
 
-        let before = self.store.stats();
-        let mapped_assets = self
-            .store
-            .map_verified_batch(&assets)
-            .context("causal-block union payload 批量 SHA/mmap 失败")?;
-        let after = self.store.stats();
+        let (before, mapped_assets, after) = {
+            let mut store = self.store.lock()?;
+            let before = store.stats();
+            let mapped_assets = store
+                .map_verified_batch(&assets)
+                .context("causal-block union payload 批量 SHA/mmap 失败")?;
+            let after = store.stats();
+            (before, mapped_assets, after)
+        };
         if mapped_assets.len() != identity_plan.physical_ranges {
             bail!("causal-block union mapped Range 数量漂移");
         }

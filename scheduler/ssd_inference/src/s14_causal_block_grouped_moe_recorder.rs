@@ -15,6 +15,7 @@ use crate::{
         S14CausalBlockHiddenBinding, S14CausalBlockLayerRangePlan, S14CausalBlockUnionBankBinding,
     },
     s14_causal_block_moe_adapter::S14CausalBlockProductionMoeAdapter,
+    s14_causal_block_union_materializer::S14CausalBlockSharedMappedAssetStore,
     s14_dynamic_page_cache_readiness::DynamicPageFetchMode,
     s14_dynamic_routed_page_plan::{FullDepthExpertCatalog, RoutedProjection, RoutedRangePart},
     s14_e4m3_qdq::{S14E4m3QdqPipeline, S14E4m3QdqShape},
@@ -320,6 +321,25 @@ pub fn build_s14_causal_block_paged_moe_adapter(
         hidden_banks,
     )?;
     S14CausalBlockProductionMoeAdapter::new(ctx, catalog, cache_root, fetch_mode, recorder)
+}
+
+pub fn build_s14_causal_block_paged_moe_adapter_with_shared_store(
+    ctx: Arc<VulkanContext>,
+    catalog: FullDepthExpertCatalog,
+    cache_root: &Path,
+    fetch_mode: DynamicPageFetchMode,
+    static_arena: Arc<S14Position0PagedWeightArena>,
+    hidden_banks: [S14CausalBlockHiddenBank; 2],
+    store: S14CausalBlockSharedMappedAssetStore,
+) -> Result<S14CausalBlockConcreteMoeAdapter> {
+    let recorder = S14CausalBlockGroupedMoeVulkanRecorder::new_paged(
+        Arc::clone(&ctx),
+        static_arena,
+        hidden_banks,
+    )?;
+    S14CausalBlockProductionMoeAdapter::new_with_shared_store(
+        ctx, catalog, cache_root, fetch_mode, recorder, store,
+    )
 }
 
 impl fmt::Debug for S14CausalBlockGroupedMoeVulkanRecorder {

@@ -45,6 +45,7 @@ use ssd_inference::{
         S14CausalBlockOwnedBufferSlice, S14CausalBlockProductionTerminalResourceOwner,
         S14CausalBlockTerminalHeadUploadState, S14CausalBlockTerminalResourceOwnerInputs,
     },
+    s14_causal_block_union_materializer::S14CausalBlockSharedMappedAssetStore,
     s14_dynamic_page_cache_readiness::{
         materialize_planned_range_asset, DynamicPageFetchMode,
     },
@@ -172,6 +173,7 @@ struct RealK4ReusableProduction {
     input_planner: S14InputAssetPlanner,
     cache_root: PathBuf,
     catalog_path: PathBuf,
+    union_mapped_store: S14CausalBlockSharedMappedAssetStore,
     union_banks: S14CausalBlockUnionBanks,
     continuation: S14CausalBlockRuntimeContinuation,
 }
@@ -188,6 +190,7 @@ impl RealK4ReusableProduction {
             input_planner,
             cache_root,
             catalog_path,
+            union_mapped_store,
             union_banks,
             continuation,
         } = self;
@@ -198,6 +201,7 @@ impl RealK4ReusableProduction {
         drop(input_planner);
         drop(cache_root);
         drop(catalog_path);
+        drop(union_mapped_store);
 
         let mut failures = Vec::new();
         match Arc::try_unwrap(head_upload) {
@@ -642,6 +646,7 @@ fn build_continuation_k4_block(
             catalog: bundle_catalog,
             cache_root: reusable.cache_root.clone(),
             fetch_mode: DynamicPageFetchMode::ExplicitFetch,
+            union_mapped_store: reusable.union_mapped_store.clone(),
             static_arena: S14CausalBlockContextBound::new(
                 Arc::clone(&context),
                 Arc::clone(&reusable.paged_arena),
@@ -1460,6 +1465,8 @@ fn build_real_position1_k4_inputs_with_builder(
     let manifest = Arc::clone(&request.manifest);
     let weight_plan = Arc::clone(&request.weight_plan);
     let cache_root = request.cache_root.clone();
+    let union_mapped_store = S14CausalBlockSharedMappedAssetStore::new(&cache_root)
+        .context("create resident causal-block verified mapped store")?;
     let catalog_path = request.catalog_path.clone();
     let input_token_ids = request.input_token_ids;
     let draft_token_ids = request.draft_token_ids;
@@ -1532,6 +1539,7 @@ fn build_real_position1_k4_inputs_with_builder(
                 input_planner,
                 cache_root,
                 catalog_path,
+                union_mapped_store,
                 union_banks,
                 continuation,
             }
@@ -1556,6 +1564,7 @@ fn build_real_position1_k4_inputs_with_builder(
         // 用户已显式授权外网 Range；仅在真实在线 top-6 命中缺页时
         // 通过现有 206/Content-Range/SHA transport 补页，不下载整模。
         fetch_mode: DynamicPageFetchMode::ExplicitFetch,
+        union_mapped_store: union_mapped_store.clone(),
         static_arena: S14CausalBlockContextBound::new(
             Arc::clone(&context),
             Arc::clone(&paged_arena),
@@ -1574,6 +1583,7 @@ fn build_real_position1_k4_inputs_with_builder(
         input_planner,
         cache_root,
         catalog_path,
+        union_mapped_store,
         union_banks,
         continuation,
     };

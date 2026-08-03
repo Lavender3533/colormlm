@@ -6,7 +6,7 @@
 //! FullDepth catalog、arena ledger 与 provider readiness；任一缺项均 fail-closed。
 
 use crate::{
-    s14_causal_block_grouped_moe_recorder::build_s14_causal_block_paged_moe_adapter,
+    s14_causal_block_grouped_moe_recorder::build_s14_causal_block_paged_moe_adapter_with_shared_store,
     s14_causal_block_hc_qkv_adapter::S14CausalBlockProductionHcQkvAdapter,
     s14_causal_block_hc_qkv_recorder::{
         S14CausalBlockHcQkvResourceProvider, S14CausalBlockHiddenBank,
@@ -34,6 +34,7 @@ use crate::{
     s14_causal_block_terminal_owner::{
         S14CausalBlockProductionTerminalResourceOwner, S14CausalBlockTerminalPublishReceipt,
     },
+    s14_causal_block_union_materializer::S14CausalBlockSharedMappedAssetStore,
     s14_causal_block_vulkan_backend::S14CausalBlockVulkanBackend,
     s14_dynamic_page_cache_readiness::DynamicPageFetchMode,
     s14_dynamic_routed_page_plan::{FullDepthExpertCatalog, OnlineTop6},
@@ -223,6 +224,7 @@ pub struct S14CausalBlockProductionBundleInputs<P> {
     pub catalog: FullDepthExpertCatalog,
     pub cache_root: PathBuf,
     pub fetch_mode: DynamicPageFetchMode,
+    pub union_mapped_store: S14CausalBlockSharedMappedAssetStore,
     pub static_arena: S14CausalBlockContextBound<Arc<S14Position0PagedWeightArena>>,
 }
 
@@ -464,6 +466,7 @@ where
         catalog,
         cache_root,
         fetch_mode,
+        union_mapped_store,
         static_arena,
     } = inputs;
     if !context.timeline_semaphore {
@@ -505,13 +508,14 @@ where
     )?;
 
     let hc_static_arena = Arc::clone(&static_arena);
-    let mut moe_adapter = build_s14_causal_block_paged_moe_adapter(
+    let mut moe_adapter = build_s14_causal_block_paged_moe_adapter_with_shared_store(
         Arc::clone(&context),
         catalog,
         &cache_root,
         fetch_mode,
         static_arena,
         hidden_banks.clone(),
+        union_mapped_store,
     )?;
     let prefix_state_producer = provider
         .take_prefix_state_producer()
