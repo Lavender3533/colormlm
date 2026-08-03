@@ -50,6 +50,7 @@ const MAX_DYNAMIC_PAGE_FETCH_TIMEOUT_SECONDS: u64 = 86_400;
 #[cfg(test)]
 const DYNAMIC_PAGE_FETCH_POLL_INTERVAL: Duration = Duration::from_millis(200);
 const DYNAMIC_PAGE_FETCH_LOG_TAIL_BYTES: u64 = 16 * 1024;
+const DYNAMIC_PAGE_FETCH_PROTOCOL_PREFIX_BYTES: usize = 64;
 
 /// Network access is denied by default. Callers must construct
 /// `ExplicitFetch` from an explicit user/runtime authorization boundary.
@@ -987,6 +988,11 @@ impl PersistentDynamicFetchWorker {
             .arg("-u")
             .arg(&transport.driver)
             .arg("--serve")
+            // The JSONL pipe is a UTF-8 protocol, not a Windows console.  Pin
+            // Python before it opens stdio so a localized error cannot be
+            // encoded with the active ANSI code page and hide the real error.
+            .env("PYTHONUTF8", "1")
+            .env("PYTHONIOENCODING", "utf-8:strict")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::from(stderr))
@@ -1086,8 +1092,8 @@ impl PersistentDynamicFetchWorker {
             .context("persistent fetch stdout 已被占用")?;
         let (sender, receiver) = mpsc::sync_channel(1);
         let reader_thread = thread::spawn(move || {
-            let mut line = String::new();
-            let read = reader.read_line(&mut line);
+            let mut line = Vec::new();
+            let read = reader.read_until(b'\n', &mut line);
             let _ = sender.send((reader, read, line));
         });
         let (reader, read, line) = match receiver.recv_timeout(timeout) {
@@ -1127,8 +1133,24 @@ impl PersistentDynamicFetchWorker {
                 read_log_tail(&self.stderr_log)
             );
         }
+        let line = match std::str::from_utf8(&line) {
+            Ok(line) => line,
+            Err(error) => {
+                let prefix = protocol_hex_prefix(&line);
+                self.stop();
+                bail!(
+                    "persistent dynamic Range worker 返回非 UTF-8 JSONL 并已回收: request_id={} error={} bytes={} prefix_hex={} stderr_log={} stderr_tail={}",
+                    request_id,
+                    error,
+                    line.len(),
+                    prefix,
+                    self.stderr_log.display(),
+                    read_log_tail(&self.stderr_log)
+                );
+            }
+        };
         let response: serde_json::Value =
-            serde_json::from_str(&line).context("decode persistent dynamic fetch response JSON")?;
+            serde_json::from_str(line).context("decode persistent dynamic fetch response JSON")?;
         if response
             .get("request_id")
             .and_then(serde_json::Value::as_u64)
@@ -1203,6 +1225,14 @@ impl PersistentDynamicFetchWorker {
             request_wall_ms,
         })
     }
+}
+
+fn protocol_hex_prefix(bytes: &[u8]) -> String {
+    bytes
+        .iter()
+        .take(DYNAMIC_PAGE_FETCH_PROTOCOL_PREFIX_BYTES)
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 impl Drop for PersistentDynamicFetchWorker {

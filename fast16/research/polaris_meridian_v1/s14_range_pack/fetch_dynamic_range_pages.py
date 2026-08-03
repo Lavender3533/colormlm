@@ -322,7 +322,10 @@ def _serve() -> int:
                     "error_type": type(error).__name__,
                     "error": str(error),
                 }
-            print(json.dumps(response, ensure_ascii=False), flush=True)
+            # JSONL stdout is a control-plane byte protocol.  ASCII escaping is
+            # an independent safety belt around PYTHONUTF8/PYTHONIOENCODING so
+            # localized exception text cannot depend on a Windows code page.
+            print(json.dumps(response, ensure_ascii=True), flush=True)
     return 0
 
 
