@@ -20,7 +20,9 @@ except ImportError:
 
 
 MANIFEST_FORMAT = "polaris-s14-dynamic-page-fetch-manifest-v1"
-MAX_RANGE_COUNT = 36
+# 单个 token/lane 是36项；causal-block K=8 会把同层8条 route 去重后合并，
+# 上限仍是精确的 8 * 36，不接受无界 manifest。
+MAX_RANGE_COUNT = 8 * 36
 
 
 def _load_manifest(path: Path) -> list[dict[str, Any]]:
@@ -115,7 +117,7 @@ def main() -> int:
             },
         )
 
-    # 每个 manifest 至多36项；RangeCache 内部已有预算锁、proof锁与 keyed
+    # 每个 manifest 至多288项；RangeCache 内部已有预算锁、proof锁与 keyed
     # file lock。受控并发只重叠 HTTPS Range I/O，仍逐项执行精确206/长度/SHA门。
     with concurrent.futures.ThreadPoolExecutor(
         max_workers=min(workers, max(1, len(entries)))

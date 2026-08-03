@@ -19,6 +19,7 @@ use anyhow::{bail, Context, Result};
 use polaris_s14_runner::Position0Asset;
 use serde::Serialize;
 use std::{
+    collections::BTreeMap,
     error::Error,
     fmt,
     fs::{self, OpenOptions},
@@ -157,7 +158,7 @@ pub struct DynamicPageFetchManifest {
     pub entries: Vec<DynamicPageFetchEntry>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct DynamicPageFetchEntry {
     pub tensor: String,
     pub kind: String,
@@ -485,6 +486,90 @@ pub fn materialize_dynamic_page_plan(
 ) -> std::result::Result<MaterializedDynamicRoutedPagePlan, DynamicPageMaterializeError> {
     let transport = DynamicPageRangeTransport::default();
     materialize_dynamic_page_plan_with_transport(plan, cache_root, fetch_mode, &transport)
+}
+
+/// 将同一 causal-block 层的 K=4/8 lane route 合并成一次 Range transport。
+///
+/// 每个 lane 仍先独立生成并验证完整 readiness/manifest identity；这里只按
+/// `range_key` 去重完全相同的物理 Range，然后一次启动现有 Python transport。
+/// transport 返回后，每个原始 plan 都重新执行 Rust proof、payload SHA 与 mmap 门，
+/// 因而批处理只减少进程/连接往返，不放宽任何资产验证。
+pub fn materialize_dynamic_page_plans_batched(
+    plans: &[DynamicRoutedPagePlan],
+    cache_root: &Path,
+    fetch_mode: DynamicPageFetchMode,
+) -> std::result::Result<Vec<MaterializedDynamicRoutedPagePlan>, DynamicPageMaterializeError> {
+    if plans.is_empty() || plans.len() > 8 {
+        return Err(DynamicPageMaterializeError::Failed(anyhow::anyhow!(
+            "batched dynamic page plans 数量必须在1..=8，actual={}",
+            plans.len()
+        )));
+    }
+    let first_layer = plans[0].layer;
+    if plans.iter().any(|plan| plan.layer != first_layer) {
+        return Err(DynamicPageMaterializeError::Failed(anyhow::anyhow!(
+            "batched dynamic page plans 必须属于同一层"
+        )));
+    }
+
+    let mut merged = BTreeMap::<String, DynamicPageFetchEntry>::new();
+    let mut first_required = None;
+    for plan in plans {
+        let report = inspect_dynamic_page_cache(plan, cache_root)?;
+        if report.unready_count == 0 {
+            continue;
+        }
+        if first_required.is_none() {
+            first_required = Some(fetch_required_error(plan, &report)?);
+        }
+        let manifest = build_unready_fetch_manifest(plan, &report)?;
+        for entry in manifest.entries {
+            match merged.entry(entry.range_key.clone()) {
+                std::collections::btree_map::Entry::Vacant(slot) => {
+                    slot.insert(entry);
+                }
+                std::collections::btree_map::Entry::Occupied(slot) => {
+                    if slot.get() != &entry {
+                        return Err(DynamicPageMaterializeError::Failed(anyhow::anyhow!(
+                            "batched dynamic page 重复 range_key identity 漂移: {}",
+                            slot.key()
+                        )));
+                    }
+                }
+            }
+        }
+    }
+
+    if !merged.is_empty() {
+        if !fetch_mode.is_authorized() {
+            return Err(DynamicPageMaterializeError::FetchRequired(
+                first_required.expect("unready manifest 必有 structured error"),
+            ));
+        }
+        let entries = merged.into_values().collect::<Vec<_>>();
+        let budget = entries.iter().try_fold(0u64, |sum, entry| {
+            sum.checked_add(entry.bytes)
+                .context("batched dynamic page download budget overflow")
+        })?;
+        let manifest = DynamicPageFetchManifest {
+            format: S14_DYNAMIC_PAGE_FETCH_MANIFEST_FORMAT,
+            layer: first_layer,
+            position: plans.iter().map(|plan| plan.position).min().unwrap_or(0),
+            entries,
+        };
+        let transport = DynamicPageRangeTransport::default();
+        invoke_existing_range_transport(&transport, &manifest, cache_root, budget)
+            .context("batched dynamic page Range transport 失败")?;
+    }
+
+    plans
+        .iter()
+        .map(|plan| {
+            plan.materialize_cached(cache_root)
+                .context("batched dynamic page fetch 后 Rust proof/SHA 复核失败")
+        })
+        .collect::<Result<Vec<_>>>()
+        .map_err(DynamicPageMaterializeError::Failed)
 }
 
 pub fn materialize_dynamic_page_plan_with_transport(

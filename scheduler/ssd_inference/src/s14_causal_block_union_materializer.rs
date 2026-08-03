@@ -7,7 +7,9 @@
 
 use crate::{
     s14_causal_block_layer::{S14CausalBlockLayerRangePlan, S14CausalBlockPhysicalRange},
-    s14_dynamic_page_cache_readiness::{materialize_dynamic_page_plan, DynamicPageFetchMode},
+    s14_dynamic_page_cache_readiness::{
+        materialize_dynamic_page_plans_batched, DynamicPageFetchMode,
+    },
     s14_dynamic_routed_page_plan::{
         DynamicRoutedPagePlan, ExpertRangeIdentity, FullDepthExpertCatalog, OnlineTop6,
         RoutedProjection, RoutedRangePart,
@@ -178,18 +180,16 @@ impl S14CausalBlockUnionMaterializer {
                 return Err(local_error.context("causal-block union Range local-only 物化失败"));
             }
             Err(_) => {
-                // 缺页路径复用既有显式授权 transport。每个 lane 的 top-6 manifest 都保留
-                // layer/position/expert/SHA/Range 身份；fetch 完成后仍重新按 union 计划解析。
-                for route_plan in &identity_plan.route_plans {
-                    materialize_dynamic_page_plan(
-                        route_plan,
-                        &self.cache_root,
-                        DynamicPageFetchMode::ExplicitFetch,
-                    )
-                    .map_err(|error| anyhow::anyhow!(error))
-                    .context("causal-block lane Range 显式 fetch/proof/SHA 失败")?;
-                    explicit_fetch_lane_plans += 1;
-                }
+                // K lanes 已在本层同时可知；把完全相同的物理 Range 去重后只启动一次
+                // transport，随后仍逐 lane 复核 proof/SHA，再按 union 计划唯一映射。
+                materialize_dynamic_page_plans_batched(
+                    &identity_plan.route_plans,
+                    &self.cache_root,
+                    DynamicPageFetchMode::ExplicitFetch,
+                )
+                .map_err(|error| anyhow::anyhow!(error))
+                .context("causal-block batched lane Range 显式 fetch/proof/SHA 失败")?;
+                explicit_fetch_lane_plans = identity_plan.route_plans.len();
                 resolve_union_assets(identity_plan, &self.cache_root)
                     .context("causal-block union fetch 后 proof identity 复核失败")?
             }
