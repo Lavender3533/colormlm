@@ -1616,6 +1616,36 @@ impl S14Position0PersistentHostResources {
         })
     }
 
+    /// 单token runtime完成并排空后，把同一verified uploader/store移交给K-block terminal/provider。
+    /// backend command pool与graph快照不跨模式复用，避免旧descriptor继续借用position0 candidate。
+    pub fn into_causal_block_upload_parts(
+        self,
+        ctx: &VulkanContext,
+        weights: &S14Position0HybridWeightPlan,
+    ) -> Result<(S14Position0HybridUploader, VerifiedMappedAssetStore)> {
+        if self.active_token {
+            bail!("active position0 token存在时禁止移交causal-block uploader/store");
+        }
+        let Self {
+            mut uploader,
+            store,
+            graphs: _,
+            backend_command_pool,
+            backend_layer_command: _,
+            steps_started: _,
+            active_token,
+        } = self;
+        debug_assert!(!active_token);
+        unsafe {
+            ctx.device.destroy_command_pool(backend_command_pool, None);
+        }
+        if let Err(error) = uploader.begin_persistent_token(weights, false) {
+            uploader.destroy(ctx);
+            return Err(error.context("把 position0 uploader 切换到 causal-block token 起点"));
+        }
+        Ok((uploader, store))
+    }
+
     fn begin_token(
         &mut self,
         weights: &S14Position0HybridWeightPlan,

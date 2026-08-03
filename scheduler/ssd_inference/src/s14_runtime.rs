@@ -14,11 +14,13 @@ use crate::{
     s14_dynamic_routed_page_plan::FullDepthExpertCatalog,
     s14_head_chunk_argmax::S14_HEAD_CHUNK_COUNT,
     s14_input_asset_plan::S14InputAssetPlanner,
+    s14_position0_hybrid_upload::S14Position0HybridUploader,
     s14_position0_layer_backend::{
         S14Position0PersistentHostResources, S14Position0PersistentHostStepTelemetry,
         S14Position0SynchronousVulkanLayerAdapter,
     },
     s14_position0_layer_program::S14Position0FullDepthLayerProgram,
+    s14_position0_mapped_assets::VerifiedMappedAssetStore,
     s14_position0_paged_layer_bridge::{
         S14Position0PagedLayerBridge, S14Position0PagedLayerStageReceipt,
     },
@@ -38,7 +40,7 @@ use crate::{
     s14_position0_weight_plan::S14Position0HybridWeightPlan,
     s14_position0_whole_token::Position0GpuCandidate,
     s14_position0_workspace::S14Position0WorkspaceSlot,
-    s14_whole_token_device::WholeTokenDeviceState,
+    s14_whole_token_device::{WholeTokenDetachedCommittedState, WholeTokenDeviceState},
     VulkanContext,
 };
 use anyhow::{anyhow, bail, Context, Result};
@@ -272,6 +274,24 @@ pub struct S14Session {
     device: Option<WholeTokenDeviceState>,
 }
 
+/// position0 `0→5`完成后移交给K=4 production builder的同源资源。
+/// 这里只做owner转移，不创建prefix/hidden/terminal候选，也不读取host checkpoint。
+pub struct S14Position0CommittedRuntimeParts {
+    pub context: Arc<VulkanContext>,
+    pub manifest: Position0WholeTokenManifest,
+    pub weights: S14Position0HybridWeightPlan,
+    pub paged_arena: Arc<S14Position0PagedWeightArena>,
+    pub union_banks: S14CausalBlockUnionBanks,
+    pub layer_program: S14Position0FullDepthLayerProgram,
+    pub input_planner: S14InputAssetPlanner,
+    pub payload_root: PathBuf,
+    pub page_fetch_mode: DynamicPageFetchMode,
+    pub uploader: S14Position0HybridUploader,
+    pub mapped_store: VerifiedMappedAssetStore,
+    pub authoritative: DecoderStateV1,
+    pub committed_device: WholeTokenDetachedCommittedState,
+}
+
 #[derive(Clone, Debug)]
 pub struct S14StepOutput {
     pub position: u32,
@@ -434,6 +454,89 @@ impl S14Runtime {
 
     pub fn step(&mut self, session: &mut S14Session) -> Result<S14StepOutput> {
         self.step_with_next_input(session, None)
+    }
+
+    /// 只允许在真实position0成功提交`0→5`后消费runtime/session。昂贵paged arena、union bank、
+    /// verified uploader/store与active committed device bank保持同一Arc context。
+    pub fn into_position0_committed_causal_block_parts(
+        mut self,
+        mut session: S14Session,
+    ) -> Result<S14Position0CommittedRuntimeParts> {
+        if !self.owns_session(&session) {
+            bail!("position0 committed exporter拒绝外来session");
+        }
+        session.host.validate()?;
+        let record = session.host.committed_tokens.last();
+        if session.host.position != 1
+            || session.host.commit_epoch != 1
+            || session.host.input_token_id != 5
+            || session.host.active_fixed_bank != 1
+            || session.host.committed_tokens.len() != 1
+            || record.is_none_or(|value| {
+                value.position != 0 || value.input_token_id != 0 || value.predicted_token_id != 5
+            })
+        {
+            bail!("causal-block exporter必须消费真实position0 0→5 committed state");
+        }
+        let device = session
+            .device
+            .take()
+            .context("position0 committed exporter缺少device state")?;
+        if device.epoch() != session.host.commit_epoch
+            || device.active_bank() != usize::from(session.host.active_fixed_bank)
+            || device.state_bytes() != session.host.native_arena.len() as u64
+            || device.candidate_position().is_some()
+        {
+            session.device = Some(device);
+            bail!("position0 committed exporter host/device identity漂移");
+        }
+
+        let command_resources = self
+            .persistent_command_resources
+            .take()
+            .context("position0 committed exporter缺少command owner")?;
+        command_resources.destroy(&self.ctx);
+        let host_resources = self
+            .persistent_host_resources
+            .take()
+            .context("position0 committed exporter缺少verified host owner")?;
+        let (uploader, mapped_store) =
+            host_resources.into_causal_block_upload_parts(&self.ctx, &self.weights)?;
+        let paged_arena = Arc::new(
+            self.arena
+                .take()
+                .context("position0 committed exporter缺少paged arena")?,
+        );
+        let union_banks = self
+            .causal_block_union_banks
+            .take()
+            .context("position0 committed exporter缺少union banks")?;
+        let committed_device = match device.into_detached_committed_state(&self.ctx) {
+            Ok(value) => value,
+            Err(error) => {
+                uploader.destroy(&self.ctx);
+                Arc::try_unwrap(paged_arena)
+                    .map_err(|_| anyhow!("position0 exporter rollback paged arena Arc漂移"))?
+                    .destroy(&self.ctx);
+                union_banks.destroy(&self.ctx);
+                return Err(error.context("detach position0 committed device bank"));
+            }
+        };
+        Ok(S14Position0CommittedRuntimeParts {
+            context: Arc::clone(&self.ctx),
+            manifest: self.manifest.clone(),
+            weights: self.weights.clone(),
+            paged_arena,
+            union_banks,
+            layer_program: self.layer_program.clone(),
+            input_planner: self.input_planner.clone(),
+            payload_root: self.payload_root.clone(),
+            page_fetch_mode: self.page_fetch_mode,
+            uploader,
+            mapped_store,
+            authoritative: session.host.clone(),
+            committed_device,
+        })
     }
 
     /// 执行真实模型 step，但允许 prompt prefill 在原子提交时把下一输入替换为

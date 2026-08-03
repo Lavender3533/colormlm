@@ -169,6 +169,16 @@ impl S14CausalBlockPrefixStateProgram {
         &self.identities
     }
 
+    pub fn state_layout(
+        &self,
+        source_lane: usize,
+    ) -> Result<&crate::s14_position0_state_writeback::S14Position0StateWritebackLayout> {
+        self.programs
+            .get(source_lane)
+            .map(|program| &program.state_layout)
+            .ok_or_else(|| anyhow!("prefix state source lane 非法: lane={source_lane}"))
+    }
+
     pub fn recipe(
         &self,
         source_lane: usize,

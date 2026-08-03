@@ -537,6 +537,12 @@ impl S14Position0HybridUploader {
             && self.progress.pending_head_chunk.is_none()
     }
 
+    /// resident-small 与可选 resident static 页已经由同源 runtime 完成 verified
+    /// proof/SHA/mmap/upload。跨到 causal-block 后只能复用，不能再次执行 one-shot 上传。
+    pub fn resident_static_uploaded(&self) -> bool {
+        self.progress.static_complete
+    }
+
     /// 为跨 token 常驻 uploader 打开下一次事务。首个 token 只校验初始化态；
     /// 后续 token 必须确认上一 token 已完整走过43层和32个head chunk，随后只
     /// 重置游标/pending，不重新分配 staging、command pool、command buffer或fence。

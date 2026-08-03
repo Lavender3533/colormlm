@@ -17,7 +17,7 @@ use crate::s14_causal_block_layer::{
     S14CausalBlockHiddenBinding, S14CausalBlockLayerInput, S14_CAUSAL_BLOCK_HC_ELEMENTS_PER_LANE,
 };
 use ash::vk;
-use polaris_s14_runner::{GraphProfile, FULL_DEPTH_LAYERS};
+use polaris_s14_runner::{GraphProfile, COMPRESS_RATIOS, FULL_DEPTH_LAYERS};
 use std::fmt;
 
 const BF16_BYTES: u64 = 2;
@@ -36,6 +36,9 @@ pub struct S14CausalBlockHcQkvLayerRecordingReceipt {
     pub command_graph_submit_calls: u32,
     pub hc_qkv_projection_record_calls: u32,
     pub attention_recording_calls: u32,
+    pub contiguous_attention_dispatch_calls: u32,
+    pub ratio4_boundary_attention_dispatch_calls: u32,
+    pub ratio4_state_transition_record_calls: u32,
     pub attention_output_post_record_calls: u32,
     pub ffn_hc_router_input_record_calls: u32,
     pub router_recording_calls: u32,
@@ -60,6 +63,17 @@ impl S14CausalBlockHcQkvLayerRecordingReceipt {
             .generation
             .checked_add(1)
             .ok_or_else(|| "causal-block HC/QKV hidden generation overflow".to_owned())?;
+        let ratio = COMPRESS_RATIOS
+            .get(usize::from(input.layer))
+            .copied()
+            .ok_or_else(|| "causal-block HC/QKV compress-ratio layer 越界".to_owned())?;
+        let ratio4_boundary =
+            input.base_position == 1 && input.input_token_ids.len() == 4 && ratio == 4;
+        let expected_contiguous_dispatches = u32::from(!ratio4_boundary);
+        // ratio4 跨边界必须严格分成 rollover 前 lanes0..2 与 rollover 后 lane3
+        // 两次 block-row dispatch；state transition recorder 仍只调用一次。
+        let expected_ratio4_attention_dispatches = 2 * u32::from(ratio4_boundary);
+        let expected_ratio4_state_transitions = u32::from(ratio4_boundary);
         if self.base_position != input.base_position
             || self.layer != input.layer
             || self.block_size != input.input_token_ids.len()
@@ -69,6 +83,9 @@ impl S14CausalBlockHcQkvLayerRecordingReceipt {
             || self.command_graph_submit_calls != 1
             || self.hc_qkv_projection_record_calls != 1
             || self.attention_recording_calls != 1
+            || self.contiguous_attention_dispatch_calls != expected_contiguous_dispatches
+            || self.ratio4_boundary_attention_dispatch_calls != expected_ratio4_attention_dispatches
+            || self.ratio4_state_transition_record_calls != expected_ratio4_state_transitions
             || self.attention_output_post_record_calls != 1
             || self.ffn_hc_router_input_record_calls != 1
             || self.router_recording_calls != 1
@@ -578,6 +595,9 @@ mod tests {
                     command_graph_submit_calls: 1,
                     hc_qkv_projection_record_calls: 1,
                     attention_recording_calls: 1,
+                    contiguous_attention_dispatch_calls: 1,
+                    ratio4_boundary_attention_dispatch_calls: 0,
+                    ratio4_state_transition_record_calls: 0,
                     attention_output_post_record_calls: 1,
                     ffn_hc_router_input_record_calls: 1,
                     router_recording_calls: 1,
@@ -652,5 +672,52 @@ mod tests {
         assert!(error.contains("未闭合一次 K-row"));
         assert!(error.contains("drain/abort"));
         invalid.drain_and_abort(0).unwrap();
+    }
+
+    #[test]
+    fn base1_k4_ratio4_receipt_rejects_contiguous_attention_masquerade() {
+        let block_size = 4;
+        let layer = 2;
+        assert_eq!(COMPRESS_RATIOS[usize::from(layer)], 4);
+        let tokens = [1, 2, 3, 4];
+        let input = S14CausalBlockLayerInput {
+            base_position: 1,
+            layer,
+            input_token_ids: &tokens,
+            input_hidden: hidden(21, block_size, 0),
+            source: polaris_s14_runner::MaterializedTokenSource::SpeculativeDraft,
+        };
+        let output = S14CausalBlockAttentionRouterOutput {
+            post_attention_hidden: hidden(22, block_size, 1),
+            routes: routes(layer, block_size),
+            forward_calls: 1,
+        };
+        let valid = S14CausalBlockHcQkvLayerRecordingReceipt {
+            base_position: 1,
+            layer,
+            block_size,
+            input_hidden: input.input_hidden,
+            post_attention_hidden: output.post_attention_hidden,
+            layer_record_calls: 1,
+            command_graph_submit_calls: 1,
+            hc_qkv_projection_record_calls: 1,
+            attention_recording_calls: 1,
+            contiguous_attention_dispatch_calls: 0,
+            ratio4_boundary_attention_dispatch_calls: 2,
+            ratio4_state_transition_record_calls: 1,
+            attention_output_post_record_calls: 1,
+            ffn_hc_router_input_record_calls: 1,
+            router_recording_calls: 1,
+            serial_token_forward_calls: 0,
+            hc_hidden_integration_complete: true,
+        };
+        valid.validate(&input, &output).unwrap();
+
+        let invalid = S14CausalBlockHcQkvLayerRecordingReceipt {
+            contiguous_attention_dispatch_calls: 1,
+            ratio4_boundary_attention_dispatch_calls: 0,
+            ..valid
+        };
+        assert!(invalid.validate(&input, &output).is_err());
     }
 }

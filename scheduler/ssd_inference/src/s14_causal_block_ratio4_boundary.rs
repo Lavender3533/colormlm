@@ -92,6 +92,11 @@ pub struct S14CausalBlockRatio4CandidateStateBinding {
     pub candidate_logical_bytes: u64,
     pub first_compressed_kv_offset: u64,
     pub first_indexer_row_offset: u64,
+    pub position3_recipe_position: u32,
+    pub position3_recipe_compress_ratio: u16,
+    pub position4_recipe_position: u32,
+    pub position4_recipe_compress_ratio: u16,
+    pub compressed_rope_position: u32,
 }
 
 impl S14CausalBlockRatio4CandidateStateBinding {
@@ -117,6 +122,11 @@ impl S14CausalBlockRatio4CandidateStateBinding {
             || main_end > candidate_end
             || self.first_indexer_row_offset < self.candidate_base_offset
             || indexer_end > candidate_end
+            || self.position3_recipe_position != 3
+            || self.position3_recipe_compress_ratio != 4
+            || self.position4_recipe_position != 4
+            || self.position4_recipe_compress_ratio != 4
+            || self.compressed_rope_position != 3
         {
             bail!("ratio4 candidate state strong-owner binding 漂移");
         }
@@ -331,7 +341,7 @@ pub struct S14CausalBlockRatio4BoundaryRecorder {
 
 impl S14CausalBlockRatio4BoundaryRecorder {
     pub fn new(ctx: &VulkanContext) -> Result<Self> {
-        let attention = ComputePipeline::new(ctx, S14_CAUSAL_BLOCK_RATIO4_BOUNDARY_SPV, 9, 24)?;
+        let attention = ComputePipeline::new(ctx, S14_CAUSAL_BLOCK_RATIO4_BOUNDARY_SPV, 9, 16)?;
         let position4_index_query = match S14Ratio4IndexQueryPipeline::new(ctx) {
             Ok(pipeline) => pipeline,
             Err(error) => {
@@ -386,7 +396,7 @@ impl S14CausalBlockRatio4BoundaryRecorder {
             Ok(receipt) => receipt,
             Err(error) => {
                 destroy_binders(ctx, &mut binders);
-                return Err(error.context("录制 ratio4 post-position3-attention rollover"));
+                return Err(error.context("录制 ratio4 post-finalize remainder rollover"));
             }
         };
         if let Err(error) = rollover.validate() {
@@ -395,17 +405,14 @@ impl S14CausalBlockRatio4BoundaryRecorder {
         }
         compute_to_compute_barrier(ctx, command);
 
-        let position4_prelude = match state.record_position4_remainder_and_index_head(
-            ctx,
-            command,
-            state_workspace,
-        ) {
-            Ok(receipt) => receipt,
-            Err(error) => {
-                destroy_binders(ctx, &mut binders);
-                return Err(error.context("录制 ratio4 position4 remainder/index-head"));
-            }
-        };
+        let position4_prelude =
+            match state.record_position4_remainder_and_index_head(ctx, command, state_workspace) {
+                Ok(receipt) => receipt,
+                Err(error) => {
+                    destroy_binders(ctx, &mut binders);
+                    return Err(error.context("录制 ratio4 position4 remainder/index-head"));
+                }
+            };
         if let Err(error) = position4_prelude.validate() {
             destroy_binders(ctx, &mut binders);
             return Err(error);
@@ -604,6 +611,10 @@ mod tests {
         assert!(shader.contains("binding = 4"));
         assert!(shader.contains("block_lane == 2u ? 0u : compressed_index.values[0]"));
         assert!(shader.contains("block_lane >= 2u ? 1u : 0u"));
+        assert!(shader.contains("uint block_lane = gl_WorkGroupID.y"));
+        assert!(!shader.contains("lane_base"));
+        let recorder_source = include_str!("s14_causal_block_ratio4_boundary.rs");
+        assert!(recorder_source.contains("cmd_dispatch(command, HEADS, BLOCK_SIZE, 1)"));
         S14CausalBlockRatio4BoundaryRecordingReceipt {
             positions: shape.positions(),
             boundary_lane: shape.boundary_lane(),

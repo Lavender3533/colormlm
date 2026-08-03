@@ -467,12 +467,7 @@ fn validate_source_envelope(source: &S14CausalBlockTerminalProductionSource) -> 
         if expected.handle() != observed.handle() {
             bail!("K-lane terminal head bank 未与 paged arena 强绑定");
         }
-        validate_owned_range(
-            observed,
-            0,
-            shape.max_chunk_weight_bytes()?,
-            "head bank",
-        )?;
+        validate_owned_range(observed, 0, shape.max_chunk_weight_bytes()?, "head bank")?;
     }
 
     if source.host_candidates.block_size() != block_size
@@ -679,14 +674,9 @@ mod tests {
             },
         ];
 
-        let error = complete_host_candidates_after_gpu_head(
-            finalizer,
-            7,
-            4,
-            &routes,
-            &head_results,
-        )
-        .unwrap_err();
+        let error =
+            complete_host_candidates_after_gpu_head(finalizer, 7, 4, &routes, &head_results)
+                .unwrap_err();
 
         assert!(error.to_string().contains("synthetic stop after GPU head"));
         assert_eq!(*seen_gpu_tokens.lock().unwrap(), vec![5, 223, 939, 21]);

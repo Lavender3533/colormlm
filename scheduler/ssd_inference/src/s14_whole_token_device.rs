@@ -67,6 +67,19 @@ pub struct WholeTokenDeviceBlockCommitReceipt {
     pub checkpoint_index: usize,
 }
 
+/// 从已排空单token runtime移交给causal-block builder的唯一 committed bank。
+/// 调用方取得后必须把`buffer`纳入显式external owner生命周期。
+pub struct WholeTokenDetachedCommittedState {
+    pub buffer: GpuBuffer,
+    pub state_bytes: u64,
+    pub epoch: u64,
+    pub active_bank: usize,
+    /// 只用于后续 production owner 的同 context 身份核验，不拥有 device/queue。
+    pub source_device: vk::Device,
+    pub source_graphics_queue: vk::Queue,
+    pub source_graphics_queue_family: u32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct WholeTokenBlockPublishPlan {
     next_epoch: u64,
@@ -215,6 +228,57 @@ impl WholeTokenDeviceState {
 
     pub fn active_buffer(&self) -> &GpuBuffer {
         &self.banks[self.active_bank]
+    }
+
+    /// position0成功提交且所有外部timeline已排空后，把active committed bank移交给K-block。
+    /// inactive bank、block scratch、sticky status与单token command owner在这里真实销毁。
+    pub fn into_detached_committed_state(
+        self,
+        ctx: &VulkanContext,
+    ) -> Result<WholeTokenDetachedCommittedState> {
+        if self.phase != CandidatePhase::Idle
+            || self.candidate_position.is_some()
+            || self.active_bank > 1
+        {
+            bail!("whole-token device state非idle时禁止移交committed bank");
+        }
+        let Self {
+            banks: [bank0, bank1],
+            block_publish_scratch,
+            sticky_status,
+            state_bytes,
+            active_bank,
+            epoch,
+            candidate_position: _,
+            phase: _,
+            last_committed_dirty: _,
+            repair_dirty: _,
+            candidate_dirty: _,
+            command_pool,
+            command: _,
+            fence,
+        } = self;
+        unsafe {
+            ctx.device.destroy_fence(fence, None);
+            ctx.device.destroy_command_pool(command_pool, None);
+        }
+        sticky_status.destroy(ctx);
+        block_publish_scratch.destroy(ctx);
+        let (buffer, inactive) = match active_bank {
+            0 => (bank0, bank1),
+            1 => (bank1, bank0),
+            _ => unreachable!("active bank已在资源移交前校验"),
+        };
+        inactive.destroy(ctx);
+        Ok(WholeTokenDetachedCommittedState {
+            buffer,
+            state_bytes,
+            epoch,
+            active_bank,
+            source_device: ctx.device.handle(),
+            source_graphics_queue: ctx.q_graphics,
+            source_graphics_queue_family: ctx.qf_graphics,
+        })
     }
 
     pub fn candidate_buffer(&self) -> Result<&GpuBuffer> {

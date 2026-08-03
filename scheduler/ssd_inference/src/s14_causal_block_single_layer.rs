@@ -12,7 +12,6 @@
 //! output arena，不能用可复制的裸 `vk::Buffer` 冒充资源所有权。
 
 use crate::{
-    GpuBuffer, VulkanContext,
     s14_causal_block_grouped_graph::{
         S14CausalBlockGroupedMoeRecorder, S14CausalBlockRecordedGroupedMoe,
     },
@@ -27,15 +26,16 @@ use crate::{
     s14_causal_block_moe_adapter::S14CausalBlockVulkanMoeAdapter,
     s14_causal_block_resources::S14CausalBlockUnionBankPlan,
     s14_causal_block_union_materializer::{
-        S14CausalBlockMaterializedUnion, S14CausalBlockUnionMaterializer,
-        S14CausalBlockUnionStageReceipt, build_causal_block_union_identity_plan,
+        build_causal_block_union_identity_plan, S14CausalBlockMaterializedUnion,
+        S14CausalBlockUnionMaterializer, S14CausalBlockUnionStageReceipt,
     },
     s14_dynamic_page_cache_readiness::DynamicPageFetchMode,
     s14_dynamic_routed_page_plan::FullDepthExpertCatalog,
+    GpuBuffer, VulkanContext,
 };
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use ash::vk;
-use polaris_s14_runner::{FULL_DEPTH_LAYERS, GraphProfile, LayerCausalBatchPlan, RouteDecision};
+use polaris_s14_runner::{GraphProfile, LayerCausalBatchPlan, RouteDecision, FULL_DEPTH_LAYERS};
 use std::{fmt, path::Path, path::PathBuf, sync::Arc};
 
 const K4: usize = 4;

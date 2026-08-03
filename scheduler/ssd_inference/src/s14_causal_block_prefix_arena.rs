@@ -8,7 +8,11 @@
 
 use crate::{
     s14_causal_block_prefix_state::S14CausalBlockPrefixStateSealReceipt,
-    s14_causal_block_terminal_owner::S14CausalBlockOwnedBufferSlice, GpuBuffer, VulkanContext,
+    s14_causal_block_production_evidence::{
+        S14CausalBlockProductionEvidenceLedger, S14CausalBlockProductionEvidenceSnapshot,
+    },
+    s14_causal_block_terminal_owner::S14CausalBlockOwnedBufferSlice,
+    GpuBuffer, VulkanContext,
 };
 use anyhow::{bail, Context, Result};
 use ash::vk;
@@ -59,6 +63,9 @@ impl S14CausalBlockPrefixCheckpointLayout {
 enum PrefixArenaPhase {
     Ready,
     InitializationRecorded,
+    /// 43层 producer 已完成 K-prefix 累积写集，但 terminal owner 尚未
+    /// 在 post-seal 窗口验收。回执必须留在强 owner 内，禁止预先导出 slices。
+    PrefixProgramReceiptPublished(S14CausalBlockPrefixStateSealReceipt),
     PrefixesSealed,
     Aborted,
 }
@@ -82,6 +89,7 @@ pub struct S14CausalBlockPrefixCheckpointArena {
     base_position: u32,
     layout: S14CausalBlockPrefixCheckpointLayout,
     phase: Mutex<PrefixArenaPhase>,
+    evidence: S14CausalBlockProductionEvidenceLedger,
 }
 
 impl fmt::Debug for S14CausalBlockPrefixCheckpointArena {
@@ -120,6 +128,7 @@ impl S14CausalBlockPrefixCheckpointArena {
         {
             bail!("prefix checkpoint arena handle/alignment/capacity 非法");
         }
+        let evidence = S14CausalBlockProductionEvidenceLedger::new(base_position, block_size)?;
         Ok(Arc::new(Self {
             context,
             arena,
@@ -127,6 +136,7 @@ impl S14CausalBlockPrefixCheckpointArena {
             base_position,
             layout,
             phase: Mutex::new(PrefixArenaPhase::Ready),
+            evidence,
         }))
     }
 
@@ -146,9 +156,31 @@ impl S14CausalBlockPrefixCheckpointArena {
         &self.arena
     }
 
+    /// 纯 host、只读 production 证据；不泄露 Vulkan owner 或写入口。
+    pub fn production_evidence_snapshot(&self) -> Result<S14CausalBlockProductionEvidenceSnapshot> {
+        self.evidence.snapshot()
+    }
+
+    pub(crate) fn record_completed_ratio4_layer(
+        &self,
+        layer: u8,
+        receipt: crate::s14_causal_block_ratio4_boundary::S14CausalBlockRatio4BoundaryRecordingReceipt,
+    ) -> Result<()> {
+        self.evidence.record_completed_ratio4_layer(layer, receipt)
+    }
+
     pub fn prefix_offset(&self, prefix_index: usize) -> Result<u64> {
         self.layout
             .checkpoint_offset(self.arena_offset, prefix_index)
+    }
+
+    /// Host checkpoint finalizer 的只读门。terminal owner 必须已经在 post-seal
+    /// 窗口验收 producer receipt；在此之前禁止把 device arena 当成完整 checkpoint 回读。
+    pub(crate) fn validate_host_readback_ready(&self) -> Result<()> {
+        if *self.lock_phase()? != PrefixArenaPhase::PrefixesSealed {
+            bail!("prefix checkpoint host readback 只能发生在 terminal post-seal 验收之后");
+        }
+        Ok(())
     }
 
     /// 在 caller 已开始的 command 中把同一份 authoritative state 复制为 K 个 prefix
@@ -276,23 +308,26 @@ impl S14CausalBlockPrefixCheckpointArena {
         })
     }
 
-    /// 只有结构状态机已 seal 全部 K-prefix×43层累积写集后才发布 slices。
-    pub fn seal_after_prefix_program(
+    /// 只由同一 block-major producer 在43层完成后发布一次性回执。
+    /// 本步不验收、不 seal arena，也不导出 checkpoint slices；真正的
+    /// 验收只能在 terminal owner 的 post-seal `record_and_publish` 内发生。
+    pub fn publish_prefix_program_seal_receipt(
         &self,
         receipt: S14CausalBlockPrefixStateSealReceipt,
     ) -> Result<()> {
-        validate_prefix_seal_receipt(self.base_position, self.layout, receipt)?;
         let mut phase = self.lock_phase()?;
-        if *phase != PrefixArenaPhase::InitializationRecorded {
-            bail!("prefix checkpoint arena 尚未录制 authoritative 初始化或已 seal");
-        }
-        *phase = PrefixArenaPhase::PrefixesSealed;
-        Ok(())
+        publish_receipt_for_phase(&mut phase, receipt)
     }
 
-    pub fn terminal_checkpoint_slices(&self) -> Result<Vec<S14CausalBlockOwnedBufferSlice>> {
-        if *self.lock_phase()? != PrefixArenaPhase::PrefixesSealed {
-            bail!("prefix checkpoint slices 只能在全部 prefix seal 后导出");
+    /// terminal owner 的唯一延迟导出入口。先在持锁状态下对同源 producer
+    /// receipt 执行完整 K×43层三角覆盖验证，成功后才原子进入
+    /// `PrefixesSealed`，然后导出 slices。验证失败不会误发布 arena。
+    pub(crate) fn seal_and_export_terminal_checkpoints(
+        &self,
+    ) -> Result<Vec<S14CausalBlockOwnedBufferSlice>> {
+        {
+            let mut phase = self.lock_phase()?;
+            validate_and_seal_phase(&mut phase, self.base_position, self.layout, &self.evidence)?;
         }
         (0..self.layout.block_size)
             .map(|prefix| {
@@ -316,6 +351,32 @@ impl S14CausalBlockPrefixCheckpointArena {
             .lock()
             .map_err(|_| anyhow::anyhow!("prefix checkpoint arena lifecycle poisoned"))
     }
+}
+
+fn publish_receipt_for_phase(
+    phase: &mut PrefixArenaPhase,
+    receipt: S14CausalBlockPrefixStateSealReceipt,
+) -> Result<()> {
+    if *phase != PrefixArenaPhase::InitializationRecorded {
+        bail!("prefix checkpoint seal receipt 只能由完成 authoritative 初始化的 producer 发布一次");
+    }
+    *phase = PrefixArenaPhase::PrefixProgramReceiptPublished(receipt);
+    Ok(())
+}
+
+fn validate_and_seal_phase(
+    phase: &mut PrefixArenaPhase,
+    base_position: u32,
+    layout: S14CausalBlockPrefixCheckpointLayout,
+    evidence: &S14CausalBlockProductionEvidenceLedger,
+) -> Result<S14CausalBlockPrefixStateSealReceipt> {
+    let PrefixArenaPhase::PrefixProgramReceiptPublished(receipt) = *phase else {
+        bail!("prefix checkpoint terminal 导出前缺少同源43层 producer seal receipt");
+    };
+    validate_prefix_seal_receipt(base_position, layout, receipt)?;
+    evidence.record_prefix_seal(receipt)?;
+    *phase = PrefixArenaPhase::PrefixesSealed;
+    Ok(receipt)
 }
 
 fn validate_prefix_seal_receipt(
@@ -388,5 +449,28 @@ mod tests {
         let mut invalid = valid;
         invalid.cumulative_lane_applications -= 1;
         assert!(validate_prefix_seal_receipt(1, layout, invalid).is_err());
+    }
+
+    #[test]
+    fn deferred_prefix_receipt_cannot_preseal_or_republish() {
+        let layout = S14CausalBlockPrefixCheckpointLayout::build(4, 1024).unwrap();
+        let valid = S14CausalBlockPrefixStateSealReceipt {
+            base_position: 1,
+            block_size: 4,
+            sealed_prefixes: 4,
+            sealed_prefix_layers: 172,
+            cumulative_lane_applications: 430,
+            serial_token_forward_calls: 0,
+        };
+        let mut phase = PrefixArenaPhase::Ready;
+        assert!(publish_receipt_for_phase(&mut phase, valid).is_err());
+        phase = PrefixArenaPhase::InitializationRecorded;
+        publish_receipt_for_phase(&mut phase, valid).unwrap();
+        assert!(publish_receipt_for_phase(&mut phase, valid).is_err());
+        let evidence = S14CausalBlockProductionEvidenceLedger::new(1, 4).unwrap();
+        let receipt = validate_and_seal_phase(&mut phase, 1, layout, &evidence).unwrap();
+        assert_eq!(receipt, valid);
+        assert_eq!(phase, PrefixArenaPhase::PrefixesSealed);
+        assert!(validate_and_seal_phase(&mut phase, 1, layout, &evidence).is_err());
     }
 }

@@ -1,0 +1,780 @@
+//! position1、K=4 production causal-block 的 concrete HC/QKV resource provider。
+//!
+//! 本模块不执行 whole-token，也不生成 terminal/checkpoint。它只闭合 bundle 之前缺失的
+//! concrete provider：真实 position1 committed state、按实际 input token 解码的 L0--L2
+//! `tid2eid`、经 SHA 验证的 L3--L42 router bias、K 行真实 RoPE、43 层 current-KV
+//! 输出与 paged static uploader。所有小型 allocation 都由显式 owner 管理；bundle 销毁前
+//! 禁止销毁 owner。
+
+use crate::{
+    s14_causal_block_hc_qkv_recorder::{
+        S14CausalBlockHcQkvLayerResources, S14CausalBlockHcQkvResourceProvider,
+        S14CausalBlockHcQkvWeightOffsets, S14CausalBlockOwnedBufferSlice,
+    },
+    s14_causal_block_layer::S14CausalBlockLayerInput,
+    s14_causal_block_prefix_producer::S14CausalBlockPrefixStateProducer,
+    s14_causal_block_production_bundle::S14CausalBlockProductionHcQkvResourceProvider,
+    s14_causal_block_ratio4_boundary::S14CausalBlockRatio4BoundaryStateRecorder,
+    s14_causal_block_terminal_owner::S14CausalBlockTerminalHeadUploadState,
+    s14_position0_layer_backend::{build_position0_layer_graph_plan, S14Position0L0GraphPlan},
+    s14_position0_paged_weight_arena::{S14Position0PagedArenaPlan, S14Position0PagedWeightArena},
+    s14_position0_state_writeback::S14Position0StateWritebackLayout,
+    s14_position0_weight_plan::S14Position0HybridWeightPlan,
+    s14_position1_attention::position_rope_cos_sin,
+    s14_route_postprocess_gpu::S14RoutePostprocessGpuMode,
+    GpuBuffer, VulkanContext,
+};
+use anyhow::{anyhow, bail, Context, Result};
+use ash::vk;
+use polaris_s14_runner::{
+    MaterializedTokenSource, NativeState, Position0Asset, Position0WholeTokenManifest,
+    COMPRESS_RATIOS, EXPERTS_PER_TOKEN, FULL_DEPTH_LAYERS,
+};
+use std::{
+    collections::BTreeMap,
+    fmt,
+    sync::{Arc, Mutex},
+};
+
+pub const S14_BASE1_K4_BASE_POSITION: u32 = 1;
+pub const S14_BASE1_K4_BLOCK_SIZE: usize = 4;
+
+const KV_ELEMENTS_PER_LANE: u64 = 512;
+const ROPE_ELEMENTS_PER_LANE: u64 = 64;
+const ROUTER_EXPERTS: u64 = 256;
+const BF16_BYTES: u64 = 2;
+const F32_BYTES: u64 = 4;
+const AUX_ALIGNMENT: u64 = 256;
+
+/// 外部 runtime 已提交的 authoritative device state。`native_state` 与 device slice
+/// 必须是同一个 position1 checkpoint；本模块只借用其 committed window 行，不复制或
+/// 伪造状态。
+pub struct S14Base1K4AuthoritativeStateBinding {
+    pub native_state: NativeState,
+    pub device_state: S14CausalBlockOwnedBufferSlice,
+}
+
+/// ratio4 producer 必须为21个真实 ratio4 层逐层提供 candidate state recorder。
+/// recorder 自己拥有 prefix checkpoint arena 内的目标 slice 与数值写回生命周期。
+pub struct S14Base1K4ProviderInputs {
+    pub context: Arc<VulkanContext>,
+    pub manifest: Arc<Position0WholeTokenManifest>,
+    pub weight_plan: Arc<S14Position0HybridWeightPlan>,
+    pub paged_arena: Arc<S14Position0PagedWeightArena>,
+    pub head_upload: Arc<Mutex<S14CausalBlockTerminalHeadUploadState>>,
+    pub authoritative: S14Base1K4AuthoritativeStateBinding,
+    pub input_token_ids: [u32; S14_BASE1_K4_BLOCK_SIZE],
+    pub ratio4_boundary_states: BTreeMap<u8, Arc<dyn S14CausalBlockRatio4BoundaryStateRecorder>>,
+    pub prefix_state_producer: S14CausalBlockPrefixStateProducer,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ProviderPhase {
+    Ready,
+    Preparing { next_layer_index: usize },
+    Complete,
+    Poisoned,
+}
+
+/// provider 使用的两块小型 allocation 的显式 owner。`GpuBuffer` 没有 RAII Drop，
+/// 因此 orchestrator 必须先销毁 production bundle，再调用本 owner 的 `destroy()`。
+#[must_use = "bundle 销毁后必须显式 destroy base1/K4 HC/QKV external resources"]
+pub struct S14Base1K4HcQkvExternalResources {
+    context: Arc<VulkanContext>,
+    aux: Option<Arc<GpuBuffer>>,
+    current_kv: Option<Arc<GpuBuffer>>,
+}
+
+impl fmt::Debug for S14Base1K4HcQkvExternalResources {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("S14Base1K4HcQkvExternalResources")
+            .field("context", &Arc::as_ptr(&self.context))
+            .field("aux_present", &self.aux.is_some())
+            .field("current_kv_present", &self.current_kv.is_some())
+            .finish()
+    }
+}
+
+impl S14Base1K4HcQkvExternalResources {
+    pub fn destroy(&mut self) -> Result<()> {
+        if self.aux.is_none() && self.current_kv.is_none() {
+            return Ok(());
+        }
+        let aux_refs = self.aux.as_ref().map_or(0, Arc::strong_count);
+        let current_refs = self.current_kv.as_ref().map_or(0, Arc::strong_count);
+        if aux_refs != 1 || current_refs != 1 {
+            bail!(
+                "base1/K4 HC/QKV resources 仍被 provider/recorder 持有: aux_refs={aux_refs} current_kv_refs={current_refs}"
+            );
+        }
+        let current_kv = Arc::try_unwrap(
+            self.current_kv
+                .take()
+                .context("base1/K4 current-KV owner 缺失")?,
+        )
+        .map_err(|_| anyhow!("base1/K4 current-KV Arc ownership 漂移"))?;
+        let aux = Arc::try_unwrap(self.aux.take().context("base1/K4 aux owner 缺失")?)
+            .map_err(|_| anyhow!("base1/K4 aux Arc ownership 漂移"))?;
+        current_kv.destroy(&self.context);
+        aux.destroy(&self.context);
+        Ok(())
+    }
+}
+
+/// 已经能直接传入 `build_s14_causal_block_production_bundle` 的 concrete provider。
+pub struct S14Base1K4ProductionHcQkvProvider {
+    context: Arc<VulkanContext>,
+    manifest: Arc<Position0WholeTokenManifest>,
+    weight_plan: Arc<S14Position0HybridWeightPlan>,
+    paged_arena: Arc<S14Position0PagedWeightArena>,
+    head_upload: Arc<Mutex<S14CausalBlockTerminalHeadUploadState>>,
+    state_layout: S14Position0StateWritebackLayout,
+    authoritative_device_state: S14CausalBlockOwnedBufferSlice,
+    input_token_ids: [u32; S14_BASE1_K4_BLOCK_SIZE],
+    graphs: Vec<S14Position0L0GraphPlan>,
+    weights: Vec<S14CausalBlockHcQkvWeightOffsets>,
+    rope_by_ratio: BTreeMap<u16, S14CausalBlockOwnedBufferSlice>,
+    route_aux_by_layer: Vec<S14CausalBlockOwnedBufferSlice>,
+    current_kv_by_layer: Vec<S14CausalBlockOwnedBufferSlice>,
+    ratio4_boundary_states: BTreeMap<u8, Arc<dyn S14CausalBlockRatio4BoundaryStateRecorder>>,
+    prefix_state_producer: Option<S14CausalBlockPrefixStateProducer>,
+    phase: ProviderPhase,
+}
+
+impl fmt::Debug for S14Base1K4ProductionHcQkvProvider {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("S14Base1K4ProductionHcQkvProvider")
+            .field("context", &Arc::as_ptr(&self.context))
+            .field("input_token_ids", &self.input_token_ids)
+            .field("graph_count", &self.graphs.len())
+            .field("ratio4_state_count", &self.ratio4_boundary_states.len())
+            .field("phase", &self.phase)
+            .finish_non_exhaustive()
+    }
+}
+
+/// 构建 concrete provider，并一次性上传 resident static 权重。
+///
+/// 失败后调用方必须丢弃同一个 `head_upload`/paged arena；static uploader 是 one-shot，
+/// 不允许在部分失败后重解释为全新 runtime。
+pub fn build_s14_base1_k4_production_hc_qkv_provider(
+    inputs: S14Base1K4ProviderInputs,
+) -> Result<(
+    S14Base1K4ProductionHcQkvProvider,
+    S14Base1K4HcQkvExternalResources,
+)> {
+    let S14Base1K4ProviderInputs {
+        context,
+        manifest,
+        weight_plan,
+        paged_arena,
+        head_upload,
+        authoritative,
+        input_token_ids,
+        ratio4_boundary_states,
+        prefix_state_producer,
+    } = inputs;
+
+    validate_authoritative_state(&authoritative)?;
+    manifest
+        .validate()
+        .map_err(|error| anyhow!("position0 manifest invalid: {error}"))?;
+    weight_plan.validate(&manifest)?;
+    let expected_arena_plan = S14Position0PagedArenaPlan::build(&weight_plan)?;
+    if paged_arena.plan() != &expected_arena_plan {
+        bail!("base1/K4 paged arena 与 manifest/weight plan 不是同源布局");
+    }
+
+    let graphs = build_graphs(&manifest, &weight_plan, &paged_arena)?;
+    let weights = graphs
+        .iter()
+        .map(S14CausalBlockHcQkvWeightOffsets::from_position0_graph)
+        .collect::<Result<Vec<_>>>()?;
+    validate_ratio4_state_owners(&context, &ratio4_boundary_states)?;
+    if !Arc::ptr_eq(&context, prefix_state_producer.context())
+        || prefix_state_producer.arena().base_position() != S14_BASE1_K4_BASE_POSITION
+        || prefix_state_producer.arena().layout().block_size != S14_BASE1_K4_BLOCK_SIZE
+    {
+        bail!("base1/K4 prefix state producer context/base/K 漂移");
+    }
+
+    let state_layout = S14Position0StateWritebackLayout::build(&authoritative.native_state)?;
+    validate_exact_slice(
+        &authoritative.device_state,
+        authoritative.native_state.arena_bytes,
+        "authoritative device state",
+    )?;
+
+    let route_aux_payloads = {
+        let mut upload = head_upload
+            .lock()
+            .map_err(|_| anyhow!("base1/K4 head upload/store mutex poisoned"))?;
+        let payloads =
+            build_route_aux_payloads(&manifest, &graphs, input_token_ids, &mut upload.store)?;
+        let S14CausalBlockTerminalHeadUploadState { uploader, store } = &mut *upload;
+        if !uploader.resident_static_uploaded() {
+            let receipt = uploader.upload_static_once(
+                &context,
+                &manifest,
+                &weight_plan,
+                store,
+                paged_arena.as_ref(),
+            )?;
+            if !receipt.complete {
+                bail!("base1/K4 resident static upload receipt 不完整");
+            }
+        }
+        payloads
+    };
+
+    let rope_payloads = build_rope_payloads()?;
+    let aux_layout = AuxLayout::build(&route_aux_payloads, &rope_payloads)?;
+    let aux = Arc::new(host_storage_buffer(&context, aux_layout.bytes)?);
+    let current_kv_bytes = current_kv_total_bytes()?;
+    let current_kv = match GpuBuffer::new_vram(
+        &context,
+        current_kv_bytes,
+        vk::BufferUsageFlags::STORAGE_BUFFER
+            | vk::BufferUsageFlags::TRANSFER_SRC
+            | vk::BufferUsageFlags::TRANSFER_DST,
+    ) {
+        Ok(buffer) => Arc::new(buffer),
+        Err(error) => {
+            aux.destroy(&context);
+            return Err(error.context("allocate base1/K4 43-layer current-KV arena"));
+        }
+    };
+
+    let resource_build = (|| -> Result<_> {
+        let rope_by_ratio = write_rope_payloads(&aux, &aux_layout, &rope_payloads)?;
+        let route_aux_by_layer = write_route_aux_payloads(&aux, &aux_layout, &route_aux_payloads)?;
+        let current_kv_by_layer = build_current_kv_slices(&current_kv)?;
+        Ok((rope_by_ratio, route_aux_by_layer, current_kv_by_layer))
+    })();
+    let (rope_by_ratio, route_aux_by_layer, current_kv_by_layer) = match resource_build {
+        Ok(value) => value,
+        Err(error) => {
+            current_kv.destroy(&context);
+            aux.destroy(&context);
+            return Err(error);
+        }
+    };
+
+    let provider = S14Base1K4ProductionHcQkvProvider {
+        context: Arc::clone(&context),
+        manifest,
+        weight_plan,
+        paged_arena,
+        head_upload,
+        state_layout,
+        authoritative_device_state: authoritative.device_state,
+        input_token_ids,
+        graphs,
+        weights,
+        rope_by_ratio,
+        route_aux_by_layer,
+        current_kv_by_layer,
+        ratio4_boundary_states,
+        prefix_state_producer: Some(prefix_state_producer),
+        phase: ProviderPhase::Ready,
+    };
+    provider.validate_internal(S14_BASE1_K4_BLOCK_SIZE)?;
+    let owner = S14Base1K4HcQkvExternalResources {
+        context,
+        aux: Some(aux),
+        current_kv: Some(current_kv),
+    };
+    Ok((provider, owner))
+}
+
+impl S14CausalBlockHcQkvResourceProvider for S14Base1K4ProductionHcQkvProvider {
+    fn prepare_layer(
+        &mut self,
+        input: &S14CausalBlockLayerInput<'_>,
+    ) -> std::result::Result<S14CausalBlockHcQkvLayerResources, String> {
+        self.prepare_layer_inner(input).map_err(|error| {
+            self.phase = ProviderPhase::Poisoned;
+            format!("base1/K4 production HC/QKV provider: {error:#}")
+        })
+    }
+}
+
+impl S14CausalBlockProductionHcQkvResourceProvider for S14Base1K4ProductionHcQkvProvider {
+    fn paged_weight_arena(&self) -> &Arc<S14Position0PagedWeightArena> {
+        &self.paged_arena
+    }
+
+    fn validate_production_bundle(&self, block_size: usize) -> std::result::Result<(), String> {
+        self.validate_internal(block_size)
+            .map_err(|error| error.to_string())
+    }
+
+    fn take_prefix_state_producer(
+        &mut self,
+    ) -> std::result::Result<S14CausalBlockPrefixStateProducer, String> {
+        self.prefix_state_producer
+            .take()
+            .ok_or_else(|| "base1/K4 prefix state producer 已被消费".to_owned())
+    }
+}
+
+impl Drop for S14Base1K4ProductionHcQkvProvider {
+    fn drop(&mut self) {
+        if let Some(mut producer) = self.prefix_state_producer.take() {
+            let _ = producer.destroy();
+        }
+    }
+}
+
+impl S14Base1K4ProductionHcQkvProvider {
+    fn prepare_layer_inner(
+        &mut self,
+        input: &S14CausalBlockLayerInput<'_>,
+    ) -> Result<S14CausalBlockHcQkvLayerResources> {
+        let next_layer_index = match self.phase {
+            ProviderPhase::Ready => 0,
+            ProviderPhase::Preparing { next_layer_index } => next_layer_index,
+            ProviderPhase::Complete => bail!("43层已经全部准备，禁止重复 prepare"),
+            ProviderPhase::Poisoned => bail!("provider 已 poisoned"),
+        };
+        let &expected_layer = FULL_DEPTH_LAYERS
+            .get(next_layer_index)
+            .context("base1/K4 next layer index 越界")?;
+        if input.base_position != S14_BASE1_K4_BASE_POSITION
+            || input.layer != expected_layer
+            || input.input_token_ids != self.input_token_ids
+            || input.source != MaterializedTokenSource::SpeculativeDraft
+        {
+            bail!("base1/K4 input base/layer/token/source 漂移");
+        }
+
+        let static_receipt = {
+            let mut upload = self
+                .head_upload
+                .lock()
+                .map_err(|_| anyhow!("base1/K4 head upload/store mutex poisoned"))?;
+            let S14CausalBlockTerminalHeadUploadState { uploader, store } = &mut *upload;
+            uploader.prepare_next_static_layer(
+                &self.context,
+                &self.manifest,
+                &self.weight_plan,
+                store,
+                self.paged_arena.as_ref(),
+            )?
+        };
+        if static_receipt.layer != expected_layer {
+            bail!("base1/K4 static uploader 层序漂移");
+        }
+
+        let graph = self
+            .graphs
+            .get(next_layer_index)
+            .context("base1/K4 graph 缺层")?;
+        let layer_state = self
+            .state_layout
+            .layer(expected_layer)
+            .context("base1/K4 state layout 缺层")?;
+        let committed_range = &layer_state.committed_window_state_range;
+        let committed_offset = self
+            .authoritative_device_state
+            .offset
+            .checked_add(committed_range.start)
+            .context("base1/K4 committed KV offset overflow")?;
+        let committed = S14CausalBlockOwnedBufferSlice {
+            buffer: Arc::clone(&self.authoritative_device_state.buffer),
+            offset: committed_offset,
+            bytes: committed_range.end - committed_range.start,
+        };
+        let rope = self
+            .rope_by_ratio
+            .get(&COMPRESS_RATIOS[usize::from(expected_layer)])
+            .context("base1/K4 layer RoPE ratio 缺失")?
+            .clone();
+        let mut resources = S14CausalBlockHcQkvLayerResources::from_ready_paged_static_layer(
+            expected_layer,
+            Arc::clone(&self.paged_arena),
+            self.weights[next_layer_index],
+            graph.route_mode,
+            committed,
+            self.current_kv_by_layer[next_layer_index].clone(),
+            rope,
+            self.route_aux_by_layer[next_layer_index].clone(),
+        )?;
+        if COMPRESS_RATIOS[usize::from(expected_layer)] == 4 {
+            resources = resources.with_ratio4_boundary_state(
+                self.ratio4_boundary_states
+                    .get(&expected_layer)
+                    .context("base1/K4 ratio4 layer 缺少 candidate state owner")?
+                    .clone(),
+            )?;
+        }
+
+        let following = next_layer_index + 1;
+        self.phase = if following == FULL_DEPTH_LAYERS.len() {
+            ProviderPhase::Complete
+        } else {
+            ProviderPhase::Preparing {
+                next_layer_index: following,
+            }
+        };
+        Ok(resources)
+    }
+
+    fn validate_internal(&self, block_size: usize) -> Result<()> {
+        if block_size != S14_BASE1_K4_BLOCK_SIZE
+            || self.state_layout.position != S14_BASE1_K4_BASE_POSITION
+            || self.graphs.len() != FULL_DEPTH_LAYERS.len()
+            || self.weights.len() != FULL_DEPTH_LAYERS.len()
+            || self.route_aux_by_layer.len() != FULL_DEPTH_LAYERS.len()
+            || self.current_kv_by_layer.len() != FULL_DEPTH_LAYERS.len()
+            || self.prefix_state_producer.is_none()
+            || self.phase != ProviderPhase::Ready
+        {
+            bail!("base1/K4 provider readiness K/position/43层/phase 漂移");
+        }
+        if self
+            .graphs
+            .iter()
+            .zip(FULL_DEPTH_LAYERS)
+            .any(|(graph, layer)| graph.layer != layer)
+        {
+            bail!("base1/K4 provider graph 层序漂移");
+        }
+        for ratio in [0u16, 4, 128] {
+            validate_exact_slice(
+                self.rope_by_ratio
+                    .get(&ratio)
+                    .context("base1/K4 provider RoPE ratio 缺失")?,
+                rope_bytes()?,
+                "K-row RoPE",
+            )?;
+        }
+        Ok(())
+    }
+}
+
+fn validate_authoritative_state(binding: &S14Base1K4AuthoritativeStateBinding) -> Result<()> {
+    binding
+        .native_state
+        .validate_for(polaris_s14_runner::GraphProfile::FullDepth43NativeTop6)
+        .context("validate base1/K4 authoritative native state")?;
+    if binding.native_state.position != S14_BASE1_K4_BASE_POSITION || binding.native_state.poisoned
+    {
+        bail!("base1/K4 authoritative state 必须是未 poisoned 的 position1 committed state");
+    }
+    Ok(())
+}
+
+fn build_graphs(
+    manifest: &Position0WholeTokenManifest,
+    weights: &S14Position0HybridWeightPlan,
+    paged_arena: &S14Position0PagedWeightArena,
+) -> Result<Vec<S14Position0L0GraphPlan>> {
+    FULL_DEPTH_LAYERS
+        .iter()
+        .enumerate()
+        .map(|(index, &layer)| {
+            let layout = paged_arena
+                .plan()
+                .physical
+                .static_layers
+                .get(index)
+                .with_context(|| format!("base1/K4 paged arena 缺少 L{layer} static layout"))?;
+            let graph = build_position0_layer_graph_plan(manifest, weights, layout, index)?;
+            if graph.layer != layer || graph.layer_index != index {
+                bail!("base1/K4 L{layer} graph identity 漂移");
+            }
+            Ok(graph)
+        })
+        .collect()
+}
+
+fn validate_ratio4_state_owners(
+    _context: &Arc<VulkanContext>,
+    states: &BTreeMap<u8, Arc<dyn S14CausalBlockRatio4BoundaryStateRecorder>>,
+) -> Result<()> {
+    let expected = FULL_DEPTH_LAYERS
+        .iter()
+        .copied()
+        .filter(|&layer| COMPRESS_RATIOS[usize::from(layer)] == 4)
+        .collect::<Vec<_>>();
+    if states.keys().copied().collect::<Vec<_>>() != expected {
+        bail!("base1/K4 ratio4 candidate state 必须精确覆盖21个真实层");
+    }
+    for (&layer, state) in states {
+        let binding = state.candidate_state_binding();
+        binding.validate(state.candidate_state_owner())?;
+        if binding.layer != layer
+            || binding.base_position != S14_BASE1_K4_BASE_POSITION
+            || binding.block_size as usize != S14_BASE1_K4_BLOCK_SIZE
+        {
+            bail!("base1/K4 L{layer} ratio4 candidate state context/base/K 漂移");
+        }
+    }
+    Ok(())
+}
+
+fn build_route_aux_payloads(
+    manifest: &Position0WholeTokenManifest,
+    graphs: &[S14Position0L0GraphPlan],
+    input_token_ids: [u32; S14_BASE1_K4_BLOCK_SIZE],
+    store: &mut crate::s14_position0_mapped_assets::VerifiedMappedAssetStore,
+) -> Result<Vec<Vec<u8>>> {
+    let mut payloads = Vec::with_capacity(FULL_DEPTH_LAYERS.len());
+    for (index, graph) in graphs.iter().enumerate() {
+        let layer = manifest
+            .layers
+            .get(index)
+            .with_context(|| format!("base1/K4 manifest 缺少 L{}", graph.layer))?;
+        let (suffix, expected_dtype, expected_shape) = match graph.route_mode {
+            S14RoutePostprocessGpuMode::PhysicalIds => (
+                "ffn.gate.tid2eid",
+                "I64",
+                vec![129_280, EXPERTS_PER_TOKEN as u64],
+            ),
+            S14RoutePostprocessGpuMode::BiasTop6 => ("ffn.gate.bias", "F32", vec![ROUTER_EXPERTS]),
+        };
+        let tensor = format!("layers.{}.{}", graph.layer, suffix);
+        let asset = unique_asset(
+            layer.assets.iter().filter(|asset| asset.tensor == tensor),
+            &tensor,
+        )?;
+        if asset.dtype != expected_dtype || asset.shape != expected_shape {
+            bail!("base1/K4 {tensor} dtype/shape 漂移");
+        }
+        let mapped = store.map_verified_batch(&[asset.clone()])?;
+        let bytes = mapped
+            .first()
+            .context("base1/K4 route aux verified mmap 缺失")?
+            .bytes();
+        let payload = match graph.route_mode {
+            S14RoutePostprocessGpuMode::PhysicalIds => {
+                let mut ids = Vec::with_capacity(S14_BASE1_K4_BLOCK_SIZE * EXPERTS_PER_TOKEN);
+                for token in input_token_ids {
+                    ids.extend(graph.decode_tid2eid_row_for_token(asset, bytes, token)?);
+                }
+                bytemuck::cast_slice(&ids).to_vec()
+            }
+            S14RoutePostprocessGpuMode::BiasTop6 => {
+                if bytes.len() as u64 != ROUTER_EXPERTS * F32_BYTES
+                    || bytemuck::cast_slice::<u8, f32>(bytes)
+                        .iter()
+                        .any(|value| !value.is_finite())
+                {
+                    bail!("base1/K4 {tensor} bytes/finite 漂移");
+                }
+                bytes.to_vec()
+            }
+        };
+        payloads.push(payload);
+    }
+    Ok(payloads)
+}
+
+fn build_rope_payloads() -> Result<BTreeMap<u16, Vec<u8>>> {
+    let mut output = BTreeMap::new();
+    for ratio in [0u16, 4, 128] {
+        let mut rows =
+            Vec::<f32>::with_capacity(S14_BASE1_K4_BLOCK_SIZE * ROPE_ELEMENTS_PER_LANE as usize);
+        for lane in 0..S14_BASE1_K4_BLOCK_SIZE {
+            let position = S14_BASE1_K4_BASE_POSITION
+                .checked_add(lane as u32)
+                .context("base1/K4 RoPE position overflow")?;
+            rows.extend(position_rope_cos_sin(position, u32::from(ratio))?);
+        }
+        if rows.iter().any(|value| !value.is_finite()) {
+            bail!("base1/K4 ratio{ratio} RoPE 包含非有限值");
+        }
+        output.insert(ratio, bytemuck::cast_slice(&rows).to_vec());
+    }
+    Ok(output)
+}
+
+#[derive(Debug)]
+struct AuxLayout {
+    rope_offsets: BTreeMap<u16, u64>,
+    route_offsets: Vec<u64>,
+    bytes: u64,
+}
+
+impl AuxLayout {
+    fn build(route_payloads: &[Vec<u8>], rope_payloads: &BTreeMap<u16, Vec<u8>>) -> Result<Self> {
+        if route_payloads.len() != FULL_DEPTH_LAYERS.len() || rope_payloads.len() != 3 {
+            bail!("base1/K4 aux payload count 漂移");
+        }
+        let mut cursor = 0u64;
+        let mut rope_offsets = BTreeMap::new();
+        for ratio in [0u16, 4, 128] {
+            cursor = align_up(cursor, AUX_ALIGNMENT)?;
+            rope_offsets.insert(ratio, cursor);
+            cursor = cursor
+                .checked_add(u64::try_from(
+                    rope_payloads
+                        .get(&ratio)
+                        .context("base1/K4 rope payload 缺失")?
+                        .len(),
+                )?)
+                .context("base1/K4 rope layout overflow")?;
+        }
+        let mut route_offsets = Vec::with_capacity(route_payloads.len());
+        for payload in route_payloads {
+            cursor = align_up(cursor, AUX_ALIGNMENT)?;
+            route_offsets.push(cursor);
+            cursor = cursor
+                .checked_add(u64::try_from(payload.len())?)
+                .context("base1/K4 route aux layout overflow")?;
+        }
+        Ok(Self {
+            rope_offsets,
+            route_offsets,
+            bytes: align_up(cursor, AUX_ALIGNMENT)?,
+        })
+    }
+}
+
+fn write_rope_payloads(
+    buffer: &Arc<GpuBuffer>,
+    layout: &AuxLayout,
+    payloads: &BTreeMap<u16, Vec<u8>>,
+) -> Result<BTreeMap<u16, S14CausalBlockOwnedBufferSlice>> {
+    let mut slices = BTreeMap::new();
+    for ratio in [0u16, 4, 128] {
+        let payload = payloads.get(&ratio).context("base1/K4 rope payload 缺失")?;
+        let offset = *layout
+            .rope_offsets
+            .get(&ratio)
+            .context("base1/K4 rope offset 缺失")?;
+        write_mapped(buffer, offset, payload, "RoPE")?;
+        slices.insert(
+            ratio,
+            S14CausalBlockOwnedBufferSlice {
+                buffer: Arc::clone(buffer),
+                offset,
+                bytes: u64::try_from(payload.len())?,
+            },
+        );
+    }
+    Ok(slices)
+}
+
+fn write_route_aux_payloads(
+    buffer: &Arc<GpuBuffer>,
+    layout: &AuxLayout,
+    payloads: &[Vec<u8>],
+) -> Result<Vec<S14CausalBlockOwnedBufferSlice>> {
+    payloads
+        .iter()
+        .zip(&layout.route_offsets)
+        .map(|(payload, &offset)| {
+            write_mapped(buffer, offset, payload, "route aux")?;
+            Ok(S14CausalBlockOwnedBufferSlice {
+                buffer: Arc::clone(buffer),
+                offset,
+                bytes: u64::try_from(payload.len())?,
+            })
+        })
+        .collect()
+}
+
+fn build_current_kv_slices(buffer: &Arc<GpuBuffer>) -> Result<Vec<S14CausalBlockOwnedBufferSlice>> {
+    let layer_bytes = current_kv_layer_bytes()?;
+    FULL_DEPTH_LAYERS
+        .iter()
+        .enumerate()
+        .map(|(index, _)| {
+            let offset = layer_bytes
+                .checked_mul(index as u64)
+                .context("base1/K4 current-KV layer offset overflow")?;
+            Ok(S14CausalBlockOwnedBufferSlice {
+                buffer: Arc::clone(buffer),
+                offset,
+                bytes: layer_bytes,
+            })
+        })
+        .collect()
+}
+
+fn host_storage_buffer(context: &VulkanContext, bytes: u64) -> Result<GpuBuffer> {
+    GpuBuffer::new(
+        context,
+        bytes,
+        vk::BufferUsageFlags::STORAGE_BUFFER
+            | vk::BufferUsageFlags::TRANSFER_SRC
+            | vk::BufferUsageFlags::TRANSFER_DST,
+        vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        vk::MemoryPropertyFlags::empty(),
+        true,
+    )
+}
+
+fn write_mapped(buffer: &GpuBuffer, offset: u64, payload: &[u8], label: &str) -> Result<()> {
+    let end = offset
+        .checked_add(u64::try_from(payload.len())?)
+        .with_context(|| format!("base1/K4 {label} write overflow"))?;
+    if buffer.mapped().is_null() || offset % 4 != 0 || end > buffer.size() {
+        bail!("base1/K4 {label} mapped/alignment/capacity 漂移");
+    }
+    unsafe { buffer.write_at(usize::try_from(offset)?, payload) };
+    Ok(())
+}
+
+fn validate_exact_slice(
+    slice: &S14CausalBlockOwnedBufferSlice,
+    expected_bytes: u64,
+    label: &str,
+) -> Result<()> {
+    let end = slice
+        .offset
+        .checked_add(slice.bytes)
+        .with_context(|| format!("{label} range overflow"))?;
+    if slice.buffer.handle() == vk::Buffer::null()
+        || slice.offset % 4 != 0
+        || slice.bytes != expected_bytes
+        || end > slice.buffer.size()
+    {
+        bail!("base1/K4 {label} handle/alignment/bytes/capacity 漂移");
+    }
+    Ok(())
+}
+
+fn unique_asset<'a>(
+    mut assets: impl Iterator<Item = &'a Position0Asset>,
+    label: &str,
+) -> Result<&'a Position0Asset> {
+    let first = assets
+        .next()
+        .with_context(|| format!("base1/K4 manifest 缺少 {label}"))?;
+    if assets.next().is_some() {
+        bail!("base1/K4 manifest {label} 不唯一");
+    }
+    Ok(first)
+}
+
+fn rope_bytes() -> Result<u64> {
+    (S14_BASE1_K4_BLOCK_SIZE as u64)
+        .checked_mul(ROPE_ELEMENTS_PER_LANE)
+        .and_then(|elements| elements.checked_mul(F32_BYTES))
+        .context("base1/K4 rope bytes overflow")
+}
+
+fn current_kv_layer_bytes() -> Result<u64> {
+    (S14_BASE1_K4_BLOCK_SIZE as u64)
+        .checked_mul(KV_ELEMENTS_PER_LANE)
+        .and_then(|elements| elements.checked_mul(BF16_BYTES))
+        .context("base1/K4 current-KV layer bytes overflow")
+}
+
+fn current_kv_total_bytes() -> Result<u64> {
+    current_kv_layer_bytes()?
+        .checked_mul(FULL_DEPTH_LAYERS.len() as u64)
+        .context("base1/K4 current-KV arena bytes overflow")
+}
+
+fn align_up(value: u64, alignment: u64) -> Result<u64> {
+    value
+        .checked_add(alignment - 1)
+        .map(|sum| sum & !(alignment - 1))
+        .context("base1/K4 alignment overflow")
+}

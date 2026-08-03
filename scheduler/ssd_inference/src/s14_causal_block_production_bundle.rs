@@ -21,6 +21,7 @@ use crate::{
         S14CausalBlockUnionBankBinding, S14CausalBlockUnionMaterializeReceipt,
     },
     s14_causal_block_moe_adapter::S14CausalBlockVulkanMoeAdapter,
+    s14_causal_block_prefix_producer::S14CausalBlockPrefixStateProducer,
     s14_causal_block_terminal::{
         S14CausalBlockBatchedTerminalRecorder, S14CausalBlockCheckpointArenaPool,
         S14CausalBlockCheckpointArenaTelemetry,
@@ -105,6 +106,10 @@ pub trait S14CausalBlockProductionHcQkvResourceProvider:
     fn paged_weight_arena(&self) -> &Arc<S14Position0PagedWeightArena>;
 
     fn validate_production_bundle(&self, block_size: usize) -> Result<(), String>;
+
+    /// K-prefix producer 必须与HC/QKV recorder进入同一layer command；factory只允许在
+    /// recorder构造完成后消费一次，不能在terminal begin前预制host checkpoint。
+    fn take_prefix_state_producer(&mut self) -> Result<S14CausalBlockPrefixStateProducer, String>;
 }
 
 /// 同一个 production bundle 的一次性 post-seal producer。调用发生时43层已 seal/drain，
@@ -475,7 +480,7 @@ where
         bail!("S14 production bundle HC/QKV 与 grouped-MoE paged arena identity 漂移");
     }
 
-    let (_, provider) = hc_qkv_provider.into_parts();
+    let (_, mut provider) = hc_qkv_provider.into_parts();
     provider
         .validate_production_bundle(shape.block_size)
         .map_err(anyhow::Error::msg)
@@ -507,6 +512,10 @@ where
         fetch_mode,
         static_arena,
     )?;
+    let prefix_state_producer = provider
+        .take_prefix_state_producer()
+        .map_err(anyhow::Error::msg)
+        .context("消费同源K-prefix state producer")?;
     let hc_recorder = match S14CausalBlockProductionHcQkvLayerRecorder::new(
         Arc::clone(&context),
         hc_static_arena,
@@ -515,15 +524,22 @@ where
     ) {
         Ok(recorder) => recorder,
         Err(error) => {
+            let mut prefix_state_producer = prefix_state_producer;
+            let prefix_cleanup = prefix_state_producer.destroy();
             let cleanup = moe_adapter.destroy();
             return match cleanup {
-                Ok(()) => Err(error.context("构造 HC/QKV recorder")),
+                Ok(()) if prefix_cleanup.is_ok() => Err(error.context("构造 HC/QKV recorder")),
                 Err(cleanup_error) => Err(anyhow!(
-                    "构造 HC/QKV recorder 失败: {error:#}; MoE rollback 失败: {cleanup_error}"
+                    "构造 HC/QKV recorder 失败: {error:#}; MoE rollback 失败: {cleanup_error}; prefix rollback={prefix_cleanup:?}"
+                )),
+                Ok(()) => Err(anyhow!(
+                    "构造 HC/QKV recorder 失败: {error:#}; prefix rollback={prefix_cleanup:?}"
                 )),
             };
         }
-    };
+    }
+    .with_prefix_state_producer(prefix_state_producer)
+    .context("安装同command K-prefix state producer")?;
     let hc_adapter = S14CausalBlockProductionHcQkvAdapter::new(hc_recorder);
     let (publisher, provider) = s14_causal_block_terminal_production_channel();
     let terminal_adapter =

@@ -9,19 +9,17 @@
 
 use crate::{
     compute::StorageBufferSlice,
-    s14_bf16_rmsnorm::{
-        S14Bf16RmsNormDispatch, S14Bf16RmsNormPipeline, S14Bf16RmsNormShape,
-    },
-    s14_bf16_to_f32::{
-        S14Bf16ToF32Dispatch, S14Bf16ToF32Pipeline, S14Bf16ToF32Shape,
-    },
+    s14_bf16_rmsnorm::{S14Bf16RmsNormDispatch, S14Bf16RmsNormPipeline, S14Bf16RmsNormShape},
+    s14_bf16_to_f32::{S14Bf16ToF32Dispatch, S14Bf16ToF32Pipeline, S14Bf16ToF32Shape},
     s14_causal_block_layer::{
         S14CausalBlockHiddenBinding, S14_CAUSAL_BLOCK_HC_ELEMENTS_PER_LANE,
         S14_CAUSAL_BLOCK_STREAM_WIDTH,
     },
+    s14_causal_block_prefix_arena::S14CausalBlockPrefixCheckpointArena,
     s14_causal_block_production_bundle::{
         S14CausalBlockContextBound, S14CausalBlockProductionTerminalPublisher,
     },
+    s14_causal_block_production_evidence::S14CausalBlockProductionEvidenceSnapshot,
     s14_causal_block_terminal_adapter::{
         S14CausalBlockHostCandidateFinalizer, S14CausalBlockTerminalProductionSource,
         S14CausalBlockTerminalResource, S14CausalBlockTerminalResourceOwner,
@@ -31,9 +29,7 @@ use crate::{
         S14FinalHcHeadPipeline, S14FinalHcHeadShape,
     },
     s14_head_chunk_argmax::{S14HeadChunkArgmaxShape, S14_HEAD_CHUNK_COUNT},
-    s14_position0_hybrid_upload::{
-        S14Position0HeadChunkReceipt, S14Position0HybridUploader,
-    },
+    s14_position0_hybrid_upload::{S14Position0HeadChunkReceipt, S14Position0HybridUploader},
     s14_position0_mapped_assets::VerifiedMappedAssetStore,
     s14_position0_paged_weight_arena::S14Position0PagedWeightArena,
     s14_position0_weight_plan::S14Position0HybridWeightPlan,
@@ -41,10 +37,11 @@ use crate::{
 };
 use anyhow::{bail, Context, Result};
 use ash::vk;
-use polaris_s14_runner::{
-    Position0WholeTokenManifest, RouteDecision, FULL_DEPTH_LAYERS,
+use polaris_s14_runner::{Position0WholeTokenManifest, RouteDecision, FULL_DEPTH_LAYERS};
+use std::{
+    fmt,
+    sync::{Arc, Mutex},
 };
-use std::{fmt, sync::{Arc, Mutex}};
 
 const TERMINAL_ALIGNMENT: u64 = 256;
 const FINAL_RMS_EPSILON: f32 = 1.0e-6;
@@ -73,13 +70,6 @@ impl S14CausalBlockOwnedBufferSlice {
     pub fn new(buffer: Arc<GpuBuffer>, offset: u64) -> Self {
         Self { buffer, offset }
     }
-
-    fn storage_slice(&self) -> StorageBufferSlice<'_> {
-        StorageBufferSlice {
-            buffer: self.buffer.as_ref(),
-            offset: self.offset,
-        }
-    }
 }
 
 pub struct S14CausalBlockTerminalHeadUploadState {
@@ -103,12 +93,9 @@ pub struct S14CausalBlockTerminalResourceOwnerInputs {
     pub context: Arc<VulkanContext>,
     pub block_size: usize,
     pub final_hidden: S14CausalBlockOwnedBufferSlice,
-    pub final_hc_head_fn: S14CausalBlockOwnedBufferSlice,
-    pub final_hc_head_scale: S14CausalBlockOwnedBufferSlice,
-    pub final_hc_head_base: S14CausalBlockOwnedBufferSlice,
-    pub final_norm_weight: S14CausalBlockOwnedBufferSlice,
-    pub checkpoint_state_bytes: u64,
-    pub checkpoints: Vec<S14CausalBlockOwnedBufferSlice>,
+    /// FullDepth43 producer 开始前绑定的单一 K-prefix arena。checkpoint slices
+    /// 只能在43层累积写集全部 seal 后导出，避免 terminal 安装生命周期环。
+    pub prefix_checkpoint_arena: Arc<S14CausalBlockPrefixCheckpointArena>,
     pub paged_arena: Arc<S14Position0PagedWeightArena>,
     pub head_manifest: Arc<Position0WholeTokenManifest>,
     pub head_weight_plan: Arc<S14Position0HybridWeightPlan>,
@@ -219,8 +206,7 @@ pub struct S14CausalBlockProductionTerminalResourceOwner {
     context: Arc<VulkanContext>,
     block_size: usize,
     final_hidden: S14CausalBlockOwnedBufferSlice,
-    checkpoint_state_bytes: u64,
-    checkpoints: Vec<S14CausalBlockOwnedBufferSlice>,
+    prefix_checkpoint_arena: Arc<S14CausalBlockPrefixCheckpointArena>,
     paged_arena: Arc<S14Position0PagedWeightArena>,
     head_manifest: Arc<Position0WholeTokenManifest>,
     head_weight_plan: Arc<S14Position0HybridWeightPlan>,
@@ -242,8 +228,14 @@ impl fmt::Debug for S14CausalBlockProductionTerminalResourceOwner {
             .field("context", &Arc::as_ptr(&self.context))
             .field("block_size", &self.block_size)
             .field("final_hidden", &self.final_hidden)
-            .field("checkpoint_state_bytes", &self.checkpoint_state_bytes)
-            .field("checkpoint_count", &self.checkpoints.len())
+            .field(
+                "checkpoint_state_bytes",
+                &self.prefix_checkpoint_arena.layout().checkpoint_state_bytes,
+            )
+            .field(
+                "checkpoint_count",
+                &self.prefix_checkpoint_arena.layout().block_size,
+            )
             .field("head_chunk_count", &(S14_HEAD_CHUNK_COUNT as usize))
             .field("paged_arena", &Arc::as_ptr(&self.paged_arena))
             .field("layout", &self.layout)
@@ -259,12 +251,7 @@ impl S14CausalBlockProductionTerminalResourceOwner {
             context,
             block_size,
             final_hidden,
-            final_hc_head_fn,
-            final_hc_head_scale,
-            final_hc_head_base,
-            final_norm_weight,
-            checkpoint_state_bytes,
-            checkpoints,
+            prefix_checkpoint_arena,
             paged_arena,
             head_manifest,
             head_weight_plan,
@@ -273,15 +260,15 @@ impl S14CausalBlockProductionTerminalResourceOwner {
         if !context.timeline_semaphore || !matches!(block_size, 4 | 8) {
             bail!("production terminal owner 要求 timeline semaphore 与 K=4/8");
         }
+        if !Arc::ptr_eq(&context, prefix_checkpoint_arena.context()) {
+            bail!("production terminal owner 与 prefix checkpoint arena VulkanContext 漂移");
+        }
+        let terminal_static = resolve_terminal_static_slices(paged_arena.as_ref())?;
         validate_external_resources(
             block_size,
             &final_hidden,
-            &final_hc_head_fn,
-            &final_hc_head_scale,
-            &final_hc_head_base,
-            &final_norm_weight,
-            checkpoint_state_bytes,
-            &checkpoints,
+            terminal_static,
+            &prefix_checkpoint_arena,
             &paged_arena,
             &head_manifest,
             &head_weight_plan,
@@ -338,10 +325,7 @@ impl S14CausalBlockProductionTerminalResourceOwner {
             &context,
             block_size,
             &final_hidden,
-            &final_hc_head_fn,
-            &final_hc_head_scale,
-            &final_hc_head_base,
-            &final_norm_weight,
+            terminal_static,
             &arena,
             layout,
         ) {
@@ -360,8 +344,7 @@ impl S14CausalBlockProductionTerminalResourceOwner {
             context,
             block_size,
             final_hidden,
-            checkpoint_state_bytes,
-            checkpoints,
+            prefix_checkpoint_arena,
             paged_arena,
             head_manifest,
             head_weight_plan,
@@ -386,11 +369,17 @@ impl S14CausalBlockProductionTerminalResourceOwner {
     }
 
     pub fn checkpoint_state_bytes(&self) -> u64 {
-        self.checkpoint_state_bytes
+        self.prefix_checkpoint_arena.layout().checkpoint_state_bytes
     }
 
     pub fn paged_weight_arena(&self) -> &Arc<S14Position0PagedWeightArena> {
         &self.paged_arena
+    }
+
+    /// 只读导出由同一 prefix arena 在 GPU 完成后累计的 production 强回执。
+    /// 不暴露 ledger 写入口，也不延长任何临时 descriptor/command 生命周期。
+    pub fn production_evidence_snapshot(&self) -> Result<S14CausalBlockProductionEvidenceSnapshot> {
+        self.prefix_checkpoint_arena.production_evidence_snapshot()
     }
 
     pub fn layout(&self) -> S14CausalBlockTerminalArenaLayout {
@@ -410,9 +399,17 @@ impl S14CausalBlockProductionTerminalResourceOwner {
     ) -> Result<S14CausalBlockTerminalPublishReceipt, String> {
         self.validate_publication_identity(base_position, final_hidden, &routes_by_position)
             .map_err(|error| error.to_string())?;
+        let checkpoints = self
+            .prefix_checkpoint_arena
+            .seal_and_export_terminal_checkpoints()
+            .map_err(|error| format!("post-seal K-prefix checkpoint 导出失败: {error:#}"))?;
+        validate_checkpoint_slices(self.block_size, self.checkpoint_state_bytes(), &checkpoints)
+            .map_err(|error| format!("post-seal K-prefix checkpoint 验收失败: {error:#}"))?;
         if let Err(error) = self.record_and_submit_prelude() {
             self.set_phase(OwnerPhase::Poisoned);
-            return Err(format!("record production terminal HC/norm 失败: {error:#}"));
+            return Err(format!(
+                "record production terminal HC/norm 失败: {error:#}"
+            ));
         }
         let resources: Arc<dyn S14CausalBlockTerminalResourceOwner> = self.clone();
         let source = S14CausalBlockTerminalProductionSource {
@@ -420,7 +417,7 @@ impl S14CausalBlockProductionTerminalResourceOwner {
             base_position,
             final_hidden,
             normalized_head_rows_offset: self.layout.normalized_f32_offset,
-            checkpoint_offsets: self.checkpoints.iter().map(|slice| slice.offset).collect(),
+            checkpoint_offsets: checkpoints.iter().map(|slice| slice.offset).collect(),
             head_chunk_count: S14_HEAD_CHUNK_COUNT as usize,
             producer_timeline_value: PRODUCER_TIMELINE_VALUE,
             routes_by_position,
@@ -450,7 +447,7 @@ impl S14CausalBlockProductionTerminalResourceOwner {
             completed_layers: FULL_DEPTH_LAYERS.len(),
             producer_timeline_value: PRODUCER_TIMELINE_VALUE,
             normalized_head_rows_offset: self.layout.normalized_f32_offset,
-            checkpoint_count: self.checkpoints.len(),
+            checkpoint_count: checkpoints.len(),
             head_chunk_count: S14_HEAD_CHUNK_COUNT as usize,
             predicted_tokens_prebuilt: false,
         })
@@ -466,7 +463,8 @@ impl S14CausalBlockProductionTerminalResourceOwner {
             .checked_add(self.block_size as u32)
             .context("production terminal position overflow")?;
         let expected_hidden_bytes = hidden_bytes(self.block_size)?;
-        if final_hidden.buffer != self.final_hidden.buffer.handle()
+        if base_position != self.prefix_checkpoint_arena.base_position()
+            || final_hidden.buffer != self.final_hidden.buffer.handle()
             || final_hidden.offset != self.final_hidden.offset
             || final_hidden.bytes != expected_hidden_bytes
             || final_hidden.block_size != self.block_size
@@ -493,7 +491,10 @@ impl S14CausalBlockProductionTerminalResourceOwner {
             }
             *phase = OwnerPhase::Recording;
         }
-        let arena = self.arena.as_ref().context("production terminal arena 已销毁")?;
+        let arena = self
+            .arena
+            .as_ref()
+            .context("production terminal arena 已销毁")?;
         let status_readback = self
             .status_readback
             .as_ref()
@@ -503,10 +504,9 @@ impl S14CausalBlockProductionTerminalResourceOwner {
             .as_ref()
             .context("production terminal pipelines 已销毁")?;
         unsafe {
-            self.context.device.reset_command_pool(
-                self.command_pool,
-                vk::CommandPoolResetFlags::empty(),
-            )?;
+            self.context
+                .device
+                .reset_command_pool(self.command_pool, vk::CommandPoolResetFlags::empty())?;
             self.context.device.begin_command_buffer(
                 self.command,
                 &vk::CommandBufferBeginInfo::default()
@@ -521,7 +521,9 @@ impl S14CausalBlockProductionTerminalResourceOwner {
             );
             transfer_to_compute_barrier(&self.context, self.command);
             for dispatch in &pipelines.final_hc_dispatches {
-                pipelines.final_hc.cmd(&self.context, self.command, dispatch);
+                pipelines
+                    .final_hc
+                    .cmd(&self.context, self.command, dispatch);
                 compute_to_compute_barrier(&self.context, self.command);
             }
             pipelines
@@ -550,15 +552,17 @@ impl S14CausalBlockProductionTerminalResourceOwner {
             let commands = [self.command];
             let signals = [self.producer_timeline];
             let signal_values = [PRODUCER_TIMELINE_VALUE];
-            let mut timeline_info = vk::TimelineSemaphoreSubmitInfo::default()
-                .signal_semaphore_values(&signal_values);
+            let mut timeline_info =
+                vk::TimelineSemaphoreSubmitInfo::default().signal_semaphore_values(&signal_values);
             let submit = vk::SubmitInfo::default()
                 .push_next(&mut timeline_info)
                 .command_buffers(&commands)
                 .signal_semaphores(&signals);
-            self.context
-                .device
-                .queue_submit(self.context.q_graphics, &[submit], vk::Fence::null())?;
+            self.context.device.queue_submit(
+                self.context.q_graphics,
+                &[submit],
+                vk::Fence::null(),
+            )?;
         }
         self.set_phase(OwnerPhase::Submitted);
         Ok(())
@@ -627,10 +631,9 @@ impl S14CausalBlockTerminalResourceOwner for S14CausalBlockProductionTerminalRes
         match resource {
             S14CausalBlockTerminalResource::FinalHidden => Some(self.final_hidden.buffer.as_ref()),
             S14CausalBlockTerminalResource::NormalizedHeadRows => self.arena.as_ref(),
-            S14CausalBlockTerminalResource::CandidateCheckpoint(lane) => self
-                .checkpoints
-                .get(lane)
-                .map(|slice| slice.buffer.as_ref()),
+            S14CausalBlockTerminalResource::CandidateCheckpoint(lane) => {
+                (lane < self.block_size).then(|| self.prefix_checkpoint_arena.buffer().as_ref())
+            }
             S14CausalBlockTerminalResource::HeadBank(bank) => {
                 self.paged_arena.head_chunk(bank).ok()
             }
@@ -752,10 +755,7 @@ fn build_pipelines(
     ctx: &VulkanContext,
     block_size: usize,
     final_hidden: &S14CausalBlockOwnedBufferSlice,
-    hc_head_fn: &S14CausalBlockOwnedBufferSlice,
-    hc_head_scale: &S14CausalBlockOwnedBufferSlice,
-    hc_head_base: &S14CausalBlockOwnedBufferSlice,
-    norm_weight: &S14CausalBlockOwnedBufferSlice,
+    terminal_static: S14CausalBlockTerminalStaticSlices<'_>,
     arena: &GpuBuffer,
     layout: S14CausalBlockTerminalArenaLayout,
 ) -> Result<TerminalPipelines> {
@@ -774,9 +774,9 @@ fn build_pipelines(
                     final_hidden.buffer.as_ref(),
                     final_hidden.offset + hidden_lane_bytes * lane as u64,
                 ),
-                hc_head_fn: owned_hc_slice(hc_head_fn),
-                hc_head_scale: owned_hc_slice(hc_head_scale),
-                hc_head_base: owned_hc_slice(hc_head_base),
+                hc_head_fn: storage_hc_slice(terminal_static.hc_head_fn),
+                hc_head_scale: storage_hc_slice(terminal_static.hc_head_scale),
+                hc_head_base: storage_hc_slice(terminal_static.hc_head_base),
                 output: S14FinalHcHeadBufferSlice::new(
                     arena,
                     layout.final_hidden_bf16_offset + output_lane_bytes * lane as u64,
@@ -810,19 +810,29 @@ fn build_pipelines(
             return Err(error.context("create production terminal RMSNorm pipeline"));
         }
     };
-    let rms_shape = S14Bf16RmsNormShape::new(
-        block_size as u32,
-        S14_CAUSAL_BLOCK_STREAM_WIDTH as u32,
-    )?;
+    let rms_shape =
+        S14Bf16RmsNormShape::new(block_size as u32, S14_CAUSAL_BLOCK_STREAM_WIDTH as u32)?;
     let rmsnorm_dispatch = match rmsnorm.bind_slices(
         ctx,
         rms_shape,
         FINAL_RMS_EPSILON,
-        StorageBufferSlice { buffer: arena, offset: layout.final_hidden_bf16_offset },
-        norm_weight.storage_slice(),
-        StorageBufferSlice { buffer: arena, offset: layout.inverse_rms_offset },
-        StorageBufferSlice { buffer: arena, offset: layout.normalized_bf16_offset },
-        StorageBufferSlice { buffer: arena, offset: layout.status_offset },
+        StorageBufferSlice {
+            buffer: arena,
+            offset: layout.final_hidden_bf16_offset,
+        },
+        terminal_static.norm_weight,
+        StorageBufferSlice {
+            buffer: arena,
+            offset: layout.inverse_rms_offset,
+        },
+        StorageBufferSlice {
+            buffer: arena,
+            offset: layout.normalized_bf16_offset,
+        },
+        StorageBufferSlice {
+            buffer: arena,
+            offset: layout.status_offset,
+        },
     ) {
         Ok(dispatch) => dispatch,
         Err(error) => {
@@ -854,9 +864,18 @@ fn build_pipelines(
     let to_f32_dispatch = match to_f32.bind_slices(
         ctx,
         S14Bf16ToF32Shape::new(scalars)?,
-        StorageBufferSlice { buffer: arena, offset: layout.normalized_bf16_offset },
-        StorageBufferSlice { buffer: arena, offset: layout.normalized_f32_offset },
-        StorageBufferSlice { buffer: arena, offset: layout.status_offset },
+        StorageBufferSlice {
+            buffer: arena,
+            offset: layout.normalized_bf16_offset,
+        },
+        StorageBufferSlice {
+            buffer: arena,
+            offset: layout.normalized_f32_offset,
+        },
+        StorageBufferSlice {
+            buffer: arena,
+            offset: layout.status_offset,
+        },
     ) {
         Ok(dispatch) => dispatch,
         Err(error) => {
@@ -884,40 +903,46 @@ fn build_pipelines(
 fn validate_external_resources(
     block_size: usize,
     final_hidden: &S14CausalBlockOwnedBufferSlice,
-    hc_head_fn: &S14CausalBlockOwnedBufferSlice,
-    hc_head_scale: &S14CausalBlockOwnedBufferSlice,
-    hc_head_base: &S14CausalBlockOwnedBufferSlice,
-    norm_weight: &S14CausalBlockOwnedBufferSlice,
-    checkpoint_state_bytes: u64,
-    checkpoints: &[S14CausalBlockOwnedBufferSlice],
+    terminal_static: S14CausalBlockTerminalStaticSlices<'_>,
+    prefix_checkpoint_arena: &Arc<S14CausalBlockPrefixCheckpointArena>,
     paged_arena: &S14Position0PagedWeightArena,
     head_manifest: &Position0WholeTokenManifest,
     head_weight_plan: &S14Position0HybridWeightPlan,
 ) -> Result<()> {
     head_weight_plan.validate(head_manifest)?;
-    if checkpoint_state_bytes == 0 || checkpoints.len() != block_size {
-        bail!("production terminal checkpoint 数量或 state bytes 非法");
+    let checkpoint_layout = prefix_checkpoint_arena.layout();
+    if checkpoint_layout.checkpoint_state_bytes == 0
+        || checkpoint_layout.block_size != block_size
+        || prefix_checkpoint_arena.buffer().handle() == vk::Buffer::null()
+    {
+        bail!("production terminal prefix checkpoint arena K/state/handle 非法");
     }
     let final_shape = S14FinalHcHeadShape::production();
+    validate_slice(final_hidden, hidden_bytes(block_size)?, "final hidden")?;
     for (slice, bytes, label) in [
-        (final_hidden, hidden_bytes(block_size)?, "final hidden"),
-        (hc_head_fn, final_shape.hc_head_fn_f32_bytes(), "hc_head_fn"),
-        (hc_head_scale, final_shape.hc_head_scale_f32_bytes(), "hc_head_scale"),
-        (hc_head_base, final_shape.hc_head_base_f32_bytes(), "hc_head_base"),
-        (norm_weight, S14_CAUSAL_BLOCK_STREAM_WIDTH as u64 * 2, "norm.weight"),
+        (
+            terminal_static.hc_head_fn,
+            final_shape.hc_head_fn_f32_bytes(),
+            "hc_head_fn",
+        ),
+        (
+            terminal_static.hc_head_scale,
+            final_shape.hc_head_scale_f32_bytes(),
+            "hc_head_scale",
+        ),
+        (
+            terminal_static.hc_head_base,
+            final_shape.hc_head_base_f32_bytes(),
+            "hc_head_base",
+        ),
+        (
+            terminal_static.norm_weight,
+            S14_CAUSAL_BLOCK_STREAM_WIDTH as u64 * 2,
+            "norm.weight",
+        ),
     ] {
-        validate_slice(slice, bytes, label)?;
+        validate_storage_slice(slice, bytes, label)?;
     }
-    let checkpoint_handle = checkpoints[0].buffer.handle();
-    let mut checkpoint_ranges = Vec::with_capacity(block_size);
-    for checkpoint in checkpoints {
-        if checkpoint.buffer.handle() != checkpoint_handle {
-            bail!("production terminal K份 checkpoint 必须属于同一 device arena");
-        }
-        validate_slice(checkpoint, checkpoint_state_bytes, "candidate checkpoint")?;
-        checkpoint_ranges.push((checkpoint.offset, checkpoint.offset + checkpoint_state_bytes));
-    }
-    validate_non_overlapping(&checkpoint_ranges, "candidate checkpoint")?;
     let head_shape = S14HeadChunkArgmaxShape::production_batched(block_size as u32)?;
     if head_weight_plan.head_chunk_count != u64::from(S14_HEAD_CHUNK_COUNT)
         || head_weight_plan.head_chunk_bytes != head_shape.max_chunk_weight_bytes()?
@@ -939,11 +964,30 @@ fn validate_external_resources(
     Ok(())
 }
 
-fn validate_slice(
-    slice: &S14CausalBlockOwnedBufferSlice,
-    bytes: u64,
-    label: &str,
+fn validate_checkpoint_slices(
+    block_size: usize,
+    checkpoint_state_bytes: u64,
+    checkpoints: &[S14CausalBlockOwnedBufferSlice],
 ) -> Result<()> {
+    if checkpoint_state_bytes == 0 || checkpoints.len() != block_size {
+        bail!("production terminal checkpoint 数量或 state bytes 非法");
+    }
+    let checkpoint_handle = checkpoints[0].buffer.handle();
+    let mut checkpoint_ranges = Vec::with_capacity(block_size);
+    for checkpoint in checkpoints {
+        if checkpoint.buffer.handle() != checkpoint_handle {
+            bail!("production terminal K份 checkpoint 必须属于同一 device arena");
+        }
+        validate_slice(checkpoint, checkpoint_state_bytes, "candidate checkpoint")?;
+        checkpoint_ranges.push((
+            checkpoint.offset,
+            checkpoint.offset + checkpoint_state_bytes,
+        ));
+    }
+    validate_non_overlapping(&checkpoint_ranges, "candidate checkpoint")
+}
+
+fn validate_slice(slice: &S14CausalBlockOwnedBufferSlice, bytes: u64, label: &str) -> Result<()> {
     if slice.buffer.handle() == vk::Buffer::null()
         || bytes == 0
         || slice.offset % 4 != 0
@@ -976,8 +1020,54 @@ fn host_candidates_identity_would_be_invalid(
     !matches!(block_size, 4 | 8) || routes_by_position.len() != block_size
 }
 
-fn owned_hc_slice(slice: &S14CausalBlockOwnedBufferSlice) -> S14FinalHcHeadBufferSlice<'_> {
-    S14FinalHcHeadBufferSlice::new(slice.buffer.as_ref(), slice.offset)
+#[derive(Clone, Copy)]
+struct S14CausalBlockTerminalStaticSlices<'a> {
+    hc_head_fn: StorageBufferSlice<'a>,
+    hc_head_scale: StorageBufferSlice<'a>,
+    hc_head_base: StorageBufferSlice<'a>,
+    norm_weight: StorageBufferSlice<'a>,
+}
+
+fn resolve_terminal_static_slices(
+    paged_arena: &S14Position0PagedWeightArena,
+) -> Result<S14CausalBlockTerminalStaticSlices<'_>> {
+    fn resident<'a>(
+        paged_arena: &'a S14Position0PagedWeightArena,
+        tensor: &str,
+    ) -> Result<StorageBufferSlice<'a>> {
+        let binding = paged_arena.static_asset(tensor)?;
+        if !binding.resident_once || binding.layer.is_some() || binding.bank.is_some() {
+            bail!("production terminal {tensor} 必须来自 paged resident-small arena");
+        }
+        Ok(StorageBufferSlice {
+            buffer: binding.buffer,
+            offset: binding.destination_offset,
+        })
+    }
+    Ok(S14CausalBlockTerminalStaticSlices {
+        hc_head_fn: resident(paged_arena, "hc_head_fn")?,
+        hc_head_scale: resident(paged_arena, "hc_head_scale")?,
+        hc_head_base: resident(paged_arena, "hc_head_base")?,
+        norm_weight: resident(paged_arena, "norm.weight")?,
+    })
+}
+
+fn storage_hc_slice(slice: StorageBufferSlice<'_>) -> S14FinalHcHeadBufferSlice<'_> {
+    S14FinalHcHeadBufferSlice::new(slice.buffer, slice.offset)
+}
+
+fn validate_storage_slice(slice: StorageBufferSlice<'_>, bytes: u64, label: &str) -> Result<()> {
+    if slice.buffer.handle() == vk::Buffer::null()
+        || bytes == 0
+        || slice.offset % 4 != 0
+        || slice
+            .offset
+            .checked_add(bytes)
+            .is_none_or(|end| end > slice.buffer.size())
+    {
+        bail!("production terminal {label} paged slice 越界/未对齐");
+    }
+    Ok(())
 }
 
 fn hidden_bytes(block_size: usize) -> Result<u64> {
