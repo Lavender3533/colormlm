@@ -884,6 +884,21 @@ class RangeCache:
         with self._budget_lock:
             return self._download_used
 
+    def begin_request_budget(self, download_budget_bytes: int) -> None:
+        """为常驻 fetch worker 开始一个严格串行的请求级下载预算。"""
+
+        if (
+            isinstance(download_budget_bytes, bool)
+            or not isinstance(download_budget_bytes, int)
+            or download_budget_bytes <= 0
+        ):
+            raise rp.ContractError("request download budget 必须为正整数")
+        with self._budget_lock:
+            if self._download_reserved != 0 or self._cache_reserved != 0:
+                raise rp.ContractError("上一个 Range 请求仍有未结算 reservation")
+            self.download_budget_bytes = download_budget_bytes
+            self._download_used = 0
+
     @property
     def proof_cache_telemetry(self) -> dict[str, Any]:
         with self._proof_cache_lock:

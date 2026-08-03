@@ -23,12 +23,16 @@ use std::{
     error::Error,
     fmt,
     fs::{self, OpenOptions},
-    io::{Read, Seek, SeekFrom, Write},
+    io::{BufRead, BufReader, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::{Child, ChildStdin, ChildStdout, Command, Stdio},
+    sync::{mpsc, Mutex, OnceLock},
     thread,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
+
+#[cfg(test)]
+use std::time::Instant;
 
 pub const S14_DYNAMIC_PAGE_CACHE_READINESS_FORMAT: &str =
     "polaris-s14-dynamic-page-cache-readiness-v1";
@@ -42,6 +46,7 @@ pub const S14_DYNAMIC_PAGE_FETCH_LOG_DIR_ENV: &str = "S14_DYNAMIC_PAGE_FETCH_LOG
 
 const DEFAULT_DYNAMIC_PAGE_FETCH_TIMEOUT: Duration = Duration::from_secs(7_200);
 const MAX_DYNAMIC_PAGE_FETCH_TIMEOUT_SECONDS: u64 = 86_400;
+#[cfg(test)]
 const DYNAMIC_PAGE_FETCH_POLL_INTERVAL: Duration = Duration::from_millis(200);
 const DYNAMIC_PAGE_FETCH_LOG_TAIL_BYTES: u64 = 16 * 1024;
 
@@ -792,6 +797,313 @@ fn default_fetch_driver() -> PathBuf {
     )
 }
 
+struct PersistentDynamicFetchWorker {
+    transport: DynamicPageRangeTransport,
+    child: Child,
+    stdin: ChildStdin,
+    stdout: Option<BufReader<ChildStdout>>,
+    stderr_log: PathBuf,
+    next_request_id: u64,
+}
+
+impl PersistentDynamicFetchWorker {
+    fn spawn(transport: &DynamicPageRangeTransport, cache_root: &Path) -> Result<Self> {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .context("system clock before Unix epoch")?
+            .as_nanos();
+        let log_dir = std::env::var_os(S14_DYNAMIC_PAGE_FETCH_LOG_DIR_ENV)
+            .map(PathBuf::from)
+            .unwrap_or_else(|| cache_root.join("_dynamic_fetch_logs"));
+        fs::create_dir_all(&log_dir)
+            .with_context(|| format!("create dynamic fetch log dir {}", log_dir.display()))?;
+        let stderr_log = log_dir.join(format!(
+            "fetch-worker-{}-{stamp}.stderr.log",
+            std::process::id()
+        ));
+        let stderr = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&stderr_log)
+            .with_context(|| format!("create persistent fetch stderr {}", stderr_log.display()))?;
+        let mut child = Command::new(&transport.python)
+            .arg("-u")
+            .arg(&transport.driver)
+            .arg("--serve")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::from(stderr))
+            .spawn()
+            .with_context(|| {
+                format!(
+                    "启动 persistent dynamic Range worker python={} driver={} stderr={}",
+                    transport.python.display(),
+                    transport.driver.display(),
+                    stderr_log.display()
+                )
+            })?;
+        let stdin = child.stdin.take().context("persistent fetch worker 缺少stdin")?;
+        let stdout = child
+            .stdout
+            .take()
+            .map(BufReader::new)
+            .context("persistent fetch worker 缺少stdout")?;
+        eprintln!(
+            "persistent dynamic Range worker started pid={} stderr={}",
+            child.id(),
+            stderr_log.display()
+        );
+        Ok(Self {
+            transport: transport.clone(),
+            child,
+            stdin,
+            stdout: Some(stdout),
+            stderr_log,
+            next_request_id: 0,
+        })
+    }
+
+    fn stop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        self.stdout.take();
+    }
+
+    fn request(
+        &mut self,
+        manifest_path: &Path,
+        cache_root: &Path,
+        download_budget_bytes: u64,
+        timeout: Duration,
+    ) -> Result<String> {
+        match self.child.try_wait() {
+            Ok(None) => {}
+            Ok(Some(status)) => bail!(
+                "persistent dynamic Range worker 已退出: status={} stderr_log={} stderr_tail={}",
+                status,
+                self.stderr_log.display(),
+                read_log_tail(&self.stderr_log)
+            ),
+            Err(error) => bail!(
+                "poll persistent dynamic Range worker 失败: error={} stderr_log={} stderr_tail={}",
+                error,
+                self.stderr_log.display(),
+                read_log_tail(&self.stderr_log)
+            ),
+        }
+        let request_id = self.next_request_id;
+        self.next_request_id = self
+            .next_request_id
+            .checked_add(1)
+            .context("persistent fetch request_id overflow")?;
+        let manifest_utf8 = manifest_path
+            .to_str()
+            .context("persistent fetch manifest path 必须为UTF-8")?;
+        let cache_root_utf8 = cache_root
+            .to_str()
+            .context("persistent fetch cache root 必须为UTF-8")?;
+        serde_json::to_writer(
+            &mut self.stdin,
+            &serde_json::json!({
+                "op": "fetch_manifest",
+                "request_id": request_id,
+                "manifest": manifest_utf8,
+                "cache_root": cache_root_utf8,
+                "download_budget_bytes": download_budget_bytes,
+            }),
+        )
+        .context("encode persistent dynamic fetch request")?;
+        self.stdin
+            .write_all(b"\n")
+            .context("write persistent dynamic fetch newline")?;
+        self.stdin
+            .flush()
+            .context("flush persistent dynamic fetch request")?;
+
+        let mut reader = self.stdout.take().context("persistent fetch stdout 已被占用")?;
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let reader_thread = thread::spawn(move || {
+            let mut line = String::new();
+            let read = reader.read_line(&mut line);
+            let _ = sender.send((reader, read, line));
+        });
+        let (reader, read, line) = match receiver.recv_timeout(timeout) {
+            Ok(result) => result,
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                self.stop();
+                let _ = reader_thread.join();
+                bail!(
+                    "persistent dynamic Range worker 请求超时并已回收: request_id={} timeout_seconds={} stderr_log={} stderr_tail={}",
+                    request_id,
+                    timeout.as_secs(),
+                    self.stderr_log.display(),
+                    read_log_tail(&self.stderr_log)
+                );
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                self.stop();
+                let _ = reader_thread.join();
+                bail!(
+                    "persistent dynamic Range worker stdout reader 断开并已回收: request_id={} stderr_log={} stderr_tail={}",
+                    request_id,
+                    self.stderr_log.display(),
+                    read_log_tail(&self.stderr_log)
+                );
+            }
+        };
+        let _ = reader_thread.join();
+        self.stdout = Some(reader);
+        let read = read.context("read persistent dynamic fetch response")?;
+        if read == 0 {
+            let status = self.child.wait().ok();
+            bail!(
+                "persistent dynamic Range worker stdout EOF: request_id={} status={:?} stderr_log={} stderr_tail={}",
+                request_id,
+                status,
+                self.stderr_log.display(),
+                read_log_tail(&self.stderr_log)
+            );
+        }
+        let response: serde_json::Value =
+            serde_json::from_str(&line).context("decode persistent dynamic fetch response JSON")?;
+        if response.get("request_id").and_then(serde_json::Value::as_u64) != Some(request_id) {
+            bail!("persistent dynamic fetch response request_id 漂移");
+        }
+        if response.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
+            bail!(
+                "persistent dynamic fetch 请求失败: type={} error={} stderr_log={} stderr_tail={}",
+                response
+                    .get("error_type")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("unknown"),
+                response
+                    .get("error")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("unknown"),
+                self.stderr_log.display(),
+                read_log_tail(&self.stderr_log)
+            );
+        }
+        let result = response.get("result").context("persistent fetch response 缺少result")?;
+        if result.get("format").and_then(serde_json::Value::as_str)
+            != Some("polaris-s14-dynamic-page-fetch-result-v1")
+            || result
+                .get("requested_bytes")
+                .and_then(serde_json::Value::as_u64)
+                != Some(download_budget_bytes)
+        {
+            bail!("persistent dynamic fetch result format/budget 漂移");
+        }
+        let expected_ranges = u64::try_from(manifest_entry_count(manifest_path)?)
+            .context("persistent fetch manifest range count overflow")?;
+        let range_count = result
+            .get("range_count")
+            .and_then(serde_json::Value::as_u64)
+            .context("persistent dynamic fetch result 缺少range_count")?;
+        let cache_hits = result
+            .get("cache_hits")
+            .and_then(serde_json::Value::as_u64)
+            .context("persistent dynamic fetch result 缺少cache_hits")?;
+        let cache_misses = result
+            .get("cache_misses")
+            .and_then(serde_json::Value::as_u64)
+            .context("persistent dynamic fetch result 缺少cache_misses")?;
+        if range_count != expected_ranges
+            || cache_hits.checked_add(cache_misses) != Some(expected_ranges)
+        {
+            bail!("persistent dynamic fetch result range/hit/miss count 漂移");
+        }
+        Ok(line)
+    }
+}
+
+fn manifest_entry_count(path: &Path) -> Result<usize> {
+    let value: serde_json::Value = serde_json::from_reader(
+        fs::File::open(path)
+            .with_context(|| format!("open persistent fetch manifest {}", path.display()))?,
+    )
+    .context("decode persistent fetch manifest for receipt")?;
+    value
+        .get("entries")
+        .and_then(serde_json::Value::as_array)
+        .map(Vec::len)
+        .context("persistent fetch manifest 缺少entries")
+}
+
+impl Drop for PersistentDynamicFetchWorker {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
+static PERSISTENT_DYNAMIC_FETCH_WORKER: OnceLock<Mutex<Option<PersistentDynamicFetchWorker>>> =
+    OnceLock::new();
+
+fn invoke_persistent_range_transport(
+    transport: &DynamicPageRangeTransport,
+    manifest: &DynamicPageFetchManifest,
+    cache_root: &Path,
+    download_budget_bytes: u64,
+    timeout: Duration,
+) -> Result<()> {
+    let (artifacts, mut stdout_log, mut stderr_log) =
+        DynamicFetchArtifacts::write(manifest, cache_root)?;
+    writeln!(
+        stderr_log,
+        "rust_persistent_transport_request manifest={} budget_bytes={} timeout_seconds={}",
+        artifacts.manifest.display(),
+        download_budget_bytes,
+        timeout.as_secs()
+    )
+    .context("write persistent dynamic fetch request metadata")?;
+    stderr_log
+        .flush()
+        .context("flush persistent dynamic fetch request metadata")?;
+
+    let worker_lock = PERSISTENT_DYNAMIC_FETCH_WORKER.get_or_init(|| Mutex::new(None));
+    let mut slot = worker_lock
+        .lock()
+        .map_err(|_| anyhow::anyhow!("persistent dynamic fetch worker mutex poisoned"))?;
+    let replace = slot
+        .as_ref()
+        .map(|worker| worker.transport != *transport)
+        .unwrap_or(false);
+    if replace {
+        if let Some(mut worker) = slot.take() {
+            worker.stop();
+        }
+    }
+    if slot.is_none() {
+        *slot = Some(PersistentDynamicFetchWorker::spawn(transport, cache_root)?);
+    }
+    let result = slot.as_mut().expect("worker just initialized").request(
+        &artifacts.manifest,
+        cache_root,
+        download_budget_bytes,
+        timeout,
+    );
+    match result {
+        Ok(response) => {
+            stdout_log
+                .write_all(response.as_bytes())
+                .context("write persistent dynamic fetch response log")?;
+            stdout_log
+                .flush()
+                .context("flush persistent dynamic fetch response log")?;
+            drop(stdout_log);
+            drop(stderr_log);
+            artifacts.cleanup_success();
+            Ok(())
+        }
+        Err(error) => {
+            if let Some(mut worker) = slot.take() {
+                worker.stop();
+            }
+            Err(error)
+        }
+    }
+}
+
 fn invoke_existing_range_transport(
     transport: &DynamicPageRangeTransport,
     manifest: &DynamicPageFetchManifest,
@@ -805,7 +1117,7 @@ fn invoke_existing_range_transport(
         );
     }
     let timeout = dynamic_page_fetch_timeout()?;
-    invoke_existing_range_transport_with_timeout(
+    invoke_persistent_range_transport(
         transport,
         manifest,
         cache_root,
@@ -814,6 +1126,7 @@ fn invoke_existing_range_transport(
     )
 }
 
+#[cfg(test)]
 fn invoke_existing_range_transport_with_timeout(
     transport: &DynamicPageRangeTransport,
     manifest: &DynamicPageFetchManifest,
