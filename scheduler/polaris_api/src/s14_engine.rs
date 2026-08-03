@@ -150,6 +150,16 @@ pub struct VerifiedS14NumericalGate {
 }
 
 impl VerifiedS14NumericalGate {
+    /// 只用于在 loopback 上产生下一份冻结数值证据。调用者必须
+    /// 将服务限制为单请求并在请求后关闭；这不放松 runtime 的
+    /// Range proof/SHA、Vulkan 计算或 host/device commit 门。
+    pub fn live_n12_evidence_probe() -> Self {
+        Self {
+            max_position_exclusive: 12,
+            evidence: "live-n12-evidence-probe-loopback-only".to_owned(),
+        }
+    }
+
     pub fn from_n8_evidence_file(path: impl AsRef<Path>) -> Result<Self, EngineError> {
         let path = path.as_ref();
         let bytes = fs::read(path).map_err(|error| {
@@ -326,9 +336,20 @@ impl<C: S14ChatCodec> S14RuntimeChatBackend<C> {
                 return Ok(());
             }
             let position = session.position();
-            self.runtime
+            let output = self
+                .runtime
                 .step_with_next_input(session, Some(next_prompt_token))
                 .map_err(|error| runtime_error(position, error))?;
+            eprintln!(
+                "s14_api_step phase=prefill position={} input_token={} output_token={} commit_epoch={} routes={} physical_ranges={} elapsed_ms={:.3}",
+                output.position,
+                output.input_token_id,
+                output.predicted_token_id,
+                output.commit_epoch,
+                output.online_top6_routes,
+                output.dynamic_physical_ranges,
+                output.elapsed_ms,
+            );
         }
 
         let mut completion_ids = Vec::with_capacity(max_tokens as usize);
@@ -342,6 +363,16 @@ impl<C: S14ChatCodec> S14RuntimeChatBackend<C> {
                 .runtime
                 .step(session)
                 .map_err(|error| runtime_error(position, error))?;
+            eprintln!(
+                "s14_api_step phase=generation position={} input_token={} output_token={} commit_epoch={} routes={} physical_ranges={} elapsed_ms={:.3}",
+                output.position,
+                output.input_token_id,
+                output.predicted_token_id,
+                output.commit_epoch,
+                output.online_top6_routes,
+                output.dynamic_physical_ranges,
+                output.elapsed_ms,
+            );
             completion_ids.push(output.predicted_token_id);
             let decoded = self.codec.decode_completion(&completion_ids)?;
             if !decoded.starts_with(&emitted) {

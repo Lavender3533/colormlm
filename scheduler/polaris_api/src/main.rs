@@ -23,12 +23,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let default_max_tokens = env_u32("POLARIS_S14_DEFAULT_MAX_TOKENS", 3)?;
     let queue_capacity = env_usize("POLARIS_S14_QUEUE_CAPACITY", 1)?;
     let explicit_page_fetch = env_bool("POLARIS_S14_EXPLICIT_PAGE_FETCH", false)?;
+    let live_n12_probe = env_bool("POLARIS_S14_LIVE_N12_EVIDENCE_PROBE", false)?;
     if explicit_page_fetch {
         require_proxy_policy()?;
     }
+    if live_n12_probe
+        && (!address.ip().is_loopback() || default_max_tokens != 8 || queue_capacity != 1)
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "S14 live N12 evidence probe 只允许 loopback、default_max_tokens=8、queue_capacity=1",
+        )
+        .into());
+    }
     let engine = ResidentChatEngine::spawn(queue_capacity, move || {
         // 顺序有意固定：先验 N=8 日志与官方 codec；二者失败时绝不初始化 Vulkan/模型资产。
-        let numerical_gate = VerifiedS14NumericalGate::from_n8_evidence_file(&evidence_path)?;
+        let numerical_gate = if live_n12_probe {
+            VerifiedS14NumericalGate::live_n12_evidence_probe()
+        } else {
+            VerifiedS14NumericalGate::from_n8_evidence_file(&evidence_path)?
+        };
         let codec = DeepSeekV4ChatCodec::load_production(&tokenizer_path)?;
         let runtime_config =
             S14RuntimeConfig::production_defaults().with_explicit_page_fetch(explicit_page_fetch);
@@ -50,6 +64,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let engine: Arc<dyn ChatEngine> = Arc::new(engine);
 
     eprintln!("Polaris API 正在监听 http://{address}");
+    if live_n12_probe {
+        eprintln!(
+            "S14 live N12 evidence probe 已启用：只允许本机单请求，请求后必须关闭服务。"
+        );
+    }
     eprintln!(
         "resident loader 正在依次核验 N=8 证据、官方 codec 与 S14 runtime；完成前 health/模型发现/生成均返回 HTTP 503。"
     );
