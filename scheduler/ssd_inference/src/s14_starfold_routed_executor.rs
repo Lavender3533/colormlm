@@ -108,6 +108,36 @@ pub struct S14StarfoldRoutedExecutor {
     compute: S14StarfoldMxfp4ComputeOwner,
     next_consumer_id: u64,
     next_transfer_epoch: u64,
+    active_constellation_layer: Option<S14StarfoldActiveConstellationLayer>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum S14StarfoldConstellationLayerPhase {
+    W1,
+    W3,
+    Prepare,
+    W2,
+    Complete,
+    Poisoned,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct S14StarfoldActiveConstellationLayer {
+    epoch: u64,
+    layer: u16,
+    base_position: u64,
+    phase: S14StarfoldConstellationLayerPhase,
+}
+
+/// 一个 16/32/64 MiB constellation 层的唯一 transfer epoch lease。
+///
+/// lease 本身不在 Drop 中 drain：runtime hook 的可变所有权只存在于显式
+/// finish/abort 边界，避免错误路径双 drain 或伪恢复。
+pub struct S14StarfoldConstellationLayerEpoch {
+    epoch: u64,
+    layer: u16,
+    base_position: u64,
+    closed: bool,
 }
 
 impl S14StarfoldRoutedExecutor {
@@ -116,6 +146,7 @@ impl S14StarfoldRoutedExecutor {
             compute: S14StarfoldMxfp4ComputeOwner::new(context)?,
             next_consumer_id: 1,
             next_transfer_epoch: 1,
+            active_constellation_layer: None,
         })
     }
 
@@ -128,6 +159,9 @@ impl S14StarfoldRoutedExecutor {
         buffers: S14StarfoldRoutedBuffers,
         layout: S14StarfoldRoutedWorkspaceLayout,
     ) -> Result<S14StarfoldProjectionExecutionReceipt> {
+        if self.active_constellation_layer.is_some() {
+            bail!("S14 StarFold 活动 constellation layer 内禁止进入 microtile projection");
+        }
         validate_buffers(buffers, layout)?;
         if schedule.layer != layer_plan.authoritative_routes.layer()
             || schedule.base_position != layer_plan.authoritative_routes.base_position()
@@ -308,98 +342,12 @@ impl S14StarfoldRoutedExecutor {
     where
         H: S14StarfoldConstellationRuntimeHook,
     {
-        let first = packets
-            .first()
-            .context("S14 StarFold 星座执行缺少 packet")?;
-        first.validate()?;
-        let key = first.key();
-        let projection = match key.projection {
-            0 => S14StarfoldExpertProjection::W1,
-            1 => S14StarfoldExpertProjection::W3,
-            2 => S14StarfoldExpertProjection::W2,
-            _ => bail!("S14 StarFold 星座 packet projection code 非法"),
-        };
-        let transfer_epoch = self.next_transfer_epoch;
-        self.next_transfer_epoch = self
-            .next_transfer_epoch
-            .checked_add(1)
-            .context("S14 StarFold 星座 transfer epoch overflow")?;
+        if self.active_constellation_layer.is_some() {
+            bail!("S14 StarFold 活动 layer epoch 内禁止进入单 projection 兼容包装");
+        }
+        let transfer_epoch = self.allocate_transfer_epoch()?;
         hook.begin_constellation_epoch(transfer_epoch)?;
-
-        let execution = (|| -> Result<S14StarfoldProjectionExecutionReceipt> {
-            let mut experts = BTreeSet::new();
-            let mut routes = BTreeSet::new();
-            let mut packed_uploads = 0u32;
-            let mut packed_upload_bytes = 0u64;
-            let mut lane_dispatches = 0u32;
-            let mut queue_submit_calls = 0u32;
-            let mut completion = None;
-            for (ordinal, packet) in packets.into_iter().enumerate() {
-                packet.validate()?;
-                let packet_key = packet.key();
-                if packet_key.layer != key.layer
-                    || packet_key.base_position != key.base_position
-                    || packet_key.projection != key.projection
-                    || usize::from(packet_key.packet_ordinal) != ordinal
-                {
-                    bail!("S14 StarFold 星座 packet 序列 identity 漂移");
-                }
-                for member in packet.members() {
-                    experts.insert(member.expert_id);
-                    for lane in member.lanes() {
-                        if !routes.insert((lane.lane, lane.route_rank)) {
-                            bail!("S14 StarFold 星座执行检测到重复 lane/rank");
-                        }
-                    }
-                }
-                let packet_bytes = packet.payload_bytes;
-                let ready = hook.upload_constellation_packet_in_epoch(transfer_epoch, packet)?;
-                let consumer_id = self.next_consumer_id;
-                self.next_consumer_id = self
-                    .next_consumer_id
-                    .checked_add(1)
-                    .context("S14 StarFold 星座 compute consumer id overflow")?;
-                let receipt: S14StarfoldConstellationComputeSubmissionReceipt =
-                    self.compute.submit_ready_constellation_batch(
-                        hook.constellation_windows_mut()?,
-                        ready,
-                        consumer_id,
-                    )?;
-                packed_uploads = packed_uploads
-                    .checked_add(receipt.packet.transfer_submit_calls)
-                    .context("S14 StarFold 星座 packet upload count overflow")?;
-                packed_upload_bytes = packed_upload_bytes
-                    .checked_add(packet_bytes)
-                    .context("S14 StarFold 星座 packet upload bytes overflow")?;
-                lane_dispatches = lane_dispatches
-                    .checked_add(receipt.lane_dispatches)
-                    .context("S14 StarFold 星座 lane dispatch count overflow")?;
-                queue_submit_calls = queue_submit_calls
-                    .checked_add(receipt.queue_submit_calls)
-                    .context("S14 StarFold 星座 queue submit count overflow")?;
-                completion = Some(receipt.signal_compute);
-            }
-            if packed_uploads == 0
-                || lane_dispatches != (STARFOLD_B4_LANES * STARFOLD_TOP_K) as u32
-                || routes.len() != STARFOLD_B4_LANES * STARFOLD_TOP_K
-                || packed_uploads != queue_submit_calls
-            {
-                bail!("S14 StarFold 星座执行未形成精确24 route与一包一提交");
-            }
-            Ok(S14StarfoldProjectionExecutionReceipt {
-                layer: key.layer,
-                base_position: key.base_position,
-                projection,
-                unique_experts: u32::try_from(experts.len())
-                    .context("S14 StarFold 星座 unique experts 超出 u32")?,
-                packed_uploads,
-                packed_upload_bytes,
-                lane_dispatches,
-                queue_submit_calls,
-                completion: completion.context("S14 StarFold 星座执行缺少 completion")?,
-                serial_token_forward_calls: 0,
-            })
-        })();
+        let execution = self.execute_constellation_packets_in_epoch(hook, transfer_epoch, packets);
         let drain = hook.drain_constellation_epoch(transfer_epoch);
         match (execution, drain) {
             (Ok(receipt), Ok(())) => Ok(receipt),
@@ -410,8 +358,283 @@ impl S14StarfoldRoutedExecutor {
         }
     }
 
+    pub fn begin_constellation_layer_epoch<H>(
+        &mut self,
+        hook: &mut H,
+        layer: u16,
+        base_position: u64,
+    ) -> Result<S14StarfoldConstellationLayerEpoch>
+    where
+        H: S14StarfoldConstellationRuntimeHook,
+    {
+        if self.active_constellation_layer.is_some() {
+            bail!("S14 StarFold constellation layer epoch 已活动");
+        }
+        let epoch = self.allocate_transfer_epoch()?;
+        hook.begin_constellation_epoch(epoch)?;
+        self.active_constellation_layer = Some(S14StarfoldActiveConstellationLayer {
+            epoch,
+            layer,
+            base_position,
+            phase: S14StarfoldConstellationLayerPhase::W1,
+        });
+        Ok(S14StarfoldConstellationLayerEpoch {
+            epoch,
+            layer,
+            base_position,
+            closed: false,
+        })
+    }
+
+    pub fn execute_constellation_projection_in_layer_epoch<H>(
+        &mut self,
+        hook: &mut H,
+        owner: &mut S14StarfoldConstellationLayerEpoch,
+        packets: Vec<Arc<S14StarfoldConstellationPacket>>,
+    ) -> Result<S14StarfoldProjectionExecutionReceipt>
+    where
+        H: S14StarfoldConstellationRuntimeHook,
+    {
+        let first = packets
+            .first()
+            .context("S14 StarFold layer epoch 缺少 constellation packet")?;
+        first.validate()?;
+        let key = first.key();
+        let projection = projection_from_code(key.projection)?;
+        let active = self.validate_layer_epoch(owner)?;
+        if key.layer != active.layer || key.base_position != active.base_position {
+            bail!("S14 StarFold layer epoch packet layer/base identity 漂移");
+        }
+        let expected_phase = match projection {
+            S14StarfoldExpertProjection::W1 => S14StarfoldConstellationLayerPhase::W1,
+            S14StarfoldExpertProjection::W3 => S14StarfoldConstellationLayerPhase::W3,
+            S14StarfoldExpertProjection::W2 => S14StarfoldConstellationLayerPhase::W2,
+        };
+        if active.phase != expected_phase {
+            bail!("S14 StarFold layer epoch projection/phase 顺序漂移");
+        }
+        let execution = self.execute_constellation_packets_in_epoch(hook, owner.epoch, packets);
+        match execution {
+            Ok(receipt) => {
+                let next = match projection {
+                    S14StarfoldExpertProjection::W1 => S14StarfoldConstellationLayerPhase::W3,
+                    S14StarfoldExpertProjection::W3 => S14StarfoldConstellationLayerPhase::Prepare,
+                    S14StarfoldExpertProjection::W2 => S14StarfoldConstellationLayerPhase::Complete,
+                };
+                self.active_constellation_layer
+                    .as_mut()
+                    .context("S14 StarFold layer epoch active state 丢失")?
+                    .phase = next;
+                Ok(receipt)
+            }
+            Err(error) => {
+                if let Some(active) = self.active_constellation_layer.as_mut() {
+                    active.phase = S14StarfoldConstellationLayerPhase::Poisoned;
+                }
+                Err(error)
+            }
+        }
+    }
+
+    pub fn mark_constellation_layer_prepare_submitted(
+        &mut self,
+        owner: &mut S14StarfoldConstellationLayerEpoch,
+    ) -> Result<()> {
+        let active = self.validate_layer_epoch(owner)?;
+        if active.phase != S14StarfoldConstellationLayerPhase::Prepare {
+            bail!("S14 StarFold layer prepare 未处于 Prepare phase");
+        }
+        self.active_constellation_layer
+            .as_mut()
+            .context("S14 StarFold layer epoch active state 丢失")?
+            .phase = S14StarfoldConstellationLayerPhase::W2;
+        Ok(())
+    }
+
+    pub fn finish_constellation_layer_epoch<H>(
+        &mut self,
+        hook: &mut H,
+        owner: &mut S14StarfoldConstellationLayerEpoch,
+    ) -> Result<()>
+    where
+        H: S14StarfoldConstellationRuntimeHook,
+    {
+        let active = self.validate_layer_epoch(owner)?;
+        if active.phase != S14StarfoldConstellationLayerPhase::Complete {
+            bail!("S14 StarFold layer epoch 未完成 W2，禁止 finish");
+        }
+        match hook.drain_constellation_epoch(owner.epoch) {
+            Ok(()) => {
+                self.active_constellation_layer = None;
+                owner.closed = true;
+                Ok(())
+            }
+            Err(error) => {
+                self.active_constellation_layer
+                    .as_mut()
+                    .context("S14 StarFold layer epoch active state 丢失")?
+                    .phase = S14StarfoldConstellationLayerPhase::Poisoned;
+                Err(error)
+            }
+        }
+    }
+
+    pub fn abort_constellation_layer_epoch<H>(
+        &mut self,
+        hook: &mut H,
+        owner: &mut S14StarfoldConstellationLayerEpoch,
+    ) -> Result<()>
+    where
+        H: S14StarfoldConstellationRuntimeHook,
+    {
+        self.validate_layer_epoch(owner)?;
+        match hook.drain_constellation_epoch(owner.epoch) {
+            Ok(()) => {
+                self.active_constellation_layer = None;
+                owner.closed = true;
+                Ok(())
+            }
+            Err(error) => {
+                self.active_constellation_layer
+                    .as_mut()
+                    .context("S14 StarFold layer epoch active state 丢失")?
+                    .phase = S14StarfoldConstellationLayerPhase::Poisoned;
+                Err(error)
+            }
+        }
+    }
+
+    fn execute_constellation_packets_in_epoch<H>(
+        &mut self,
+        hook: &mut H,
+        transfer_epoch: u64,
+        packets: Vec<Arc<S14StarfoldConstellationPacket>>,
+    ) -> Result<S14StarfoldProjectionExecutionReceipt>
+    where
+        H: S14StarfoldConstellationRuntimeHook,
+    {
+        let first = packets
+            .first()
+            .context("S14 StarFold 星座执行缺少 packet")?;
+        first.validate()?;
+        let key = first.key();
+        let projection = projection_from_code(key.projection)?;
+        let mut experts = BTreeSet::new();
+        let mut routes = BTreeSet::new();
+        let mut packed_uploads = 0u32;
+        let mut packed_upload_bytes = 0u64;
+        let mut lane_dispatches = 0u32;
+        let mut queue_submit_calls = 0u32;
+        let mut completion = None;
+        for (ordinal, packet) in packets.into_iter().enumerate() {
+            packet.validate()?;
+            let packet_key = packet.key();
+            if packet_key.layer != key.layer
+                || packet_key.base_position != key.base_position
+                || packet_key.projection != key.projection
+                || usize::from(packet_key.packet_ordinal) != ordinal
+            {
+                bail!("S14 StarFold 星座 packet 序列 identity 漂移");
+            }
+            for member in packet.members() {
+                experts.insert(member.expert_id);
+                for lane in member.lanes() {
+                    if !routes.insert((lane.lane, lane.route_rank)) {
+                        bail!("S14 StarFold 星座执行检测到重复 lane/rank");
+                    }
+                }
+            }
+            let packet_bytes = packet.payload_bytes;
+            let ready = hook.upload_constellation_packet_in_epoch(transfer_epoch, packet)?;
+            let consumer_id = self.next_consumer_id;
+            self.next_consumer_id = self
+                .next_consumer_id
+                .checked_add(1)
+                .context("S14 StarFold 星座 compute consumer id overflow")?;
+            let receipt: S14StarfoldConstellationComputeSubmissionReceipt =
+                self.compute.submit_ready_constellation_batch(
+                    hook.constellation_windows_mut()?,
+                    ready,
+                    consumer_id,
+                )?;
+            packed_uploads = packed_uploads
+                .checked_add(receipt.packet.transfer_submit_calls)
+                .context("S14 StarFold 星座 packet upload count overflow")?;
+            packed_upload_bytes = packed_upload_bytes
+                .checked_add(packet_bytes)
+                .context("S14 StarFold 星座 packet upload bytes overflow")?;
+            lane_dispatches = lane_dispatches
+                .checked_add(receipt.lane_dispatches)
+                .context("S14 StarFold 星座 lane dispatch count overflow")?;
+            queue_submit_calls = queue_submit_calls
+                .checked_add(receipt.queue_submit_calls)
+                .context("S14 StarFold 星座 queue submit count overflow")?;
+            completion = Some(receipt.signal_compute);
+        }
+        if packed_uploads == 0
+            || lane_dispatches != (STARFOLD_B4_LANES * STARFOLD_TOP_K) as u32
+            || routes.len() != STARFOLD_B4_LANES * STARFOLD_TOP_K
+            || packed_uploads != queue_submit_calls
+        {
+            bail!("S14 StarFold 星座执行未形成精确24 route与一包一提交");
+        }
+        Ok(S14StarfoldProjectionExecutionReceipt {
+            layer: key.layer,
+            base_position: key.base_position,
+            projection,
+            unique_experts: u32::try_from(experts.len())
+                .context("S14 StarFold 星座 unique experts 超出 u32")?,
+            packed_uploads,
+            packed_upload_bytes,
+            lane_dispatches,
+            queue_submit_calls,
+            completion: completion.context("S14 StarFold 星座执行缺少 completion")?,
+            serial_token_forward_calls: 0,
+        })
+    }
+
+    fn allocate_transfer_epoch(&mut self) -> Result<u64> {
+        let epoch = self.next_transfer_epoch;
+        self.next_transfer_epoch = self
+            .next_transfer_epoch
+            .checked_add(1)
+            .context("S14 StarFold constellation transfer epoch overflow")?;
+        Ok(epoch)
+    }
+
+    fn validate_layer_epoch(
+        &self,
+        owner: &S14StarfoldConstellationLayerEpoch,
+    ) -> Result<S14StarfoldActiveConstellationLayer> {
+        if owner.closed {
+            bail!("S14 StarFold constellation layer epoch 已关闭");
+        }
+        let active = self
+            .active_constellation_layer
+            .context("S14 StarFold constellation layer epoch 未活动")?;
+        if active.epoch != owner.epoch
+            || active.layer != owner.layer
+            || active.base_position != owner.base_position
+        {
+            bail!("S14 StarFold constellation layer epoch lease identity 漂移");
+        }
+        Ok(active)
+    }
+
     pub fn try_destroy(&mut self) -> Result<()> {
+        if self.active_constellation_layer.is_some() {
+            bail!("S14 StarFold 活动 constellation layer epoch 下禁止销毁 routed executor");
+        }
         self.compute.try_destroy()
+    }
+}
+
+fn projection_from_code(code: u8) -> Result<S14StarfoldExpertProjection> {
+    match code {
+        0 => Ok(S14StarfoldExpertProjection::W1),
+        1 => Ok(S14StarfoldExpertProjection::W3),
+        2 => Ok(S14StarfoldExpertProjection::W2),
+        _ => bail!("S14 StarFold 星座 packet projection code 非法"),
     }
 }
 

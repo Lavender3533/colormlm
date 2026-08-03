@@ -8,7 +8,8 @@ use crate::{
     s14_starfold_mxfp4_tile::S14StarfoldMxfp4ExternalSlice,
     s14_starfold_prepare_owner::{S14StarfoldPrepareOwner, S14StarfoldPrepareReceipt},
     s14_starfold_routed_executor::{
-        S14StarfoldProjectionExecutionReceipt, S14StarfoldRoutedExecutor,
+        S14StarfoldProjectionExecutionReceipt, S14StarfoldRoutedBuffers, S14StarfoldRoutedExecutor,
+        S14StarfoldRoutedWorkspaceLayout,
     },
     s14_starfold_runtime::{S14StarfoldB4LayerPlan, S14StarfoldRuntime},
     VulkanContext,
@@ -67,31 +68,42 @@ impl S14StarfoldB4RoutedLayerOwner {
             S14StarfoldB4ExpertSchedule::build(layer_plan, runtime.contract().microtile_bytes)?;
         let buffers = self.prepare.routed_buffers(input_f32)?;
         let layout = self.prepare.layout();
-        let w1 = self.execute_projection(
-            runtime,
-            layer_plan,
-            &schedule,
-            S14StarfoldExpertProjection::W1,
-            buffers,
-            layout,
-        )?;
-        let w3 = self.execute_projection(
-            runtime,
-            layer_plan,
-            &schedule,
-            S14StarfoldExpertProjection::W3,
-            buffers,
-            layout,
-        )?;
-        let prepare = self.prepare.submit_prepare(&schedule)?;
-        let w2 = self.execute_projection(
-            runtime,
-            layer_plan,
-            &schedule,
-            S14StarfoldExpertProjection::W2,
-            buffers,
-            layout,
-        )?;
+        let window_bytes = runtime.contract().microtile_bytes;
+        let mib = crate::s14_starfold_cache::STARFOLD_ONE_MIB;
+        let (w1, w3, prepare, w2) = if [mib, 2 * mib, 4 * mib, 8 * mib].contains(&window_bytes) {
+            let w1 = self.routed.execute_projection(
+                runtime,
+                layer_plan,
+                &schedule,
+                S14StarfoldExpertProjection::W1,
+                buffers,
+                layout,
+            )?;
+            let w3 = self.routed.execute_projection(
+                runtime,
+                layer_plan,
+                &schedule,
+                S14StarfoldExpertProjection::W3,
+                buffers,
+                layout,
+            )?;
+            let prepare = self.prepare.submit_prepare(&schedule)?;
+            let w2 = self.routed.execute_projection(
+                runtime,
+                layer_plan,
+                &schedule,
+                S14StarfoldExpertProjection::W2,
+                buffers,
+                layout,
+            )?;
+            (w1, w3, prepare, w2)
+        } else if [16 * mib, 32 * mib, 64 * mib].contains(&window_bytes) {
+            self.execute_constellation_layer(runtime, layer_plan, &schedule, buffers, layout)?
+        } else {
+            bail!(
+                "S14 StarFold production window {window_bytes} bytes 不属于 1/2/4/8 microtile 或 16/32/64 constellation 合同"
+            )
+        };
         let packed_uploads = w1
             .packed_uploads
             .checked_add(w3.packed_uploads)
@@ -157,41 +169,76 @@ impl S14StarfoldB4RoutedLayerOwner {
         ))
     }
 
-    fn execute_projection(
+    fn execute_constellation_layer(
         &mut self,
         runtime: &mut S14StarfoldRuntime,
         layer_plan: &S14StarfoldB4LayerPlan,
         schedule: &S14StarfoldB4ExpertSchedule,
-        projection: S14StarfoldExpertProjection,
-        buffers: crate::s14_starfold_routed_executor::S14StarfoldRoutedBuffers,
-        layout: crate::s14_starfold_routed_executor::S14StarfoldRoutedWorkspaceLayout,
-    ) -> Result<S14StarfoldProjectionExecutionReceipt> {
-        let window_bytes = runtime.contract().microtile_bytes;
-        let mib = crate::s14_starfold_cache::STARFOLD_ONE_MIB;
-        if [mib, 2 * mib, 4 * mib, 8 * mib].contains(&window_bytes) {
-            self.routed.execute_projection(
+        buffers: S14StarfoldRoutedBuffers,
+        layout: S14StarfoldRoutedWorkspaceLayout,
+    ) -> Result<(
+        S14StarfoldProjectionExecutionReceipt,
+        S14StarfoldProjectionExecutionReceipt,
+        S14StarfoldPrepareReceipt,
+        S14StarfoldProjectionExecutionReceipt,
+    )> {
+        let mut epoch = self.routed.begin_constellation_layer_epoch(
+            runtime,
+            schedule.layer,
+            schedule.base_position,
+        )?;
+        let execution = (|| -> Result<_> {
+            let w1_packets = self.routed.materialize_projection_constellations(
                 runtime,
                 layer_plan,
                 schedule,
-                projection,
-                buffers,
-                layout,
-            )
-        } else if [16 * mib, 32 * mib, 64 * mib].contains(&window_bytes) {
-            let packets = self.routed.materialize_projection_constellations(
-                runtime,
-                layer_plan,
-                schedule,
-                projection,
+                S14StarfoldExpertProjection::W1,
                 buffers,
                 layout,
             )?;
+            let w1 = self
+                .routed
+                .execute_constellation_projection_in_layer_epoch(runtime, &mut epoch, w1_packets)?;
+            let w3_packets = self.routed.materialize_projection_constellations(
+                runtime,
+                layer_plan,
+                schedule,
+                S14StarfoldExpertProjection::W3,
+                buffers,
+                layout,
+            )?;
+            let w3 = self
+                .routed
+                .execute_constellation_projection_in_layer_epoch(runtime, &mut epoch, w3_packets)?;
+            let prepare = self.prepare.submit_prepare(schedule)?;
             self.routed
-                .execute_materialized_constellations_with_hook(runtime, packets)
+                .mark_constellation_layer_prepare_submitted(&mut epoch)?;
+            let w2_packets = self.routed.materialize_projection_constellations(
+                runtime,
+                layer_plan,
+                schedule,
+                S14StarfoldExpertProjection::W2,
+                buffers,
+                layout,
+            )?;
+            let w2 = self
+                .routed
+                .execute_constellation_projection_in_layer_epoch(runtime, &mut epoch, w2_packets)?;
+            Ok((w1, w3, prepare, w2))
+        })();
+        let drain = if execution.is_ok() {
+            self.routed
+                .finish_constellation_layer_epoch(runtime, &mut epoch)
         } else {
-            bail!(
-                "S14 StarFold production window {window_bytes} bytes 不属于 1/2/4/8 microtile 或 16/32/64 constellation 合同"
-            )
+            self.routed
+                .abort_constellation_layer_epoch(runtime, &mut epoch)
+        };
+        match (execution, drain) {
+            (Ok(receipts), Ok(())) => Ok(receipts),
+            (Err(error), Ok(())) | (Ok(_), Err(error)) => Err(error),
+            (Err(error), Err(drain)) => Err(anyhow::anyhow!(
+                "{error:#}; constellation layer epoch drain={drain:#}"
+            )),
         }
     }
 

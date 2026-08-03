@@ -17,6 +17,7 @@ use crate::{
         S14EmbeddingBroadcastPipeline, S14EmbeddingBroadcastShape,
     },
     s14_input_asset_plan::S14InputAssetPlanner,
+    s14_local_embedding_shard::S14LocalEmbeddingShard,
     s14_position0_mapped_assets::{VerifiedMappedAsset, VerifiedMappedAssetStore},
     GpuBuffer, VulkanContext,
 };
@@ -98,14 +99,7 @@ impl S14CausalBlockK4InputHiddenOwner {
         token_ids: [u32; S14_CAUSAL_BLOCK_K4_INPUT_TOKENS],
         generation: u64,
     ) -> Result<Self> {
-        let block_end = base_position
-            .checked_add(S14_CAUSAL_BLOCK_K4_INPUT_TOKENS as u32)
-            .context("S14 K=4 input position end overflow")?;
-        if max_seq_len == 0 || block_end > max_seq_len {
-            bail!(
-                "S14 K=4 input positions 越出 sequence: base={base_position} end={block_end} max_seq_len={max_seq_len}"
-            );
-        }
+        validate_block_positions(base_position, max_seq_len)?;
         let mut assets = Vec::with_capacity(S14_CAUSAL_BLOCK_K4_INPUT_TOKENS);
         for (lane, &token_id) in token_ids.iter().enumerate() {
             let position = base_position
@@ -139,7 +133,45 @@ impl S14CausalBlockK4InputHiddenOwner {
             lane_leases.push(lease);
         }
 
-        let hidden = upload_and_broadcast_k4(&context, &lane_leases)
+        let lane_rows = lane_leases
+            .iter()
+            .map(|lease| lease.bytes())
+            .collect::<Vec<_>>();
+        Self::build_from_rows(context, base_position, token_ids, generation, &lane_rows)
+    }
+
+    /// Production StarFold 的本地 shard 入口。shard 已在 factory 启动期完成整文件
+    /// size/header/SHA 验签；每个 block 只借用四个 8 KiB 行，不打开 Range 文件，
+    /// 也不允许 `ExplicitFetch` 介入 prompt 路径。
+    pub fn build_at_from_local_shard(
+        context: Arc<VulkanContext>,
+        shard: &S14LocalEmbeddingShard,
+        base_position: u32,
+        max_seq_len: u32,
+        token_ids: [u32; S14_CAUSAL_BLOCK_K4_INPUT_TOKENS],
+        generation: u64,
+    ) -> Result<Self> {
+        validate_block_positions(base_position, max_seq_len)?;
+        let lane_rows = token_ids
+            .iter()
+            .enumerate()
+            .map(|(lane, &token_id)| {
+                shard.row(token_id).with_context(|| {
+                    format!("borrow S14 local embedding lane {lane} token {token_id}")
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Self::build_from_rows(context, base_position, token_ids, generation, &lane_rows)
+    }
+
+    fn build_from_rows(
+        context: Arc<VulkanContext>,
+        base_position: u32,
+        token_ids: [u32; S14_CAUSAL_BLOCK_K4_INPUT_TOKENS],
+        generation: u64,
+        lane_rows: &[&[u8]],
+    ) -> Result<Self> {
+        let hidden = upload_and_broadcast_k4(&context, lane_rows)
             .context("upload+broadcast S14 K=4 input hidden")?;
         let alternate = match GpuBuffer::new_vram(
             &context,
@@ -301,6 +333,18 @@ fn validate_embedding_asset(asset: &Position0Asset, token_id: u32) -> Result<()>
     Ok(())
 }
 
+fn validate_block_positions(base_position: u32, max_seq_len: u32) -> Result<()> {
+    let block_end = base_position
+        .checked_add(S14_CAUSAL_BLOCK_K4_INPUT_TOKENS as u32)
+        .context("S14 K=4 input position end overflow")?;
+    if max_seq_len == 0 || block_end > max_seq_len {
+        bail!(
+            "S14 K=4 input positions 越出 sequence: base={base_position} end={block_end} max_seq_len={max_seq_len}"
+        );
+    }
+    Ok(())
+}
+
 fn deduplicate_embedding_assets(
     assets: &[Position0Asset],
 ) -> Result<(
@@ -358,12 +402,9 @@ fn validate_verified_lease(
     Ok(())
 }
 
-fn upload_and_broadcast_k4(
-    context: &VulkanContext,
-    lane_leases: &[Arc<VerifiedMappedAsset>],
-) -> Result<GpuBuffer> {
-    if lane_leases.len() != S14_CAUSAL_BLOCK_K4_INPUT_TOKENS {
-        bail!("S14 K=4 upload lease 数量必须为 4");
+fn upload_and_broadcast_k4(context: &VulkanContext, lane_rows: &[&[u8]]) -> Result<GpuBuffer> {
+    if lane_rows.len() != S14_CAUSAL_BLOCK_K4_INPUT_TOKENS {
+        bail!("S14 K=4 upload row 数量必须为 4");
     }
     if S14_CAUSAL_BLOCK_HC_STREAMS != 4
         || S14_CAUSAL_BLOCK_STREAM_WIDTH != 4096
@@ -418,8 +459,8 @@ fn upload_and_broadcast_k4(
                 | vk::BufferUsageFlags::TRANSFER_DST,
         )?);
 
-        for (lane, lease) in lane_leases.iter().enumerate() {
-            if lease.bytes().len() as u64 != S14_CAUSAL_BLOCK_K4_EMBEDDING_ROW_BYTES {
+        for (lane, row) in lane_rows.iter().enumerate() {
+            if row.len() as u64 != S14_CAUSAL_BLOCK_K4_EMBEDDING_ROW_BYTES {
                 bail!("S14 K=4 lane {lane} mmap row bytes 漂移");
             }
             let source_offset = lane
@@ -430,7 +471,7 @@ fn upload_and_broadcast_k4(
                     .source
                     .as_ref()
                     .context("S14 K=4 source buffer 缺失")?
-                    .write_at(source_offset, lease.bytes());
+                    .write_at(source_offset, row);
             }
             let status_offset = usize::try_from(
                 status_stride

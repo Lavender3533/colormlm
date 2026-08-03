@@ -65,6 +65,7 @@ pub mod s14_hc_post;
 pub mod s14_head_chunk_argmax;
 pub mod s14_information_gain_router;
 pub mod s14_input_asset_plan;
+pub mod s14_local_embedding_shard;
 pub mod s14_position0_attention;
 pub mod s14_position0_hybrid_upload;
 pub mod s14_position0_hybrid_weight_arena;

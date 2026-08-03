@@ -1,7 +1,7 @@
 //! 纯 S14 StarFold 的 concrete K4 block resource factory。
 //!
 //! `S14Runtime` 与请求级 `S14Session` 始终只由 production root/session 拥有；
-//! concrete factory 只保留 manifest/weight plan/layer program/input planner/head uploader 等
+//! concrete factory 只保留 manifest/weight plan/layer program/local embedding shard/head uploader 等
 //! block assets，并且只从 request 携带的同源 authoritative/device checkpoint 构造。
 //! 本模块不执行 token，不存在 union/grouped-MoE、CPU、serial-token 或 Transformer fallback。
 
@@ -14,14 +14,12 @@ use crate::{
     s14_causal_block_hc_qkv_adapter::S14Position0CommittedGenerationProvenance,
     s14_causal_block_hc_qkv_recorder::S14CausalBlockOwnedBufferSlice,
     s14_causal_block_k4_input_hidden::S14CausalBlockK4InputHiddenOwner,
-    s14_causal_block_layer::S14CausalBlockHiddenBinding,
     s14_causal_block_prefix_initializer::S14CausalBlockPrefixInitializationOwner,
     s14_causal_block_prefix_state::S14CausalBlockPrefixStateProgram,
     s14_causal_block_production_bundle::S14CausalBlockContextBound,
     s14_causal_block_ratio4_state_owner::S14CausalBlockRatio4ProductionStateOwners,
     s14_causal_block_terminal_owner::S14CausalBlockTerminalHeadUploadState,
-    s14_dynamic_page_cache_readiness::{materialize_planned_range_asset, DynamicPageFetchMode},
-    s14_input_asset_plan::S14InputAssetPlanner,
+    s14_local_embedding_shard::S14LocalEmbeddingShard,
     s14_position0_hybrid_upload::S14Position0CausalBlockUploadLease,
     s14_position0_layer_program::S14Position0FullDepthLayerProgram,
     s14_position0_paged_weight_arena::{S14Position0PagedArenaPlan, S14Position0PagedWeightArena},
@@ -42,10 +40,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use polaris_s14_runner::{
     DecoderStateV1, MaterializedTokenSource, Position0WholeTokenManifest, VOCAB_SIZE,
 };
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex, Weak},
-};
+use std::sync::{Arc, Mutex, Weak};
 
 pub const S14_STARFOLD_CONCRETE_K: usize = 4;
 pub const S14_STARFOLD_INITIAL_HIDDEN_GENERATION: u64 = 0;
@@ -348,9 +343,7 @@ pub struct S14StarfoldConcreteFactory {
     manifest: Arc<Position0WholeTokenManifest>,
     weight_plan: Arc<S14Position0HybridWeightPlan>,
     layer_program: S14Position0FullDepthLayerProgram,
-    input_planner: S14InputAssetPlanner,
-    payload_root: PathBuf,
-    page_fetch_mode: DynamicPageFetchMode,
+    embedding_shard: S14LocalEmbeddingShard,
     head_upload: Option<Arc<Mutex<S14CausalBlockTerminalHeadUploadState>>>,
     uploader_prepared_block_sequence: Option<u64>,
     uploader_prepared_base_position: Option<u32>,
@@ -384,9 +377,8 @@ impl S14StarfoldConcreteFactory {
             .map_err(|error| anyhow!("S14 concrete manifest 非法: {error}"))?;
         let weight_plan = Arc::new(S14Position0HybridWeightPlan::build(&manifest)?);
         weight_plan.validate(&manifest)?;
-        let input_planner =
-            S14InputAssetPlanner::load_pinned(&config.catalog_path, &config.payload_root)
-                .context("加载 S14 concrete input asset planner")?;
+        let embedding_shard = S14LocalEmbeddingShard::open_verified(&config.embedding_shard_path)
+            .context("加载 S14 concrete 本地 embedding shard")?;
         let context = Arc::clone(runtime.context());
         let paged_arena = Arc::clone(runtime.paged_arena()?);
         let expected_arena = S14Position0PagedArenaPlan::build(&weight_plan)?;
@@ -412,9 +404,7 @@ impl S14StarfoldConcreteFactory {
             manifest,
             weight_plan,
             layer_program,
-            input_planner,
-            payload_root: config.payload_root.clone(),
-            page_fetch_mode: config.page_fetch_mode,
+            embedding_shard,
             head_upload: Some(head_upload),
             uploader_prepared_block_sequence: None,
             uploader_prepared_base_position: None,
@@ -488,35 +478,15 @@ impl S14StarfoldConcreteFactory {
         };
         let ratio4_boundary_states = ratio4_owners.trait_states();
 
-        // K4 input hidden 与 token-major prologue 共用同一条显式 Range 传输链。
-        // 这里只按 planner 派生的完整 manifest 身份补齐缺页；随后 input owner
-        // 仍会经 VerifiedMappedAssetStore 做既有 proof/SHA/mmap，不接受 token 特判。
-        if let Err(error) = self.materialize_input_embeddings(
-            authoritative.position,
-            authoritative.native.max_seq_len,
-            &input_token_ids,
-        ) {
-            drop(ratio4_boundary_states);
-            let producer_cleanup = prefix_producer.destroy();
-            let ratio_cleanup = ratio4_owners.destroy();
-            return Err(anyhow!(
-                "materialize S14 concrete K4 input embeddings: {error:#}; producer={producer_cleanup:?}; ratio4={ratio_cleanup:?}"
-            ));
-        }
-
         let head_upload = Arc::clone(
             self.head_upload
                 .as_ref()
                 .context("S14 concrete terminal head uploader 已退休")?,
         );
         let mut hidden_owner = {
-            let mut head = head_upload
-                .lock()
-                .map_err(|_| anyhow!("S14 concrete terminal head uploader mutex poisoned"))?;
-            match S14CausalBlockK4InputHiddenOwner::build_at(
+            match S14CausalBlockK4InputHiddenOwner::build_at_from_local_shard(
                 Arc::clone(&context),
-                &self.input_planner,
-                &mut head.store,
+                &self.embedding_shard,
                 authoritative.position,
                 authoritative.native.max_seq_len,
                 input_token_ids,
@@ -524,7 +494,6 @@ impl S14StarfoldConcreteFactory {
             ) {
                 Ok(owner) => owner,
                 Err(error) => {
-                    drop(head);
                     drop(ratio4_boundary_states);
                     let producer_cleanup = prefix_producer.destroy();
                     let ratio_cleanup = ratio4_owners.destroy();
@@ -608,32 +577,6 @@ impl S14StarfoldConcreteFactory {
                 prefix_initialization: None,
             },
         })
-    }
-
-    fn materialize_input_embeddings(
-        &self,
-        base_position: u32,
-        max_seq_len: u32,
-        input_token_ids: &[u32; S14_STARFOLD_CONCRETE_K],
-    ) -> Result<()> {
-        for (lane, &token_id) in input_token_ids.iter().enumerate() {
-            let position = base_position
-                .checked_add(u32::try_from(lane).context("K4 embedding lane overflow")?)
-                .context("K4 embedding position overflow")?;
-            let plan = self
-                .input_planner
-                .plan(position, token_id, max_seq_len)
-                .with_context(|| format!("plan K4 lane {lane} token {token_id} embedding Range"))?;
-            materialize_planned_range_asset(
-                &plan.embedding,
-                &self.payload_root,
-                self.page_fetch_mode,
-            )
-            .with_context(|| {
-                format!("materialize K4 lane {lane} token {token_id} embedding Range")
-            })?;
-        }
-        Ok(())
     }
 
     fn prepare_persistent_uploader(

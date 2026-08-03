@@ -238,6 +238,9 @@ pub struct S14RuntimeConfig {
     pub manifest_path: PathBuf,
     pub payload_root: PathBuf,
     pub catalog_path: PathBuf,
+    /// Production StarFold prompt 的完整本地 embedding shard。启动期严格验签并
+    /// 常驻只读 mmap；prompt/block 期间禁止再通过 ExplicitFetch 获取 embedding 行。
+    pub embedding_shard_path: PathBuf,
     pub paged_weight_arena_limit_bytes: Option<u64>,
     pub page_fetch_mode: DynamicPageFetchMode,
     pub causal_block_weight_storage: S14RuntimeCausalBlockWeightStorage,
@@ -265,6 +268,9 @@ impl S14RuntimeConfig {
             catalog_path: PathBuf::from(
                 "D:/models/Polaris-S14/fulldepth43_native_top6_catalog.json",
             ),
+            embedding_shard_path: PathBuf::from(
+                "D:/models/Polaris-S14/model-00001-of-00048.safetensors",
+            ),
             paged_weight_arena_limit_bytes: Some(3 * 1024 * 1024 * 1024),
             page_fetch_mode: DynamicPageFetchMode::LocalOnly,
             causal_block_weight_storage:
@@ -280,6 +286,11 @@ impl S14RuntimeConfig {
         } else {
             DynamicPageFetchMode::LocalOnly
         };
+        self
+    }
+
+    pub fn with_embedding_shard_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.embedding_shard_path = path.into();
         self
     }
 
