@@ -2051,3 +2051,24 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
 - ModelScope DSW的gfx942/191.7GiB HBM节点当前被stock RADV Vulkan `CS rejected -22`阻断；
   不上传42GiB缓存、不启动HIP移植。它只保留为精确hotset/pack索引CPU预构建或后续训练的可选资源，
   不阻塞本地API主线。
+
+## 2026-08-03 20:13：16-token第二轮唯一真门失败，S14本轮no-go
+
+- 8-token首轮门成功后，只运行了一次16-token第二轮门，没有重跑。冻结三消息为
+  `你好 → 好的 → 继续`，官方tokenizer得到11个prompt token，连同16 completion需要精确26个
+  position；一次性loopback N26闩锁提交为`23c2298`，release编译通过且不允许可配置放宽。
+- 真实请求在position0完成43层并提交`0→5`，耗时`13.104190s`；position1立即返回HTTP `502`，
+  `failed_position=1`，唯一错误为
+  `S14 runtime position1 失败: A device memory allocation has failed`，总墙钟`13.333819s`，
+  completion token为0。
+- 精确失败入口为`polaris_api/src/s14_engine.rs::S14RuntimeChatBackend::run_session`调用
+  `S14Runtime::step_with_next_input`；底层原始Vulkan分配错误来自
+  `ssd_inference/src/buffer.rs::GpuBuffer::new/vkAllocateMemory`。当前错误链没有携带具体buffer身份，
+  因此不能伪称已经定位到某一个allocation owner。
+- 本门前后Range cache均为`19,333`个`.bin`、`47,333,597,404 B`，下载`0 B`。API PID
+  `49256`已关闭、fetch worker未启动、11435端口已释放。按20:00契约，本轮S14冻结为no-go：
+  没有启动Open WebUI，也没有获得16-token第二轮或20--50 token/s证据。
+- 后续只保留三条由用户选择的路线：A）先修token-major position间Vulkan临时资源复用/单buffer回退；
+  B）完成production resident K4 decoder注入API；C）冻结S14，体验暂回v38/v47，S14只做离线内存与
+  hotset/pack研究。完整回执见
+  `fast16/research/polaris_meridian_v1/whole_token_runtime/S14_N26_SECOND_TURN_NO_GO_20260803.json`。

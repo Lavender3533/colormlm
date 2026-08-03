@@ -1,0 +1,101 @@
+{
+  "schema": "polaris-s14-second-turn-no-go-v1",
+  "checked_at_bjt": "2026-08-03T20:13:00+08:00",
+  "git_head": "23c2298",
+  "deadline_contract": "2026-08-03T20:00:00+08:00 Open WebUI arbitrary input, >=16 completion tokens, second round submittable",
+  "result": "no_go",
+  "request": {
+    "endpoint": "http://127.0.0.1:11435/v1/chat/completions",
+    "model": "Polaris-S14",
+    "messages": [
+      {
+        "role": "user",
+        "content": "你好"
+      },
+      {
+        "role": "assistant",
+        "content": "好的"
+      },
+      {
+        "role": "user",
+        "content": "继续"
+      }
+    ],
+    "prompt_tokens_cpu_verified": 11,
+    "max_tokens": 16,
+    "required_positions": 26,
+    "temperature": 0,
+    "stream": false
+  },
+  "response": {
+    "http_status": 502,
+    "wall_seconds": 13.333819,
+    "error_code": "engine_internal_error",
+    "failed_position": 1,
+    "retryable": false,
+    "message": "S14 runtime position1 失败: A device memory allocation has failed",
+    "completion_tokens": 0
+  },
+  "last_successful_step": {
+    "phase": "prefill",
+    "position": 0,
+    "input_token": 0,
+    "output_token": 5,
+    "commit_epoch": 1,
+    "routes": 43,
+    "physical_ranges": 1548,
+    "elapsed_ms": 13104.190
+  },
+  "precise_blocker": {
+    "api_file": "scheduler/polaris_api/src/s14_engine.rs",
+    "api_function": "S14RuntimeChatBackend::run_session",
+    "api_call": "S14Runtime::step_with_next_input at position1",
+    "api_line_at_git_head": 351,
+    "vulkan_file": "scheduler/ssd_inference/src/buffer.rs",
+    "vulkan_function": "GpuBuffer::new / vkAllocateMemory",
+    "vulkan_line_at_git_head": 118,
+    "driver_error": "A device memory allocation has failed",
+    "allocation_identity_available_in_error_chain": false
+  },
+  "cache": {
+    "before_bin_files": 19333,
+    "after_bin_files": 19333,
+    "before_bin_bytes": 47333597404,
+    "after_bin_bytes": 47333597404,
+    "downloaded_bytes": 0
+  },
+  "shutdown": {
+    "api_pid": 49256,
+    "api_exited": true,
+    "fetch_worker_started": false,
+    "port_11435_free": true,
+    "service_left_running": false
+  },
+  "accepted_previous_milestone": {
+    "evidence": "S14_API_8_TOKEN_GATE_20260803.json",
+    "http_status": 200,
+    "completion_tokens": 8,
+    "content": "好的，用户发来一个简单的问候",
+    "wall_seconds": 256.578514
+  },
+  "not_accepted": {
+    "open_webui_second_turn": false,
+    "sixteen_completion_tokens": false,
+    "resident_k4_decoder_in_api": false,
+    "twenty_to_fifty_tokens_per_second": false
+  },
+  "routes_requiring_user_choice": [
+    {
+      "id": "A",
+      "summary": "保留token-major API，先定位并复用position间Vulkan临时buffer/pipeline，加入精确allocation identity，显存不足时按合同退回单buffer。"
+    },
+    {
+      "id": "B",
+      "summary": "完成production resident K4 decoder注入API，让第二块消费真实checkpoint；仍需新的单次真实二轮门。"
+    },
+    {
+      "id": "C",
+      "summary": "冻结当前S14研究版，用户体验暂回v38/v47；S14只做离线内存生命周期与hotset/pack研究。"
+    }
+  ]
+}
