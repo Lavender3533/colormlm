@@ -160,6 +160,16 @@ impl VerifiedS14NumericalGate {
         }
     }
 
+    /// 只用于一次 loopback 第二轮 16-token 验收。调用方必须把服务
+    /// 限制为单请求并在请求后关闭；26 是冻结第二轮 prompt 的精确
+    /// `(prompt.len() - 1) + max_tokens`，不是可配置的任意放宽。
+    pub fn live_n26_second_turn_evidence_probe() -> Self {
+        Self {
+            max_position_exclusive: 26,
+            evidence: "live-n26-second-turn-evidence-probe-loopback-only".to_owned(),
+        }
+    }
+
     pub fn from_n8_evidence_file(path: impl AsRef<Path>) -> Result<Self, EngineError> {
         let path = path.as_ref();
         let bytes = fs::read(path).map_err(|error| {
