@@ -29,7 +29,7 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, Ordering as AtomicOrdering},
+        atomic::{AtomicBool, AtomicU64, Ordering as AtomicOrdering},
         Arc, Condvar, Mutex, OnceLock,
     },
     time::SystemTime,
@@ -47,6 +47,7 @@ pub const STARFOLD_DEFAULT_VERIFIED_LEASES: usize = 4_096;
 pub const STARFOLD_MAX_VERIFIED_LEASES: usize = STARFOLD_MAX_RAM_PAGES;
 pub const STARFOLD_VERIFIED_LEASE_CACHE_CONTRACT_VERSION: u32 = 1;
 const STARFOLD_MAX_PROOF_BYTES: u64 = 16 * 1024 * 1024;
+static NEXT_VERIFIED_LEASE_CACHE_INSTANCE_ID: AtomicU64 = AtomicU64::new(1);
 
 pub type StarfoldResult<T> = Result<T, StarfoldError>;
 
@@ -960,12 +961,23 @@ pub struct StarfoldVerifiedLeaseIdentity {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct StarfoldVerifiedLeaseKey {
     tensor: String,
+    parent_tensor: Option<String>,
+    kind: String,
+    dtype: String,
+    shape: Vec<u64>,
     cache_key: String,
     range_key: String,
     payload_path: PathBuf,
     payload_bytes: u64,
     proof_path: PathBuf,
     expert_id: Option<u16>,
+    identity_repo: String,
+    identity_revision: String,
+    identity_source_file: String,
+    identity_source_file_bytes: u64,
+    identity_start: u64,
+    identity_end: u64,
+    identity_header_tensor_table_sha256: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -991,6 +1003,7 @@ pub struct StarfoldVerifiedMappedLease {
     proof_file: File,
     payload_stamp: StarfoldFileStamp,
     proof_stamp: StarfoldFileStamp,
+    last_validated_epoch: AtomicU64,
 }
 
 impl StarfoldVerifiedMappedLease {
@@ -1031,11 +1044,31 @@ impl StarfoldVerifiedMappedLease {
             .ok_or_else(|| StarfoldError::new("Starfold verified mmap slice 越界"))
     }
 
-    fn files_are_current(&self) -> StarfoldResult<bool> {
-        Ok(
-            file_stamp(&self.identity.payload_path)? == self.payload_stamp
-                && file_stamp(&self.identity.proof_path)? == self.proof_stamp,
-        )
+    fn files_are_current_in_epoch(&self, epoch: u64) -> StarfoldResult<(bool, bool)> {
+        if self.last_validated_epoch.load(AtomicOrdering::Acquire) == epoch {
+            return Ok((true, true));
+        }
+        let current = file_stamp(&self.identity.payload_path)? == self.payload_stamp
+            && file_stamp(&self.identity.proof_path)? == self.proof_stamp;
+        if current {
+            self.last_validated_epoch
+                .store(epoch, AtomicOrdering::Release);
+        }
+        Ok((current, false))
+    }
+}
+
+/// 一次 request 级不可伪造的文件身份复核纪元。相同 lease 在同一纪元首次命中时
+/// 复核 payload/proof stamp，随后 microtile 只复验完整 planned identity，不再重复 stat。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct StarfoldVerifiedLeaseValidationEpoch {
+    cache_instance_id: u64,
+    epoch: u64,
+}
+
+impl StarfoldVerifiedLeaseValidationEpoch {
+    pub const fn id(self) -> u64 {
+        self.epoch
     }
 }
 
@@ -1049,6 +1082,10 @@ pub struct StarfoldVerifiedLeaseCacheStats {
     pub evictions: u64,
     pub resident_entries: usize,
     pub resident_logical_bytes: u64,
+    /// cache hit 中真正重新读取 payload/proof 文件 stamp 的次数。
+    pub hit_file_stamp_validations: u64,
+    /// 同一 request 纪元内复用已认证 stamp、避免两次 metadata syscall 的命中次数。
+    pub validation_epoch_reuses: u64,
     /// 命中热 lease 后避免再次完整散列的 payload 逻辑字节。
     pub sha256_bytes_avoided: u64,
 }
@@ -1096,6 +1133,8 @@ struct VerifiedLeaseRegistry {
 /// 做 proof-bound 切片，不会把未验证 RAM 页发布给 Vulkan 上传路径。
 #[derive(Debug)]
 pub struct StarfoldVerifiedLeaseCache {
+    instance_id: u64,
+    next_validation_epoch: AtomicU64,
     capacity_entries: usize,
     registry: Mutex<VerifiedLeaseRegistry>,
 }
@@ -1107,7 +1146,18 @@ impl StarfoldVerifiedLeaseCache {
                 "Starfold verified lease capacity 必须位于 1..={STARFOLD_MAX_VERIFIED_LEASES}: actual={capacity_entries}"
             )));
         }
+        let instance_id = NEXT_VERIFIED_LEASE_CACHE_INSTANCE_ID
+            .fetch_update(
+                AtomicOrdering::Relaxed,
+                AtomicOrdering::Relaxed,
+                |current| (current < u64::MAX).then_some(current + 1),
+            )
+            .map_err(|_| {
+                StarfoldError::new("Starfold verified lease cache instance id exhausted")
+            })?;
         Ok(Self {
+            instance_id,
+            next_validation_epoch: AtomicU64::new(1),
             capacity_entries,
             registry: Mutex::new(VerifiedLeaseRegistry::default()),
         })
@@ -1115,6 +1165,25 @@ impl StarfoldVerifiedLeaseCache {
 
     pub const fn capacity_entries(&self) -> usize {
         self.capacity_entries
+    }
+
+    pub(crate) fn begin_validation_epoch(
+        &self,
+    ) -> StarfoldResult<StarfoldVerifiedLeaseValidationEpoch> {
+        let epoch = self
+            .next_validation_epoch
+            .fetch_update(
+                AtomicOrdering::Relaxed,
+                AtomicOrdering::Relaxed,
+                |current| (current < u64::MAX).then_some(current + 1),
+            )
+            .map_err(|_| {
+                StarfoldError::new("Starfold verified lease validation epoch exhausted")
+            })?;
+        Ok(StarfoldVerifiedLeaseValidationEpoch {
+            cache_instance_id: self.instance_id,
+            epoch,
+        })
     }
 
     /// 从 planned Range 获取进程级热 lease。cache hit 不再读取 proof、不重新 mmap，
@@ -1126,6 +1195,24 @@ impl StarfoldVerifiedLeaseCache {
         planned: &S14PlannedRangeAsset,
         expert_id: Option<u16>,
     ) -> StarfoldResult<Arc<StarfoldVerifiedMappedLease>> {
+        let epoch = self.begin_validation_epoch()?;
+        self.acquire_planned_in_epoch(allowed_root, planned, expert_id, epoch)
+    }
+
+    /// request 级热路径。同一个 epoch 只能由当前 cache 签发；它把文件 stamp 复核从
+    /// “每个 microtile 两次 stat”收敛为“每个完整 Range、每个 request 最多一次”。
+    pub(crate) fn acquire_planned_in_epoch(
+        &self,
+        allowed_root: &Path,
+        planned: &S14PlannedRangeAsset,
+        expert_id: Option<u16>,
+        epoch: StarfoldVerifiedLeaseValidationEpoch,
+    ) -> StarfoldResult<Arc<StarfoldVerifiedMappedLease>> {
+        if epoch.cache_instance_id != self.instance_id || epoch.epoch == 0 {
+            return Err(StarfoldError::new(
+                "Starfold verified lease validation epoch owner 漂移",
+            ));
+        }
         let canonical_root = canonical_directory(allowed_root)?;
         let key = normalized_lease_key(&canonical_root, planned, expert_id)?;
         let slot = self.slot_for(&key)?;
@@ -1139,15 +1226,17 @@ impl StarfoldVerifiedLeaseCache {
                 VerifiedLeaseSlotState::Ready(lease) => {
                     let lease = Arc::clone(lease);
                     drop(state);
-                    if lease.files_are_current()? {
-                        planned
-                            .validate_resolved_position0_asset(lease.asset(), expert_id)
-                            .map_err(|error| {
-                                StarfoldError::new(format!(
-                                    "Starfold verified lease cache hit planned identity 漂移: {error:#}"
-                                ))
-                            })?;
-                        self.record_hit(&key, &slot, lease.identity.payload_bytes)?;
+                    planned
+                        .validate_resolved_position0_asset(lease.asset(), expert_id)
+                        .map_err(|error| {
+                            StarfoldError::new(format!(
+                                "Starfold verified lease cache hit planned identity 漂移: {error:#}"
+                            ))
+                        })?;
+                    let (files_current, epoch_reused) =
+                        lease.files_are_current_in_epoch(epoch.epoch)?;
+                    if files_current {
+                        self.record_hit(&key, &slot, lease.identity.payload_bytes, epoch_reused)?;
                         return Ok(lease);
                     }
                     let mut state = slot.state.lock().map_err(|_| {
@@ -1174,7 +1263,8 @@ impl StarfoldVerifiedLeaseCache {
                     *state = VerifiedLeaseSlotState::Loading;
                     drop(state);
                     self.record_miss()?;
-                    let loaded = load_verified_lease(&canonical_root, planned, expert_id, &key);
+                    let loaded =
+                        load_verified_lease(&canonical_root, planned, expert_id, &key, epoch.epoch);
                     let mut state = slot.state.lock().map_err(|_| {
                         StarfoldError::new("Starfold verified lease publish slot poisoned")
                     })?;
@@ -1288,11 +1378,19 @@ impl StarfoldVerifiedLeaseCache {
         key: &StarfoldVerifiedLeaseKey,
         slot: &Arc<VerifiedLeaseSlot>,
         bytes: u64,
+        epoch_reused: bool,
     ) -> StarfoldResult<()> {
         let mut registry = self.registry_lock()?;
         registry.stats.hits = registry.stats.hits.saturating_add(1);
         registry.stats.sha256_bytes_avoided =
             registry.stats.sha256_bytes_avoided.saturating_add(bytes);
+        if epoch_reused {
+            registry.stats.validation_epoch_reuses =
+                registry.stats.validation_epoch_reuses.saturating_add(1);
+        } else {
+            registry.stats.hit_file_stamp_validations =
+                registry.stats.hit_file_stamp_validations.saturating_add(1);
+        }
         touch_matching_entry(&mut registry, key, slot);
         Ok(())
     }
@@ -1417,12 +1515,23 @@ fn normalized_lease_key(
     let proof_path = canonical_child(canonical_root, &planned.proof_path, "proof")?;
     Ok(StarfoldVerifiedLeaseKey {
         tensor: planned.tensor.clone(),
+        parent_tensor: planned.parent_tensor.clone(),
+        kind: planned.kind.clone(),
+        dtype: planned.dtype.clone(),
+        shape: planned.shape.clone(),
         cache_key: planned.cache_key.clone(),
         range_key: planned.range_key.clone(),
         payload_path,
         payload_bytes: planned.bytes,
         proof_path,
         expert_id,
+        identity_repo: planned.identity.repo.clone(),
+        identity_revision: planned.identity.revision.clone(),
+        identity_source_file: planned.identity.source_file.clone(),
+        identity_source_file_bytes: planned.identity.source_file_bytes,
+        identity_start: planned.identity.start,
+        identity_end: planned.identity.end,
+        identity_header_tensor_table_sha256: planned.identity.header_tensor_table_sha256.clone(),
     })
 }
 
@@ -1448,6 +1557,7 @@ fn load_verified_lease(
     planned: &S14PlannedRangeAsset,
     expert_id: Option<u16>,
     key: &StarfoldVerifiedLeaseKey,
+    validation_epoch: u64,
 ) -> StarfoldResult<StarfoldVerifiedMappedLease> {
     let payload_before = file_stamp(&key.payload_path)?;
     let proof_before = file_stamp(&key.proof_path)?;
@@ -1545,6 +1655,7 @@ fn load_verified_lease(
         proof_file,
         payload_stamp: payload_after,
         proof_stamp: proof_after,
+        last_validated_epoch: AtomicU64::new(validation_epoch),
     })
 }
 

@@ -36,7 +36,11 @@ use crate::{
         propose_s14_starwave_draft, propose_s14_starwave_draft_with_navigator,
         S14StarwaveDraftProposal, S14StarwavePosition0CommittedOrigin,
     },
-    s14_starwave_history_navigator::S14StarwaveHistoryNavigator,
+    s14_starwave_history_navigator::{
+        observe_process_starwave_committed_sequence, process_starwave_transition_atlas_stats,
+        S14StarwaveHistoryNavigator, S14_STARWAVE_TRANSITION_ATLAS_CAPACITY,
+        S14_STARWAVE_TRANSITION_ATLAS_CONTRACT_VERSION,
+    },
     s14_whole_token_device::{
         WholeTokenDetachedCommittedState, WholeTokenDeviceCommittedCheckpointBinding,
     },
@@ -131,6 +135,9 @@ pub struct S14StarfoldResidentResourceContract {
     pub verified_lease_cache_owners: usize,
     pub verified_lease_cache_capacity_entries: usize,
     pub verified_lease_cache_contract_version: u32,
+    pub starwave_transition_atlas_owners: usize,
+    pub starwave_transition_atlas_capacity_entries: usize,
+    pub starwave_transition_atlas_contract_version: u32,
     pub terminal_head_uploader_owners: usize,
     pub starwave_commit_owners: usize,
     pub request_owned: S14StarfoldRequestOwnerReadiness,
@@ -317,6 +324,7 @@ impl<F: S14StarfoldBlockResourceFactory> S14StarfoldProductionRoot<F> {
         let factory_inventory = factory.resident_owner_inventory(context, paged_arena)?;
         let forbidden = factory_inventory.forbidden;
         let verified_lease_cache = process_starfold_verified_lease_cache();
+        let _transition_atlas = process_starwave_transition_atlas_stats();
         let expected_physical_allocation = u64::from(windows.microtile_bytes)
             .checked_mul(u64::try_from(S14_STARFOLD_WINDOW_COUNT)?)
             .context("resident StarFold window bytes overflow")?;
@@ -358,6 +366,10 @@ impl<F: S14StarfoldBlockResourceFactory> S14StarfoldProductionRoot<F> {
             verified_lease_cache_owners: 1,
             verified_lease_cache_capacity_entries: verified_lease_cache.capacity_entries(),
             verified_lease_cache_contract_version: STARFOLD_VERIFIED_LEASE_CACHE_CONTRACT_VERSION,
+            starwave_transition_atlas_owners: 1,
+            starwave_transition_atlas_capacity_entries: S14_STARWAVE_TRANSITION_ATLAS_CAPACITY,
+            starwave_transition_atlas_contract_version:
+                S14_STARWAVE_TRANSITION_ATLAS_CONTRACT_VERSION,
             terminal_head_uploader_owners: factory_inventory.terminal_head_uploader_owners,
             starwave_commit_owners: usize::from(self.commit_chain.is_some()),
             request_owned: S14StarfoldRequestOwnerReadiness::DeferredUntilPrompt,
@@ -388,7 +400,7 @@ impl<F: S14StarfoldBlockResourceFactory> S14StarfoldProductionRoot<F> {
                 bail!("S14 production root adapter 不支持跨请求 reset，已 fail-closed")
             }
         }
-        let runtime = match self.runtime.take() {
+        let mut runtime = match self.runtime.take() {
             Some(runtime) => runtime,
             None => {
                 self.lease = S14StarfoldProductionLeaseState::Exhausted;
@@ -412,6 +424,13 @@ impl<F: S14StarfoldBlockResourceFactory> S14StarfoldProductionRoot<F> {
                 bail!("S14 production root 缺少唯一 StarWave commit chain owner，已 fail-closed");
             }
         };
+        if let Err(error) = runtime.begin_starfold_verified_lease_request_epoch() {
+            self.runtime = Some(runtime);
+            self.factory = Some(factory);
+            self.commit_chain = Some(commit_chain);
+            self.lease = S14StarfoldProductionLeaseState::Ready;
+            return Err(error.context("签发 prompt request verified lease validation epoch"));
+        }
         let decoder = match runtime.new_session(plan.first_input_token_id, max_seq_len) {
             Ok(session) => session,
             Err(error) => {
@@ -482,7 +501,7 @@ impl<F: S14StarfoldBlockResourceFactory> S14StarfoldProductionRoot<F> {
             self.lease = S14StarfoldProductionLeaseState::Exhausted;
             bail!("S14 production root owner-return 前 lease/owner 空槽不合法");
         }
-        let (runtime, mut factory) = match session.into_resident_parts() {
+        let (runtime, mut factory, committed_sequence) = match session.into_resident_parts() {
             Ok(parts) => parts,
             Err(error) => {
                 self.lease = S14StarfoldProductionLeaseState::Exhausted;
@@ -504,6 +523,9 @@ impl<F: S14StarfoldBlockResourceFactory> S14StarfoldProductionRoot<F> {
         if let Err(error) = self.resident_resource_contract() {
             self.lease = S14StarfoldProductionLeaseState::Exhausted;
             return Err(error.context("owner-return 后 resident resource contract 未闭合"));
+        }
+        if let Some(committed_sequence) = committed_sequence {
+            observe_process_starwave_committed_sequence(&committed_sequence);
         }
         Ok(())
     }
@@ -678,7 +700,7 @@ where
         self.cleanup_inner()
     }
 
-    fn into_resident_parts(mut self) -> Result<(S14Runtime, F)> {
+    fn into_resident_parts(mut self) -> Result<(S14Runtime, F, Option<Vec<u32>>)> {
         if self.closed {
             bail!("S14 production session 已关闭，不能归还 resident root");
         }
@@ -692,6 +714,25 @@ where
                     .map(|runtime| Arc::clone(runtime.context()))
             })
             .context("归还 resident root 时缺少 Vulkan context")?;
+
+        // 这里只冻结候选输入链；真正写入 atlas 必须等 root 完整取回 runtime/factory、
+        // rearm 并重新验签成功之后。这样任何后续 owner cleanup 失败都不会污染星图。
+        let committed_sequence = if self.navigator.is_some() {
+            let decoder = self
+                .decoder
+                .as_ref()
+                .context("冻结 committed transition atlas 输入时缺少 decoder")?;
+            let authoritative = decoder.authoritative_state();
+            let mut committed_sequence = authoritative
+                .committed_tokens
+                .iter()
+                .map(|record| record.input_token_id)
+                .collect::<Vec<_>>();
+            committed_sequence.push(authoritative.input_token_id);
+            Some(committed_sequence)
+        } else {
+            None
+        };
 
         // 先释放持有 provider/hidden/prefix Arc 的 request execution graph，但保留
         // 唯一 StarFold runtime/windows；随后 external owners 才能安全退休。
@@ -736,7 +777,7 @@ where
             .take()
             .context("归还 resident root 时 block factory 已缺失")?;
         self.closed = true;
-        Ok((runtime, factory))
+        Ok((runtime, factory, committed_sequence))
     }
 
     fn prefill_prompt(&mut self, plan: &S14StarfoldPromptPrefillPlan) -> Result<()> {

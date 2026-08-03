@@ -711,6 +711,13 @@ impl S14Runtime {
         Ok(())
     }
 
+    pub(crate) fn begin_starfold_verified_lease_request_epoch(&mut self) -> Result<u64> {
+        self.starfold_runtime
+            .as_mut()
+            .context("S14 runtime 缺少 StarFold owner，无法签发 request validation epoch")?
+            .begin_verified_lease_request_epoch()
+    }
+
     pub(crate) fn expert_catalog(&self) -> &FullDepthExpertCatalog {
         self.expert_catalog.as_ref()
     }

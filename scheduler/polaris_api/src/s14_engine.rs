@@ -8,6 +8,10 @@ use ssd_inference::{
     s14_starfold_cache::{
         STARFOLD_DEFAULT_VERIFIED_LEASES, STARFOLD_VERIFIED_LEASE_CACHE_CONTRACT_VERSION,
     },
+    s14_starwave_history_navigator::{
+        S14_STARWAVE_TRANSITION_ATLAS_CAPACITY,
+        S14_STARWAVE_TRANSITION_ATLAS_CONTRACT_VERSION,
+    },
 };
 use std::{fs, path::Path};
 use tokenizers::Tokenizer;
@@ -500,7 +504,7 @@ pub struct S14ResidentK4CommittedBlock {
     pub wall_ms: f64,
 }
 
-pub const S14_RESIDENT_K4_RESOURCE_CONTRACT_VERSION: u32 = 3;
+pub const S14_RESIDENT_K4_RESOURCE_CONTRACT_VERSION: u32 = 4;
 /// StarFold production supertile 的最小兼容粒度；实际值由启动合同携带并参与 SHA。
 pub const S14_RESIDENT_K4_MICROTILE_BYTES: u32 = 1_048_576;
 const S14_RESIDENT_K4_MAX_MICROTILE_BYTES: u32 = 64 * S14_RESIDENT_K4_MICROTILE_BYTES;
@@ -526,6 +530,9 @@ pub struct S14ResidentK4ResourceInventory {
     pub verified_lease_cache_owners: u32,
     pub verified_lease_cache_capacity_entries: u32,
     pub verified_lease_cache_contract_version: u32,
+    pub starwave_transition_atlas_owners: u32,
+    pub starwave_transition_atlas_capacity_entries: u32,
+    pub starwave_transition_atlas_contract_version: u32,
     pub terminal_head_uploader_owners: u32,
     pub starwave_commit_owners: u32,
     pub legacy_union_calls: u64,
@@ -1069,6 +1076,11 @@ fn validate_resident_k4_inventory(
             == STARFOLD_DEFAULT_VERIFIED_LEASES as u32
         && inventory.verified_lease_cache_contract_version
             == STARFOLD_VERIFIED_LEASE_CACHE_CONTRACT_VERSION
+        && inventory.starwave_transition_atlas_owners == 1
+        && inventory.starwave_transition_atlas_capacity_entries
+            == S14_STARWAVE_TRANSITION_ATLAS_CAPACITY as u32
+        && inventory.starwave_transition_atlas_contract_version
+            == S14_STARWAVE_TRANSITION_ATLAS_CONTRACT_VERSION
         && inventory.terminal_head_uploader_owners == 1
         && inventory.starwave_commit_owners == 1;
     let forbidden_paths = inventory.legacy_union_calls
@@ -1090,7 +1102,7 @@ fn validate_resident_k4_inventory(
 
 fn resident_k4_resource_sha256(inventory: S14ResidentK4ResourceInventory) -> [u8; 32] {
     let mut sha256 = Sha256::new();
-    sha256.update(b"polaris-s14-resident-k4-resource-contract-v3");
+    sha256.update(b"polaris-s14-resident-k4-resource-contract-v4");
     for value in [
         S14_RESIDENT_K4_RESOURCE_CONTRACT_VERSION,
         inventory.request_decoder_owners,
@@ -1112,6 +1124,9 @@ fn resident_k4_resource_sha256(inventory: S14ResidentK4ResourceInventory) -> [u8
         inventory.verified_lease_cache_owners,
         inventory.verified_lease_cache_capacity_entries,
         inventory.verified_lease_cache_contract_version,
+        inventory.starwave_transition_atlas_owners,
+        inventory.starwave_transition_atlas_capacity_entries,
+        inventory.starwave_transition_atlas_contract_version,
         inventory.terminal_head_uploader_owners,
         inventory.starwave_commit_owners,
     ] {

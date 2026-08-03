@@ -15,8 +15,9 @@ use crate::{
     s14_starfold_cache::{
         process_starfold_verified_lease_cache, StarfoldB4MicroUnionPlan, StarfoldB4RouteBlock,
         StarfoldMicrotileLayout, StarfoldMicrotileSpan, StarfoldPageKey, StarfoldRouteEntry,
-        StarfoldTensorSegment, StarfoldVerifiedLeaseCacheStats, StarfoldVerifiedMappedLease,
-        STARFOLD_B4_LANES, STARFOLD_ONE_MIB, STARFOLD_TOP_K,
+        StarfoldTensorSegment, StarfoldVerifiedLeaseCacheStats,
+        StarfoldVerifiedLeaseValidationEpoch, StarfoldVerifiedMappedLease, STARFOLD_B4_LANES,
+        STARFOLD_ONE_MIB, STARFOLD_TOP_K,
     },
     s14_starfold_transfer_executor::S14StarfoldTransferExecutor,
     s14_starfold_vulkan_windows::{
@@ -1002,6 +1003,7 @@ impl S14StarfoldComputeSubmissionReceipt {
 pub struct S14StarfoldRuntime {
     cache_root: PathBuf,
     page_fetch_mode: DynamicPageFetchMode,
+    validation_epoch: StarfoldVerifiedLeaseValidationEpoch,
     contract: S14StarfoldDoubleWindowContract,
     resource_owner: Option<S14StarfoldVulkanResourceOwner>,
     transfer_executor: Option<S14StarfoldTransferExecutor>,
@@ -1031,9 +1033,14 @@ impl S14StarfoldRuntime {
             u64::from(microtile_bytes),
         )
         .context("初始化 S14 StarFold 常驻双 staging transfer executor")?;
+        let validation_epoch = process_starfold_verified_lease_cache()
+            .begin_validation_epoch()
+            .map_err(anyhow::Error::new)
+            .context("签发 S14 StarFold 初始 verified lease validation epoch")?;
         Ok(Self {
             cache_root: cache_root.to_path_buf(),
             page_fetch_mode,
+            validation_epoch,
             contract,
             resource_owner: Some(resource_owner),
             transfer_executor: Some(transfer_executor),
@@ -1085,6 +1092,16 @@ impl S14StarfoldRuntime {
             .context("读取 S14 StarFold 进程级 verified lease cache stats")
     }
 
+    /// 每个 prompt request 只签发一次；同一请求的所有 K4 block 共用该纪元。
+    pub fn begin_verified_lease_request_epoch(&mut self) -> Result<u64> {
+        let epoch = process_starfold_verified_lease_cache()
+            .begin_validation_epoch()
+            .map_err(anyhow::Error::new)
+            .context("签发 S14 StarFold request verified lease validation epoch")?;
+        self.validation_epoch = epoch;
+        Ok(epoch.id())
+    }
+
     pub fn physical_allocation_bytes(&self) -> u64 {
         self.resource_owner
             .as_ref()
@@ -1130,10 +1147,11 @@ impl S14StarfoldRuntime {
             bail!("S14 StarFold verified microtile 越出 planned Range");
         }
         let hot_lease = process_starfold_verified_lease_cache()
-            .acquire_planned(
+            .acquire_planned_in_epoch(
                 &self.cache_root,
                 &source.planned,
                 Some(source.span.key.expert_id),
+                self.validation_epoch,
             )
             .map_err(anyhow::Error::new)
             .context("取得 S14 StarFold 进程级 proof/SHA/mmap 热 lease")?;
