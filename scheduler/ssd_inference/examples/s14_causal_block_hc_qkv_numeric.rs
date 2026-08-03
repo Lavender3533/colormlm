@@ -9,8 +9,8 @@ use ssd_inference::{
     },
     s14_causal_block_hc_qkv_recorder::{
         S14CausalBlockHcQkvLayerResources, S14CausalBlockHcQkvResourceProvider,
-        S14CausalBlockHcQkvWeightOffsets, S14CausalBlockHiddenBank,
-        S14CausalBlockOwnedBufferSlice, S14CausalBlockProductionHcQkvLayerRecorder,
+        S14CausalBlockHcQkvWeightOffsets, S14CausalBlockHiddenBank, S14CausalBlockOwnedBufferSlice,
+        S14CausalBlockProductionHcQkvLayerRecorder,
     },
     s14_causal_block_layer::S14CausalBlockLayerInput,
     s14_causal_block_vulkan_backend::S14CausalBlockVulkanBackend,

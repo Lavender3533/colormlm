@@ -230,6 +230,62 @@ impl WholeTokenDeviceState {
         &self.banks[self.active_bank]
     }
 
+    /// 在不消费双bank device state的前提下，把当前已提交bank真实复制为
+    /// block-major prefix initializer可消费的detached snapshot。这是device→device
+    /// copy，不经host checkpoint；保留的`WholeTokenDeviceState`继续负责第一个
+    /// K-block selected checkpoint的两阶段发布。
+    pub fn snapshot_detached_committed_state(
+        &mut self,
+        ctx: &VulkanContext,
+    ) -> Result<WholeTokenDetachedCommittedState> {
+        if self.phase != CandidatePhase::Idle
+            || self.candidate_position.is_some()
+            || self.active_bank > 1
+        {
+            bail!("whole-token device state非idle时禁止snapshot committed bank");
+        }
+        let usage = vk::BufferUsageFlags::STORAGE_BUFFER
+            | vk::BufferUsageFlags::TRANSFER_SRC
+            | vk::BufferUsageFlags::TRANSFER_DST;
+        let snapshot = GpuBuffer::new_vram(ctx, self.state_bytes, usage)
+            .context("allocate whole-token committed snapshot")?;
+        let copied = (|| -> Result<()> {
+            unsafe {
+                ctx.device.reset_command_pool(
+                    self.command_pool,
+                    vk::CommandPoolResetFlags::RELEASE_RESOURCES,
+                )?;
+                ctx.device.begin_command_buffer(
+                    self.command,
+                    &vk::CommandBufferBeginInfo::default()
+                        .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+                )?;
+                ctx.device.cmd_copy_buffer(
+                    self.command,
+                    self.active_buffer().handle(),
+                    snapshot.handle(),
+                    &[vk::BufferCopy::default().size(self.state_bytes)],
+                );
+                ctx.device.end_command_buffer(self.command)?;
+                submit_and_wait(ctx, self.command, self.fence)?;
+            }
+            Ok(())
+        })();
+        if let Err(error) = copied {
+            snapshot.destroy(ctx);
+            return Err(error.context("copy whole-token committed snapshot"));
+        }
+        Ok(WholeTokenDetachedCommittedState {
+            buffer: snapshot,
+            state_bytes: self.state_bytes,
+            epoch: self.epoch,
+            active_bank: self.active_bank,
+            source_device: ctx.device.handle(),
+            source_graphics_queue: ctx.q_graphics,
+            source_graphics_queue_family: ctx.qf_graphics,
+        })
+    }
+
     /// position0成功提交且所有外部timeline已排空后，把active committed bank移交给K-block。
     /// inactive bank、block scratch、sticky status与单token command owner在这里真实销毁。
     pub fn into_detached_committed_state(

@@ -334,6 +334,24 @@ impl HybridUploadProgress {
         Ok(())
     }
 
+    fn prepare_next_causal_block_head(
+        &mut self,
+        plan: &S14Position0HybridWeightPlan,
+    ) -> Result<()> {
+        if !self.static_complete
+            || self.next_runtime_static_layer != plan.routed_layers.len()
+            || self.next_routed_layer != 0
+            || self.pending_layer.is_some()
+            || self.next_head_chunk != plan.head_chunk_count
+            || self.pending_head_chunk.is_some()
+        {
+            bail!("causal-block static/head stream上一块未完整闭合，禁止复用");
+        }
+        self.next_runtime_static_layer = 0;
+        self.next_head_chunk = 0;
+        Ok(())
+    }
+
     fn reset_token(&mut self) {
         debug_assert!(self.static_complete);
         self.next_runtime_static_layer = 0;
@@ -545,6 +563,17 @@ impl S14Position0HybridUploader {
             && self.progress.pending_layer.is_none()
             && self.progress.next_head_chunk == 0
             && self.progress.pending_head_chunk.is_none()
+    }
+
+    /// 在一个完整 causal block 的43层 static 与32个head chunk闭合后重开下一块。
+    /// causal-block provider 会推进 static 层游标，在线 routed 页则由 union
+    /// materializer 直接提供、不会推进旧 uploader 的 routed 游标，因此这里要求
+    /// `static=43/routed=0/head=32` 后只重置 static/head 控制游标，不重新分配资源。
+    pub fn begin_next_causal_block_head_stream(
+        &mut self,
+        plan: &S14Position0HybridWeightPlan,
+    ) -> Result<()> {
+        self.progress.prepare_next_causal_block_head(plan)
     }
 
     /// resident-small 与可选 resident static 页已经由同源 runtime 完成 verified
@@ -1702,6 +1731,26 @@ mod tests {
         assert!(!progress.all_complete(&plan));
         progress.prepare_persistent_token(&plan, false).unwrap();
         assert!(progress.at_token_start());
+    }
+
+    #[test]
+    fn completed_causal_block_reopens_static_and_head_streams() {
+        let manifest = manifest();
+        let plan = S14Position0HybridWeightPlan::build(&manifest).unwrap();
+        let mut progress = HybridUploadProgress::new();
+        progress.static_complete = true;
+        progress.next_runtime_static_layer = plan.routed_layers.len();
+        progress.next_routed_layer = 0;
+        progress.next_head_chunk = plan.head_chunk_count;
+
+        progress.prepare_next_causal_block_head(&plan).unwrap();
+        assert_eq!(progress.next_head_chunk, 0);
+        assert_eq!(progress.next_runtime_static_layer, 0);
+        assert_eq!(progress.next_routed_layer, 0);
+        assert!(progress.static_complete);
+
+        progress.next_head_chunk = plan.head_chunk_count - 1;
+        assert!(progress.prepare_next_causal_block_head(&plan).is_err());
     }
 
     #[test]

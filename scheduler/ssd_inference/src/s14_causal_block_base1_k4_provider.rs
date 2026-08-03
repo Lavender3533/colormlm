@@ -62,6 +62,8 @@ pub struct S14Base1K4ProviderInputs {
     pub weight_plan: Arc<S14Position0HybridWeightPlan>,
     pub paged_arena: Arc<S14Position0PagedWeightArena>,
     pub head_upload: Arc<Mutex<S14CausalBlockTerminalHeadUploadState>>,
+    /// 当前块的真实起始位置。首块为1；后续块必须来自已提交checkpoint。
+    pub base_position: u32,
     pub authoritative: S14Base1K4AuthoritativeStateBinding,
     pub input_token_ids: [u32; S14_BASE1_K4_BLOCK_SIZE],
     pub ratio4_boundary_states: BTreeMap<u8, Arc<dyn S14CausalBlockRatio4BoundaryStateRecorder>>,
@@ -129,6 +131,7 @@ pub struct S14Base1K4ProductionHcQkvProvider {
     weight_plan: Arc<S14Position0HybridWeightPlan>,
     paged_arena: Arc<S14Position0PagedWeightArena>,
     head_upload: Arc<Mutex<S14CausalBlockTerminalHeadUploadState>>,
+    base_position: u32,
     state_layout: S14Position0StateWritebackLayout,
     authoritative_device_state: S14CausalBlockOwnedBufferSlice,
     input_token_ids: [u32; S14_BASE1_K4_BLOCK_SIZE],
@@ -147,6 +150,7 @@ impl fmt::Debug for S14Base1K4ProductionHcQkvProvider {
         formatter
             .debug_struct("S14Base1K4ProductionHcQkvProvider")
             .field("context", &Arc::as_ptr(&self.context))
+            .field("base_position", &self.base_position)
             .field("input_token_ids", &self.input_token_ids)
             .field("graph_count", &self.graphs.len())
             .field("ratio4_state_count", &self.ratio4_boundary_states.len())
@@ -171,13 +175,14 @@ pub fn build_s14_base1_k4_production_hc_qkv_provider(
         weight_plan,
         paged_arena,
         head_upload,
+        base_position,
         authoritative,
         input_token_ids,
         ratio4_boundary_states,
         prefix_state_producer,
     } = inputs;
 
-    validate_authoritative_state(&authoritative)?;
+    validate_authoritative_state(&authoritative, base_position)?;
     manifest
         .validate()
         .map_err(|error| anyhow!("position0 manifest invalid: {error}"))?;
@@ -192,9 +197,9 @@ pub fn build_s14_base1_k4_production_hc_qkv_provider(
         .iter()
         .map(S14CausalBlockHcQkvWeightOffsets::from_position0_graph)
         .collect::<Result<Vec<_>>>()?;
-    validate_ratio4_state_owners(&context, &ratio4_boundary_states)?;
+    validate_ratio4_state_owners(&context, &ratio4_boundary_states, base_position)?;
     if !Arc::ptr_eq(&context, prefix_state_producer.context())
-        || prefix_state_producer.arena().base_position() != S14_BASE1_K4_BASE_POSITION
+        || prefix_state_producer.arena().base_position() != base_position
         || prefix_state_producer.arena().layout().block_size != S14_BASE1_K4_BLOCK_SIZE
     {
         bail!("base1/K4 prefix state producer context/base/K 漂移");
@@ -229,7 +234,7 @@ pub fn build_s14_base1_k4_production_hc_qkv_provider(
         payloads
     };
 
-    let rope_payloads = build_rope_payloads()?;
+    let rope_payloads = build_rope_payloads(base_position)?;
     let aux_layout = AuxLayout::build(&route_aux_payloads, &rope_payloads)?;
     let aux = Arc::new(host_storage_buffer(&context, aux_layout.bytes)?);
     let current_kv_bytes = current_kv_total_bytes()?;
@@ -268,6 +273,7 @@ pub fn build_s14_base1_k4_production_hc_qkv_provider(
         weight_plan,
         paged_arena,
         head_upload,
+        base_position,
         state_layout,
         authoritative_device_state: authoritative.device_state,
         input_token_ids,
@@ -342,7 +348,7 @@ impl S14Base1K4ProductionHcQkvProvider {
         let &expected_layer = FULL_DEPTH_LAYERS
             .get(next_layer_index)
             .context("base1/K4 next layer index 越界")?;
-        if input.base_position != S14_BASE1_K4_BASE_POSITION
+        if input.base_position != self.base_position
             || input.layer != expected_layer
             || input.input_token_ids != self.input_token_ids
             || input.source != MaterializedTokenSource::SpeculativeDraft
@@ -424,7 +430,7 @@ impl S14Base1K4ProductionHcQkvProvider {
 
     fn validate_internal(&self, block_size: usize) -> Result<()> {
         if block_size != S14_BASE1_K4_BLOCK_SIZE
-            || self.state_layout.position != S14_BASE1_K4_BASE_POSITION
+            || self.state_layout.position != self.base_position
             || self.graphs.len() != FULL_DEPTH_LAYERS.len()
             || self.weights.len() != FULL_DEPTH_LAYERS.len()
             || self.route_aux_by_layer.len() != FULL_DEPTH_LAYERS.len()
@@ -455,14 +461,19 @@ impl S14Base1K4ProductionHcQkvProvider {
     }
 }
 
-fn validate_authoritative_state(binding: &S14Base1K4AuthoritativeStateBinding) -> Result<()> {
+fn validate_authoritative_state(
+    binding: &S14Base1K4AuthoritativeStateBinding,
+    base_position: u32,
+) -> Result<()> {
     binding
         .native_state
         .validate_for(polaris_s14_runner::GraphProfile::FullDepth43NativeTop6)
         .context("validate base1/K4 authoritative native state")?;
-    if binding.native_state.position != S14_BASE1_K4_BASE_POSITION || binding.native_state.poisoned
+    if base_position == 0
+        || binding.native_state.position != base_position
+        || binding.native_state.poisoned
     {
-        bail!("base1/K4 authoritative state 必须是未 poisoned 的 position1 committed state");
+        bail!("K4 authoritative state 必须匹配非零真实base position且未poisoned");
     }
     Ok(())
 }
@@ -494,6 +505,7 @@ fn build_graphs(
 fn validate_ratio4_state_owners(
     _context: &Arc<VulkanContext>,
     states: &BTreeMap<u8, Arc<dyn S14CausalBlockRatio4BoundaryStateRecorder>>,
+    base_position: u32,
 ) -> Result<()> {
     let expected = FULL_DEPTH_LAYERS
         .iter()
@@ -507,7 +519,7 @@ fn validate_ratio4_state_owners(
         let binding = state.candidate_state_binding();
         binding.validate(state.candidate_state_owner())?;
         if binding.layer != layer
-            || binding.base_position != S14_BASE1_K4_BASE_POSITION
+            || binding.base_position != base_position
             || binding.block_size as usize != S14_BASE1_K4_BLOCK_SIZE
         {
             bail!("base1/K4 L{layer} ratio4 candidate state context/base/K 漂移");
@@ -573,13 +585,13 @@ fn build_route_aux_payloads(
     Ok(payloads)
 }
 
-fn build_rope_payloads() -> Result<BTreeMap<u16, Vec<u8>>> {
+fn build_rope_payloads(base_position: u32) -> Result<BTreeMap<u16, Vec<u8>>> {
     let mut output = BTreeMap::new();
     for ratio in [0u16, 4, 128] {
         let mut rows =
             Vec::<f32>::with_capacity(S14_BASE1_K4_BLOCK_SIZE * ROPE_ELEMENTS_PER_LANE as usize);
         for lane in 0..S14_BASE1_K4_BLOCK_SIZE {
-            let position = S14_BASE1_K4_BASE_POSITION
+            let position = base_position
                 .checked_add(lane as u32)
                 .context("base1/K4 RoPE position overflow")?;
             rows.extend(position_rope_cos_sin(position, u32::from(ratio))?);

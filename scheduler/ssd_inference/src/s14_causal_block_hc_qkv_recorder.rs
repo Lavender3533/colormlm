@@ -480,8 +480,9 @@ impl WorkspaceLayout {
             ratio4_raw_index_query_bf16: take(8_192 * BF16_BYTES)?,
             ratio4_processed_index_query_bf16: take(8_192 * BF16_BYTES)?,
             ratio4_head_weights_bf16: take(64 * BF16_BYTES)?,
-            ratio4_index_scores_f32: take(F32_BYTES)?,
-            ratio4_compressed_indices_u32: take(4)?,
+            // base5末lane(position8)必须让真实indexer对block0+1给出完整排列。
+            ratio4_index_scores_f32: take(2 * F32_BYTES)?,
+            ratio4_compressed_indices_u32: take(2 * F32_BYTES)?,
             bytes: 0,
         };
         Ok(Self {
@@ -832,7 +833,7 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
             routes,
             forward_calls: 1,
         };
-        let ratio4_boundary = is_base1_k4_ratio4_layer(input)?;
+        let ratio4_boundary = is_supported_k4_ratio4_layer(input)?;
         Ok(S14CausalBlockHcQkvRecordedLayer {
             receipt: S14CausalBlockHcQkvLayerRecordingReceipt {
                 base_position,
@@ -1008,7 +1009,7 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
                 sticky_status_u32: StorageBufferSlice::whole(status),
             },
         )?;
-        if is_base1_k4_ratio4_layer(input)? {
+        if is_supported_k4_ratio4_layer(input)? {
             let state = resources
                 .ratio4_boundary_state
                 .as_ref()
@@ -1633,7 +1634,7 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
         {
             bail!("causal-block HC/QKV layer/static arena identity 漂移");
         }
-        let ratio4_boundary = is_base1_k4_ratio4_layer(input)?;
+        let ratio4_boundary = is_supported_k4_ratio4_layer(input)?;
         if ratio4_boundary != resources.ratio4_boundary_state.is_some() {
             bail!("causal-block HC/QKV ratio4 candidate state owner 缺失或误绑定");
         }
@@ -1731,8 +1732,21 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
                 found = Some(index);
             }
         }
-        let input_bank =
-            found.context("causal-block HC/QKV input hidden 不属于已注册 A/B banks")?;
+        let input_bank = found.with_context(|| {
+            format!(
+                "causal-block HC/QKV input hidden 不属于已注册 A/B banks: input=(buffer={:?}, offset={}, bytes={}, K={}); bank0=(buffer={:?}, offset={}, capacity={}); bank1=(buffer={:?}, offset={}, capacity={})",
+                input.buffer,
+                input.offset,
+                input.bytes,
+                input.block_size,
+                self.hidden_banks[0].buffer.handle(),
+                self.hidden_banks[0].offset,
+                self.hidden_banks[0].capacity_bytes,
+                self.hidden_banks[1].buffer.handle(),
+                self.hidden_banks[1].offset,
+                self.hidden_banks[1].capacity_bytes,
+            )
+        })?;
         Ok((input_bank, 1 - input_bank))
     }
 
@@ -2030,12 +2044,12 @@ fn validate_paged_static_binding(
     Ok(())
 }
 
-fn is_base1_k4_ratio4_layer(input: &S14CausalBlockLayerInput<'_>) -> Result<bool> {
+fn is_supported_k4_ratio4_layer(input: &S14CausalBlockLayerInput<'_>) -> Result<bool> {
     let ratio = COMPRESS_RATIOS
         .get(usize::from(input.layer))
         .copied()
         .context("causal-block HC/QKV compress-ratio layer 越界")?;
-    Ok(input.base_position == 1 && input.input_token_ids.len() == 4 && ratio == 4)
+    Ok(matches!(input.base_position, 1 | 5) && input.input_token_ids.len() == 4 && ratio == 4)
 }
 
 fn hidden_bytes(block_size: usize) -> Result<u64> {

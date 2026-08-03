@@ -1,0 +1,18 @@
+[package]
+name = "polaris_api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+axum = "0.7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+ssd_inference = { path = "../ssd_inference" }
+tokio = { workspace = true, features = ["net"] }
+tokio-stream = "0.1"
+tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }

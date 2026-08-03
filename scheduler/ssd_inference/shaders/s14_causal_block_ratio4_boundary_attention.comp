@@ -1,9 +1,10 @@
 #version 450
 
-// base_position=1/K=4/ratio4 boundary-aware attention。
-// lane0/1 consume contiguous window；lane2 consumes freshly finalized block0；lane3
-// consumes the block selected by the real position4 indexer. Rollover only changes
-// remainder state, so all four lanes execute in one (64,4,1) dispatch afterwards.
+// base_position=1/5、K=4、ratio4 boundary-aware attention。
+// committed_kv绑定base_position行，compressed_kv绑定截至boundary lane已写回的全部
+// compressed rows。boundary lane按物理顺序消费完整压缩前缀；末lane消费真实indexer
+// 排名。base5因此读取committed rows0..4，position7直读block0+1，position8按
+// indexer顺序消费block0+1。Rollover只改变remainder state。
 
 layout(local_size_x = 64) in;
 
@@ -27,10 +28,12 @@ layout(push_constant) uniform Push {
 const uint STATUS_INVALID_SHAPE = 1u;
 const uint STATUS_NON_FINITE = 2u;
 const uint STATUS_INVALID_COMPRESSED_INDEX = 4u;
+const uint BOUNDARY_LANE = 2u;
+const uint MAX_SEQUENCE_TOKENS = 11u;
 
 shared float partial[64];
-shared float scores[8];
-shared float probabilities[8];
+shared float scores[MAX_SEQUENCE_TOKENS];
+shared float probabilities[MAX_SEQUENCE_TOKENS];
 
 bool finite_f32(float value) {
     return !isnan(value) && !isinf(value);
@@ -54,8 +57,9 @@ float load_query_raw(uint block_lane, uint head, uint d) {
     return load_bf16_word(query.packed_bf16[scalar_index >> 1u], scalar_index);
 }
 
-float load_committed(uint d) {
-    return load_bf16_word(committed_kv.packed_bf16[d >> 1u], d);
+float load_committed(uint committed_row, uint d) {
+    uint scalar_index = committed_row * pc.head_dim + d;
+    return load_bf16_word(committed_kv.packed_bf16[scalar_index >> 1u], scalar_index);
 }
 
 float load_current_raw(uint block_lane, uint d) {
@@ -190,12 +194,35 @@ float load_current_position(uint block_lane, uint d) {
 }
 
 float load_window(uint token, uint d) {
-    return token == 0u ? load_committed(d) : load_current_position(token - 1u, d);
+    return token < pc.base_position
+        ? load_committed(token, d)
+        : load_current_position(token - pc.base_position, d);
 }
 
-float load_sequence(uint block_lane, uint token, uint window_count, uint d) {
+uint selected_compressed_row(
+    uint block_lane,
+    uint compressed_rank,
+    uint compressed_count
+) {
+    // boundary lane刚完成当前4-token block：<=2行都必须可见，直接物理顺序读取。
+    if (block_lane == BOUNDARY_LANE) return compressed_rank;
+    // base5 lane0/1只有block0，真实indexer的唯一合法排列也是[0]。
+    if (compressed_count == 1u) return 0u;
+    // 在当前fail-closed base1/5 ABI中，只有末lane会到这里；其buffer由真实
+    // post-boundary indexer写入完整排列。
+    return compressed_index.values[compressed_rank];
+}
+
+float load_sequence(
+    uint block_lane,
+    uint token,
+    uint window_count,
+    uint compressed_count,
+    uint d
+) {
     if (token < window_count) return load_window(token, d);
-    uint selected = block_lane == 2u ? 0u : compressed_index.values[0];
+    uint compressed_rank = token - window_count;
+    uint selected = selected_compressed_row(block_lane, compressed_rank, compressed_count);
     return load_compressed(selected, d);
 }
 
@@ -203,25 +230,36 @@ void main() {
     uint head = gl_WorkGroupID.x;
     uint block_lane = gl_WorkGroupID.y;
     uint lane = gl_LocalInvocationID.x;
-    if (pc.heads != 64u || pc.head_dim != 512u || pc.base_position != 1u ||
-        pc.block_size != 4u) {
+    if (pc.heads != 64u || pc.head_dim != 512u ||
+        (pc.base_position != 1u && pc.base_position != 5u) || pc.block_size != 4u) {
         if (lane == 0u) atomicOr(status_code, STATUS_INVALID_SHAPE);
         return;
     }
     if (head >= pc.heads || block_lane >= pc.block_size) return;
-    if (block_lane == 3u && lane == 0u && compressed_index.values[0] != 0u)
-        atomicOr(status_code, STATUS_INVALID_COMPRESSED_INDEX);
+    uint compressed_count = (pc.base_position + block_lane + 1u) / 4u;
+    uint window_count = pc.base_position + block_lane + 1u;
+    uint token_count = window_count + compressed_count;
+    if (lane == 0u && token_count > MAX_SEQUENCE_TOKENS)
+        atomicOr(status_code, STATUS_INVALID_SHAPE);
+    if (block_lane == 3u && lane == 0u && compressed_count > 1u) {
+        for (uint rank = 0u; rank < compressed_count; ++rank) {
+            uint selected = compressed_index.values[rank];
+            if (selected >= compressed_count)
+                atomicOr(status_code, STATUS_INVALID_COMPRESSED_INDEX);
+            for (uint previous = 0u; previous < rank; ++previous) {
+                if (compressed_index.values[previous] == selected)
+                    atomicOr(status_code, STATUS_INVALID_COMPRESSED_INDEX);
+            }
+        }
+    }
     barrier();
     if (status_code != 0u) return;
 
-    uint window_count = pc.base_position + block_lane + 1u;
-    uint compressed_count = block_lane >= 2u ? 1u : 0u;
-    uint token_count = window_count + compressed_count;
     for (uint token = 0u; token < token_count; ++token) {
         float dot_value = 0.0;
         for (uint d = lane; d < pc.head_dim; d += 64u)
             dot_value += load_query_position(block_lane, head, d) *
-                         load_sequence(block_lane, token, window_count, d);
+                         load_sequence(block_lane, token, window_count, compressed_count, d);
         partial[lane] = dot_value;
         barrier();
         for (uint stride = 32u; stride > 0u; stride >>= 1u) {
@@ -260,9 +298,9 @@ void main() {
         precise float value1 = 0.0;
         for (uint token = 0u; token < token_count; ++token) {
             precise float product0 = probabilities[token] *
-                load_sequence(block_lane, token, window_count, d0);
+                load_sequence(block_lane, token, window_count, compressed_count, d0);
             precise float product1 = probabilities[token] *
-                load_sequence(block_lane, token, window_count, d1);
+                load_sequence(block_lane, token, window_count, compressed_count, d1);
             value0 = value0 + product0;
             value1 = value1 + product1;
         }

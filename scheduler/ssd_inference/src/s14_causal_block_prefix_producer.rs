@@ -1,4 +1,4 @@
-//! base_position=1、K=4 block-major prefix checkpoint 的真实 Vulkan producer。
+//! 任意已提交 base_position、K=4 block-major prefix checkpoint 的真实 Vulkan producer。
 //!
 //! 每层 HC/QKV 得到 K 行 `hc_branch_f32` 与 `kv_raw_bf16` 后，本 producer 在同一个
 //! command buffer 中把 source lane `s` 的写集累积到 prefix `s..K`。compressor 投影每个
@@ -25,7 +25,6 @@ use std::{
     sync::{Arc, Mutex, MutexGuard},
 };
 
-const BASE_POSITION: u32 = 1;
 const BLOCK_SIZE: usize = 4;
 const HIDDEN: u64 = 4096;
 const KV: u64 = 512;
@@ -82,6 +81,7 @@ enum ProducerPhase {
 /// `release_completed_layer` 只在包含本层录制的 fence 完成后执行。
 pub struct S14CausalBlockPrefixStateProducer {
     context: Arc<VulkanContext>,
+    base_position: u32,
     arena: Arc<S14CausalBlockPrefixCheckpointArena>,
     program: S14CausalBlockSharedPrefixStateProgram,
     workspace: Option<GpuBuffer>,
@@ -96,6 +96,7 @@ impl fmt::Debug for S14CausalBlockPrefixStateProducer {
         formatter
             .debug_struct("S14CausalBlockPrefixStateProducer")
             .field("context", &Arc::as_ptr(&self.context))
+            .field("base_position", &self.base_position)
             .field("arena", &Arc::as_ptr(&self.arena))
             .field("workspace", &self.workspace.as_ref().map(GpuBuffer::handle))
             .field("phase", &self.phase.lock().ok().map(|phase| *phase))
@@ -109,8 +110,9 @@ impl S14CausalBlockPrefixStateProducer {
         arena: Arc<S14CausalBlockPrefixCheckpointArena>,
         program: S14CausalBlockSharedPrefixStateProgram,
     ) -> Result<Self> {
+        let base_position = arena.base_position();
         if !Arc::ptr_eq(&context, arena.context())
-            || arena.base_position() != BASE_POSITION
+            || base_position == 0
             || arena.layout().block_size != BLOCK_SIZE
         {
             bail!("K4 prefix producer context/base/K 与 arena 漂移");
@@ -126,7 +128,7 @@ impl S14CausalBlockPrefixStateProducer {
                     let recipe = program.recipe(lane, layer)?;
                     if recipe.workspace_bytes != first.workspace_bytes
                         || recipe.candidate_state_bytes != arena.layout().checkpoint_state_bytes
-                        || recipe.position != BASE_POSITION + lane as u32
+                        || recipe.position != base_position + lane as u32
                     {
                         bail!("K4 prefix producer L{layer}/lane{lane} recipe ABI 漂移");
                     }
@@ -153,6 +155,7 @@ impl S14CausalBlockPrefixStateProducer {
         };
         Ok(Self {
             context,
+            base_position,
             arena,
             program,
             workspace: Some(workspace),
@@ -287,7 +290,7 @@ impl S14CausalBlockPrefixStateProducer {
             }
             let recipe = program.recipe(source_lane, inputs.layer)?.clone();
             if recipe.static_layer_bytes != inputs.static_logical_bytes
-                || recipe.position != BASE_POSITION + source_lane as u32
+                || recipe.position != self.base_position + source_lane as u32
                 || recipe.compress_ratio != ratio
             {
                 bail!(
@@ -358,7 +361,7 @@ impl S14CausalBlockPrefixStateProducer {
             next_layer_index: next_layer_index + 1,
         };
         Ok(S14CausalBlockPrefixLayerRecordingReceipt {
-            base_position: BASE_POSITION,
+            base_position: self.base_position,
             block_size: BLOCK_SIZE,
             layer: inputs.layer,
             window_writebacks,
@@ -485,7 +488,9 @@ fn validate_program_identity(
     program: &S14CausalBlockPrefixStateProgram,
     arena: &S14CausalBlockPrefixCheckpointArena,
 ) -> Result<()> {
-    if program.base_position() != BASE_POSITION
+    let base_position = arena.base_position();
+    if base_position == 0
+        || program.base_position() != base_position
         || program.block_size() != BLOCK_SIZE
         || program.identities().len() != BLOCK_SIZE
         || program
@@ -494,8 +499,8 @@ fn validate_program_identity(
             .enumerate()
             .any(|(lane, identity)| {
                 identity.prefix_index != lane
-                    || identity.input_position != BASE_POSITION + lane as u32
-                    || identity.checkpoint_position != BASE_POSITION + lane as u32 + 1
+                    || identity.input_position != base_position + lane as u32
+                    || identity.checkpoint_position != base_position + lane as u32 + 1
                     || identity.candidate_state_bytes != arena.layout().checkpoint_state_bytes
             })
     {

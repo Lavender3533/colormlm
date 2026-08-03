@@ -67,8 +67,9 @@ impl S14CausalBlockHcQkvLayerRecordingReceipt {
             .get(usize::from(input.layer))
             .copied()
             .ok_or_else(|| "causal-block HC/QKV compress-ratio layer 越界".to_owned())?;
-        let ratio4_boundary =
-            input.base_position == 1 && input.input_token_ids.len() == 4 && ratio == 4;
+        let ratio4_boundary = matches!(input.base_position, 1 | 5)
+            && input.input_token_ids.len() == 4
+            && ratio == 4;
         let expected_contiguous_dispatches = u32::from(!ratio4_boundary);
         // ratio4 跨边界必须严格分成 rollover 前 lanes0..2 与 rollover 后 lane3
         // 两次 block-row dispatch；state transition recorder 仍只调用一次。
@@ -675,49 +676,51 @@ mod tests {
     }
 
     #[test]
-    fn base1_k4_ratio4_receipt_rejects_contiguous_attention_masquerade() {
+    fn supported_k4_ratio4_receipt_rejects_contiguous_attention_masquerade() {
         let block_size = 4;
         let layer = 2;
         assert_eq!(COMPRESS_RATIOS[usize::from(layer)], 4);
         let tokens = [1, 2, 3, 4];
-        let input = S14CausalBlockLayerInput {
-            base_position: 1,
-            layer,
-            input_token_ids: &tokens,
-            input_hidden: hidden(21, block_size, 0),
-            source: polaris_s14_runner::MaterializedTokenSource::SpeculativeDraft,
-        };
-        let output = S14CausalBlockAttentionRouterOutput {
-            post_attention_hidden: hidden(22, block_size, 1),
-            routes: routes(layer, block_size),
-            forward_calls: 1,
-        };
-        let valid = S14CausalBlockHcQkvLayerRecordingReceipt {
-            base_position: 1,
-            layer,
-            block_size,
-            input_hidden: input.input_hidden,
-            post_attention_hidden: output.post_attention_hidden,
-            layer_record_calls: 1,
-            command_graph_submit_calls: 1,
-            hc_qkv_projection_record_calls: 1,
-            attention_recording_calls: 1,
-            contiguous_attention_dispatch_calls: 0,
-            ratio4_boundary_attention_dispatch_calls: 2,
-            ratio4_state_transition_record_calls: 1,
-            attention_output_post_record_calls: 1,
-            ffn_hc_router_input_record_calls: 1,
-            router_recording_calls: 1,
-            serial_token_forward_calls: 0,
-            hc_hidden_integration_complete: true,
-        };
-        valid.validate(&input, &output).unwrap();
+        for base_position in [1, 5] {
+            let input = S14CausalBlockLayerInput {
+                base_position,
+                layer,
+                input_token_ids: &tokens,
+                input_hidden: hidden(21, block_size, 0),
+                source: polaris_s14_runner::MaterializedTokenSource::SpeculativeDraft,
+            };
+            let output = S14CausalBlockAttentionRouterOutput {
+                post_attention_hidden: hidden(22, block_size, 1),
+                routes: routes(layer, block_size),
+                forward_calls: 1,
+            };
+            let valid = S14CausalBlockHcQkvLayerRecordingReceipt {
+                base_position,
+                layer,
+                block_size,
+                input_hidden: input.input_hidden,
+                post_attention_hidden: output.post_attention_hidden,
+                layer_record_calls: 1,
+                command_graph_submit_calls: 1,
+                hc_qkv_projection_record_calls: 1,
+                attention_recording_calls: 1,
+                contiguous_attention_dispatch_calls: 0,
+                ratio4_boundary_attention_dispatch_calls: 2,
+                ratio4_state_transition_record_calls: 1,
+                attention_output_post_record_calls: 1,
+                ffn_hc_router_input_record_calls: 1,
+                router_recording_calls: 1,
+                serial_token_forward_calls: 0,
+                hc_hidden_integration_complete: true,
+            };
+            valid.validate(&input, &output).unwrap();
 
-        let invalid = S14CausalBlockHcQkvLayerRecordingReceipt {
-            contiguous_attention_dispatch_calls: 1,
-            ratio4_boundary_attention_dispatch_calls: 0,
-            ..valid
-        };
-        assert!(invalid.validate(&input, &output).is_err());
+            let invalid = S14CausalBlockHcQkvLayerRecordingReceipt {
+                contiguous_attention_dispatch_calls: 1,
+                ratio4_boundary_attention_dispatch_calls: 0,
+                ..valid
+            };
+            assert!(invalid.validate(&input, &output).is_err());
+        }
     }
 }

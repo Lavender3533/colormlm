@@ -1,13 +1,12 @@
 //! K=4 单层 HC/QKV -> grouped MoE -> next-layer hidden 的真实 Vulkan 集成门。
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use ash::vk;
 use polaris_s14_runner::{
-    EXPERT_PAGE_BYTES, LayerCausalBatchPlan, MaterializedTokenSource, RouteDecision,
-    build_layer_causal_batch_plan,
+    build_layer_causal_batch_plan, LayerCausalBatchPlan, MaterializedTokenSource, RouteDecision,
+    EXPERT_PAGE_BYTES,
 };
 use ssd_inference::{
-    GpuBuffer, VulkanContext,
     s14_causal_block_grouped_graph::{
         S14CausalBlockGroupedMoeRecorder, S14CausalBlockRecordedGroupedMoe,
     },
@@ -24,7 +23,8 @@ use ssd_inference::{
         S14CausalBlockAttentionRouterOutput, S14CausalBlockFullDepthBackend,
         S14CausalBlockGroupedMoeOutput, S14CausalBlockHiddenBinding, S14CausalBlockLayerBackend,
         S14CausalBlockLayerInput, S14CausalBlockLayerRangePlan, S14CausalBlockPhysicalRange,
-        S14CausalBlockUnionBankBinding, S14CausalBlockUnionMaterializeReceipt,
+        S14CausalBlockRangeEvidenceReceipt, S14CausalBlockUnionBankBinding,
+        S14CausalBlockUnionMaterializeReceipt,
     },
     s14_causal_block_moe_adapter::S14CausalBlockVulkanMoeAdapter,
     s14_causal_block_vulkan_backend::S14CausalBlockVulkanBackend,
@@ -32,13 +32,14 @@ use ssd_inference::{
     s14_position1_attention::position_rope_cos_sin,
     s14_route_postprocess_gpu::S14RoutePostprocessGpuMode,
     s14_vulkan::S14RaggedBranchOffsets,
+    GpuBuffer, VulkanContext,
 };
 use std::{
     collections::BTreeSet,
     fmt,
     sync::{
-        Arc,
         atomic::{AtomicU32, Ordering},
+        Arc,
     },
     time::Instant,
 };
@@ -227,6 +228,16 @@ impl S14CausalBlockVulkanMoeAdapter for FixtureMoeAdapter {
                 physical_ranges: range_plan.physical_ranges,
                 uploaded_bytes: range_plan.union_expert_bytes,
                 materialize_calls: 1,
+                range_evidence: S14CausalBlockRangeEvidenceReceipt {
+                    proof_assets: range_plan.physical_ranges,
+                    explicit_fetch_lane_plans: 0,
+                    mmap_requests: range_plan.physical_ranges as u64,
+                    mmap_hits: range_plan.physical_ranges as u64,
+                    mmap_misses: 0,
+                    sha256_bytes: 0,
+                    staging_range_copies: range_plan.physical_ranges,
+                    gpu_upload_copy_regions: 1,
+                },
             })
         })();
         result.map_err(|error| format!("{error:#}"))

@@ -1,7 +1,8 @@
 //! position0 committed device bank 到 K=4 prefix checkpoint arena 的 production 初始化 owner。
 //!
 //! 该 owner 是 detached single-token runtime 与 block-major producer 之间的唯一桥：它只接受
-//! 已真实提交的 position0 `0 -> 5` host/device identity，分配一块 K=4 device checkpoint arena，
+//! 已真实提交的 position0 `0 -> 5` ledger/host/device identity；position1当前输入可以是
+//! prompt prefill指定的任意词表token。它分配一块 K=4 device checkpoint arena，
 //! 在同一 graphics queue 录制并完成 authoritative baseline copy，随后才允许构造 prefix producer。
 //! 初始化失败会 abort arena；若等待失败且 queue 也无法 drain，则保留 pending Vulkan 资源直到
 //! context teardown，禁止销毁仍可能在执行的 command 或 buffer。
@@ -20,7 +21,7 @@ use crate::{
 };
 use anyhow::{anyhow, bail, Context, Result};
 use ash::vk;
-use polaris_s14_runner::DecoderStateV1;
+use polaris_s14_runner::{DecoderStateV1, VOCAB_SIZE};
 use std::{fmt, sync::Arc};
 
 pub const S14_CAUSAL_BLOCK_BOOTSTRAP_BASE_POSITION: u32 = 1;
@@ -87,6 +88,26 @@ impl S14CausalBlockPrefixInitializationOwner {
         authoritative: DecoderStateV1,
         committed: WholeTokenDetachedCommittedState,
     ) -> Result<Self> {
+        validate_position0_bootstrap_ledger(&authoritative)?;
+        Self::initialize_at(
+            context,
+            authoritative,
+            committed,
+            S14_CAUSAL_BLOCK_BOOTSTRAP_BASE_POSITION,
+            S14_CAUSAL_BLOCK_BOOTSTRAP_BLOCK_SIZE,
+        )
+    }
+
+    /// 消费任意已真实提交的device snapshot，为下一个K=4/8 block构造
+    /// 新prefix arena。`base_position`必须精确等于selected checkpoint提交后的
+    /// host position；该入口不重放position0、不接受fixture snapshot。
+    pub fn initialize_at(
+        context: Arc<VulkanContext>,
+        authoritative: DecoderStateV1,
+        committed: WholeTokenDetachedCommittedState,
+        base_position: u32,
+        block_size: usize,
+    ) -> Result<Self> {
         let WholeTokenDetachedCommittedState {
             buffer: committed_buffer,
             state_bytes,
@@ -96,7 +117,7 @@ impl S14CausalBlockPrefixInitializationOwner {
             source_graphics_queue,
             source_graphics_queue_family,
         } = committed;
-        if let Err(error) = validate_position0_committed_identity(
+        if let Err(error) = validate_committed_identity_at(
             &context,
             &authoritative,
             &committed_buffer,
@@ -106,15 +127,14 @@ impl S14CausalBlockPrefixInitializationOwner {
             source_device,
             source_graphics_queue,
             source_graphics_queue_family,
+            base_position,
+            block_size,
         ) {
             committed_buffer.destroy(&context);
             return Err(error);
         }
 
-        let layout = S14CausalBlockPrefixCheckpointLayout::build(
-            S14_CAUSAL_BLOCK_BOOTSTRAP_BLOCK_SIZE,
-            state_bytes,
-        )?;
+        let layout = S14CausalBlockPrefixCheckpointLayout::build(block_size, state_bytes)?;
         let prefix_buffer = match GpuBuffer::new_vram(
             &context,
             layout.used_bytes,
@@ -125,7 +145,7 @@ impl S14CausalBlockPrefixInitializationOwner {
             Ok(buffer) => buffer,
             Err(error) => {
                 committed_buffer.destroy(&context);
-                return Err(error.context("allocate K=4 prefix checkpoint storage"));
+                return Err(error.context("allocate causal-block prefix checkpoint storage"));
             }
         };
         let authoritative_device = Arc::new(committed_buffer);
@@ -134,15 +154,15 @@ impl S14CausalBlockPrefixInitializationOwner {
             Arc::clone(&context),
             Arc::clone(&prefix_storage),
             0,
-            S14_CAUSAL_BLOCK_BOOTSTRAP_BASE_POSITION,
-            S14_CAUSAL_BLOCK_BOOTSTRAP_BLOCK_SIZE,
+            base_position,
+            block_size,
             state_bytes,
         ) {
             Ok(arena) => arena,
             Err(error) => {
                 destroy_unshared_buffer(&context, prefix_storage);
                 destroy_unshared_buffer(&context, authoritative_device);
-                return Err(error.context("bind K=4 prefix checkpoint arena"));
+                return Err(error.context("bind causal-block prefix checkpoint arena"));
             }
         };
 
@@ -208,6 +228,8 @@ impl S14CausalBlockPrefixInitializationOwner {
             epoch,
             active_bank,
             state_bytes,
+            base_position,
+            block_size,
         ) {
             Ok(completion) => completion,
             Err(error) => {
@@ -346,7 +368,8 @@ impl Drop for S14CausalBlockPrefixInitializationOwner {
     }
 }
 
-fn validate_position0_committed_identity(
+#[allow(clippy::too_many_arguments)]
+fn validate_committed_identity_at(
     context: &VulkanContext,
     authoritative: &DecoderStateV1,
     committed_buffer: &GpuBuffer,
@@ -356,16 +379,22 @@ fn validate_position0_committed_identity(
     source_device: vk::Device,
     source_graphics_queue: vk::Queue,
     source_graphics_queue_family: u32,
+    base_position: u32,
+    block_size: usize,
 ) -> Result<()> {
     authoritative
         .validate()
-        .context("validate position0 committed host state")?;
-    let records = authoritative.committed_tokens.as_slice();
-    if authoritative.position != S14_CAUSAL_BLOCK_BOOTSTRAP_BASE_POSITION
-        || authoritative.native.position != S14_CAUSAL_BLOCK_BOOTSTRAP_BASE_POSITION
+        .context("validate causal-block committed host state")?;
+    let block_end = base_position
+        .checked_add(u32::try_from(block_size).context("causal-block prefix K无法表示为u32")?);
+    if !matches!(block_size, 4 | 8)
+        || base_position == 0
+        || block_end.is_none_or(|end| end > authoritative.native.max_seq_len)
+        || authoritative.position != base_position
+        || authoritative.native.position != base_position
         || authoritative.commit_epoch != epoch
         || usize::from(authoritative.active_fixed_bank) != active_bank
-        || authoritative.input_token_id != POSITION0_PREDICTED_TOKEN_ID
+        || authoritative.input_token_id >= VOCAB_SIZE
         || state_bytes != authoritative.native.arena_bytes
         || state_bytes != authoritative.native_arena.len() as u64
         || state_bytes == 0
@@ -376,12 +405,21 @@ fn validate_position0_committed_identity(
         || source_device != context.device.handle()
         || source_graphics_queue != context.q_graphics
         || source_graphics_queue_family != context.qf_graphics
+    {
+        bail!("prefix initialization 拒绝非同源committed device snapshot或base/K漂移");
+    }
+    Ok(())
+}
+
+fn validate_position0_bootstrap_ledger(authoritative: &DecoderStateV1) -> Result<()> {
+    let records = authoritative.committed_tokens.as_slice();
+    if authoritative.position != S14_CAUSAL_BLOCK_BOOTSTRAP_BASE_POSITION
         || records.len() != 1
         || records[0].position != 0
         || records[0].input_token_id != POSITION0_INPUT_TOKEN_ID
         || records[0].predicted_token_id != POSITION0_PREDICTED_TOKEN_ID
     {
-        bail!("prefix initialization 只接受同源 position0 0→5 committed host/device bank");
+        bail!("prefix bootstrap 只接受同源 position0 0→5 ledger与合法position1请求输入");
     }
     Ok(())
 }
@@ -391,18 +429,20 @@ fn validate_initialization_receipt(
     epoch: u64,
     active_bank: usize,
     state_bytes: u64,
+    base_position: u32,
+    block_size: usize,
 ) -> Result<S14CausalBlockPrefixInitializationCompletion> {
     let copied_bytes = state_bytes
-        .checked_mul(S14_CAUSAL_BLOCK_BOOTSTRAP_BLOCK_SIZE as u64)
+        .checked_mul(block_size as u64)
         .context("prefix initialization copied bytes overflow")?;
-    if receipt.base_position != S14_CAUSAL_BLOCK_BOOTSTRAP_BASE_POSITION
-        || receipt.block_size != S14_CAUSAL_BLOCK_BOOTSTRAP_BLOCK_SIZE
+    if receipt.base_position != base_position
+        || receipt.block_size != block_size
         || receipt.checkpoint_state_bytes != state_bytes
-        || receipt.copy_regions != S14_CAUSAL_BLOCK_BOOTSTRAP_BLOCK_SIZE
+        || receipt.copy_regions != block_size
         || receipt.copied_bytes != copied_bytes
         || receipt.serial_token_forward_calls != 0
     {
-        bail!("prefix initialization receipt 与 authoritative K=4 baseline copy 漂移");
+        bail!("prefix initialization receipt 与 authoritative K-block baseline copy 漂移");
     }
     Ok(S14CausalBlockPrefixInitializationCompletion {
         authoritative_epoch: epoch,

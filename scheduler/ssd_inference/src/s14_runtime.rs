@@ -7,6 +7,7 @@
 
 use crate::{
     compute::StorageBufferSlice,
+    s14_causal_block_layer::{S14CausalBlockPublishReceipt, S14CausalBlockSealedFuture},
     s14_causal_block_resources::S14CausalBlockUnionBanks,
     s14_dynamic_page_cache_readiness::{
         materialize_dynamic_page_plan, materialize_planned_range_asset, DynamicPageFetchMode,
@@ -290,6 +291,24 @@ pub struct S14Position0CommittedRuntimeParts {
     pub mapped_store: VerifiedMappedAssetStore,
     pub authoritative: DecoderStateV1,
     pub committed_device: WholeTokenDetachedCommittedState,
+    pub continuation: S14CausalBlockRuntimeContinuation,
+}
+
+/// K-block producer取得paged/union/head owner后仍保留的权威runtime/session壳。
+/// 它只负责对sealed future调用既有两阶段发布路径，并从发布后的真实committed bank
+/// 派生下一block起点；不重建position0，也不接受host fixture替换device checkpoint。
+pub struct S14CausalBlockRuntimeContinuation {
+    runtime: S14Runtime,
+    session: S14Session,
+}
+
+/// 下一K=4/8 block只能从最近一次真实发布后的host/device同源状态构造。
+pub struct S14NextCausalBlockCommittedState {
+    pub authoritative: DecoderStateV1,
+    pub committed_device: WholeTokenDetachedCommittedState,
+    pub base_position: u32,
+    pub input_token_id: u32,
+    pub commit_epoch: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -456,12 +475,18 @@ impl S14Runtime {
         self.step_with_next_input(session, None)
     }
 
-    /// 只允许在真实position0成功提交`0→5`后消费runtime/session。昂贵paged arena、union bank、
-    /// verified uploader/store与active committed device bank保持同一Arc context。
+    /// 只允许在真实position0成功提交`0→5`后消费runtime/session。`expected_next_input`
+    /// 是本次请求在position1实际要消费的token；它可以由prompt prefill覆盖模型的position0
+    /// 预测，但ledger仍必须保留真实`0→5`，不能伪造position0输出。昂贵paged arena、union
+    /// bank、verified uploader/store与active committed device bank保持同一Arc context。
     pub fn into_position0_committed_causal_block_parts(
         mut self,
         mut session: S14Session,
+        expected_next_input: u32,
     ) -> Result<S14Position0CommittedRuntimeParts> {
+        if expected_next_input >= VOCAB_SIZE {
+            bail!("position0 committed exporter next input越界: {expected_next_input}");
+        }
         if !self.owns_session(&session) {
             bail!("position0 committed exporter拒绝外来session");
         }
@@ -469,25 +494,26 @@ impl S14Runtime {
         let record = session.host.committed_tokens.last();
         if session.host.position != 1
             || session.host.commit_epoch != 1
-            || session.host.input_token_id != 5
+            || session.host.input_token_id != expected_next_input
             || session.host.active_fixed_bank != 1
             || session.host.committed_tokens.len() != 1
             || record.is_none_or(|value| {
                 value.position != 0 || value.input_token_id != 0 || value.predicted_token_id != 5
             })
         {
-            bail!("causal-block exporter必须消费真实position0 0→5 committed state");
+            bail!(
+                "causal-block exporter必须消费真实position0 0→5 committed state并绑定请求next input={expected_next_input}"
+            );
         }
         let device = session
             .device
-            .take()
+            .as_ref()
             .context("position0 committed exporter缺少device state")?;
         if device.epoch() != session.host.commit_epoch
             || device.active_bank() != usize::from(session.host.active_fixed_bank)
             || device.state_bytes() != session.host.native_arena.len() as u64
             || device.candidate_position().is_some()
         {
-            session.device = Some(device);
             bail!("position0 committed exporter host/device identity漂移");
         }
 
@@ -511,7 +537,12 @@ impl S14Runtime {
             .causal_block_union_banks
             .take()
             .context("position0 committed exporter缺少union banks")?;
-        let committed_device = match device.into_detached_committed_state(&self.ctx) {
+        let committed_device = match session
+            .device
+            .as_mut()
+            .context("position0 committed exporter缺少device state")?
+            .snapshot_detached_committed_state(&self.ctx)
+        {
             Ok(value) => value,
             Err(error) => {
                 uploader.destroy(&self.ctx);
@@ -519,23 +550,36 @@ impl S14Runtime {
                     .map_err(|_| anyhow!("position0 exporter rollback paged arena Arc漂移"))?
                     .destroy(&self.ctx);
                 union_banks.destroy(&self.ctx);
-                return Err(error.context("detach position0 committed device bank"));
+                return Err(error.context("snapshot position0 committed device bank"));
             }
         };
+        let context = Arc::clone(&self.ctx);
+        let manifest = self.manifest.clone();
+        let weights = self.weights.clone();
+        let layer_program = self.layer_program.clone();
+        let input_planner = self.input_planner.clone();
+        let payload_root = self.payload_root.clone();
+        let page_fetch_mode = self.page_fetch_mode;
+        let authoritative = session.host.clone();
+        let continuation = S14CausalBlockRuntimeContinuation {
+            runtime: self,
+            session,
+        };
         Ok(S14Position0CommittedRuntimeParts {
-            context: Arc::clone(&self.ctx),
-            manifest: self.manifest.clone(),
-            weights: self.weights.clone(),
+            context,
+            manifest,
+            weights,
             paged_arena,
             union_banks,
-            layer_program: self.layer_program.clone(),
-            input_planner: self.input_planner.clone(),
-            payload_root: self.payload_root.clone(),
-            page_fetch_mode: self.page_fetch_mode,
+            layer_program,
+            input_planner,
+            payload_root,
+            page_fetch_mode,
             uploader,
             mapped_store,
-            authoritative: session.host.clone(),
+            authoritative,
             committed_device,
+            continuation,
         })
     }
 
@@ -1100,6 +1144,86 @@ impl Drop for S14Runtime {
         if let Some(banks) = self.causal_block_union_banks.take() {
             banks.destroy(&self.ctx);
         }
+    }
+}
+
+impl S14CausalBlockRuntimeContinuation {
+    pub fn context(&self) -> Arc<VulkanContext> {
+        Arc::clone(&self.runtime.ctx)
+    }
+
+    pub fn authoritative_state(&self) -> &DecoderStateV1 {
+        &self.session.host
+    }
+
+    /// 复用`S14Runtime::publish_causal_block_longest_prefix`；这里不复制提交算法。
+    pub fn publish_longest_prefix(
+        &mut self,
+        sealed: S14CausalBlockSealedFuture,
+    ) -> Result<S14CausalBlockPublishReceipt> {
+        self.runtime
+            .publish_causal_block_longest_prefix(&mut self.session, sealed)
+            .map_err(|error| anyhow!(error.to_string()))
+    }
+
+    /// 从刚发布的session position/input/epoch与active device bank同源派生下一block。
+    /// snapshot是device→device copy，只供prefix initializer消费；权威双bank继续留在session。
+    pub fn snapshot_next_block(
+        &mut self,
+        block_size: usize,
+    ) -> Result<S14NextCausalBlockCommittedState> {
+        if !matches!(block_size, 4 | 8) {
+            bail!("causal-block continuation只接受K=4/8，实际K={block_size}");
+        }
+        if !self.runtime.owns_session(&self.session) {
+            bail!("causal-block continuation runtime/session context漂移");
+        }
+        self.session
+            .host
+            .validate()
+            .context("validate causal-block continuation host state")?;
+        let base_position = self.session.position();
+        let input_token_id = self.session.input_token_id();
+        let commit_epoch = self.session.commit_epoch();
+        let block_end = base_position
+            .checked_add(u32::try_from(block_size).context("causal-block K无法表示为u32")?)
+            .context("causal-block continuation position overflow")?;
+        if base_position == 0
+            || block_end > self.session.host.native.max_seq_len
+            || input_token_id >= VOCAB_SIZE
+        {
+            bail!(
+                "causal-block continuation next block越界: base={base_position} K={block_size} input={input_token_id}"
+            );
+        }
+        let device = self
+            .session
+            .device
+            .as_mut()
+            .context("causal-block continuation缺少device state")?;
+        if device.epoch() != commit_epoch
+            || device.active_bank() != usize::from(self.session.host.active_fixed_bank)
+            || device.state_bytes() != self.session.host.native_arena.len() as u64
+            || device.candidate_position().is_some()
+        {
+            bail!("causal-block continuation host/device committed identity漂移");
+        }
+        let committed_device = device
+            .snapshot_detached_committed_state(&self.runtime.ctx)
+            .context("snapshot next causal-block committed device bank")?;
+        Ok(S14NextCausalBlockCommittedState {
+            authoritative: self.session.host.clone(),
+            committed_device,
+            base_position,
+            input_token_id,
+            commit_epoch,
+        })
+    }
+
+    pub fn destroy(self) -> Result<()> {
+        let S14CausalBlockRuntimeContinuation { runtime, session } = self;
+        session.destroy()?;
+        runtime.destroy()
     }
 }
 

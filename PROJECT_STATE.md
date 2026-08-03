@@ -1,8 +1,23 @@
 # 北极星（Polaris）项目现状
 
-更新日期：2026-08-02
+更新日期：2026-08-03
 
 跨对话/跨工程接手续读：`fast16/HANDOFF_2026-07-31.md`。
+
+## 2026-08-03 Polaris S14 主线
+
+- S14 新 Rust/Vulkan 本体已完成 production K=4 两个连续 block 的真实提交：第一块从
+  `base_position=1` 发布实际 selected checkpoint，第二块消费该 device checkpoint，从
+  `base_position=5` 再跑 43/43 层并以 `committed=true` 结束；没有重启 position0、固定
+  checkpoint、逐 token forward 或 CPU fallback。
+- 任意用户输入短链已经真实接通官方 DeepSeek-V4 tokenizer/chat codec、resident `S14Runtime`、
+  `/v1/chat/completions` 与 `/api/chat`。实测 `你好`（5 prompt tokens）得到 HTTP 200 和真实文本
+  `好的，用户`（3 completion tokens），总计 8 positions；这不是旧 Python executor 或接口占位。
+- 当前网页能力仍只按权威 token-major N=8 门开放短回复。8-token completion CLI 已越过
+  position8，并在 position9/L21 冷补页时触及20分钟工具上限；没有数值错误，但未形成完整
+  长回复证据，因此 API 暂不冒进放宽门限。
+- 当前唯一主线是把已通过的 K=4 continuation 抽成 resident 可重复接口，并补齐非对齐 base
+  position 后接入现有 Open WebUI。v47 后续只作为草稿岛；能力岛/胶囊不抢占这一闭环。
 
 ## 正式命名与兼容层
 
