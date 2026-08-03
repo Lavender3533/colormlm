@@ -126,7 +126,9 @@ impl S14CausalBlockRatio4CandidateStateBinding {
             || self.position3_recipe_compress_ratio != 4
             || self.position4_recipe_position != 4
             || self.position4_recipe_compress_ratio != 4
-            || self.compressed_rope_position != 3
+            // position3 finalize覆盖原始positions0..3；官方compressed RoPE位置是0，
+            // 不是boundary position本身。
+            || self.compressed_rope_position != 0
         {
             bail!("ratio4 candidate state strong-owner binding 漂移");
         }

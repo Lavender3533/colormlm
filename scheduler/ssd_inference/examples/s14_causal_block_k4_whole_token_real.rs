@@ -794,6 +794,8 @@ fn build_real_position1_k4_inputs_with_builder(
         Ok(value) => value,
         Err(error) => {
             drop(terminal_owner);
+            drop(host_finalizer);
+            drop(hidden_banks);
             drop(paged_arena);
             union_banks.destroy(&context);
             let cleanup = external_owner.destroy(&context);
