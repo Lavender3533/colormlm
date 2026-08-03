@@ -71,6 +71,12 @@ pub struct S14CausalBlockUnionIdentityPlan {
     route_plans: Vec<DynamicRoutedPagePlan>,
 }
 
+impl S14CausalBlockUnionIdentityPlan {
+    pub fn route_plans(&self) -> &[DynamicRoutedPagePlan] {
+        &self.route_plans
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct S14CausalBlockUnionMaterializeTelemetry {
     pub unique_experts: usize,
@@ -273,34 +279,13 @@ pub fn build_causal_block_union_identity_plan(
         bail!("causal-block union layer range plan count/bytes 漂移");
     }
 
+    let route_plans = build_causal_block_route_plans(catalog, base_position, routes)?;
     let mut identities = BTreeMap::<PhysicalKey, ExpertRangeIdentity>::new();
-    let mut route_plans = Vec::with_capacity(routes.len());
     let mut union_experts = BTreeSet::new();
-    for (lane, route) in routes.iter().enumerate() {
-        if route.layer != range_plan.layer {
+    for route_plan in &route_plans {
+        if route_plan.layer != range_plan.layer {
             bail!("causal-block union route layer 漂移");
         }
-        let expert_ids: [u16; EXPERTS_PER_TOKEN] = route
-            .expert_ids
-            .clone()
-            .try_into()
-            .map_err(|_| anyhow::anyhow!("causal-block route 不是精确 top-6 IDs"))?;
-        let route_weights: [f32; EXPERTS_PER_TOKEN] = route
-            .weights
-            .clone()
-            .try_into()
-            .map_err(|_| anyhow::anyhow!("causal-block route 不是精确 top-6 weights"))?;
-        let position = u64::from(base_position)
-            .checked_add(lane as u64)
-            .context("causal-block union position overflow")?;
-        let route_plan = catalog
-            .plan(OnlineTop6 {
-                layer: route.layer,
-                position,
-                expert_ids,
-                route_weights,
-            })
-            .context("causal-block union catalog route plan 失败")?;
         for physical in route_plan.physical_ranges()? {
             union_experts.insert(physical.expert_id);
             let key = PhysicalKey::new(physical.expert_id, physical.projection, physical.part);
@@ -312,7 +297,6 @@ pub fn build_causal_block_union_identity_plan(
                 identities.insert(key, physical.range.clone());
             }
         }
-        route_plans.push(route_plan);
     }
     if union_experts.len() != range_plan.unique_experts
         || identities.len() != expected_physical_ranges
@@ -379,6 +363,51 @@ pub fn build_causal_block_union_identity_plan(
         ranges,
         route_plans,
     })
+}
+
+/// Build the exact per-lane catalog plans as soon as the authoritative GPU
+/// router output is available.  The resulting plans are suitable for a
+/// cache-only prefetch ticket; the later union identity builder reconstructs
+/// them independently and requires exact equality before publication.
+pub fn build_causal_block_route_plans(
+    catalog: &FullDepthExpertCatalog,
+    base_position: u32,
+    routes: &[RouteDecision],
+) -> Result<Vec<DynamicRoutedPagePlan>> {
+    if !matches!(routes.len(), 4 | 8) {
+        bail!("causal-block route plans 要求精确K=4/8 routes");
+    }
+    let layer = routes[0].layer;
+    routes
+        .iter()
+        .enumerate()
+        .map(|(lane, route)| {
+            if route.layer != layer {
+                bail!("causal-block route plans layer 漂移");
+            }
+            let expert_ids: [u16; EXPERTS_PER_TOKEN] = route
+                .expert_ids
+                .clone()
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("causal-block route 不是精确 top-6 IDs"))?;
+            let route_weights: [f32; EXPERTS_PER_TOKEN] = route
+                .weights
+                .clone()
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("causal-block route 不是精确 top-6 weights"))?;
+            let position = u64::from(base_position)
+                .checked_add(lane as u64)
+                .context("causal-block route plan position overflow")?;
+            catalog
+                .plan(OnlineTop6 {
+                    layer,
+                    position,
+                    expert_ids,
+                    route_weights,
+                })
+                .context("causal-block catalog route plan 失败")
+        })
+        .collect()
 }
 
 fn resolve_union_assets(

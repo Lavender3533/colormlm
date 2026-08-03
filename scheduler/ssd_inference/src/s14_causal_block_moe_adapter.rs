@@ -18,8 +18,10 @@ use crate::{
         S14CausalBlockUnionMaterializeReceipt,
     },
     s14_causal_block_resources::S14CausalBlockUnionBankPlan,
+    s14_causal_block_route_prefetch::S14CausalBlockRoutePrefetchTicket,
     s14_causal_block_union_materializer::{
-        build_causal_block_union_identity_plan, S14CausalBlockUnionMaterializer,
+        build_causal_block_route_plans, build_causal_block_union_identity_plan,
+        S14CausalBlockUnionMaterializer,
     },
     s14_dynamic_page_cache_readiness::DynamicPageFetchMode,
     s14_dynamic_routed_page_plan::FullDepthExpertCatalog,
@@ -28,7 +30,7 @@ use crate::{
 use anyhow::{bail, Context, Result};
 use ash::vk;
 use polaris_s14_runner::{GraphProfile, LayerCausalBatchPlan, RouteDecision, FULL_DEPTH_LAYERS};
-use std::{fmt, path::Path, path::PathBuf, sync::Arc};
+use std::{fmt, path::Path, path::PathBuf, sync::Arc, time::Instant};
 
 /// Vulkan backend 与 MoE production owner 之间的最窄对象安全边界。
 ///
@@ -82,6 +84,7 @@ enum AdapterLayerPhase {
         layer: u8,
         routes: Vec<RouteDecision>,
         post_attention_hidden: S14CausalBlockHiddenBinding,
+        prefetch_ticket: Option<S14CausalBlockRoutePrefetchTicket>,
     },
     UnionUploaded {
         layer: u8,
@@ -120,6 +123,7 @@ pub struct S14CausalBlockProductionMoeAdapter<R: S14CausalBlockGroupedMoeRecorde
     materializer: S14CausalBlockUnionMaterializer,
     catalog: FullDepthExpertCatalog,
     cache_root: PathBuf,
+    fetch_mode: DynamicPageFetchMode,
     phase: AdapterPhase,
 }
 
@@ -154,6 +158,7 @@ impl<R: S14CausalBlockGroupedMoeRecorder> S14CausalBlockProductionMoeAdapter<R> 
             materializer,
             catalog,
             cache_root: cache_root.to_path_buf(),
+            fetch_mode,
             phase: AdapterPhase::Idle,
         })
     }
@@ -249,11 +254,20 @@ impl<R: S14CausalBlockGroupedMoeRecorder> S14CausalBlockProductionMoeAdapter<R> 
                 bail!("causal-block MoE route layer 漂移");
             }
         }
+        let route_plans =
+            build_causal_block_route_plans(&self.catalog, active.base_position, &output.routes)?;
+        let prefetch_ticket = S14CausalBlockRoutePrefetchTicket::start(
+            active.base_position,
+            route_plans,
+            self.cache_root.clone(),
+            self.fetch_mode,
+        )?;
         let active = self.active_mut()?;
         active.layer_phase = AdapterLayerPhase::RoutesReady {
             layer: expected_layer,
             routes: output.routes.clone(),
             post_attention_hidden: output.post_attention_hidden,
+            prefetch_ticket: Some(prefetch_ticket),
         };
         Ok(())
     }
@@ -269,6 +283,7 @@ impl<R: S14CausalBlockGroupedMoeRecorder> S14CausalBlockProductionMoeAdapter<R> 
                 layer,
                 routes,
                 post_attention_hidden,
+                ..
             } => (*layer, routes.clone(), *post_attention_hidden),
             _ => bail!("causal-block MoE materialize 前缺少同层真实 attention route"),
         };
@@ -286,7 +301,41 @@ impl<R: S14CausalBlockGroupedMoeRecorder> S14CausalBlockProductionMoeAdapter<R> 
             &routes,
             range_plan,
         )?;
+        let prefetch_ticket = match &mut self.active_mut()?.layer_phase {
+            AdapterLayerPhase::RoutesReady {
+                prefetch_ticket, ..
+            } => prefetch_ticket
+                .take()
+                .context("causal-block exact-route prefetch ticket 缺失")?,
+            _ => bail!("causal-block exact-route prefetch ticket phase 漂移"),
+        };
+        let prefetch = prefetch_ticket
+            .finish(identity.route_plans())
+            .context("causal-block exact-route cache prefetch 失败")?;
+        if prefetch.transport_invocations != 0 {
+            eprintln!(
+                "s14_exact_route_prefetch layer={} position={} physical_ranges={} requested_bytes={} cache_hits={} cache_misses={} downloaded_bytes={} request_wall_ms={:.3}",
+                prefetch.layer,
+                prefetch.position,
+                prefetch.physical_ranges,
+                prefetch.requested_bytes,
+                prefetch.cache_hits,
+                prefetch.cache_misses,
+                prefetch.downloaded_bytes,
+                prefetch.request_wall_ms,
+            );
+        }
+        let materialize_started = Instant::now();
         let materialized = self.materializer.materialize(&identity)?;
+        eprintln!(
+            "s14_union_materialize layer={} physical_ranges={} mmap_hits={} mmap_misses={} sha256_bytes={} wall_ms={:.3}",
+            materialized.layer,
+            materialized.telemetry.physical_ranges,
+            materialized.telemetry.mmap_hits_this_call,
+            materialized.telemetry.mmap_misses_this_call,
+            materialized.telemetry.sha256_bytes_this_call,
+            materialize_started.elapsed().as_secs_f64() * 1_000.0,
+        );
         if materialized.layer != layer
             || materialized.unique_experts != range_plan.unique_experts
             || materialized.union_expert_bytes != range_plan.union_expert_bytes

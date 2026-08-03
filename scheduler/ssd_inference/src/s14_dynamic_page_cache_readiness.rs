@@ -45,6 +45,7 @@ pub const S14_DYNAMIC_PAGE_FETCH_TIMEOUT_SECONDS_ENV: &str =
 pub const S14_DYNAMIC_PAGE_FETCH_LOG_DIR_ENV: &str = "S14_DYNAMIC_PAGE_FETCH_LOG_DIR";
 
 const DEFAULT_DYNAMIC_PAGE_FETCH_TIMEOUT: Duration = Duration::from_secs(7_200);
+const EXACT_ROUTE_PREFETCH_TIMEOUT: Duration = Duration::from_secs(240);
 const MAX_DYNAMIC_PAGE_FETCH_TIMEOUT_SECONDS: u64 = 86_400;
 #[cfg(test)]
 const DYNAMIC_PAGE_FETCH_POLL_INTERVAL: Duration = Duration::from_millis(200);
@@ -187,6 +188,22 @@ pub struct DynamicPageFetchRequired {
     pub missing_payload_paths: Vec<PathBuf>,
     pub missing_proof_paths: Vec<PathBuf>,
     pub unready_bytes: u64,
+}
+
+/// Exact-route cache warming receipt.  This receipt is never sufficient for
+/// model execution: the authoritative union materializer must still resolve
+/// every proof and rehash/mmap every payload before publishing a GPU upload.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct DynamicPageFetchOnlyReceipt {
+    pub layer: u8,
+    pub position: u64,
+    pub physical_ranges: usize,
+    pub requested_bytes: u64,
+    pub cache_hits: u64,
+    pub cache_misses: u64,
+    pub downloaded_bytes: u64,
+    pub request_wall_ms: f64,
+    pub transport_invocations: u32,
 }
 
 #[derive(Debug)]
@@ -577,6 +594,117 @@ pub fn materialize_dynamic_page_plans_batched(
         .map_err(DynamicPageMaterializeError::Failed)
 }
 
+/// Warm one authoritative K-lane route manifest without creating a model
+/// lease.  All physical identities are merged by `range_key` and sent to the
+/// resident transport once.  Cache hits remain local; misses retain the
+/// transport's HTTPS 206/Content-Range/length/SHA contract.
+///
+/// The caller must subsequently run the normal union materializer.  This
+/// helper deliberately does not call `materialize_cached`, avoiding a second
+/// eager Rust SHA/mmap pass before the authoritative one.
+pub fn fetch_dynamic_page_plans_batched_only(
+    plans: &[DynamicRoutedPagePlan],
+    cache_root: &Path,
+    fetch_mode: DynamicPageFetchMode,
+) -> std::result::Result<DynamicPageFetchOnlyReceipt, DynamicPageMaterializeError> {
+    if plans.is_empty() || plans.len() > 8 {
+        return Err(DynamicPageMaterializeError::Failed(anyhow::anyhow!(
+            "fetch-only dynamic page plans 数量必须在1..=8，actual={}",
+            plans.len()
+        )));
+    }
+    let layer = plans[0].layer;
+    if plans.iter().any(|plan| plan.layer != layer) {
+        return Err(DynamicPageMaterializeError::Failed(anyhow::anyhow!(
+            "fetch-only dynamic page plans 必须属于同一层"
+        )));
+    }
+
+    let position = plans.iter().map(|plan| plan.position).min().unwrap_or(0);
+    let mut merged = BTreeMap::<String, DynamicPageFetchEntry>::new();
+    for plan in plans {
+        for physical in plan.physical_ranges()? {
+            let range = physical.range;
+            let entry = DynamicPageFetchEntry {
+                tensor: range.tensor.clone(),
+                kind: range.kind.clone(),
+                layer: range.layer,
+                expert_id: range.expert_id,
+                file: range.file.clone(),
+                file_bytes: range.file_bytes,
+                header_tensor_table_sha256: range.header_tensor_table_sha256.clone(),
+                start: range.start,
+                end: range.end,
+                bytes: range.bytes,
+                dtype: range.dtype.clone(),
+                shape: range.shape.clone(),
+                range_key: range.range_key.clone(),
+            };
+            match merged.entry(entry.range_key.clone()) {
+                std::collections::btree_map::Entry::Vacant(slot) => {
+                    slot.insert(entry);
+                }
+                std::collections::btree_map::Entry::Occupied(slot) => {
+                    if slot.get() != &entry {
+                        return Err(DynamicPageMaterializeError::Failed(anyhow::anyhow!(
+                            "fetch-only dynamic page 重复 range_key identity 漂移: {}",
+                            slot.key()
+                        )));
+                    }
+                }
+            }
+        }
+    }
+    let entries = merged.into_values().collect::<Vec<_>>();
+    let requested_bytes = entries.iter().try_fold(0u64, |sum, entry| {
+        sum.checked_add(entry.bytes)
+            .context("fetch-only dynamic page budget overflow")
+    })?;
+    let mut receipt = DynamicPageFetchOnlyReceipt {
+        layer,
+        position,
+        physical_ranges: entries.len(),
+        requested_bytes,
+        ..DynamicPageFetchOnlyReceipt::default()
+    };
+    if !fetch_mode.is_authorized() {
+        return Ok(receipt);
+    }
+    if entries.is_empty() || requested_bytes == 0 {
+        return Err(DynamicPageMaterializeError::Failed(anyhow::anyhow!(
+            "fetch-only dynamic page manifest/budget 为空"
+        )));
+    }
+    let manifest = DynamicPageFetchManifest {
+        format: S14_DYNAMIC_PAGE_FETCH_MANIFEST_FORMAT,
+        layer,
+        position,
+        entries,
+    };
+    let transport = DynamicPageRangeTransport::default();
+    if !transport.driver.is_file() {
+        return Err(DynamicPageMaterializeError::Failed(anyhow::anyhow!(
+            "dynamic Range transport driver 不存在: {}",
+            transport.driver.display()
+        )));
+    }
+    let timeout = dynamic_page_fetch_timeout()
+        .map(|configured| configured.min(EXACT_ROUTE_PREFETCH_TIMEOUT))?;
+    let transport_receipt = invoke_persistent_range_transport(
+        &transport,
+        &manifest,
+        cache_root,
+        requested_bytes,
+        timeout,
+    )?;
+    receipt.cache_hits = transport_receipt.cache_hits;
+    receipt.cache_misses = transport_receipt.cache_misses;
+    receipt.downloaded_bytes = transport_receipt.downloaded_bytes;
+    receipt.request_wall_ms = transport_receipt.request_wall_ms;
+    receipt.transport_invocations = 1;
+    Ok(receipt)
+}
+
 pub fn materialize_dynamic_page_plan_with_transport(
     plan: &DynamicRoutedPagePlan,
     cache_root: &Path,
@@ -806,6 +934,15 @@ struct PersistentDynamicFetchWorker {
     next_request_id: u64,
 }
 
+#[derive(Debug)]
+struct DynamicPageTransportReceipt {
+    raw_response: String,
+    cache_hits: u64,
+    cache_misses: u64,
+    downloaded_bytes: u64,
+    request_wall_ms: f64,
+}
+
 impl PersistentDynamicFetchWorker {
     fn spawn(transport: &DynamicPageRangeTransport, cache_root: &Path) -> Result<Self> {
         let stamp = SystemTime::now()
@@ -842,7 +979,10 @@ impl PersistentDynamicFetchWorker {
                     stderr_log.display()
                 )
             })?;
-        let stdin = child.stdin.take().context("persistent fetch worker 缺少stdin")?;
+        let stdin = child
+            .stdin
+            .take()
+            .context("persistent fetch worker 缺少stdin")?;
         let stdout = child
             .stdout
             .take()
@@ -875,7 +1015,7 @@ impl PersistentDynamicFetchWorker {
         cache_root: &Path,
         download_budget_bytes: u64,
         timeout: Duration,
-    ) -> Result<String> {
+    ) -> Result<DynamicPageTransportReceipt> {
         match self.child.try_wait() {
             Ok(None) => {}
             Ok(Some(status)) => bail!(
@@ -920,7 +1060,10 @@ impl PersistentDynamicFetchWorker {
             .flush()
             .context("flush persistent dynamic fetch request")?;
 
-        let mut reader = self.stdout.take().context("persistent fetch stdout 已被占用")?;
+        let mut reader = self
+            .stdout
+            .take()
+            .context("persistent fetch stdout 已被占用")?;
         let (sender, receiver) = mpsc::sync_channel(1);
         let reader_thread = thread::spawn(move || {
             let mut line = String::new();
@@ -966,7 +1109,11 @@ impl PersistentDynamicFetchWorker {
         }
         let response: serde_json::Value =
             serde_json::from_str(&line).context("decode persistent dynamic fetch response JSON")?;
-        if response.get("request_id").and_then(serde_json::Value::as_u64) != Some(request_id) {
+        if response
+            .get("request_id")
+            .and_then(serde_json::Value::as_u64)
+            != Some(request_id)
+        {
             bail!("persistent dynamic fetch response request_id 漂移");
         }
         if response.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
@@ -984,7 +1131,9 @@ impl PersistentDynamicFetchWorker {
                 read_log_tail(&self.stderr_log)
             );
         }
-        let result = response.get("result").context("persistent fetch response 缺少result")?;
+        let result = response
+            .get("result")
+            .context("persistent fetch response 缺少result")?;
         if result.get("format").and_then(serde_json::Value::as_str)
             != Some("polaris-s14-dynamic-page-fetch-result-v1")
             || result
@@ -1013,7 +1162,27 @@ impl PersistentDynamicFetchWorker {
         {
             bail!("persistent dynamic fetch result range/hit/miss count 漂移");
         }
-        Ok(line)
+        let downloaded_bytes = result
+            .get("downloaded_bytes")
+            .and_then(serde_json::Value::as_u64)
+            .context("persistent dynamic fetch result 缺少downloaded_bytes")?;
+        let request_wall_ms = result
+            .get("request_wall_ms")
+            .and_then(serde_json::Value::as_f64)
+            .context("persistent dynamic fetch result 缺少request_wall_ms")?;
+        if !request_wall_ms.is_finite()
+            || request_wall_ms < 0.0
+            || downloaded_bytes > download_budget_bytes
+        {
+            bail!("persistent dynamic fetch result timing/download bytes 非法");
+        }
+        Ok(DynamicPageTransportReceipt {
+            raw_response: line,
+            cache_hits,
+            cache_misses,
+            downloaded_bytes,
+            request_wall_ms,
+        })
     }
 }
 
@@ -1045,7 +1214,7 @@ fn invoke_persistent_range_transport(
     cache_root: &Path,
     download_budget_bytes: u64,
     timeout: Duration,
-) -> Result<()> {
+) -> Result<DynamicPageTransportReceipt> {
     let (artifacts, mut stdout_log, mut stderr_log) =
         DynamicFetchArtifacts::write(manifest, cache_root)?;
     writeln!(
@@ -1085,7 +1254,7 @@ fn invoke_persistent_range_transport(
     match result {
         Ok(response) => {
             stdout_log
-                .write_all(response.as_bytes())
+                .write_all(response.raw_response.as_bytes())
                 .context("write persistent dynamic fetch response log")?;
             stdout_log
                 .flush()
@@ -1093,7 +1262,7 @@ fn invoke_persistent_range_transport(
             drop(stdout_log);
             drop(stderr_log);
             artifacts.cleanup_success();
-            Ok(())
+            Ok(response)
         }
         Err(error) => {
             if let Some(mut worker) = slot.take() {
@@ -1124,6 +1293,7 @@ fn invoke_existing_range_transport(
         download_budget_bytes,
         timeout,
     )
+    .map(|_| ())
 }
 
 #[cfg(test)]

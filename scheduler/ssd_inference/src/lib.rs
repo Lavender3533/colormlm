@@ -44,6 +44,7 @@ pub mod s14_causal_block_production_evidence;
 pub mod s14_causal_block_ratio4_boundary;
 pub mod s14_causal_block_ratio4_state_owner;
 pub mod s14_causal_block_resources;
+pub mod s14_causal_block_route_prefetch;
 pub mod s14_causal_block_single_layer;
 pub mod s14_causal_block_terminal;
 pub mod s14_causal_block_terminal_adapter;

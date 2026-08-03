@@ -66,6 +66,7 @@ def _execute_request(
     executor: concurrent.futures.ThreadPoolExecutor,
     retries: int,
 ) -> dict[str, Any]:
+    request_started = time.perf_counter()
     entries = _load_manifest(manifest_path)
     sizes = [entry.get("bytes") for entry in entries]
     if any(
@@ -138,12 +139,25 @@ def _execute_request(
     hits = sum(row[0] for row in results)
     misses = sum(row[1] for row in results)
     rows = [row[2] for row in results]
+    downloaded_bytes = sum(
+        int(entry["bytes"])
+        for entry, row in zip(entries, rows, strict=True)
+        if not bool(row["cache_hit"])
+    )
+    request_wall_ms = (time.perf_counter() - request_started) * 1000.0
     return {
         "format": "polaris-s14-dynamic-page-fetch-result-v1",
         "range_count": len(rows),
         "requested_bytes": requested_bytes,
         "cache_hits": hits,
         "cache_misses": misses,
+        "downloaded_bytes": downloaded_bytes,
+        "request_wall_ms": request_wall_ms,
+        "effective_download_mib_s": (
+            downloaded_bytes / (1024.0 * 1024.0) / (request_wall_ms / 1000.0)
+            if downloaded_bytes and request_wall_ms > 0.0
+            else 0.0
+        ),
         "ranges": rows,
         "proof_cache": cache.proof_cache_telemetry,
     }
