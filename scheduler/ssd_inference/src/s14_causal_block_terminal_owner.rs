@@ -721,10 +721,15 @@ impl S14CausalBlockTerminalResourceOwner for S14CausalBlockProductionTerminalRes
             .head_upload
             .lock()
             .map_err(|_| "production terminal head uploader poisoned".to_owned())?;
-        if chunk == 0 && !state.uploader.ready_for_causal_block_head_stream() {
-            return Err(
-                "production terminal head uploader 未处于 causal-block 全新 head 流起点".into(),
-            );
+        if chunk == 0 {
+            state
+                .uploader
+                .validate_causal_block_terminal_head_stream(&self.head_weight_plan)
+                .map_err(|error| {
+                    format!(
+                        "production terminal head uploader 未处于 causal-block terminal head 流起点: {error:#}"
+                    )
+                })?;
         }
         let receipt = state
             .uploader
