@@ -233,7 +233,7 @@ where
         } {
             Ok(pending) => pending,
             Err(error) => {
-                return self.poison(error.context(format!("stage/submit L{}", plan.layer)))
+                return self.poison(error.context(format!("stage/submit L{}", plan.layer)));
             }
         };
         if pending.kind
@@ -255,7 +255,7 @@ where
         } {
             Ok(ticket) => ticket,
             Err(error) => {
-                return self.poison(error.context(format!("submit compute L{}", plan.layer)))
+                return self.poison(error.context(format!("submit compute L{}", plan.layer)));
             }
         };
         if ticket.transfer_value != pending.transfer_value || ticket.compute_value == 0 {

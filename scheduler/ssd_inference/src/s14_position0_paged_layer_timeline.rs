@@ -372,7 +372,7 @@ impl S14Position0PagedLayerTimeline {
             Some(_) => {
                 return self.poison_error(anyhow!(
                     "position0 router probe completion receipt 层/index/bank 漂移"
-                ))
+                ));
             }
             None => match self.progress.expected_layer() {
                 Ok(layer) => layer,
@@ -406,7 +406,7 @@ impl S14Position0PagedLayerTimeline {
                 Ok(value) => value,
                 Err(error) => {
                     return self
-                        .poison_error(error.context(format!("submit paged transfer L{layer}")))
+                        .poison_error(error.context(format!("submit paged transfer L{layer}")));
                 }
             };
         self.layer_staging_last_transfer[bank] = Some(transfer_value);
@@ -440,7 +440,7 @@ impl S14Position0PagedLayerTimeline {
         let (index, layer) = match pending.kind {
             S14Position0PendingTransferKind::Layer { index, layer } => (index, layer),
             S14Position0PendingTransferKind::Head { .. } => {
-                return self.poison_error(anyhow!("head pending 不能提交为 layer compute"))
+                return self.poison_error(anyhow!("head pending 不能提交为 layer compute"));
             }
         };
         if index != self.progress.layer_tickets.len() || layer != FULL_DEPTH_LAYERS[index] {
@@ -454,7 +454,7 @@ impl S14Position0PagedLayerTimeline {
                 Ok(value) => value,
                 Err(error) => {
                     return self
-                        .poison_error(error.context(format!("submit paged compute L{layer}")))
+                        .poison_error(error.context(format!("submit paged compute L{layer}")));
                 }
             };
         let ticket = S14LayerTicket {
@@ -546,7 +546,7 @@ impl S14Position0PagedLayerTimeline {
         let value = match self.timeline.submit_compute_only(ctx, command) {
             Ok(value) => value,
             Err(error) => {
-                return self.poison_error(error.context("submit terminal argmax compute"))
+                return self.poison_error(error.context("submit terminal argmax compute"));
             }
         };
         self.progress.tail_compute_segments += 1;
@@ -599,7 +599,7 @@ impl S14Position0PagedLayerTimeline {
                 Ok(value) => value,
                 Err(error) => {
                     return self
-                        .poison_error(error.context(format!("submit head transfer {chunk}")))
+                        .poison_error(error.context(format!("submit head transfer {chunk}")));
                 }
             };
         self.head_staging_last_transfer[bank] = Some(transfer_value);
@@ -632,7 +632,7 @@ impl S14Position0PagedLayerTimeline {
         let chunk = match pending.kind {
             S14Position0PendingTransferKind::Head { chunk } => chunk,
             S14Position0PendingTransferKind::Layer { .. } => {
-                return self.poison_error(anyhow!("layer pending 不能提交为 head compute"))
+                return self.poison_error(anyhow!("layer pending 不能提交为 head compute"));
             }
         };
         if chunk != self.progress.head_chunks {
@@ -645,7 +645,8 @@ impl S14Position0PagedLayerTimeline {
             {
                 Ok(value) => value,
                 Err(error) => {
-                    return self.poison_error(error.context(format!("submit head compute {chunk}")))
+                    return self
+                        .poison_error(error.context(format!("submit head compute {chunk}")));
                 }
             };
         self.head_last_compute[pending.bank] = Some(compute_value);

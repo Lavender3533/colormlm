@@ -1,8 +1,9 @@
 //! position0 committed device bank 到 K=4 prefix checkpoint arena 的 production 初始化 owner。
 //!
 //! 该 owner 是 detached single-token runtime 与 block-major producer 之间的唯一桥：它只接受
-//! 已真实提交的 position0 `0 -> 5` ledger/host/device identity；position1当前输入可以是
-//! prompt prefill指定的任意词表token。它分配一块 K=4 device checkpoint arena，
+//! 已真实提交的 host/device identity。ForcedPrefill 仍使用专用 policy；单-token
+//! prompt 的 base0 generation 必须另外消费 StarWave committed-origin 强证据。
+//! 它分配一块 K=4 device checkpoint arena，
 //! 在同一 graphics queue 录制并完成 authoritative baseline copy，随后才允许构造 prefix producer。
 //! 初始化失败会 abort arena；若等待失败且 queue 也无法 drain，则保留 pending Vulkan 资源直到
 //! context teardown，禁止销毁仍可能在执行的 command 或 buffer。
@@ -16,6 +17,9 @@ use crate::{
         S14CausalBlockPrefixStateProducer, S14CausalBlockSharedPrefixStateProgram,
     },
     s14_causal_block_terminal_owner::S14CausalBlockOwnedBufferSlice,
+    s14_starwave_draft::{
+        validate_s14_starwave_generation_origin, S14StarwavePosition0CommittedOrigin,
+    },
     s14_whole_token_device::WholeTokenDetachedCommittedState,
     GpuBuffer, VulkanContext,
 };
@@ -26,6 +30,13 @@ use std::{fmt, sync::Arc};
 
 pub const S14_CAUSAL_BLOCK_BOOTSTRAP_BASE_POSITION: u32 = 1;
 pub const S14_CAUSAL_BLOCK_BOOTSTRAP_BLOCK_SIZE: usize = 4;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum S14CausalBlockPrefixBootstrapPolicy {
+    CommittedContinuation,
+    Position0CommittedGeneration,
+    ForcedPrefill,
+}
 
 const POSITION0_INPUT_TOKEN_ID: u32 = 0;
 const POSITION0_PREDICTED_TOKEN_ID: u32 = 5;
@@ -55,6 +66,7 @@ pub struct S14CausalBlockPrefixInitializationOwner {
     prefix_storage: Option<Arc<GpuBuffer>>,
     prefix_arena: Option<Arc<S14CausalBlockPrefixCheckpointArena>>,
     completion: S14CausalBlockPrefixInitializationCompletion,
+    bootstrap_policy: S14CausalBlockPrefixBootstrapPolicy,
 }
 
 impl fmt::Debug for S14CausalBlockPrefixInitializationOwner {
@@ -108,6 +120,79 @@ impl S14CausalBlockPrefixInitializationOwner {
         base_position: u32,
         block_size: usize,
     ) -> Result<Self> {
+        Self::initialize_at_with_policy(
+            context,
+            authoritative,
+            committed,
+            base_position,
+            block_size,
+            S14CausalBlockPrefixBootstrapPolicy::CommittedContinuation,
+        )
+    }
+
+    /// ForcedPrefill 从 BOS/base0 启动的唯一 initializer。必须使用 epoch0/bank0 的真实
+    /// `WholeTokenDeviceState` snapshot 与空 ledger host state，不接受恢复态或伪造字节。
+    pub fn initialize_forced_prefill(
+        context: Arc<VulkanContext>,
+        authoritative: DecoderStateV1,
+        committed: WholeTokenDetachedCommittedState,
+    ) -> Result<Self> {
+        Self::initialize_at_with_policy(
+            context,
+            authoritative,
+            committed,
+            0,
+            S14_CAUSAL_BLOCK_BOOTSTRAP_BLOCK_SIZE,
+            S14CausalBlockPrefixBootstrapPolicy::ForcedPrefill,
+        )
+    }
+
+    /// 后续 teacher-forced block 继续使用 ForcedPrefill producer；base 必须等于已提交 state。
+    pub fn initialize_forced_prefill_at(
+        context: Arc<VulkanContext>,
+        authoritative: DecoderStateV1,
+        committed: WholeTokenDetachedCommittedState,
+    ) -> Result<Self> {
+        let base_position = authoritative.position;
+        Self::initialize_at_with_policy(
+            context,
+            authoritative,
+            committed,
+            base_position,
+            S14_CAUSAL_BLOCK_BOOTSTRAP_BLOCK_SIZE,
+            S14CausalBlockPrefixBootstrapPolicy::ForcedPrefill,
+        )
+    }
+
+    /// 单-token prompt 从真实 position0 committed checkpoint 进入 generation 的唯一入口。
+    /// 它消费 detached device snapshot 并生成 `SpeculativeDraft` producer；普通
+    /// `initialize_at` 仍严格拒绝 base0。
+    pub fn initialize_generation_position0(
+        context: Arc<VulkanContext>,
+        authoritative: DecoderStateV1,
+        committed: WholeTokenDetachedCommittedState,
+        origin: S14StarwavePosition0CommittedOrigin,
+    ) -> Result<Self> {
+        validate_s14_starwave_generation_origin(&authoritative, Some(origin))
+            .map_err(|error| anyhow!(error.to_string()))?;
+        Self::initialize_at_with_policy(
+            context,
+            authoritative,
+            committed,
+            0,
+            S14_CAUSAL_BLOCK_BOOTSTRAP_BLOCK_SIZE,
+            S14CausalBlockPrefixBootstrapPolicy::Position0CommittedGeneration,
+        )
+    }
+
+    fn initialize_at_with_policy(
+        context: Arc<VulkanContext>,
+        authoritative: DecoderStateV1,
+        committed: WholeTokenDetachedCommittedState,
+        base_position: u32,
+        block_size: usize,
+        bootstrap_policy: S14CausalBlockPrefixBootstrapPolicy,
+    ) -> Result<Self> {
         let WholeTokenDetachedCommittedState {
             buffer: committed_buffer,
             state_bytes,
@@ -129,12 +214,19 @@ impl S14CausalBlockPrefixInitializationOwner {
             source_graphics_queue_family,
             base_position,
             block_size,
+            bootstrap_policy,
         ) {
             committed_buffer.destroy(&context);
             return Err(error);
         }
 
-        let layout = S14CausalBlockPrefixCheckpointLayout::build(block_size, state_bytes)?;
+        let layout = match S14CausalBlockPrefixCheckpointLayout::build(block_size, state_bytes) {
+            Ok(layout) => layout,
+            Err(error) => {
+                committed_buffer.destroy(&context);
+                return Err(error.context("构造 causal-block prefix checkpoint layout"));
+            }
+        };
         let prefix_buffer = match GpuBuffer::new_vram(
             &context,
             layout.used_bytes,
@@ -259,6 +351,7 @@ impl S14CausalBlockPrefixInitializationOwner {
             prefix_storage: Some(prefix_storage),
             prefix_arena: Some(prefix_arena),
             completion,
+            bootstrap_policy,
         })
     }
 
@@ -303,11 +396,23 @@ impl S14CausalBlockPrefixInitializationOwner {
         {
             bail!("prefix initialization 尚未完成 submit/wait，禁止进入 K=4 producer");
         }
-        S14CausalBlockPrefixStateProducer::new(
-            Arc::clone(&self.context),
-            Arc::clone(self.prefix_arena()?),
-            program,
-        )
+        match self.bootstrap_policy {
+            S14CausalBlockPrefixBootstrapPolicy::CommittedContinuation
+            | S14CausalBlockPrefixBootstrapPolicy::Position0CommittedGeneration => {
+                S14CausalBlockPrefixStateProducer::new(
+                    Arc::clone(&self.context),
+                    Arc::clone(self.prefix_arena()?),
+                    program,
+                )
+            }
+            S14CausalBlockPrefixBootstrapPolicy::ForcedPrefill => {
+                S14CausalBlockPrefixStateProducer::new_forced_prefill(
+                    Arc::clone(&self.context),
+                    Arc::clone(self.prefix_arena()?),
+                    program,
+                )
+            }
+        }
     }
 
     /// 必须在所有 provider/producer/ratio4/terminal owner 与 sealed future 释放后调用。
@@ -381,14 +486,36 @@ fn validate_committed_identity_at(
     source_graphics_queue_family: u32,
     base_position: u32,
     block_size: usize,
+    bootstrap_policy: S14CausalBlockPrefixBootstrapPolicy,
 ) -> Result<()> {
     authoritative
         .validate()
         .context("validate causal-block committed host state")?;
     let block_end = base_position
         .checked_add(u32::try_from(block_size).context("causal-block prefix K无法表示为u32")?);
+    let valid_base_policy = match bootstrap_policy {
+        S14CausalBlockPrefixBootstrapPolicy::CommittedContinuation => base_position > 0,
+        S14CausalBlockPrefixBootstrapPolicy::Position0CommittedGeneration => {
+            base_position == 0
+                && authoritative.position == 0
+                && authoritative.native.position == 0
+                && authoritative.commit_epoch == 0
+                && authoritative.active_fixed_bank == 0
+                && authoritative.committed_tokens.is_empty()
+        }
+        S14CausalBlockPrefixBootstrapPolicy::ForcedPrefill => {
+            base_position > 0
+                || (authoritative.position == 0
+                    && authoritative.native.position == 0
+                    && authoritative.commit_epoch == 0
+                    && authoritative.active_fixed_bank == 0
+                    && authoritative.committed_tokens.is_empty()
+                    && epoch == 0
+                    && active_bank == 0)
+        }
+    };
     if !matches!(block_size, 4 | 8)
-        || base_position == 0
+        || !valid_base_policy
         || block_end.is_none_or(|end| end > authoritative.native.max_seq_len)
         || authoritative.position != base_position
         || authoritative.native.position != base_position

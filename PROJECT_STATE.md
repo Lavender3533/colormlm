@@ -1,8 +1,25 @@
 # 北极星（Polaris）项目现状
 
-更新日期：2026-08-03
+更新日期：2026-08-04
 
 跨对话/跨工程接手续读：`fast16/HANDOFF_2026-07-31.md`。
+
+## 2026-08-04 Polaris S14 StarFold 可重复请求里程碑
+
+- DeepSeek-V4 官方 chat 模式边界已由错误的 `<think>` 修正为 `</think>`，思考 token 不再被当作
+  最终正文显示；此前“一加一”尾随 reasoning 的问题不是 tokenizer/head 偏移。
+- 同一个 `polaris_api.exe` 常驻进程（PID `50760`）已连续完成两个独立 HTTP 请求：`你好` 与
+  `再见` 均为 HTTP 200，分别耗时 `136.986s`、`115.727s`，解码正文分别为 `你好`、`再见`。
+  两次请求之间没有重启、重载模型或进入 `Exhausted`，证明 S14 StarFold 已从 one-shot 演示推进
+  到可归还 owner 并复用同一 runtime 的真实服务生命周期。
+- 热 Range transport 已在本地 payload/proof/长度齐全时跳过逐层 Python/JSONL 调用，同时保留
+  microtile 使用前的 proof/SHA 校验。同一 `再见` 请求耗时从 `115.727s` 降至 `97.137s`，减少
+  `18.590s`（`16.064%`）。当前最大问题已转为约百秒级请求延迟，而非跨请求生命周期正确性。
+- EOS-aware StarWave 证书已能绑定 position/epoch/draft/EOS/horizon；在真实 navigator 接入前，
+  deterministic 路径仍安全保持每 block 提交 1 token，禁止仅把 limit 硬改为 4 冒充多 token。
+- 本轮证据完成后服务已停止，`11435` 已释放；没有回退 v38/v47、Python executor、CPU 模型、
+  serial-token forward 或 whole-model fallback。结构化证据见
+  `scheduler/ssd_inference/evidence/s14_starfold_multi_request_chat_20260804.json`。
 
 ## 2026-08-03 Polaris S14 主线
 

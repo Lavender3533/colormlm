@@ -125,13 +125,10 @@ impl S14CausalBlockProductionEvidenceLedger {
         let position4_indexer_attention_layers = ratio4_layer_evidence
             .iter()
             .filter(|entry| {
-                entry.receipt.position4_remainder_record_calls == 1
-                    && entry.receipt.position4_index_head_weight_projection_calls == 1
-                    && entry.receipt.position4_index_query_dispatch_calls == 1
-                    && entry.receipt.position4_indexer_dispatch_calls == 1
-                    && entry.receipt.attention_dispatch_calls == 1
-                    && entry.receipt.attention_rows == entry.receipt.positions.len() as u32
-                    && entry.receipt.position4_sparse_attention_rows == 1
+                // receipt 自身按绝对 base 相位验证 boundary/tail/deferred post 与
+                // 每-lane sparse index 数；不能继续把 base1/5 的固定“全部为1”
+                // 当作任意连续 K4 的 production 证据。
+                entry.receipt.validate().is_ok()
             })
             .map(|entry| entry.layer)
             .collect::<Vec<_>>();

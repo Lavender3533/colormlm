@@ -12,15 +12,55 @@
 //! 若未注入实现该数值链的 recorder，Vulkan backend 保持 fail-closed；本模块不会用 K 次
 //! whole-token、capture 或 BOS replay 伪装 K-lane。
 
-use crate::s14_causal_block_layer::{
-    S14CausalBlockAttentionRouterOutput, S14CausalBlockGroupedMoeOutput,
-    S14CausalBlockHiddenBinding, S14CausalBlockLayerInput, S14_CAUSAL_BLOCK_HC_ELEMENTS_PER_LANE,
+use crate::{
+    s14_causal_block_hc_qkv_recorder::{
+        S14CausalBlockProductionHcQkvLayerRecorder, S14CausalBlockStarfoldPrefillPrefixProduct,
+        S14CausalBlockStarfoldTerminalBlockOwners,
+    },
+    s14_causal_block_layer::{
+        S14CausalBlockAttentionRouterOutput, S14CausalBlockGroupedMoeOutput,
+        S14CausalBlockHiddenBinding, S14CausalBlockLayerInput,
+        S14_CAUSAL_BLOCK_HC_ELEMENTS_PER_LANE,
+    },
+    s14_causal_block_production_bundle::S14CausalBlockProductionHcQkvResourceProvider,
+    s14_starwave_draft::{
+        validate_s14_starwave_generation_origin, S14StarwavePosition0CommittedOrigin,
+    },
 };
 use ash::vk;
-use polaris_s14_runner::{GraphProfile, COMPRESS_RATIOS, FULL_DEPTH_LAYERS};
+use polaris_s14_runner::{
+    DecoderStateV1, GraphProfile, MaterializedTokenSource, COMPRESS_RATIOS, FULL_DEPTH_LAYERS,
+};
 use std::fmt;
 
 const BF16_BYTES: u64 = 2;
+
+/// position0 generation 的不可伪造 begin 证明。普通 draft API 不接受这个状态；只有
+/// `S14StarwavePosition0CommittedOrigin` 与当前 authoritative position0 再次闭合后才能构造。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct S14Position0CommittedGenerationProvenance {
+    origin: S14StarwavePosition0CommittedOrigin,
+}
+
+impl S14Position0CommittedGenerationProvenance {
+    pub fn validate(
+        authoritative: &DecoderStateV1,
+        origin: Option<S14StarwavePosition0CommittedOrigin>,
+    ) -> Result<Self, String> {
+        validate_s14_starwave_generation_origin(authoritative, origin)
+            .map_err(|error| error.to_string())?;
+        let origin = origin
+            .ok_or_else(|| "position0 committed-generation provenance 缺少强 origin".to_owned())?;
+        if authoritative.position != 0 {
+            return Err("position0 committed-generation provenance 只能绑定 base0".into());
+        }
+        Ok(Self { origin })
+    }
+
+    pub(crate) const fn origin(self) -> S14StarwavePosition0CommittedOrigin {
+        self.origin
+    }
+}
 
 /// 单层真实数值 recorder 的强回执。各 record_calls 是一个有序 recorder scope，而不是声称
 /// 该 scope 只含一个 shader dispatch；HC/QKV 的实际多个 dispatch 仍由同一个 command graph
@@ -67,13 +107,11 @@ impl S14CausalBlockHcQkvLayerRecordingReceipt {
             .get(usize::from(input.layer))
             .copied()
             .ok_or_else(|| "causal-block HC/QKV compress-ratio layer 越界".to_owned())?;
-        let ratio4_boundary = matches!(input.base_position, 1 | 5)
-            && input.input_token_ids.len() == 4
-            && ratio == 4;
+        let ratio4_boundary = input.input_token_ids.len() == 4 && ratio == 4;
         let expected_contiguous_dispatches = u32::from(!ratio4_boundary);
-        // ratio4 跨边界必须严格分成 rollover 前 lanes0..2 与 rollover 后 lane3
-        // 两次 block-row dispatch；state transition recorder 仍只调用一次。
-        let expected_ratio4_attention_dispatches = 2 * u32::from(ratio4_boundary);
+        // 动态 ratio4 boundary shader 在同一个 K4 dispatch 内处理 boundary 前后 lanes；
+        // boundary lane 随 base%4 改变，但物理 dispatch 数始终只有一次。
+        let expected_ratio4_attention_dispatches = u32::from(ratio4_boundary);
         let expected_ratio4_state_transitions = u32::from(ratio4_boundary);
         if self.base_position != input.base_position
             || self.layer != input.layer
@@ -125,6 +163,24 @@ pub struct S14CausalBlockHcQkvRecordedLayer {
 pub trait S14CausalBlockVulkanHcQkvAdapter: fmt::Debug {
     fn begin_block(&mut self, base_position: u32, block_size: usize) -> Result<(), String>;
 
+    /// 只有已闭合真实 position0 committed host/device identity 的 generation 能调用。
+    fn begin_position0_committed_generation_block(
+        &mut self,
+        _provenance: S14Position0CommittedGenerationProvenance,
+        _block_size: usize,
+    ) -> Result<(), String> {
+        Err("HC/QKV adapter 未实现 position0 committed-generation begin".into())
+    }
+
+    /// base0 只能从显式 ForcedPrefill 路径进入；普通实现默认 fail-closed。
+    fn begin_teacher_forced_prefill_block(
+        &mut self,
+        _base_position: u32,
+        _block_size: usize,
+    ) -> Result<(), String> {
+        Err("HC/QKV adapter 未实现 ForcedPrefill begin".into())
+    }
+
     fn run_k_lane_hc_qkv_attention_router(
         &mut self,
         input: &S14CausalBlockLayerInput<'_>,
@@ -151,6 +207,24 @@ pub trait S14CausalBlockVulkanHcQkvAdapter: fmt::Debug {
 /// 本 trait 不提供任何逐 token 方法。
 pub trait S14CausalBlockHcQkvLayerRecorder: fmt::Debug {
     fn begin_block(&mut self, base_position: u32, block_size: usize) -> Result<(), String>;
+
+    /// 下游 recorder 必须以专用 typed begin 消费 provenance；普通 draft begin 继续拒绝 base0。
+    fn begin_position0_committed_generation_block(
+        &mut self,
+        _provenance: S14Position0CommittedGenerationProvenance,
+        _block_size: usize,
+    ) -> Result<(), String> {
+        Err("HC/QKV recorder 未实现 position0 committed-generation begin".into())
+    }
+
+    /// 只有绑定 ForcedPrefill provider/prefix producer 的 concrete recorder 才能覆写。
+    fn begin_teacher_forced_prefill_block(
+        &mut self,
+        _base_position: u32,
+        _block_size: usize,
+    ) -> Result<(), String> {
+        Err("HC/QKV recorder 未实现 ForcedPrefill begin".into())
+    }
 
     fn record_k_lane_hc_qkv_attention_router(
         &mut self,
@@ -180,6 +254,7 @@ enum AdapterLayerPhase {
 struct AdapterActiveBlock {
     base_position: u32,
     block_size: usize,
+    source: MaterializedTokenSource,
     next_layer: usize,
     layer_phase: AdapterLayerPhase,
 }
@@ -219,7 +294,34 @@ impl<R: S14CausalBlockHcQkvLayerRecorder> S14CausalBlockProductionHcQkvAdapter<R
         }
     }
 
-    fn begin_block_inner(&mut self, base_position: u32, block_size: usize) -> Result<(), String> {
+    /// 只允许 StarFold session 在完整 block 已 finish 后原地替换 recorder 的块级状态。
+    /// 失败后 adapter 保持 poisoned，禁止旧 provider 被再次 begin。
+    pub(crate) fn rebind_idle_recorder(
+        &mut self,
+        rebind: impl FnOnce(&mut R) -> Result<(), String>,
+    ) -> Result<(), String> {
+        if self.phase != AdapterPhase::Idle {
+            return Err("causal-block HC/QKV adapter 未 finish，禁止 rebind".into());
+        }
+        if let Err(error) = rebind(&mut self.recorder) {
+            self.phase = AdapterPhase::Poisoned {
+                completed_layers: 0,
+                drained: false,
+            };
+            return Err(format!(
+                "causal-block HC/QKV rebind 失败并 poisoned: {error}"
+            ));
+        }
+        Ok(())
+    }
+
+    fn begin_block_inner(
+        &mut self,
+        base_position: u32,
+        block_size: usize,
+        source: MaterializedTokenSource,
+        position0_provenance: Option<S14Position0CommittedGenerationProvenance>,
+    ) -> Result<(), String> {
         if self.phase != AdapterPhase::Idle {
             return Err("causal-block HC/QKV adapter 已有未释放 block".into());
         }
@@ -229,13 +331,36 @@ impl<R: S14CausalBlockHcQkvLayerRecorder> S14CausalBlockProductionHcQkvAdapter<R
         let end = base_position
             .checked_add(block_size as u32)
             .ok_or_else(|| "causal-block HC/QKV block position overflow".to_owned())?;
-        if base_position == 0 || end > 127 {
-            return Err("causal-block HC/QKV 首版只允许 position 1..126 contiguous window".into());
+        if end > 127 {
+            return Err("causal-block HC/QKV block 超出已冻结 position 范围".into());
         }
-        self.recorder.begin_block(base_position, block_size)?;
+        match (source, base_position, position0_provenance) {
+            (MaterializedTokenSource::SpeculativeDraft, 0, Some(provenance)) => self
+                .recorder
+                .begin_position0_committed_generation_block(provenance, block_size)?,
+            (MaterializedTokenSource::SpeculativeDraft, 0, None) => {
+                return Err(
+                    "causal-block HC/QKV 普通 draft 禁止 base0；必须走 committed-generation typed begin"
+                        .into(),
+                )
+            }
+            (MaterializedTokenSource::SpeculativeDraft, _, None) => {
+                self.recorder.begin_block(base_position, block_size)?
+            }
+            (MaterializedTokenSource::ForcedPrefill, _, None) => self
+                .recorder
+                .begin_teacher_forced_prefill_block(base_position, block_size)?,
+            _ => {
+                return Err(
+                    "causal-block HC/QKV source/base/committed-generation provenance 组合非法"
+                        .into(),
+                )
+            }
+        }
         self.phase = AdapterPhase::Active(AdapterActiveBlock {
             base_position,
             block_size,
+            source,
             next_layer: 0,
             layer_phase: AdapterLayerPhase::AwaitingAttention {
                 expected_input: None,
@@ -253,12 +378,13 @@ impl<R: S14CausalBlockHcQkvLayerRecorder> S14CausalBlockProductionHcQkvAdapter<R
         let expected_input = match active.layer_phase {
             AdapterLayerPhase::AwaitingAttention { expected_input } => expected_input,
             AdapterLayerPhase::AwaitingGrouped { .. } => {
-                return Err("causal-block HC/QKV 上一层 grouped output 尚未回接".into())
+                return Err("causal-block HC/QKV 上一层 grouped output 尚未回接".into());
             }
         };
         if input.base_position != active.base_position
             || input.layer != expected_layer
             || input.input_token_ids.len() != active.block_size
+            || input.source != active.source
             || input.input_hidden.block_size != active.block_size
             || expected_input.is_some_and(|expected| expected != input.input_hidden)
         {
@@ -288,7 +414,7 @@ impl<R: S14CausalBlockHcQkvLayerRecorder> S14CausalBlockProductionHcQkvAdapter<R
                 post_attention_hidden,
             } => post_attention_hidden,
             AdapterLayerPhase::AwaitingAttention { .. } => {
-                return Err("causal-block HC/QKV grouped output 前缺少同层 attention".into())
+                return Err("causal-block HC/QKV grouped output 前缺少同层 attention".into());
             }
         };
         validate_hidden(output.output_hidden, active.block_size, "grouped output")?;
@@ -409,7 +535,7 @@ impl<R: S14CausalBlockHcQkvLayerRecorder> S14CausalBlockProductionHcQkvAdapter<R
             } => {
                 return format!(
                     "{error}; causal-block HC/QKV 已 poisoned, completed_layers={completed_layers}"
-                )
+                );
             }
             _ => return error,
         };
@@ -436,11 +562,70 @@ impl<R: S14CausalBlockHcQkvLayerRecorder> S14CausalBlockProductionHcQkvAdapter<R
     }
 }
 
+impl<P> S14CausalBlockProductionHcQkvAdapter<S14CausalBlockProductionHcQkvLayerRecorder<P>>
+where
+    P: S14CausalBlockProductionHcQkvResourceProvider,
+{
+    pub(crate) fn starfold_teacher_forced_prefill_prefix_product(
+        &self,
+    ) -> Result<S14CausalBlockStarfoldPrefillPrefixProduct, String> {
+        if self.phase != AdapterPhase::LayersSealed {
+            return Err("StarFold ForcedPrefill prefix 要求 HC/QKV adapter 已 seal".into());
+        }
+        self.recorder
+            .starfold_teacher_forced_prefill_prefix_product()
+            .map_err(|error| format!("{error:#}"))
+    }
+
+    pub(crate) fn starfold_terminal_block_owners(
+        &self,
+        final_hidden: S14CausalBlockHiddenBinding,
+    ) -> Result<S14CausalBlockStarfoldTerminalBlockOwners, String> {
+        if self.phase != AdapterPhase::LayersSealed {
+            return Err("StarFold terminal owner 要求 HC/QKV adapter 已 seal".into());
+        }
+        self.recorder
+            .starfold_terminal_block_owners(final_hidden)
+            .map_err(|error| format!("{error:#}"))
+    }
+}
+
 impl<R: S14CausalBlockHcQkvLayerRecorder> S14CausalBlockVulkanHcQkvAdapter
     for S14CausalBlockProductionHcQkvAdapter<R>
 {
     fn begin_block(&mut self, base_position: u32, block_size: usize) -> Result<(), String> {
-        self.begin_block_inner(base_position, block_size)
+        self.begin_block_inner(
+            base_position,
+            block_size,
+            MaterializedTokenSource::SpeculativeDraft,
+            None,
+        )
+    }
+
+    fn begin_position0_committed_generation_block(
+        &mut self,
+        provenance: S14Position0CommittedGenerationProvenance,
+        block_size: usize,
+    ) -> Result<(), String> {
+        self.begin_block_inner(
+            0,
+            block_size,
+            MaterializedTokenSource::SpeculativeDraft,
+            Some(provenance),
+        )
+    }
+
+    fn begin_teacher_forced_prefill_block(
+        &mut self,
+        base_position: u32,
+        block_size: usize,
+    ) -> Result<(), String> {
+        self.begin_block_inner(
+            base_position,
+            block_size,
+            MaterializedTokenSource::ForcedPrefill,
+            None,
+        )
     }
 
     fn run_k_lane_hc_qkv_attention_router(
@@ -681,7 +866,7 @@ mod tests {
         let layer = 2;
         assert_eq!(COMPRESS_RATIOS[usize::from(layer)], 4);
         let tokens = [1, 2, 3, 4];
-        for base_position in [1, 5] {
+        for base_position in [0, 1, 2, 3, 5] {
             let input = S14CausalBlockLayerInput {
                 base_position,
                 layer,
@@ -705,7 +890,7 @@ mod tests {
                 hc_qkv_projection_record_calls: 1,
                 attention_recording_calls: 1,
                 contiguous_attention_dispatch_calls: 0,
-                ratio4_boundary_attention_dispatch_calls: 2,
+                ratio4_boundary_attention_dispatch_calls: 1,
                 ratio4_state_transition_record_calls: 1,
                 attention_output_post_record_calls: 1,
                 ffn_hc_router_input_record_calls: 1,

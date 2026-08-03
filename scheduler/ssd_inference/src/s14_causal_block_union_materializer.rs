@@ -164,14 +164,12 @@ pub struct S14CausalBlockSharedMappedAssetStore {
 
 impl S14CausalBlockSharedMappedAssetStore {
     pub fn new(cache_root: &Path) -> Result<Self> {
-        let cache_root = cache_root
-            .canonicalize()
-            .with_context(|| {
-                format!(
-                    "resolve causal-block shared cache root {}",
-                    cache_root.display()
-                )
-            })?;
+        let cache_root = cache_root.canonicalize().with_context(|| {
+            format!(
+                "resolve causal-block shared cache root {}",
+                cache_root.display()
+            )
+        })?;
         let store = VerifiedMappedAssetStore::new(&cache_root)?;
         Ok(Self {
             cache_root,
@@ -184,14 +182,12 @@ impl S14CausalBlockSharedMappedAssetStore {
     }
 
     fn validate_cache_root(&self, cache_root: &Path) -> Result<()> {
-        let observed = cache_root
-            .canonicalize()
-            .with_context(|| {
-                format!(
-                    "resolve causal-block materializer cache root {}",
-                    cache_root.display()
-                )
-            })?;
+        let observed = cache_root.canonicalize().with_context(|| {
+            format!(
+                "resolve causal-block materializer cache root {}",
+                cache_root.display()
+            )
+        })?;
         if observed != self.cache_root {
             bail!(
                 "causal-block shared mapped store cache root漂移: shared={} observed={}",

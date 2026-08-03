@@ -675,6 +675,25 @@ pub fn fetch_dynamic_page_plans_batched_only(
             "fetch-only dynamic page manifest/budget 为空"
         )));
     }
+    // ExplicitFetch 只授权“缺页时可访问网络”，不意味着每个热层都必须跨进程调用
+    // Python transport。真正的 proof/identity/payload-SHA 门仍由随后每个 microtile 的
+    // `verify_microtile` 执行；这里只做不会把损坏文件冒充 verified asset 的尺寸快检。
+    // 这样热缓存 block 不再为 43 层各支付一次 JSONL/进程往返。
+    let all_committed_locally = entries.iter().all(|entry| {
+        let payload = cache_root.join(format!("{}.bin", entry.range_key));
+        let proof = cache_root.join(format!("{}.json", entry.range_key));
+        let partial = cache_root.join(format!("{}.bin.part", entry.range_key));
+        !partial.exists()
+            && proof.is_file()
+            && fs::metadata(payload)
+                .is_ok_and(|metadata| metadata.is_file() && metadata.len() == entry.bytes)
+    });
+    if all_committed_locally {
+        receipt.cache_hits = u64::try_from(entries.len()).map_err(|_| {
+            DynamicPageMaterializeError::Failed(anyhow::anyhow!("本地热缓存 range 数量超过 u64"))
+        })?;
+        return Ok(receipt);
+    }
     let manifest = DynamicPageFetchManifest {
         format: S14_DYNAMIC_PAGE_FETCH_MANIFEST_FORMAT,
         layer,

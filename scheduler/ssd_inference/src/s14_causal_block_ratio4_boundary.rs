@@ -1,4 +1,4 @@
-//! K=4、base_position=1/5 的 ratio4 跨边界 production Vulkan 录制器。
+//! K=4 ratio4 跨边界 production Vulkan 录制器。
 //!
 //! 不可交换顺序固定在一个 command buffer 内：position3 compressor remainder、
 //! main/indexer finalize/writeback、rollover、末 lane 真实 remainder/index-query/indexer，
@@ -21,10 +21,8 @@ pub const S14_CAUSAL_BLOCK_RATIO4_BOUNDARY_SPV: &[u8] = include_bytes!(concat!(
 ));
 
 const BLOCK_SIZE: u32 = 4;
-const BOUNDARY_LANE: u32 = 2;
-const POST_BOUNDARY_LANE: u32 = 3;
-const FIRST_SUPPORTED_BASE_POSITION: u32 = 1;
-const LAST_SUPPORTED_BASE_POSITION: u32 = 5;
+const WINDOW_ROWS: u32 = 128;
+pub const S14_CAUSAL_BLOCK_RATIO4_INDEX_CAPACITY_ROWS: u32 = 32;
 const HEADS: u32 = 64;
 const HEAD_DIM: u32 = 512;
 const QUERY_ROW_BYTES: u64 = HEADS as u64 * HEAD_DIM as u64 * 2;
@@ -40,15 +38,14 @@ pub struct S14CausalBlockRatio4BoundaryShape {
 
 impl S14CausalBlockRatio4BoundaryShape {
     pub fn new(base_position: u32, block_size: u32, compress_ratio: u16) -> Result<Self> {
-        if !(FIRST_SUPPORTED_BASE_POSITION..=LAST_SUPPORTED_BASE_POSITION).contains(&base_position)
-            || base_position % 4 != 1
-            || block_size != BLOCK_SIZE
-            || compress_ratio != 4
-        {
+        if block_size != BLOCK_SIZE || compress_ratio != 4 {
             bail!(
-                "ratio4 causal-block boundary 只闭合 base_position=1/5、K=4、ratio4，actual base={base_position} K={block_size} ratio={compress_ratio}"
+                "ratio4 causal-block boundary 只接受K=4、ratio4，actual base={base_position} K={block_size} ratio={compress_ratio}"
             );
         }
+        base_position
+            .checked_add(BLOCK_SIZE - 1)
+            .ok_or_else(|| anyhow::anyhow!("ratio4 causal-block position overflow"))?;
         Ok(Self { base_position })
     }
 
@@ -66,19 +63,45 @@ impl S14CausalBlockRatio4BoundaryShape {
     }
 
     pub const fn boundary_lane(self) -> u32 {
-        BOUNDARY_LANE
+        (BLOCK_SIZE - 1) - (self.base_position % BLOCK_SIZE)
     }
 
     pub const fn boundary_position(self) -> u32 {
-        self.base_position + BOUNDARY_LANE
+        self.base_position + self.boundary_lane()
     }
 
-    pub const fn post_boundary_position(self) -> u32 {
-        self.base_position + POST_BOUNDARY_LANE
+    pub const fn post_boundary_lane(self) -> Option<u32> {
+        let lane = self.boundary_lane() + 1;
+        if lane < BLOCK_SIZE {
+            Some(lane)
+        } else {
+            None
+        }
+    }
+
+    pub const fn post_boundary_position(self) -> Option<u32> {
+        match self.post_boundary_lane() {
+            Some(lane) => Some(self.base_position + lane),
+            None => None,
+        }
+    }
+
+    /// boundary 恰好位于末 lane 时，post-boundary 属于下一块，必须由下一个
+    /// authoritative checkpoint 显式继续，不能伪造为本块 lane3。
+    pub const fn deferred_post_boundary_position(self) -> Option<u32> {
+        if self.post_boundary_lane().is_none() {
+            self.boundary_position().checked_add(1)
+        } else {
+            None
+        }
     }
 
     pub const fn committed_window_rows(self) -> u32 {
-        self.base_position
+        if self.base_position < WINDOW_ROWS {
+            self.base_position
+        } else {
+            WINDOW_ROWS
+        }
     }
 
     pub const fn compressed_count(self, lane: u32) -> u32 {
@@ -95,7 +118,29 @@ impl S14CausalBlockRatio4BoundaryShape {
     }
 
     pub const fn max_compressed_rows(self) -> u32 {
-        self.compressed_count(POST_BOUNDARY_LANE)
+        self.compressed_count(BLOCK_SIZE - 1)
+    }
+
+    pub const fn sparse_index_required(self, lane: u32) -> bool {
+        lane != self.boundary_lane() && self.compressed_count(lane) > 1
+    }
+
+    pub const fn sparse_index_lane_count(self) -> u32 {
+        self.sparse_index_required(0) as u32
+            + self.sparse_index_required(1) as u32
+            + self.sparse_index_required(2) as u32
+            + self.sparse_index_required(3) as u32
+    }
+
+    pub const fn tail_lane_application_count(self) -> u32 {
+        let first = self.boundary_lane() + 1;
+        if first >= BLOCK_SIZE {
+            0
+        } else {
+            // lane l 会进入 prefix l..3。
+            let lanes = BLOCK_SIZE - first;
+            lanes * (lanes + 1) / 2
+        }
     }
 }
 
@@ -133,10 +178,10 @@ pub struct S14CausalBlockRatio4CandidateStateBinding {
     pub candidate_logical_bytes: u64,
     pub first_compressed_kv_offset: u64,
     pub first_indexer_row_offset: u64,
-    pub position3_recipe_position: u32,
-    pub position3_recipe_compress_ratio: u16,
-    pub position4_recipe_position: u32,
-    pub position4_recipe_compress_ratio: u16,
+    pub boundary_recipe_position: u32,
+    pub boundary_recipe_compress_ratio: u16,
+    pub post_boundary_recipe_position: Option<u32>,
+    pub post_boundary_recipe_compress_ratio: Option<u16>,
     pub compressed_rope_position: u32,
 }
 
@@ -145,7 +190,7 @@ impl S14CausalBlockRatio4CandidateStateBinding {
         let shape = S14CausalBlockRatio4BoundaryShape::new(
             self.base_position,
             self.block_size,
-            self.position3_recipe_compress_ratio,
+            self.boundary_recipe_compress_ratio,
         )?;
         let compressed_rows = u64::from(shape.max_compressed_rows());
         let candidate_end = self
@@ -167,9 +212,10 @@ impl S14CausalBlockRatio4CandidateStateBinding {
             || main_end > candidate_end
             || self.first_indexer_row_offset < self.candidate_base_offset
             || indexer_end > candidate_end
-            || self.position3_recipe_position != shape.boundary_position()
-            || self.position4_recipe_position != shape.post_boundary_position()
-            || self.position4_recipe_compress_ratio != 4
+            || self.boundary_recipe_position != shape.boundary_position()
+            || self.post_boundary_recipe_position != shape.post_boundary_position()
+            || self.post_boundary_recipe_compress_ratio
+                != shape.post_boundary_lane().map(|_| 4)
             // finalize覆盖到boundary position；官方compressed RoPE位置是该4-token
             // block的起点，不是boundary position本身。
             || self.compressed_rope_position != shape.boundary_position() + 1 - 4
@@ -217,7 +263,7 @@ impl S14CausalBlockRatio4BoundaryFinalizeReceipt {
         if self.base_position != shape.base_position()
             || self.block_size != BLOCK_SIZE
             || self.boundary_position != shape.boundary_position()
-            || self.pre_boundary_remainder_record_calls != 3
+            || self.pre_boundary_remainder_record_calls != shape.boundary_lane() + 1
             || self.main_finalize_writeback_calls != 1
             || self.indexer_finalize_writeback_calls != 1
             || self.compressed_main_rows_written != 1
@@ -225,7 +271,9 @@ impl S14CausalBlockRatio4BoundaryFinalizeReceipt {
             || self.serial_token_forward_calls != 0
             || self.cpu_fallback_calls != 0
         {
-            bail!("ratio4 boundary finalize 回执不能证明 positions1..3 remainder/main/indexer device 写回");
+            bail!(
+                "ratio4 boundary finalize 回执不能证明 positions1..3 remainder/main/indexer device 写回"
+            );
         }
         Ok(())
     }
@@ -260,7 +308,8 @@ impl S14CausalBlockRatio4RolloverReceipt {
 pub struct S14CausalBlockRatio4Position4PreludeReceipt {
     pub base_position: u32,
     pub block_size: u32,
-    pub position: u32,
+    pub position: Option<u32>,
+    pub deferred_position: Option<u32>,
     pub remainder_record_calls: u32,
     pub index_head_weight_projection_calls: u32,
     pub serial_token_forward_calls: u32,
@@ -272,12 +321,15 @@ impl S14CausalBlockRatio4Position4PreludeReceipt {
         if self.base_position != shape.base_position()
             || self.block_size != BLOCK_SIZE
             || self.position != shape.post_boundary_position()
-            || self.remainder_record_calls != 1
-            || self.index_head_weight_projection_calls != 1
+            || self.deferred_position != shape.deferred_post_boundary_position()
+            || self.remainder_record_calls != shape.tail_lane_application_count()
+            || self.index_head_weight_projection_calls != shape.sparse_index_lane_count()
             || self.serial_token_forward_calls != 0
             || self.cpu_fallback_calls != 0
         {
-            bail!("ratio4 position4 prelude 回执不能证明 post-rollover remainder/index-head device 录制");
+            bail!(
+                "ratio4 position4 prelude 回执不能证明 post-rollover remainder/index-head device 录制"
+            );
         }
         Ok(())
     }
@@ -324,6 +376,8 @@ pub trait S14CausalBlockRatio4BoundaryStateRecorder: fmt::Debug {
 pub struct S14CausalBlockRatio4BoundaryRecordingReceipt {
     pub positions: [u32; 4],
     pub boundary_lane: u32,
+    pub post_boundary_position: Option<u32>,
+    pub deferred_post_boundary_position: Option<u32>,
     pub compressed_counts: [u32; 4],
     pub pre_boundary_remainder_record_calls: u32,
     pub main_finalize_writeback_calls: u32,
@@ -345,23 +399,27 @@ impl S14CausalBlockRatio4BoundaryRecordingReceipt {
     pub fn validate(self) -> Result<()> {
         let shape = S14CausalBlockRatio4BoundaryShape::new(self.positions[0], BLOCK_SIZE, 4)?;
         if self.positions != shape.positions()
-            || self.boundary_lane != BOUNDARY_LANE
+            || self.boundary_lane != shape.boundary_lane()
+            || self.post_boundary_position != shape.post_boundary_position()
+            || self.deferred_post_boundary_position != shape.deferred_post_boundary_position()
             || self.compressed_counts != shape.compressed_counts()
-            || self.pre_boundary_remainder_record_calls != 3
+            || self.pre_boundary_remainder_record_calls != shape.boundary_lane() + 1
             || self.main_finalize_writeback_calls != 1
             || self.indexer_finalize_writeback_calls != 1
             || self.rollover_record_calls != 1
-            || self.position4_remainder_record_calls != 1
-            || self.position4_index_head_weight_projection_calls != 1
-            || self.position4_index_query_dispatch_calls != 1
-            || self.position4_indexer_dispatch_calls != 1
+            || self.position4_remainder_record_calls != shape.tail_lane_application_count()
+            || self.position4_index_head_weight_projection_calls != shape.sparse_index_lane_count()
+            || self.position4_index_query_dispatch_calls != shape.sparse_index_lane_count()
+            || self.position4_indexer_dispatch_calls != shape.sparse_index_lane_count()
             || self.attention_dispatch_calls != 1
             || self.attention_rows != BLOCK_SIZE
-            || self.position4_sparse_attention_rows != 1
+            || self.position4_sparse_attention_rows != shape.sparse_index_lane_count()
             || self.serial_token_forward_calls != 0
             || self.cpu_fallback_calls != 0
         {
-            bail!("ratio4 boundary recording 回执不能证明 finalize→rollover→position4 indexer→单次K=4 boundary attention 顺序");
+            bail!(
+                "ratio4 boundary recording 回执不能证明 finalize→rollover→position4 indexer→单次K=4 boundary attention 顺序"
+            );
         }
         Ok(())
     }
@@ -435,14 +493,22 @@ impl S14CausalBlockRatio4BoundaryRecorder {
         let shape = S14CausalBlockRatio4BoundaryShape::new(
             candidate_binding.base_position,
             candidate_binding.block_size,
-            candidate_binding.position3_recipe_compress_ratio,
+            candidate_binding.boundary_recipe_compress_ratio,
         )?;
         candidate_binding.validate(state.candidate_state_owner())?;
+        if shape.max_compressed_rows() > S14_CAUSAL_BLOCK_RATIO4_INDEX_CAPACITY_ROWS {
+            bail!(
+                "ratio4 K4 compressed rows 超出 workspace capacity: rows={} capacity={}",
+                shape.max_compressed_rows(),
+                S14_CAUSAL_BLOCK_RATIO4_INDEX_CAPACITY_ROWS
+            );
+        }
         let finalize = state.record_remainder_and_finalize(ctx, command, state_workspace)?;
         finalize.validate(shape)?;
         compute_to_compute_barrier(ctx, command);
 
-        let mut binders = Vec::with_capacity(3);
+        let sparse_lane_count = shape.sparse_index_lane_count();
+        let mut binders = Vec::with_capacity(sparse_lane_count as usize * 2 + 1);
         let rollover = match state.record_rollover_after_finalize(ctx, command, state_workspace) {
             Ok(receipt) => receipt,
             Err(error) => {
@@ -470,51 +536,69 @@ impl S14CausalBlockRatio4BoundaryRecorder {
         }
         compute_to_compute_barrier(ctx, command);
 
-        let index_query_shape =
-            match S14Ratio4IndexQueryShape::new(shape.post_boundary_position(), 4) {
-                Ok(shape) => shape,
-                Err(error) => {
-                    destroy_binders(ctx, &mut binders);
-                    return Err(error);
+        let sparse_result = (|| -> Result<()> {
+            for lane in 0..BLOCK_SIZE {
+                if !shape.sparse_index_required(lane) {
+                    continue;
                 }
-            };
-        let index_query = match self.position4_index_query.bind_slices(
-            ctx,
-            position4.raw_index_query_bf16,
-            position4.rope_f32,
-            position4.processed_index_query_bf16,
-            position4.sticky_status_u32,
-            index_query_shape,
-        ) {
-            Ok(dispatch) => dispatch,
-            Err(error) => {
-                destroy_binders(ctx, &mut binders);
-                return Err(error.context("绑定 causal-block position4 ratio4 index-query"));
-            }
-        };
-        self.position4_index_query.cmd(ctx, command, &index_query);
-        binders.push(index_query.binder);
-        compute_to_compute_barrier(ctx, command);
+                let query_row_bytes = 8_192 * 2u64;
+                let head_row_bytes = 64 * 2u64;
+                let index_row_bytes = u64::from(S14_CAUSAL_BLOCK_RATIO4_INDEX_CAPACITY_ROWS) * 4;
+                let lane_offset = u64::from(lane);
+                let raw_query = offset_slice(
+                    position4.raw_index_query_bf16,
+                    lane_offset * query_row_bytes,
+                )?;
+                let processed_query = offset_slice(
+                    position4.processed_index_query_bf16,
+                    lane_offset * query_row_bytes,
+                )?;
+                let head_weights =
+                    offset_slice(position4.head_weights_bf16, lane_offset * head_row_bytes)?;
+                let scores =
+                    offset_slice(position4.index_scores_f32, lane_offset * index_row_bytes)?;
+                let indices = offset_slice(
+                    position4.compressed_indices_u32,
+                    lane_offset * index_row_bytes,
+                )?;
+                let rope = offset_slice(position4.rope_f32, lane_offset * ROPE_ROW_BYTES)?;
+                let absolute_position = shape
+                    .base_position()
+                    .checked_add(lane)
+                    .ok_or_else(|| anyhow::anyhow!("ratio4 sparse lane position overflow"))?;
+                let index_query_shape = S14Ratio4IndexQueryShape::new(absolute_position, 4)?;
+                let index_query = self.position4_index_query.bind_slices(
+                    ctx,
+                    raw_query,
+                    rope,
+                    processed_query,
+                    position4.sticky_status_u32,
+                    index_query_shape,
+                )?;
+                self.position4_index_query.cmd(ctx, command, &index_query);
+                binders.push(index_query.binder);
+                compute_to_compute_barrier(ctx, command);
 
-        let indexer = match self.position4_indexer.bind_slices(
-            ctx,
-            position4.processed_index_query_bf16,
-            position4.index_cache_bf16,
-            position4.head_weights_bf16,
-            position4.index_scores_f32,
-            position4.compressed_indices_u32,
-            position4.sticky_status_u32,
-            shape.max_compressed_rows(),
-        ) {
-            Ok(dispatch) => dispatch,
-            Err(error) => {
-                destroy_binders(ctx, &mut binders);
-                return Err(error.context("绑定 causal-block position4 ratio4 indexer"));
+                let indexer = self.position4_indexer.bind_slices(
+                    ctx,
+                    processed_query,
+                    position4.index_cache_bf16,
+                    head_weights,
+                    scores,
+                    indices,
+                    position4.sticky_status_u32,
+                    shape.compressed_count(lane),
+                )?;
+                self.position4_indexer.cmd(ctx, command, &indexer);
+                binders.push(indexer.binder);
+                compute_to_compute_barrier(ctx, command);
             }
-        };
-        self.position4_indexer.cmd(ctx, command, &indexer);
-        binders.push(indexer.binder);
-        compute_to_compute_barrier(ctx, command);
+            Ok(())
+        })();
+        if let Err(error) = sparse_result {
+            destroy_binders(ctx, &mut binders);
+            return Err(error.context("录制 ratio4 dynamic sparse index queries"));
+        }
 
         let attention_binder = match bind_attention(ctx, &self.attention, attention, shape) {
             Ok(binder) => binder,
@@ -527,7 +611,9 @@ impl S14CausalBlockRatio4BoundaryRecorder {
         binders.push(attention_binder);
         let receipt = S14CausalBlockRatio4BoundaryRecordingReceipt {
             positions: shape.positions(),
-            boundary_lane: BOUNDARY_LANE,
+            boundary_lane: shape.boundary_lane(),
+            post_boundary_position: shape.post_boundary_position(),
+            deferred_post_boundary_position: shape.deferred_post_boundary_position(),
             compressed_counts: shape.compressed_counts(),
             pre_boundary_remainder_record_calls: finalize.pre_boundary_remainder_record_calls,
             main_finalize_writeback_calls: finalize.main_finalize_writeback_calls,
@@ -536,11 +622,11 @@ impl S14CausalBlockRatio4BoundaryRecorder {
             position4_remainder_record_calls: position4_prelude.remainder_record_calls,
             position4_index_head_weight_projection_calls: position4_prelude
                 .index_head_weight_projection_calls,
-            position4_index_query_dispatch_calls: 1,
-            position4_indexer_dispatch_calls: 1,
+            position4_index_query_dispatch_calls: sparse_lane_count,
+            position4_indexer_dispatch_calls: sparse_lane_count,
             attention_dispatch_calls: 1,
             attention_rows: BLOCK_SIZE,
-            position4_sparse_attention_rows: 1,
+            position4_sparse_attention_rows: sparse_lane_count,
             serial_token_forward_calls: 0,
             cpu_fallback_calls: 0,
         };
@@ -578,9 +664,12 @@ fn bind_attention(
     bindings: S14CausalBlockRatio4AttentionBindings<'_>,
     shape: S14CausalBlockRatio4BoundaryShape,
 ) -> Result<DescriptorBinder> {
-    let committed_window_bytes = u64::from(shape.committed_window_rows()) * KV_ROW_BYTES;
+    // Vulkan descriptor range 不能为0；base0 shader 的 committed count 为0，不会读取
+    // 这一个哨兵行，因此只扩大 descriptor ABI，不伪造任何 authoritative window。
+    let committed_window_bytes = u64::from(shape.committed_window_rows().max(1)) * KV_ROW_BYTES;
     let compressed_bytes = u64::from(shape.max_compressed_rows()) * KV_ROW_BYTES;
-    let compressed_index_bytes = u64::from(shape.max_compressed_rows()) * 4;
+    let compressed_index_bytes =
+        u64::from(BLOCK_SIZE) * u64::from(S14_CAUSAL_BLOCK_RATIO4_INDEX_CAPACITY_ROWS) * 4;
     DescriptorBinder::new_with_offsets(
         ctx,
         pipeline,
@@ -613,6 +702,20 @@ fn range(slice: StorageBufferSlice<'_>, bytes: u64) -> Result<(&crate::GpuBuffer
         bail!("ratio4 causal-block attention descriptor range 越界");
     }
     Ok((slice.buffer, slice.offset, bytes))
+}
+
+fn offset_slice(slice: StorageBufferSlice<'_>, relative: u64) -> Result<StorageBufferSlice<'_>> {
+    let offset = slice
+        .offset
+        .checked_add(relative)
+        .ok_or_else(|| anyhow::anyhow!("ratio4 lane workspace offset overflow"))?;
+    if offset >= slice.buffer.size() {
+        bail!("ratio4 lane workspace offset 越界");
+    }
+    Ok(StorageBufferSlice {
+        buffer: slice.buffer,
+        offset,
+    })
 }
 
 unsafe fn record_attention(
@@ -693,24 +796,26 @@ mod tests {
         S14CausalBlockRatio4BoundaryRecordingReceipt {
             positions: shape.positions(),
             boundary_lane: shape.boundary_lane(),
+            post_boundary_position: shape.post_boundary_position(),
+            deferred_post_boundary_position: shape.deferred_post_boundary_position(),
             compressed_counts: shape.compressed_counts(),
             pre_boundary_remainder_record_calls: 3,
             main_finalize_writeback_calls: 1,
             indexer_finalize_writeback_calls: 1,
             rollover_record_calls: 1,
             position4_remainder_record_calls: 1,
-            position4_index_head_weight_projection_calls: 1,
-            position4_index_query_dispatch_calls: 1,
-            position4_indexer_dispatch_calls: 1,
+            position4_index_head_weight_projection_calls: 0,
+            position4_index_query_dispatch_calls: 0,
+            position4_indexer_dispatch_calls: 0,
             attention_dispatch_calls: 1,
             attention_rows: 4,
-            position4_sparse_attention_rows: 1,
+            position4_sparse_attention_rows: 0,
             serial_token_forward_calls: 0,
             cpu_fallback_calls: 0,
         }
         .validate()
         .unwrap();
-        for invalid in [(0, 4, 4), (1, 8, 4), (1, 4, 0), (9, 4, 4)] {
+        for invalid in [(1, 8, 4), (1, 4, 0), (u32::MAX, 4, 4)] {
             assert!(
                 S14CausalBlockRatio4BoundaryShape::new(invalid.0, invalid.1, invalid.2).is_err()
             );
@@ -722,13 +827,15 @@ mod tests {
         let shape = S14CausalBlockRatio4BoundaryShape::new(5, 4, 4).unwrap();
         assert_eq!(shape.positions(), [5, 6, 7, 8]);
         assert_eq!(shape.boundary_position(), 7);
-        assert_eq!(shape.post_boundary_position(), 8);
+        assert_eq!(shape.post_boundary_position(), Some(8));
         assert_eq!(shape.committed_window_rows(), 5);
         assert_eq!(shape.compressed_counts(), [1, 1, 2, 2]);
         assert_eq!(shape.max_compressed_rows(), 2);
         S14CausalBlockRatio4BoundaryRecordingReceipt {
             positions: shape.positions(),
             boundary_lane: shape.boundary_lane(),
+            post_boundary_position: shape.post_boundary_position(),
+            deferred_post_boundary_position: shape.deferred_post_boundary_position(),
             compressed_counts: shape.compressed_counts(),
             pre_boundary_remainder_record_calls: 3,
             main_finalize_writeback_calls: 1,
@@ -746,5 +853,23 @@ mod tests {
         }
         .validate()
         .unwrap();
+    }
+
+    #[test]
+    fn arbitrary_base_shape_derives_ratio4_phase_without_changing_k4() {
+        let expected = [
+            (0, 3, 3, None, [0, 0, 0, 1]),
+            (1, 2, 3, Some(4), [0, 0, 1, 1]),
+            (2, 1, 3, Some(4), [0, 1, 1, 1]),
+            (3, 0, 3, Some(4), [1, 1, 1, 1]),
+            (4, 3, 7, None, [1, 1, 1, 2]),
+        ];
+        for (base, boundary_lane, boundary_position, post_position, counts) in expected {
+            let shape = S14CausalBlockRatio4BoundaryShape::new(base, 4, 4).unwrap();
+            assert_eq!(shape.boundary_lane(), boundary_lane);
+            assert_eq!(shape.boundary_position(), boundary_position);
+            assert_eq!(shape.post_boundary_position(), post_position);
+            assert_eq!(shape.compressed_counts(), counts);
+        }
     }
 }

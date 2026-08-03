@@ -305,7 +305,7 @@ impl<T: Copy> S14Position0SynchronousLayerPager<T> {
         let upload = match backend.upload_weights(request) {
             Ok(receipt) => receipt,
             Err(error) => {
-                return self.poison(error.context(format!("upload L{} weights", plan.layer)))
+                return self.poison(error.context(format!("upload L{} weights", plan.layer)));
             }
         };
         if upload.static_uploaded_bytes != expected_static

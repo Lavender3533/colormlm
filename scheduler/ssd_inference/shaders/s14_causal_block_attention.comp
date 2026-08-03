@@ -215,7 +215,7 @@ void main() {
     uint block_lane = gl_WorkGroupID.y;
     uint lane = gl_LocalInvocationID.x;
     if (pc.heads != 64u || pc.head_dim != 512u || pc.block_size == 0u ||
-        pc.block_size > 8u || pc.base_position == 0u ||
+        pc.block_size > 8u ||
         pc.committed_rows != pc.base_position ||
         pc.base_position + pc.block_size > 127u) {
         if (lane == 0u) atomicOr(status_code, STATUS_INVALID_SHAPE);

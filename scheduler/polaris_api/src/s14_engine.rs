@@ -43,7 +43,8 @@ pub trait S14ChatCodec: 'static {
 /// 官方 DeepSeek-V4 encoding 的最小 Rust production profile。
 ///
 /// 当前协议层尚未表达官方 reasoning/tool-call 结构，因此只冻结无工具的
-/// `thinking_mode="thinking"` + `reasoning_effort="low"` forced-prefill。工具、name、
+/// `thinking_mode="chat"` forced-prefill。官方 chat 模式以 `</think>` 结束 assistant
+/// 边界，模型直接生成可见正文，避免把未解析的 reasoning 冒充聊天回答。工具、name、
 /// tool role 或保留标记注入均 fail-closed，不会降级为猜测模板。
 pub struct DeepSeekV4ChatCodec {
     tokenizer: Tokenizer,
@@ -289,25 +290,42 @@ impl<C: S14ChatCodec> S14RuntimeChatBackend<C> {
                 "S14 chat codec 生成了空 prompt",
             ));
         }
-        let max_tokens = request.max_tokens.unwrap_or(self.config.default_max_tokens);
         let prompt_prefill_positions = prompt.len().saturating_sub(1);
-        let required_positions = u32::try_from(prompt_prefill_positions)
-            .ok()
-            .and_then(|prefill| prefill.checked_add(max_tokens))
+        let prompt_prefill_positions = u32::try_from(prompt_prefill_positions).map_err(|_| {
+            EngineError::new(
+                EngineErrorKind::InvalidRequest,
+                "prompt position 数量超过 u32 上限",
+            )
+        })?;
+        let position_limit = self
+            .config
+            .max_seq_len
+            .min(self.config.numerical_gate.max_position_exclusive());
+        let available_completion_positions = position_limit
+            .checked_sub(prompt_prefill_positions)
+            .filter(|remaining| *remaining > 0)
             .ok_or_else(|| {
-                EngineError::new(
-                    EngineErrorKind::InvalidRequest,
-                    "prompt + max_tokens 长度溢出",
+                EngineError::unsupported_position(
+                    position_limit,
+                    format!(
+                        "prompt 已占用 {prompt_prefill_positions} 个 position，当前 S14 只覆盖 [0,{position_limit})"
+                    ),
                 )
             })?;
-        if required_positions > self.config.max_seq_len
-            || required_positions > self.config.numerical_gate.max_position_exclusive()
-        {
+        // OpenAI 兼容客户端通常会默认发送 256/4096 等 max_tokens。S14 的
+        // production 覆盖范围目前更小；服务端按已证明的默认输出上限与本次
+        // prompt 剩余容量自动收紧，而不是让通用客户端在生成前直接失败。
+        let max_tokens = request
+            .max_tokens
+            .unwrap_or(self.config.default_max_tokens)
+            .min(self.config.default_max_tokens)
+            .min(available_completion_positions);
+        let required_positions = prompt_prefill_positions + max_tokens;
+        if required_positions > position_limit {
             return Err(EngineError::unsupported_position(
-                self.config.numerical_gate.max_position_exclusive(),
+                position_limit,
                 format!(
-                    "请求最多需要 {required_positions} 个 position，但当前权威数值门只覆盖 [0,{})",
-                    self.config.numerical_gate.max_position_exclusive()
+                    "请求最多需要 {required_positions} 个 position，但当前 S14 只覆盖 [0,{position_limit})"
                 ),
             ));
         }
@@ -469,9 +487,79 @@ pub struct S14ResidentK4CommittedBlock {
     pub wall_ms: f64,
 }
 
+pub const S14_RESIDENT_K4_RESOURCE_CONTRACT_VERSION: u32 = 2;
+pub const S14_RESIDENT_K4_MICROTILE_BYTES: u32 = 1_048_576;
+
+/// 最短可聊天链允许存在的唯一 resident 物理资源拓扑。这里没有“backend kind”字符串：
+/// 只有 StarFold FullDepth43/K4 一种可验证形态，因而 v38/v47/Transformer 不能伪装成
+/// 另一个枚举分支。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct S14ResidentK4ResourceInventory {
+    pub request_decoder_owners: u32,
+    pub request_owners_deferred_until_prompt: bool,
+    pub vulkan_context_owners: u32,
+    pub transfer_queue_owners: u32,
+    pub compute_queue_owners: u32,
+    pub paged_arena_owners: u32,
+    pub starfold_microtile_windows: u32,
+    pub starfold_microtile_bytes: u32,
+    pub starfold_physical_allocation_bytes: u64,
+    pub full_depth_layers: u32,
+    pub positions_per_physical_block: u32,
+    pub routed_experts_per_position: u32,
+    pub verified_mapped_store_owners: u32,
+    pub terminal_head_uploader_owners: u32,
+    pub starwave_commit_owners: u32,
+    pub legacy_union_calls: u64,
+    pub legacy_grouped_moe_calls: u64,
+    pub serial_position0_calls: u64,
+    pub serial_token_forward_calls: u64,
+    pub cpu_compute_fallback_calls: u64,
+    pub v38_fallback_calls: u64,
+    pub v47_fallback_calls: u64,
+    pub transformer_fallback_calls: u64,
+    pub whole_model_fallback_calls: u64,
+}
+
+/// 只有唯一 Vulkan/StarFold/StarWave owner 拓扑闭合后才能构造。Chat backend 在构造和
+/// 每次请求前都会重新验签，禁止 decoder 在服务运行中换成旧模型路径。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VerifiedS14ResidentK4Resources {
+    inventory: S14ResidentK4ResourceInventory,
+    contract_sha256: [u8; 32],
+}
+
+impl VerifiedS14ResidentK4Resources {
+    pub fn verify(inventory: S14ResidentK4ResourceInventory) -> Result<Self, EngineError> {
+        validate_resident_k4_inventory(inventory)?;
+        Ok(Self {
+            inventory,
+            contract_sha256: resident_k4_resource_sha256(inventory),
+        })
+    }
+
+    pub const fn inventory(&self) -> S14ResidentK4ResourceInventory {
+        self.inventory
+    }
+
+    pub const fn contract_sha256(&self) -> [u8; 32] {
+        self.contract_sha256
+    }
+
+    fn validate(&self) -> Result<(), EngineError> {
+        validate_resident_k4_inventory(self.inventory)?;
+        if resident_k4_resource_sha256(self.inventory) != self.contract_sha256 {
+            return Err(EngineError::runtime_unavailable(
+                "resident K4 resource contract SHA-256 漂移",
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// 每个 HTTP 请求独占的 K=4 continuation。实现必须消费上一块的
 /// 真实 committed checkpoint，不能从 position0 重启或用 fixture 替换。
-pub trait S14ResidentK4Request: Send {
+pub trait S14ResidentK4Request {
     fn checkpoint(&self) -> &S14ResidentK4Checkpoint;
 
     fn execute_next_block(
@@ -482,10 +570,13 @@ pub trait S14ResidentK4Request: Send {
     fn close(self) -> Result<(), EngineError>;
 }
 
-/// 长驻 decoder 保有 Vulkan、paged arena、union banks 与 verified mapped store；
+/// 长驻 decoder 保有 Vulkan、paged arena、唯一 StarFold runtime 与 verified mapped store；
 /// `begin_request` 只创建请求状态，不得新启动第二模型实例。
-pub trait S14ResidentK4Decoder: Send + 'static {
+pub trait S14ResidentK4Decoder: 'static {
     type Request: S14ResidentK4Request;
+
+    /// 必须来自当前长驻物理 owner，不能由请求级临时模型或 legacy adapter 代填。
+    fn resources(&self) -> &VerifiedS14ResidentK4Resources;
 
     fn begin_request(
         &mut self,
@@ -501,6 +592,7 @@ pub struct S14ResidentK4ChatBackend<C, D> {
     decoder: D,
     max_seq_len: u32,
     default_max_tokens: u32,
+    resource_contract_sha256: [u8; 32],
 }
 
 impl<C: S14ChatCodec, D: S14ResidentK4Decoder> S14ResidentK4ChatBackend<C, D> {
@@ -516,11 +608,14 @@ impl<C: S14ChatCodec, D: S14ResidentK4Decoder> S14ResidentK4ChatBackend<C, D> {
                 "resident K4 max_seq_len/default_max_tokens 必须大于0",
             ));
         }
+        decoder.resources().validate()?;
+        let resource_contract_sha256 = decoder.resources().contract_sha256();
         Ok(Self {
             codec,
             decoder,
             max_seq_len,
             default_max_tokens,
+            resource_contract_sha256,
         })
     }
 
@@ -529,6 +624,12 @@ impl<C: S14ChatCodec, D: S14ResidentK4Decoder> S14ResidentK4ChatBackend<C, D> {
         request: EngineChatRequest,
         events: &EngineEventSender,
     ) -> Result<(), EngineError> {
+        self.decoder.resources().validate()?;
+        if self.decoder.resources().contract_sha256() != self.resource_contract_sha256 {
+            return Err(EngineError::runtime_unavailable(
+                "resident K4 decoder 在请求间替换了物理资源拓扑",
+            ));
+        }
         if request.tools.is_some()
             || request.tool_choice.is_some()
             || request.temperature.is_some_and(|value| value != 0.0)
@@ -554,17 +655,32 @@ impl<C: S14ChatCodec, D: S14ResidentK4Decoder> S14ResidentK4ChatBackend<C, D> {
         }
 
         let mut resident = self.decoder.begin_request(&prompt, self.max_seq_len)?;
-        let result = self.run_blocks(&mut resident, prompt.len(), max_tokens, &request.stop, events);
+        let result = self.run_blocks(
+            &mut resident,
+            prompt.len(),
+            max_tokens,
+            &request.stop,
+            events,
+        );
         let cleanup = resident.close();
-        match (result, cleanup) {
+        let done = match (result, cleanup) {
             (Err(mut error), Err(cleanup)) => {
-                error.message = format!("{}; 同时 resident K4 close 失败: {}", error.message, cleanup.message);
-                Err(error)
+                error.message = format!(
+                    "{}; 同时 resident K4 close 失败: {}",
+                    error.message, cleanup.message
+                );
+                return Err(error);
             }
-            (Err(error), _) => Err(error),
-            (Ok(()), Err(error)) => Err(error),
-            (Ok(()), Ok(())) => Ok(()),
+            (Err(error), _) => return Err(error),
+            (Ok(_), Err(error)) => return Err(error),
+            (Ok(done), Ok(())) => done,
+        };
+        if let Some(done) = done {
+            // `Done` 是唯一成功终态，必须等 request 独占的 runtime/session 完整关闭后
+            // 才能发布；否则 cleanup 失败会形成“先成功、后失败”的双终态。
+            let _ = events.blocking_send(Ok(EngineEvent::Done(done)));
         }
+        Ok(())
     }
 
     fn run_blocks<R: S14ResidentK4Request>(
@@ -574,22 +690,34 @@ impl<C: S14ChatCodec, D: S14ResidentK4Decoder> S14ResidentK4ChatBackend<C, D> {
         max_tokens: u32,
         stops: &[String],
         events: &EngineEventSender,
-    ) -> Result<(), EngineError> {
+    ) -> Result<Option<EngineDone>, EngineError> {
         let mut completion_ids = Vec::with_capacity(max_tokens as usize);
         let mut emitted = String::new();
         while completion_ids.len() < max_tokens as usize {
             let expected = resident.checkpoint().clone();
             let remaining = max_tokens - completion_ids.len() as u32;
             let block = resident.execute_next_block(remaining)?;
+            let block_tokens_u32 = block.token_ids.len() as u32;
+            let block_tokens_u64 = u64::from(block_tokens_u32);
             if block.consumed != expected
                 || block.committed.position <= block.consumed.position
-                || block.committed.commit_epoch <= block.consumed.commit_epoch
+                || block
+                    .committed
+                    .commit_epoch
+                    .checked_sub(block.consumed.commit_epoch)
+                    != Some(block_tokens_u64)
                 || block.token_ids.is_empty()
                 || block.token_ids.len() > 4
                 || block.token_ids.len() > remaining as usize
-                || block.committed.position - block.consumed.position
-                    != block.token_ids.len() as u32
-                || block.committed.sha256.len() != 64
+                || block
+                    .committed
+                    .position
+                    .checked_sub(block.consumed.position)
+                    != Some(block_tokens_u32)
+                || !is_sha256_hex(&block.consumed.sha256)
+                || !is_sha256_hex(&block.committed.sha256)
+                || !block.wall_ms.is_finite()
+                || block.wall_ms < 0.0
                 || block.committed != *resident.checkpoint()
             {
                 return Err(EngineError::new(
@@ -622,6 +750,12 @@ impl<C: S14ChatCodec, D: S14ResidentK4Decoder> S14ResidentK4ChatBackend<C, D> {
                     (None, Some(_)) => decoded.len(),
                     (None, None) => stable_visible_len(&decoded, stops),
                 };
+                if visible_len < emitted.len() || !decoded.is_char_boundary(visible_len) {
+                    return Err(EngineError::new(
+                        EngineErrorKind::Internal,
+                        "resident K4 stop/codec 边界要求撤回已发布 UTF-8 文本",
+                    ));
+                }
                 if visible_len > emitted.len() {
                     let delta = decoded[emitted.len()..visible_len].to_owned();
                     emitted.push_str(&delta);
@@ -632,16 +766,15 @@ impl<C: S14ChatCodec, D: S14ResidentK4Decoder> S14ResidentK4ChatBackend<C, D> {
                         })))
                         .is_err()
                     {
-                        return Ok(());
+                        return Ok(None);
                     }
                 }
                 if let Some(finish_reason) = finish {
-                    let _ = events.blocking_send(Ok(EngineEvent::Done(EngineDone {
+                    return Ok(Some(EngineDone {
                         finish_reason,
                         prompt_tokens: Some(prompt_tokens as u64),
                         completion_tokens: Some(completion_ids.len() as u64),
-                    })));
-                    return Ok(());
+                    }));
                 }
             }
         }
@@ -654,7 +787,7 @@ impl<C: S14ChatCodec, D: S14ResidentK4Decoder> S14ResidentK4ChatBackend<C, D> {
 
 impl<C, D> ResidentChatBackend for S14ResidentK4ChatBackend<C, D>
 where
-    C: S14ChatCodec + Send + 'static,
+    C: S14ChatCodec + 'static,
     D: S14ResidentK4Decoder,
 {
     fn run_chat(
@@ -770,15 +903,18 @@ fn render_official_forced_prefill(request: &EngineChatRequest) -> Result<String,
             && (index + 1 == messages.len() || next_is_assistant)
         {
             prompt.push_str(ASSISTANT_TOKEN);
-            prompt.push_str(THINKING_START_TOKEN);
+            // 官方 DeepSeek-V4 `thinking_mode="chat"` 的 normal-generation 边界。
+            // 当前 EngineEvent 没有 reasoning_content 通道，因此不能用 `<think>` 后再
+            // 把内部推理流当普通 content 发送给 OpenAI 兼容客户端。
+            prompt.push_str(THINKING_END_TOKEN);
         }
     }
     if !prompt.starts_with(BOS_TOKEN)
-        || !prompt.ends_with(&format!("{ASSISTANT_TOKEN}{THINKING_START_TOKEN}"))
+        || !prompt.ends_with(&format!("{ASSISTANT_TOKEN}{THINKING_END_TOKEN}"))
         || prompt.matches(BOS_TOKEN).count() != 1
     {
         return Err(codec_invalid(
-            "官方 DeepSeek forced-prefill 未闭合到 assistant thinking 边界",
+            "官方 DeepSeek forced-prefill 未闭合到 assistant chat 边界",
         ));
     }
     Ok(prompt)
@@ -889,6 +1025,89 @@ fn stable_visible_len(text: &str, stops: &[String]) -> usize {
     visible_len
 }
 
+fn validate_resident_k4_inventory(
+    inventory: S14ResidentK4ResourceInventory,
+) -> Result<(), EngineError> {
+    let exact_topology = inventory.request_decoder_owners == 0
+        && inventory.request_owners_deferred_until_prompt
+        && inventory.vulkan_context_owners == 1
+        && inventory.transfer_queue_owners == 1
+        && inventory.compute_queue_owners == 1
+        && inventory.paged_arena_owners == 1
+        && inventory.starfold_microtile_windows == 2
+        && inventory.starfold_microtile_bytes == S14_RESIDENT_K4_MICROTILE_BYTES
+        && inventory.starfold_physical_allocation_bytes
+            == u64::from(S14_RESIDENT_K4_MICROTILE_BYTES) * 2
+        && inventory.full_depth_layers == 43
+        && inventory.positions_per_physical_block == 4
+        && inventory.routed_experts_per_position == 6
+        && inventory.verified_mapped_store_owners == 1
+        && inventory.terminal_head_uploader_owners == 1
+        && inventory.starwave_commit_owners == 1;
+    let forbidden_paths = inventory.legacy_union_calls
+        | inventory.legacy_grouped_moe_calls
+        | inventory.serial_position0_calls
+        | inventory.serial_token_forward_calls
+        | inventory.cpu_compute_fallback_calls
+        | inventory.v38_fallback_calls
+        | inventory.v47_fallback_calls
+        | inventory.transformer_fallback_calls
+        | inventory.whole_model_fallback_calls;
+    if !exact_topology || forbidden_paths != 0 {
+        return Err(EngineError::runtime_unavailable(
+            "resident K4 只接受 startup-deferred request owner 与唯一 StarFold K4×FullDepth43/Vulkan/StarWave root；旧 union/grouped-MoE、serial-position0/token、CPU、v38、v47、Transformer/whole-model fallback 必须全为0",
+        ));
+    }
+    Ok(())
+}
+
+fn resident_k4_resource_sha256(inventory: S14ResidentK4ResourceInventory) -> [u8; 32] {
+    let mut sha256 = Sha256::new();
+    sha256.update(b"polaris-s14-resident-k4-resource-contract-v2");
+    for value in [
+        S14_RESIDENT_K4_RESOURCE_CONTRACT_VERSION,
+        inventory.request_decoder_owners,
+        if inventory.request_owners_deferred_until_prompt {
+            1
+        } else {
+            0
+        },
+        inventory.vulkan_context_owners,
+        inventory.transfer_queue_owners,
+        inventory.compute_queue_owners,
+        inventory.paged_arena_owners,
+        inventory.starfold_microtile_windows,
+        inventory.starfold_microtile_bytes,
+        inventory.full_depth_layers,
+        inventory.positions_per_physical_block,
+        inventory.routed_experts_per_position,
+        inventory.verified_mapped_store_owners,
+        inventory.terminal_head_uploader_owners,
+        inventory.starwave_commit_owners,
+    ] {
+        sha256.update(value.to_le_bytes());
+    }
+    sha256.update(inventory.starfold_physical_allocation_bytes.to_le_bytes());
+    for value in [
+        inventory.legacy_union_calls,
+        inventory.legacy_grouped_moe_calls,
+        inventory.serial_position0_calls,
+        inventory.serial_token_forward_calls,
+        inventory.cpu_compute_fallback_calls,
+        inventory.v38_fallback_calls,
+        inventory.v47_fallback_calls,
+        inventory.transformer_fallback_calls,
+        inventory.whole_model_fallback_calls,
+    ] {
+        sha256.update(value.to_le_bytes());
+    }
+    sha256.finalize().into()
+}
+
+fn is_sha256_hex(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
 fn runtime_error(position: u32, error: impl std::fmt::Display) -> EngineError {
     EngineError {
         kind: EngineErrorKind::Internal,
@@ -963,11 +1182,11 @@ mod tests {
         let prompt = render_official_forced_prefill(&request).unwrap();
         assert_eq!(
             prompt,
-            "<｜begin▁of▁sentence｜><｜User｜>你好<｜Assistant｜><think>"
+            "<｜begin▁of▁sentence｜><｜User｜>你好<｜Assistant｜></think>"
         );
         assert_eq!(
             sha256_hex(prompt.as_bytes()),
-            "5081d1f13730de5364bdcd23071f160aeb4792baf043f2848c05c13ac50abfcc"
+            "c3355dd94d88cbbfe405c3fd0b573a8bc2542c8bb90d160a37e001fceb2e544f"
         );
     }
 
@@ -990,7 +1209,7 @@ mod tests {
         };
         assert_eq!(
             codec.encode_chat(&request).unwrap(),
-            [0, 128_803, 30_594, 128_804, 128_821]
+            [0, 128_803, 30_594, 128_804, 128_822]
         );
     }
 

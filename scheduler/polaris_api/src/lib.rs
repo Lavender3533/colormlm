@@ -6,14 +6,40 @@
 
 mod resident;
 mod s14_engine;
+mod s14_resident_k4_adapter;
+mod s14_starfold_commit_provider;
+mod s14_starfold_ssd_adapter;
 
 pub use resident::{ResidentChatBackend, ResidentChatEngine};
 pub use s14_engine::{
     DeepSeekV4ChatCodec, S14ChatCodec, S14N8Evidence, S14ResidentK4ChatBackend,
     S14ResidentK4Checkpoint, S14ResidentK4CommittedBlock, S14ResidentK4Decoder,
-    S14ResidentK4Request, S14RuntimeChatBackend, S14RuntimeChatConfig, VerifiedS14NumericalGate,
+    S14ResidentK4Request, S14ResidentK4ResourceInventory, S14RuntimeChatBackend,
+    S14RuntimeChatConfig, VerifiedS14NumericalGate, VerifiedS14ResidentK4Resources,
     DEFAULT_S14_N8_EVIDENCE_PATH, DEFAULT_S14_TOKENIZER_PATH, OFFICIAL_CHAT_ENCODING_REVISION,
-    S14_N8_EVIDENCE_SHA256,
+    S14_N8_EVIDENCE_SHA256, S14_RESIDENT_K4_MICROTILE_BYTES,
+    S14_RESIDENT_K4_RESOURCE_CONTRACT_VERSION,
+};
+pub use s14_resident_k4_adapter::{
+    S14ProductionK4CheckpointIdentity, S14ProductionK4CommitProvider, S14ProductionK4CommitRequest,
+    S14ProductionK4CommittedBlock, S14RuntimeCommitK4Decoder, S14RuntimeCommitK4Request,
+    S14_PRODUCTION_K4_MAX_COMMITTED_TOKENS,
+};
+pub use s14_starfold_commit_provider::{
+    build_s14_starfold_production_chat_backend, S14StarfoldCommitProvider,
+    S14StarfoldCommitRequest, S14StarfoldK4CommitLimit, S14StarfoldProductionChatBackend,
+    S14StarfoldProductionSession, S14StarfoldProductionSessionFactory,
+    S14StarfoldRuntimeCheckpointReceipt, S14StarfoldRuntimeCommittedBlockReceipt,
+};
+pub use s14_starfold_ssd_adapter::{
+    build_s14_starfold_ssd_production_chat_backend, build_s14_starfold_ssd_root_chat_backend,
+    spawn_s14_starfold_ssd_production_worker, spawn_s14_starfold_ssd_root_worker,
+    S14StarfoldConcreteSsdChatBackend, S14StarfoldConcreteSsdProductionFactory,
+    S14StarfoldConcreteSsdProductionSession, S14StarfoldSsdAdapterError,
+    S14StarfoldSsdAdapterErrorKind, S14StarfoldSsdAdapterStage,
+    S14StarfoldSsdProductionChatBackend, S14StarfoldSsdProductionFactory,
+    S14StarfoldSsdProductionSession, S14StarfoldSsdRootStartupContract,
+    S14StarfoldSsdStartupContract,
 };
 
 use axum::{

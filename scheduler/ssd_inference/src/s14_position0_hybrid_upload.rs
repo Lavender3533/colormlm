@@ -565,6 +565,66 @@ impl S14Position0HybridUploader {
             && self.progress.pending_head_chunk.is_none()
     }
 
+    /// 新 causal block 交给 provider 前的严格 token-start 合同。该检查与持久
+    /// allocation 无关，只验证上一 block 已经按 sequence 完成 rearm；错误信息保留
+    /// 全部控制游标，避免昂贵真实性门只得到一个合并布尔值。
+    pub fn validate_causal_block_head_stream_start(
+        &self,
+        plan: &S14Position0HybridWeightPlan,
+    ) -> Result<()> {
+        let progress = &self.progress;
+        if !progress.static_complete
+            || progress.next_runtime_static_layer != 0
+            || progress.next_routed_layer != 0
+            || progress.pending_layer.is_some()
+            || progress.next_head_chunk != 0
+            || progress.pending_head_chunk.is_some()
+        {
+            bail!(
+                "causal-block head stream 起点未闭合: static_complete={} next_static={}/{} next_routed={} next_head={}/{} pending_layer={} pending_head={}",
+                progress.static_complete,
+                progress.next_runtime_static_layer,
+                plan.routed_layers.len(),
+                progress.next_routed_layer,
+                progress.next_head_chunk,
+                plan.head_chunk_count,
+                progress.pending_layer.is_some(),
+                progress.pending_head_chunk.is_some(),
+            );
+        }
+        Ok(())
+    }
+
+    /// FullDepth43 已完成、terminal head 尚未开始时的严格合同。provider phase
+    /// 证明逻辑层数，本检查证明同一个 persistent uploader 的物理游标确实推进到
+    /// 43/43 且 head 仍为0；不在 terminal 成功前提前 reset。
+    pub fn validate_causal_block_terminal_head_stream(
+        &self,
+        plan: &S14Position0HybridWeightPlan,
+    ) -> Result<()> {
+        let progress = &self.progress;
+        if !progress.static_complete
+            || progress.next_runtime_static_layer != plan.routed_layers.len()
+            || progress.next_routed_layer != 0
+            || progress.pending_layer.is_some()
+            || progress.next_head_chunk != 0
+            || progress.pending_head_chunk.is_some()
+        {
+            bail!(
+                "causal-block terminal head stream 未闭合: static_complete={} next_static={}/{} next_routed={} next_head={}/{} pending_layer={} pending_head={}",
+                progress.static_complete,
+                progress.next_runtime_static_layer,
+                plan.routed_layers.len(),
+                progress.next_routed_layer,
+                progress.next_head_chunk,
+                plan.head_chunk_count,
+                progress.pending_layer.is_some(),
+                progress.pending_head_chunk.is_some(),
+            );
+        }
+        Ok(())
+    }
+
     /// 在一个完整 causal block 的43层 static 与32个head chunk闭合后重开下一块。
     /// causal-block provider 会推进 static 层游标，在线 routed 页则由 union
     /// materializer 直接提供、不会推进旧 uploader 的 routed 游标，因此这里要求
@@ -574,6 +634,37 @@ impl S14Position0HybridUploader {
         plan: &S14Position0HybridWeightPlan,
     ) -> Result<()> {
         self.progress.prepare_next_causal_block_head(plan)
+    }
+
+    /// ForcedPrefill 不执行 batched head，但仍必须完整走过43层 static cursor。
+    /// 只有已 drain 的 `static=43/routed=0/head=0` 才能重开下一 causal block；
+    /// 不能用通用 abort 无条件抹掉一个未完成块的证据。
+    pub fn begin_next_causal_block_after_forced_prefill(
+        &mut self,
+        plan: &S14Position0HybridWeightPlan,
+    ) -> Result<()> {
+        let progress = &self.progress;
+        if !progress.static_complete
+            || progress.next_runtime_static_layer != plan.routed_layers.len()
+            || progress.next_routed_layer != 0
+            || progress.pending_layer.is_some()
+            || progress.next_head_chunk != 0
+            || progress.pending_head_chunk.is_some()
+        {
+            bail!(
+                "ForcedPrefill causal-block 未完整 drain: static_complete={} next_static={}/{} next_routed={} next_head={}/{} pending_layer={} pending_head={}",
+                progress.static_complete,
+                progress.next_runtime_static_layer,
+                plan.routed_layers.len(),
+                progress.next_routed_layer,
+                progress.next_head_chunk,
+                plan.head_chunk_count,
+                progress.pending_layer.is_some(),
+                progress.pending_head_chunk.is_some(),
+            );
+        }
+        self.progress.reset_token();
+        Ok(())
     }
 
     /// resident-small 与可选 resident static 页已经由同源 runtime 完成 verified

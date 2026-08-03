@@ -2511,7 +2511,9 @@ impl<'ctx, 'persistent> S14Position0SynchronousVulkanLayerAdapter<'ctx, 'persist
 
 fn validate_production_layer_position(position: u32) -> Result<()> {
     if position > 2051 {
-        bail!("production layer backend 当前只闭合首个ratio4分页边界position2051；position{position} 仍 fail-closed");
+        bail!(
+            "production layer backend 当前只闭合首个ratio4分页边界position2051；position{position} 仍 fail-closed"
+        );
     }
     Ok(())
 }

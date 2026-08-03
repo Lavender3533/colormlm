@@ -1,0 +1,88 @@
+#version 450
+
+// StarFold packed-row MXFP4 tile matvec.
+// Window layout is exactly:
+//   [tile_rows * (K / 2) packed E2M1 bytes]
+//   [tile_rows * (K / 32) UE8M0 scale bytes]
+// The host rejects reserved UE8M0 byte 0xff before upload. The shader does not
+// invent a replacement value or a fallback path for malformed payloads.
+
+layout(local_size_x = 128) in;
+
+layout(set = 0, binding = 0) readonly buffer InputF32 {
+    float input_values[];
+};
+layout(set = 0, binding = 1) readonly buffer StarFoldWindow {
+    uint window_words[];
+};
+layout(set = 0, binding = 2) writeonly buffer OutputF32 {
+    float output_values[];
+};
+
+layout(push_constant) uniform Push {
+    uint tile_rows;
+    uint K;
+    uint scale_offset;
+    uint output_row_base;
+} push;
+
+shared float partial[128];
+
+uint window_byte(uint byte_index) {
+    uint word = window_words[byte_index >> 2u];
+    return (word >> ((byte_index & 3u) * 8u)) & 0xffu;
+}
+float decode_e2m1(uint code) {
+    uint magnitude_code = code & 7u;
+    float magnitude;
+    if (magnitude_code <= 4u) {
+        magnitude = 0.5 * float(magnitude_code);
+    } else if (magnitude_code == 5u) {
+        magnitude = 3.0;
+    } else if (magnitude_code == 6u) {
+        magnitude = 4.0;
+    } else {
+        magnitude = 6.0;
+    }
+    return (code & 8u) == 0u ? magnitude : -magnitude;
+}
+
+float decode_ue8m0(uint code) {
+    return ldexp(1.0, int(code) - 127);
+}
+
+void main() {
+    uint local_row = gl_WorkGroupID.x;
+    uint lane = gl_LocalInvocationID.x;
+    if (local_row >= push.tile_rows) {
+        return;
+    }
+
+    uint packed_k = push.K >> 1u;
+    uint scales_per_row = push.K >> 5u;
+    uint weight_row_base = local_row * packed_k;
+    uint scale_row_base = push.scale_offset + local_row * scales_per_row;
+    float accumulator = 0.0;
+
+    for (uint pair = lane; pair < packed_k; pair += 128u) {
+        uint packed_pair = window_byte(weight_row_base + pair);
+        uint k = pair << 1u;
+        float scale = decode_ue8m0(window_byte(scale_row_base + (k >> 5u)));
+        accumulator += scale * (
+            decode_e2m1(packed_pair & 0x0fu) * input_values[k]
+            + decode_e2m1(packed_pair >> 4u) * input_values[k + 1u]
+        );
+    }
+
+    partial[lane] = accumulator;
+    barrier();
+    for (uint stride = 64u; stride > 0u; stride >>= 1u) {
+        if (lane < stride) {
+            partial[lane] += partial[lane + stride];
+        }
+        barrier();
+    }
+    if (lane == 0u) {
+        output_values[push.output_row_base + local_row] = partial[0];
+    }
+}

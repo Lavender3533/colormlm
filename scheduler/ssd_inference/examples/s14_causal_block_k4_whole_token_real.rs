@@ -25,8 +25,7 @@ use ssd_inference::{
     s14_causal_block_k4_input_hidden::S14CausalBlockK4InputHiddenOwner,
     s14_causal_block_layer::{
         execute_causal_block_full_depth_with_checkpoints, S14CausalBlockDeviceCheckpointStorage,
-        S14CausalBlockPublishReceipt, S14CausalBlockSealedFuture,
-        S14CausalBlockUnionBankBinding,
+        S14CausalBlockPublishReceipt, S14CausalBlockSealedFuture, S14CausalBlockUnionBankBinding,
     },
     s14_causal_block_prefix_initializer::S14CausalBlockPrefixInitializationOwner,
     s14_causal_block_prefix_producer::S14CausalBlockPrefixStateProducer,
@@ -46,13 +45,11 @@ use ssd_inference::{
         S14CausalBlockTerminalHeadUploadState, S14CausalBlockTerminalResourceOwnerInputs,
     },
     s14_causal_block_union_materializer::S14CausalBlockSharedMappedAssetStore,
-    s14_dynamic_page_cache_readiness::{
-        materialize_planned_range_asset, DynamicPageFetchMode,
-    },
+    s14_dynamic_page_cache_readiness::{materialize_planned_range_asset, DynamicPageFetchMode},
     s14_dynamic_routed_page_plan::FullDepthExpertCatalog,
     s14_input_asset_plan::S14InputAssetPlanner,
-    s14_position0_paged_weight_arena::S14Position0PagedWeightArena,
     s14_position0_layer_program::S14Position0FullDepthLayerProgram,
+    s14_position0_paged_weight_arena::S14Position0PagedWeightArena,
     s14_position0_weight_plan::S14Position0HybridWeightPlan,
     s14_runtime::{
         S14CausalBlockRuntimeContinuation, S14NextCausalBlockCommittedState, S14Runtime,
@@ -122,8 +119,8 @@ impl RealK4TokenRequest {
         if parsed.iter().any(|&token| token >= VOCAB_SIZE) {
             bail!("K=4 token参数越过词表: {parsed:?}");
         }
-        let second_block_draft_token_ids = (parsed.len() == 9)
-            .then(|| [parsed[5], parsed[6], parsed[7], parsed[8]]);
+        let second_block_draft_token_ids =
+            (parsed.len() == 9).then(|| [parsed[5], parsed[6], parsed[7], parsed[8]]);
         Ok(Self {
             first_input_token_id: parsed[0],
             draft_token_ids: [parsed[1], parsed[2], parsed[3], parsed[4]],
@@ -614,14 +611,15 @@ fn build_continuation_k4_block(
             offset: authoritative_device.offset,
             bytes: authoritative.native_arena.len() as u64,
         };
-        let (provider, provider_external) = build_s14_base1_k4_production_hc_qkv_provider(
-            S14Base1K4ProviderInputs {
+        let (provider, provider_external) =
+            build_s14_base1_k4_production_hc_qkv_provider(S14Base1K4ProviderInputs {
                 context: Arc::clone(&context),
                 manifest: Arc::clone(&reusable.manifest),
                 weight_plan: Arc::clone(&reusable.weight_plan),
                 paged_arena: Arc::clone(&reusable.paged_arena),
                 head_upload: Arc::clone(&reusable.head_upload),
                 base_position,
+                source: MaterializedTokenSource::SpeculativeDraft,
                 authoritative: S14Base1K4AuthoritativeStateBinding {
                     native_state: authoritative.native.clone(),
                     device_state: authoritative_device_state,
@@ -629,9 +627,8 @@ fn build_continuation_k4_block(
                 input_token_ids,
                 ratio4_boundary_states,
                 prefix_state_producer,
-            },
-        )
-        .context("构造第二块通用base K=4 HC/QKV provider")?;
+            })
+            .context("构造第二块通用base K=4 HC/QKV provider")?;
         let checkpoint_state_bytes = u64::try_from(authoritative.native_arena.len())?;
         let shape = S14CausalBlockProductionBundleShape::new(
             BLOCK_SIZE,
@@ -1515,6 +1512,7 @@ fn build_real_position1_k4_inputs_with_builder(
         paged_arena: Arc::clone(&paged_arena),
         head_upload: Arc::clone(&head_upload),
         base_position: authoritative.position,
+        source: MaterializedTokenSource::SpeculativeDraft,
         authoritative: S14Base1K4AuthoritativeStateBinding {
             native_state: authoritative.native.clone(),
             device_state: authoritative_device_state,

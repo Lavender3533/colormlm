@@ -13,7 +13,9 @@ use crate::{
     },
     s14_causal_block_layer::S14CausalBlockLayerInput,
     s14_causal_block_prefix_producer::S14CausalBlockPrefixStateProducer,
-    s14_causal_block_production_bundle::S14CausalBlockProductionHcQkvResourceProvider,
+    s14_causal_block_production_bundle::{
+        S14CausalBlockProductionHcQkvResourceProvider, S14CausalBlockProductionTerminalAssets,
+    },
     s14_causal_block_ratio4_boundary::S14CausalBlockRatio4BoundaryStateRecorder,
     s14_causal_block_terminal_owner::S14CausalBlockTerminalHeadUploadState,
     s14_position0_layer_backend::{build_position0_layer_graph_plan, S14Position0L0GraphPlan},
@@ -64,6 +66,8 @@ pub struct S14Base1K4ProviderInputs {
     pub head_upload: Arc<Mutex<S14CausalBlockTerminalHeadUploadState>>,
     /// 当前块的真实起始位置。首块为1；后续块必须来自已提交checkpoint。
     pub base_position: u32,
+    /// Provider 构造时冻结的 token 来源，禁止逐层把 prefill 冒充 draft。
+    pub source: MaterializedTokenSource,
     pub authoritative: S14Base1K4AuthoritativeStateBinding,
     pub input_token_ids: [u32; S14_BASE1_K4_BLOCK_SIZE],
     pub ratio4_boundary_states: BTreeMap<u8, Arc<dyn S14CausalBlockRatio4BoundaryStateRecorder>>,
@@ -132,6 +136,7 @@ pub struct S14Base1K4ProductionHcQkvProvider {
     paged_arena: Arc<S14Position0PagedWeightArena>,
     head_upload: Arc<Mutex<S14CausalBlockTerminalHeadUploadState>>,
     base_position: u32,
+    source: MaterializedTokenSource,
     state_layout: S14Position0StateWritebackLayout,
     authoritative_device_state: S14CausalBlockOwnedBufferSlice,
     input_token_ids: [u32; S14_BASE1_K4_BLOCK_SIZE],
@@ -176,13 +181,14 @@ pub fn build_s14_base1_k4_production_hc_qkv_provider(
         paged_arena,
         head_upload,
         base_position,
+        source,
         authoritative,
         input_token_ids,
         ratio4_boundary_states,
         prefix_state_producer,
     } = inputs;
 
-    validate_authoritative_state(&authoritative, base_position)?;
+    validate_authoritative_state(&authoritative, base_position, source)?;
     manifest
         .validate()
         .map_err(|error| anyhow!("position0 manifest invalid: {error}"))?;
@@ -201,6 +207,7 @@ pub fn build_s14_base1_k4_production_hc_qkv_provider(
     if !Arc::ptr_eq(&context, prefix_state_producer.context())
         || prefix_state_producer.arena().base_position() != base_position
         || prefix_state_producer.arena().layout().block_size != S14_BASE1_K4_BLOCK_SIZE
+        || prefix_state_producer.source() != source
     {
         bail!("base1/K4 prefix state producer context/base/K 漂移");
     }
@@ -274,6 +281,7 @@ pub fn build_s14_base1_k4_production_hc_qkv_provider(
         paged_arena,
         head_upload,
         base_position,
+        source,
         state_layout,
         authoritative_device_state: authoritative.device_state,
         input_token_ids,
@@ -286,16 +294,26 @@ pub fn build_s14_base1_k4_production_hc_qkv_provider(
         prefix_state_producer: Some(prefix_state_producer),
         phase: ProviderPhase::Ready,
     };
-    provider.validate_internal(S14_BASE1_K4_BLOCK_SIZE)?;
-    let owner = S14Base1K4HcQkvExternalResources {
+    let mut owner = S14Base1K4HcQkvExternalResources {
         context,
         aux: Some(aux),
         current_kv: Some(current_kv),
     };
+    if let Err(error) = provider.validate_internal(S14_BASE1_K4_BLOCK_SIZE) {
+        drop(provider);
+        let cleanup = owner.destroy();
+        return Err(anyhow!(
+            "校验 base1/K4 production provider: {error:#}; owner cleanup={cleanup:?}"
+        ));
+    }
     Ok((provider, owner))
 }
 
 impl S14CausalBlockHcQkvResourceProvider for S14Base1K4ProductionHcQkvProvider {
+    fn materialized_token_source(&self) -> MaterializedTokenSource {
+        self.source
+    }
+
     fn prepare_layer(
         &mut self,
         input: &S14CausalBlockLayerInput<'_>,
@@ -317,6 +335,28 @@ impl S14CausalBlockProductionHcQkvResourceProvider for S14Base1K4ProductionHcQkv
             .map_err(|error| error.to_string())
     }
 
+    fn validate_post_prefix_handoff(&self, block_size: usize) -> std::result::Result<(), String> {
+        self.validate_post_prefix_handoff_inner(block_size)
+            .map_err(|error| error.to_string())
+    }
+
+    fn validate_committed_block_rebind(
+        &self,
+        base_position: u32,
+        input_token_ids: &[u32],
+        checkpoint_state_bytes: u64,
+    ) -> std::result::Result<(), String> {
+        self.validate_committed_rebind_inner(base_position, input_token_ids, checkpoint_state_bytes)
+            .map_err(|error| error.to_string())
+    }
+
+    fn terminal_assets(
+        &self,
+    ) -> std::result::Result<S14CausalBlockProductionTerminalAssets, String> {
+        self.terminal_assets_inner()
+            .map_err(|error| format!("{error:#}"))
+    }
+
     fn take_prefix_state_producer(
         &mut self,
     ) -> std::result::Result<S14CausalBlockPrefixStateProducer, String> {
@@ -335,6 +375,64 @@ impl Drop for S14Base1K4ProductionHcQkvProvider {
 }
 
 impl S14Base1K4ProductionHcQkvProvider {
+    fn terminal_assets_inner(&self) -> Result<S14CausalBlockProductionTerminalAssets> {
+        if self.phase != ProviderPhase::Complete {
+            bail!(
+                "K4 terminal assets 要求 provider phase=Complete，actual={:?}",
+                self.phase
+            );
+        }
+        if self.prefix_state_producer.is_some() {
+            bail!("K4 terminal assets 要求 prefix producer 已唯一移交给 recorder");
+        }
+        self.weight_plan.validate(&self.manifest)?;
+        let expected_arena_plan = S14Position0PagedArenaPlan::build(&self.weight_plan)?;
+        if self.paged_arena.plan() != &expected_arena_plan {
+            bail!("K4 terminal assets 的 manifest/weight plan/paged arena 不同源");
+        }
+        let upload = self
+            .head_upload
+            .lock()
+            .map_err(|_| anyhow!("K4 terminal head upload/store mutex poisoned"))?;
+        if !upload.uploader.resident_static_uploaded() {
+            bail!("K4 terminal head uploader resident static 尚未上传");
+        }
+        upload
+            .uploader
+            .validate_causal_block_terminal_head_stream(&self.weight_plan)
+            .context("K4 terminal head uploader 尚未完成本 block static stream")?;
+        drop(upload);
+        Ok(S14CausalBlockProductionTerminalAssets {
+            manifest: Arc::clone(&self.manifest),
+            weight_plan: Arc::clone(&self.weight_plan),
+            head_upload: Arc::clone(&self.head_upload),
+        })
+    }
+
+    fn validate_committed_rebind_inner(
+        &self,
+        base_position: u32,
+        input_token_ids: &[u32],
+        checkpoint_state_bytes: u64,
+    ) -> Result<()> {
+        self.validate_internal(S14_BASE1_K4_BLOCK_SIZE)?;
+        validate_ratio4_state_owners(&self.context, &self.ratio4_boundary_states, base_position)?;
+        let prefix = self
+            .prefix_state_producer
+            .as_ref()
+            .context("K4 committed rebind 缺少 prefix producer")?;
+        if base_position != self.base_position
+            || input_token_ids != self.input_token_ids
+            || checkpoint_state_bytes != self.authoritative_device_state.bytes
+            || !Arc::ptr_eq(&self.context, prefix.context())
+            || prefix.arena().base_position() != base_position
+            || prefix.arena().layout().checkpoint_state_bytes != checkpoint_state_bytes
+        {
+            bail!("K4 committed rebind provider 的 base/input/checkpoint/prefix identity 漂移");
+        }
+        Ok(())
+    }
+
     fn prepare_layer_inner(
         &mut self,
         input: &S14CausalBlockLayerInput<'_>,
@@ -351,7 +449,7 @@ impl S14Base1K4ProductionHcQkvProvider {
         if input.base_position != self.base_position
             || input.layer != expected_layer
             || input.input_token_ids != self.input_token_ids
-            || input.source != MaterializedTokenSource::SpeculativeDraft
+            || input.source != self.source
         {
             bail!("base1/K4 input base/layer/token/source 漂移");
         }
@@ -429,17 +527,41 @@ impl S14Base1K4ProductionHcQkvProvider {
     }
 
     fn validate_internal(&self, block_size: usize) -> Result<()> {
+        self.validate_core_internal(block_size)?;
+        let prefix = self
+            .prefix_state_producer
+            .as_ref()
+            .context("base1/K4 provider 缺少 prefix producer")?;
+        if prefix.source() != self.source || prefix.arena().base_position() != self.base_position {
+            bail!("base1/K4 provider prefix source/base identity 漂移");
+        }
+        Ok(())
+    }
+
+    fn validate_post_prefix_handoff_inner(&self, block_size: usize) -> Result<()> {
+        self.validate_core_internal(block_size)?;
+        if self.prefix_state_producer.is_some() {
+            bail!("base1/K4 provider post-handoff 仍持有 prefix producer");
+        }
+        Ok(())
+    }
+
+    fn validate_core_internal(&self, block_size: usize) -> Result<()> {
         if block_size != S14_BASE1_K4_BLOCK_SIZE
             || self.state_layout.position != self.base_position
             || self.graphs.len() != FULL_DEPTH_LAYERS.len()
             || self.weights.len() != FULL_DEPTH_LAYERS.len()
             || self.route_aux_by_layer.len() != FULL_DEPTH_LAYERS.len()
             || self.current_kv_by_layer.len() != FULL_DEPTH_LAYERS.len()
-            || self.prefix_state_producer.is_none()
             || self.phase != ProviderPhase::Ready
         {
-            bail!("base1/K4 provider readiness K/position/43层/phase 漂移");
+            bail!("base1/K4 provider core readiness K/position/43层/phase 漂移");
         }
+        validate_ratio4_state_owners(
+            &self.context,
+            &self.ratio4_boundary_states,
+            self.base_position,
+        )?;
         if self
             .graphs
             .iter()
@@ -464,16 +586,16 @@ impl S14Base1K4ProductionHcQkvProvider {
 fn validate_authoritative_state(
     binding: &S14Base1K4AuthoritativeStateBinding,
     base_position: u32,
+    _source: MaterializedTokenSource,
 ) -> Result<()> {
     binding
         .native_state
         .validate_for(polaris_s14_runner::GraphProfile::FullDepth43NativeTop6)
         .context("validate base1/K4 authoritative native state")?;
-    if base_position == 0
-        || binding.native_state.position != base_position
-        || binding.native_state.poisoned
-    {
-        bail!("K4 authoritative state 必须匹配非零真实base position且未poisoned");
+    // generation base0 的 StarWave committed-origin 强校验位于 adapter 显式入口；provider
+    // 只绑定 native/device 物理 state，不能单独授权 launch。
+    if binding.native_state.position != base_position || binding.native_state.poisoned {
+        bail!("K4 authoritative state/source 必须匹配真实 base 且未 poisoned");
     }
     Ok(())
 }

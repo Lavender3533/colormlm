@@ -32,7 +32,8 @@ use crate::{
         S14CausalBlockTerminalProductionSource, S14CausalBlockTerminalProviderTelemetry,
     },
     s14_causal_block_terminal_owner::{
-        S14CausalBlockProductionTerminalResourceOwner, S14CausalBlockTerminalPublishReceipt,
+        S14CausalBlockProductionTerminalResourceOwner, S14CausalBlockTerminalHeadUploadState,
+        S14CausalBlockTerminalPublishReceipt,
     },
     s14_causal_block_union_materializer::S14CausalBlockSharedMappedAssetStore,
     s14_causal_block_vulkan_backend::S14CausalBlockVulkanBackend,
@@ -43,13 +44,14 @@ use crate::{
         S14Position0PagedArenaPlan, S14Position0PagedWeightArena, S14Position0StaticLayerBinding,
         S14_POSITION0_STATIC_STREAM_BANKS,
     },
-    s14_position0_weight_plan::S14_POSITION0_ROLLING_BANKS,
+    s14_position0_weight_plan::{S14Position0HybridWeightPlan, S14_POSITION0_ROLLING_BANKS},
     VulkanContext,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use ash::vk;
 use polaris_s14_runner::{
-    LayerCausalBatchPlan, RouteDecision, EXPERTS_PER_TOKEN, FULL_DEPTH_LAYERS, N_ROUTED_EXPERTS,
+    LayerCausalBatchPlan, Position0WholeTokenManifest, RouteDecision, EXPERTS_PER_TOKEN,
+    FULL_DEPTH_LAYERS, N_ROUTED_EXPERTS,
 };
 use std::{
     fmt,
@@ -58,6 +60,27 @@ use std::{
 };
 
 const HIDDEN_BANK_COUNT: usize = 2;
+
+/// FullDepth43 provider 在最后一层完成后交给 StarFold terminal 的同源只读 owner。
+/// trait 没有默认构造，production provider 必须显式返回其真实 manifest/weight plan 与
+/// 已执行本 block 静态层上传的同一个 uploader/store。
+#[derive(Clone)]
+pub struct S14CausalBlockProductionTerminalAssets {
+    pub manifest: Arc<Position0WholeTokenManifest>,
+    pub weight_plan: Arc<S14Position0HybridWeightPlan>,
+    pub head_upload: Arc<Mutex<S14CausalBlockTerminalHeadUploadState>>,
+}
+
+impl fmt::Debug for S14CausalBlockProductionTerminalAssets {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("S14CausalBlockProductionTerminalAssets")
+            .field("manifest", &Arc::as_ptr(&self.manifest))
+            .field("weight_plan", &Arc::as_ptr(&self.weight_plan))
+            .field("head_upload", &Arc::as_ptr(&self.head_upload))
+            .finish()
+    }
+}
 
 /// 将 loader 已在某个 context 下创建的资源与其 owner identity 一并移动到 factory。
 ///
@@ -81,7 +104,7 @@ impl<T> S14CausalBlockContextBound<T> {
         &self.value
     }
 
-    fn into_parts(self) -> (Arc<VulkanContext>, T) {
+    pub(crate) fn into_parts(self) -> (Arc<VulkanContext>, T) {
         (self.context, self.value)
     }
 }
@@ -107,6 +130,24 @@ pub trait S14CausalBlockProductionHcQkvResourceProvider:
     fn paged_weight_arena(&self) -> &Arc<S14Position0PagedWeightArena>;
 
     fn validate_production_bundle(&self, block_size: usize) -> Result<(), String>;
+
+    /// `take_prefix_state_producer` 成功后的第二阶段合同。此时 provider 核心资源必须仍
+    /// 完整且 ready，但 producer 必须已经唯一移交给 recorder；不能复用 pre-handoff
+    /// readiness 把合法的所有权转移误判为缺失。
+    fn validate_post_prefix_handoff(&self, block_size: usize) -> Result<(), String>;
+
+    /// 常驻 K4 execution owners 不变时，校验新 provider 绑定到本次 committed
+    /// checkpoint 的 position/input/state ABI。实现必须只读且 fail-closed。
+    fn validate_committed_block_rebind(
+        &self,
+        base_position: u32,
+        input_token_ids: &[u32],
+        checkpoint_state_bytes: u64,
+    ) -> Result<(), String>;
+
+    /// 只能在本 block 的43层 static upload 全部完成后导出。禁止 mock/default 或重新创建
+    /// uploader；terminal 必须继续消费 provider 当前持有的同一个 Arc owner。
+    fn terminal_assets(&self) -> Result<S14CausalBlockProductionTerminalAssets, String>;
 
     /// K-prefix producer 必须与HC/QKV recorder进入同一layer command；factory只允许在
     /// recorder构造完成后消费一次，不能在terminal begin前预制host checkpoint。
@@ -845,7 +886,7 @@ fn validate_terminal_publish_receipt(
     Ok(())
 }
 
-fn validate_context_owner(
+pub(crate) fn validate_context_owner(
     expected: &Arc<VulkanContext>,
     observed: &Arc<VulkanContext>,
     label: &str,
@@ -856,7 +897,9 @@ fn validate_context_owner(
     Ok(())
 }
 
-fn validate_hidden_banks(banks: &[S14CausalBlockHiddenBank; HIDDEN_BANK_COUNT]) -> Result<()> {
+pub(crate) fn validate_hidden_banks(
+    banks: &[S14CausalBlockHiddenBank; HIDDEN_BANK_COUNT],
+) -> Result<()> {
     let bindings = [banks[0].binding(8, 0)?, banks[1].binding(8, 0)?];
     if bindings
         .iter()
@@ -881,7 +924,7 @@ fn validate_hidden_banks(banks: &[S14CausalBlockHiddenBank; HIDDEN_BANK_COUNT]) 
     Ok(())
 }
 
-fn validate_static_arena(arena: &S14Position0PagedWeightArena) -> Result<()> {
+pub(crate) fn validate_static_arena(arena: &S14Position0PagedWeightArena) -> Result<()> {
     let plan = arena.plan();
     let layout = &plan.physical;
     let resident_layers = arena.resident_static_layers();
@@ -1046,7 +1089,7 @@ fn validate_paged_plan_ledger(
     Ok(())
 }
 
-fn validate_full_depth_catalog(catalog: &FullDepthExpertCatalog) -> Result<()> {
+pub(crate) fn validate_full_depth_catalog(catalog: &FullDepthExpertCatalog) -> Result<()> {
     let expert_count = usize::from(N_ROUTED_EXPERTS);
     for layer in FULL_DEPTH_LAYERS {
         let mut start = 0usize;

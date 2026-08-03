@@ -183,6 +183,20 @@ impl S14CausalBlockPrefixCheckpointArena {
         Ok(())
     }
 
+    /// Generation terminal owner 取得 arena 强引用前的只读门。43层 producer 此时
+    /// 只能发布 seal receipt，不能越权提前把 arena 置为 `PrefixesSealed`；真正的
+    /// receipt 验收、evidence 提交与 checkpoint slice 导出仍由随后唯一一次
+    /// `seal_and_export_terminal_checkpoints` 原子完成。
+    pub(crate) fn validate_terminal_receipt_published(&self) -> Result<()> {
+        if !matches!(
+            *self.lock_phase()?,
+            PrefixArenaPhase::PrefixProgramReceiptPublished(_)
+        ) {
+            bail!("prefix checkpoint terminal owner 获取前缺少43层 producer seal receipt");
+        }
+        Ok(())
+    }
+
     /// 在 caller 已开始的 command 中把同一份 authoritative state 复制为 K 个 prefix
     /// checkpoint 基线。本函数不 submit/wait；后续每个 prefix 必须在同一 queue/timeline
     /// 上按 `0..=p` 应用真实 lane 写集。
@@ -337,6 +351,15 @@ impl S14CausalBlockPrefixCheckpointArena {
                 ))
             })
             .collect()
+    }
+
+    /// Teacher-forced prompt prefill 的非 terminal seal 门。它只验收同源 K4×43 层
+    /// prefix program/evidence 并开放指定 prefix 的 host readback；不执行 final hidden、
+    /// generation head，也不导出或发布任何预测 token。
+    pub(crate) fn seal_for_starfold_teacher_forced_prefill(&self) -> Result<()> {
+        let mut phase = self.lock_phase()?;
+        validate_and_seal_phase(&mut phase, self.base_position, self.layout, &self.evidence)?;
+        Ok(())
     }
 
     /// 任一已录制 command 被丢弃或 producer 失败时永久关闭本 one-shot arena binding。

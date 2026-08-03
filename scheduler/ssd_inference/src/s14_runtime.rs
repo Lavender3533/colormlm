@@ -18,6 +18,10 @@ use crate::{
     },
     s14_dynamic_routed_page_plan::FullDepthExpertCatalog,
     s14_head_chunk_argmax::S14_HEAD_CHUNK_COUNT,
+    s14_information_gain_router::{
+        S14InformationGainBudget, S14InformationGainCandidate, S14InformationGainRouter,
+        S14InformationGainRoutingReceipt,
+    },
     s14_input_asset_plan::S14InputAssetPlanner,
     s14_position0_hybrid_upload::S14Position0HybridUploader,
     s14_position0_layer_backend::{
@@ -45,12 +49,17 @@ use crate::{
     s14_position0_weight_plan::S14Position0HybridWeightPlan,
     s14_position0_whole_token::Position0GpuCandidate,
     s14_position0_workspace::S14Position0WorkspaceSlot,
+    s14_starfold_production_resources::S14StarfoldOwnedRuntimeParts,
+    s14_starfold_runtime::{
+        S14StarfoldDoubleWindowContract, S14StarfoldKBlockLayerPlan, S14StarfoldRuntime,
+        S14_STARFOLD_DEFAULT_MICROTILE_BYTES,
+    },
     s14_whole_token_device::{WholeTokenDetachedCommittedState, WholeTokenDeviceState},
     VulkanContext,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use ash::vk;
-use polaris_s14_runner::{DecoderStateV1, Position0WholeTokenManifest, VOCAB_SIZE};
+use polaris_s14_runner::{DecoderStateV1, Position0WholeTokenManifest, RouteDecision, VOCAB_SIZE};
 use sha2::{Digest, Sha256};
 use std::{
     path::{Path, PathBuf},
@@ -230,6 +239,17 @@ pub struct S14RuntimeConfig {
     pub catalog_path: PathBuf,
     pub paged_weight_arena_limit_bytes: Option<u64>,
     pub page_fetch_mode: DynamicPageFetchMode,
+    pub causal_block_weight_storage: S14RuntimeCausalBlockWeightStorage,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum S14RuntimeCausalBlockWeightStorage {
+    /// K-block producer owns the capacity reservation before the paged arena is built.
+    RequiredEager,
+    /// Production chat keeps only two fixed microtile windows; K4/K8 changes work count, not VRAM.
+    StarfoldDoubleMicrotile { microtile_bytes: u32 },
+    /// Explicitly disable every causal-block weight interface.
+    TokenMajorDisabled,
 }
 
 impl S14RuntimeConfig {
@@ -246,6 +266,10 @@ impl S14RuntimeConfig {
             ),
             paged_weight_arena_limit_bytes: Some(3 * 1024 * 1024 * 1024),
             page_fetch_mode: DynamicPageFetchMode::LocalOnly,
+            causal_block_weight_storage:
+                S14RuntimeCausalBlockWeightStorage::StarfoldDoubleMicrotile {
+                microtile_bytes: S14_STARFOLD_DEFAULT_MICROTILE_BYTES,
+            },
         }
     }
 
@@ -257,6 +281,20 @@ impl S14RuntimeConfig {
         };
         self
     }
+
+    pub fn for_token_major_chat(mut self) -> Self {
+        self.causal_block_weight_storage =
+            S14RuntimeCausalBlockWeightStorage::StarfoldDoubleMicrotile {
+                microtile_bytes: S14_STARFOLD_DEFAULT_MICROTILE_BYTES,
+            };
+        self
+    }
+
+    /// 只供尚未迁移到 StarFold 物理执行器的旧 K4/K8 block backend 显式调用。
+    pub fn for_legacy_full_union_block(mut self) -> Self {
+        self.causal_block_weight_storage = S14RuntimeCausalBlockWeightStorage::RequiredEager;
+        self
+    }
 }
 
 /// 跨 token 常驻的昂贵 production 资源。
@@ -265,12 +303,13 @@ pub struct S14Runtime {
     manifest: Position0WholeTokenManifest,
     checkpoint_identity: S14DurableCheckpointIdentity,
     weights: S14Position0HybridWeightPlan,
-    arena: Option<S14Position0PagedWeightArena>,
+    arena: Option<Arc<S14Position0PagedWeightArena>>,
     causal_block_union_banks: Option<S14CausalBlockUnionBanks>,
+    starfold_runtime: Option<S14StarfoldRuntime>,
     layer_program: S14Position0FullDepthLayerProgram,
     plans: Vec<S14Position0SynchronousLayerPlan>,
     input_planner: S14InputAssetPlanner,
-    expert_catalog: FullDepthExpertCatalog,
+    expert_catalog: Arc<FullDepthExpertCatalog>,
     payload_root: PathBuf,
     page_fetch_mode: DynamicPageFetchMode,
     persistent_host_resources: Option<S14Position0PersistentHostResources>,
@@ -361,11 +400,23 @@ impl S14Runtime {
         if !ctx.timeline_semaphore || !ctx.has_dedicated_transfer() {
             bail!("S14 production runtime requires timeline semaphore and dedicated transfer");
         }
-        // Union banks 是 K4/K8 block-major forward 的必要资源，必须在可选静态缓存
-        // 贪心分配之前物理预留；否则单 token 缓存会吞掉 block runtime 的硬容量。
-        let causal_block_union_banks = S14CausalBlockUnionBanks::new(&ctx)
-            .map_err(anyhow::Error::new)
-            .context("初始化 S14 K4/K8 causal-block union banks")?;
+        // Token-major聊天不读取K-block union。只有显式block runtime才在可选静态
+        // 缓存之前预留该容量，避免无用的1.195GiB常驻挤压连续position。
+        let (mut causal_block_union_banks, starfold_microtile_bytes) =
+            match config.causal_block_weight_storage {
+                S14RuntimeCausalBlockWeightStorage::RequiredEager => (
+                    Some(
+                        S14CausalBlockUnionBanks::new(&ctx)
+                            .map_err(anyhow::Error::new)
+                            .context("初始化 S14 K4/K8 causal-block union banks")?,
+                    ),
+                    None,
+                ),
+                S14RuntimeCausalBlockWeightStorage::StarfoldDoubleMicrotile { microtile_bytes } => {
+                    (None, Some(microtile_bytes))
+                }
+                S14RuntimeCausalBlockWeightStorage::TokenMajorDisabled => (None, None),
+            };
         let arena = match S14Position0PagedWeightArena::new(
             &ctx,
             &weights,
@@ -373,9 +424,31 @@ impl S14Runtime {
         ) {
             Ok(arena) => arena,
             Err(error) => {
-                causal_block_union_banks.destroy(&ctx);
+                if let Some(banks) = causal_block_union_banks.take() {
+                    banks.destroy(&ctx);
+                }
                 return Err(error.context("初始化 S14 paged weight arena"));
             }
+        };
+        let starfold_runtime = match starfold_microtile_bytes {
+            Some(microtile_bytes) => {
+                match S14StarfoldRuntime::new_with_fetch_mode(
+                    Arc::clone(&ctx),
+                    &config.payload_root,
+                    microtile_bytes,
+                    config.page_fetch_mode,
+                ) {
+                    Ok(runtime) => Some(runtime),
+                    Err(error) => {
+                        arena.destroy(&ctx);
+                        if let Some(banks) = causal_block_union_banks.take() {
+                            banks.destroy(&ctx);
+                        }
+                        return Err(error.context("初始化 S14 StarFold production host runtime"));
+                    }
+                }
+            }
+            None => None,
         };
         let setup = (|| -> Result<_> {
             let layer_program = S14Position0FullDepthLayerProgram::build(
@@ -396,7 +469,9 @@ impl S14Runtime {
             Ok(loaded) => loaded,
             Err(error) => {
                 arena.destroy(&ctx);
-                causal_block_union_banks.destroy(&ctx);
+                if let Some(banks) = causal_block_union_banks.take() {
+                    banks.destroy(&ctx);
+                }
                 return Err(error);
             }
         };
@@ -404,7 +479,9 @@ impl S14Runtime {
             Ok(resources) => resources,
             Err(error) => {
                 arena.destroy(&ctx);
-                causal_block_union_banks.destroy(&ctx);
+                if let Some(banks) = causal_block_union_banks.take() {
+                    banks.destroy(&ctx);
+                }
                 return Err(error.context("初始化S14 persistent command resources"));
             }
         };
@@ -419,7 +496,9 @@ impl S14Runtime {
             Err(error) => {
                 persistent_command_resources.destroy(&ctx);
                 arena.destroy(&ctx);
-                causal_block_union_banks.destroy(&ctx);
+                if let Some(banks) = causal_block_union_banks.take() {
+                    banks.destroy(&ctx);
+                }
                 return Err(error.context("初始化S14 persistent uploader/store/graph resources"));
             }
         };
@@ -428,12 +507,13 @@ impl S14Runtime {
             manifest,
             checkpoint_identity,
             weights,
-            arena: Some(arena),
-            causal_block_union_banks: Some(causal_block_union_banks),
+            arena: Some(Arc::new(arena)),
+            causal_block_union_banks,
+            starfold_runtime,
             layer_program,
             plans,
             input_planner,
-            expert_catalog,
+            expert_catalog: Arc::new(expert_catalog),
             payload_root: config.payload_root,
             page_fetch_mode: config.page_fetch_mode,
             persistent_host_resources: Some(persistent_host_resources),
@@ -449,6 +529,33 @@ impl S14Runtime {
             host,
             device: Some(device),
         })
+    }
+
+    /// Production session 只借用同一个 runtime 的物理身份；不得据此复制 Vulkan owner。
+    pub fn context(&self) -> &Arc<VulkanContext> {
+        &self.ctx
+    }
+
+    /// 暴露唯一 paged arena 的借用，供 StarFold block resource factory 绑定 owner identity。
+    pub fn paged_arena(&self) -> Result<&Arc<S14Position0PagedWeightArena>> {
+        self.arena
+            .as_ref()
+            .context("S14 runtime paged arena 已被移交或销毁")
+    }
+
+    /// 纯 StarFold production 在任何 token 启动前消费 runtime 已创建的唯一
+    /// verified uploader/store。这样 concrete factory 不会再打开第二套 mapped store，
+    /// startup contract 的 uploader/store owner 计数也能由真实所有权证明。
+    pub(crate) fn take_starfold_upload_parts(
+        &mut self,
+    ) -> Result<(S14Position0HybridUploader, VerifiedMappedAssetStore)> {
+        let resources = self
+            .persistent_host_resources
+            .take()
+            .context("S14 runtime verified uploader/store 已被移交或销毁")?;
+        resources
+            .into_causal_block_upload_parts(&self.ctx, &self.weights)
+            .context("把唯一 runtime uploader/store 移交给 StarFold concrete factory")
     }
 
     /// 在新进程中恢复一个已持久的 K=4/8 committed block，并交付与
@@ -487,8 +594,102 @@ impl S14Runtime {
         self.causal_block_union_banks.as_ref()
     }
 
+    pub fn starfold_window_contract(&self) -> Option<S14StarfoldDoubleWindowContract> {
+        self.starfold_runtime
+            .as_ref()
+            .map(S14StarfoldRuntime::contract)
+    }
+
+    pub fn starfold_physical_allocation_bytes(&self) -> Option<u64> {
+        self.starfold_runtime
+            .as_ref()
+            .map(S14StarfoldRuntime::physical_allocation_bytes)
+    }
+
+    pub fn plan_starfold_k4_k8_layer(
+        &self,
+        base_position: u64,
+        routes: &[RouteDecision],
+    ) -> Result<S14StarfoldKBlockLayerPlan> {
+        self.starfold_runtime
+            .as_ref()
+            .context("S14 runtime未启用StarFold双microtile接口")?
+            .plan_k4_k8_layer(&self.expert_catalog, base_position, routes)
+    }
+
+    /// 只生成确定性的能力选择 receipt；本调用不做 I/O、GPU dispatch 或 token commit。
+    pub fn plan_information_gain_route(
+        &self,
+        candidates: &[S14InformationGainCandidate],
+        budget: S14InformationGainBudget,
+    ) -> Result<S14InformationGainRoutingReceipt> {
+        if self.starfold_runtime.is_none() {
+            bail!("S14 runtime未启用StarFold，拒绝发布信息增益路由计划");
+        }
+        let receipt = S14InformationGainRouter::route(candidates, budget)
+            .map_err(anyhow::Error::new)
+            .context("规划 S14 每字节信息增益能力路由")?;
+        if receipt.uses_whole_model_fallback() {
+            bail!("S14 信息增益路由禁止整链旧模型 fallback");
+        }
+        Ok(receipt)
+    }
+
+    pub fn starfold_runtime_mut(&mut self) -> Option<&mut S14StarfoldRuntime> {
+        self.starfold_runtime.as_mut()
+    }
+
+    /// 消费本 runtime，并把它已创建的唯一 StarFold runtime/windows 移交给 K4
+    /// production builder。runtime 壳仍由最终 production resource root 持有，从而强制
+    /// adapter 先销毁、paged arena 后销毁；旧 union-bank 配置被显式拒绝。
+    pub fn into_starfold_owned_parts(mut self) -> Result<S14StarfoldOwnedRuntimeParts> {
+        if self.causal_block_union_banks.is_some() {
+            bail!("S14 StarFold owned parts 拒绝旧 union-bank runtime");
+        }
+        let arena = Arc::clone(
+            self.arena
+                .as_ref()
+                .context("S14 runtime paged arena 已被移交或销毁")?,
+        );
+        let runtime = self
+            .starfold_runtime
+            .take()
+            .context("S14 runtime 的唯一 StarFold owner 已被移交")?;
+        Ok(S14StarfoldOwnedRuntimeParts::new(
+            Arc::clone(&self.ctx),
+            arena,
+            Arc::clone(&self.expert_catalog),
+            runtime,
+            self,
+        ))
+    }
+
+    /// 将一次请求结束后从 K4 adapter 拆回的唯一 StarFold runtime 放回 resident
+    /// `S14Runtime`。只允许恢复到先前由 `into_starfold_owned_parts` 留下的空槽；
+    /// paged arena、catalog 与 Vulkan context 始终由同一个 base runtime 持有。
+    pub(crate) fn restore_starfold_runtime(&mut self, runtime: S14StarfoldRuntime) -> Result<()> {
+        if self.causal_block_union_banks.is_some() {
+            bail!("S14 StarFold runtime 归还拒绝旧 union-bank runtime");
+        }
+        if self.starfold_runtime.is_some() {
+            bail!("S14 base runtime 已持有 StarFold owner，拒绝重复归还");
+        }
+        if self.arena.is_none() {
+            bail!("S14 base runtime paged arena 已退出，拒绝归还 StarFold owner");
+        }
+        if runtime
+            .context()
+            .is_none_or(|context| !Arc::ptr_eq(context, &self.ctx))
+            || runtime.physical_allocation_bytes() == 0
+        {
+            bail!("归还的 StarFold runtime Vulkan context 漂移或 owner 已销毁");
+        }
+        self.starfold_runtime = Some(runtime);
+        Ok(())
+    }
+
     pub(crate) fn expert_catalog(&self) -> &FullDepthExpertCatalog {
-        &self.expert_catalog
+        self.expert_catalog.as_ref()
     }
 
     pub(crate) fn owns_session(&self, session: &S14Session) -> bool {
@@ -560,6 +761,11 @@ impl S14Runtime {
         mut self,
         mut session: S14Session,
     ) -> Result<S14Position0CommittedRuntimeParts> {
+        if self.causal_block_union_banks.is_none() {
+            bail!(
+                "S14 runtime未预留旧式完整union banks；StarFold双microtile路径必须使用独立物理执行器，禁止进入旧block exporter"
+            );
+        }
         if !self.owns_session(&session) {
             bail!("causal-block committed exporter拒绝外来session");
         }
@@ -597,11 +803,10 @@ impl S14Runtime {
             .context("position0 committed exporter缺少verified host owner")?;
         let (uploader, mapped_store) =
             host_resources.into_causal_block_upload_parts(&self.ctx, &self.weights)?;
-        let paged_arena = Arc::new(
-            self.arena
-                .take()
-                .context("position0 committed exporter缺少paged arena")?,
-        );
+        let paged_arena = self
+            .arena
+            .take()
+            .context("position0 committed exporter缺少paged arena")?;
         let union_banks = self
             .causal_block_union_banks
             .take()
@@ -1183,6 +1388,10 @@ impl S14Runtime {
     }
 
     pub fn destroy(mut self) -> Result<()> {
+        let starfold_error = self
+            .starfold_runtime
+            .take()
+            .and_then(|runtime| runtime.destroy().err());
         if let Some(resources) = self.persistent_command_resources.take() {
             resources.destroy(&self.ctx);
         }
@@ -1190,10 +1399,13 @@ impl S14Runtime {
             resources.destroy(&self.ctx);
         }
         if let Some(arena) = self.arena.take() {
-            arena.destroy(&self.ctx);
+            destroy_shared_paged_arena(arena, &self.ctx)?;
         }
         if let Some(banks) = self.causal_block_union_banks.take() {
             banks.destroy(&self.ctx);
+        }
+        if let Some(error) = starfold_error {
+            return Err(error.context("销毁 S14 StarFold Vulkan 物理 owner"));
         }
         Ok(())
     }
@@ -1201,6 +1413,7 @@ impl S14Runtime {
 
 impl Drop for S14Runtime {
     fn drop(&mut self) {
+        self.starfold_runtime.take();
         if let Some(resources) = self.persistent_command_resources.take() {
             resources.destroy(&self.ctx);
         }
@@ -1208,12 +1421,26 @@ impl Drop for S14Runtime {
             resources.destroy(&self.ctx);
         }
         if let Some(arena) = self.arena.take() {
-            arena.destroy(&self.ctx);
+            if let Ok(arena) = Arc::try_unwrap(arena) {
+                arena.destroy(&self.ctx);
+            }
         }
         if let Some(banks) = self.causal_block_union_banks.take() {
             banks.destroy(&self.ctx);
         }
     }
+}
+
+fn destroy_shared_paged_arena(
+    arena: Arc<S14Position0PagedWeightArena>,
+    context: &VulkanContext,
+) -> Result<()> {
+    let strong = Arc::strong_count(&arena);
+    let arena = Arc::try_unwrap(arena).map_err(|_| {
+        anyhow!("S14 runtime paged arena 仍被 production owner 持有: strong_count={strong}")
+    })?;
+    arena.destroy(context);
+    Ok(())
 }
 
 impl S14CausalBlockRuntimeContinuation {
@@ -1347,6 +1574,38 @@ impl S14Session {
 
     pub fn committed_tokens(&self) -> &[polaris_s14_runner::TokenRecord] {
         &self.host.committed_tokens
+    }
+
+    pub fn authoritative_owner_counts(&self) -> (usize, usize) {
+        (1, usize::from(self.device.is_some()))
+    }
+
+    /// StarFold session 对真实 position0 host checkpoint 的只读借用。
+    pub fn authoritative_state(&self) -> &DecoderStateV1 {
+        &self.host
+    }
+
+    /// StarFold terminal 的唯一 host/device 原子发布入口。device owner 不逃逸本 session。
+    pub fn authoritative_host_device_mut(
+        &mut self,
+    ) -> Result<(&mut DecoderStateV1, &mut WholeTokenDeviceState)> {
+        self.host.validate()?;
+        let device = self
+            .device
+            .as_mut()
+            .context("S14 session 缺少 whole-token device state")?;
+        if device.candidate_position().is_some()
+            || device.epoch() != self.host.commit_epoch
+            || device.active_bank() != usize::from(self.host.active_fixed_bank)
+            || device.state_bytes() != self.host.native_arena.bytes().len() as u64
+        {
+            bail!("S14 session host/device committed identity 漂移");
+        }
+        Ok((&mut self.host, device))
+    }
+
+    pub fn context(&self) -> &Arc<VulkanContext> {
+        &self.ctx
     }
 
     pub fn destroy(mut self) -> Result<()> {

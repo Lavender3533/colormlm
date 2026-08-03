@@ -19,7 +19,7 @@ use crate::{
 };
 use anyhow::{anyhow, bail, Context, Result};
 use ash::vk;
-use polaris_s14_runner::{COMPRESS_RATIOS, FULL_DEPTH_LAYERS};
+use polaris_s14_runner::{MaterializedTokenSource, COMPRESS_RATIOS, FULL_DEPTH_LAYERS};
 use std::{
     fmt,
     sync::{Arc, Mutex, MutexGuard},
@@ -82,6 +82,7 @@ enum ProducerPhase {
 pub struct S14CausalBlockPrefixStateProducer {
     context: Arc<VulkanContext>,
     base_position: u32,
+    source: MaterializedTokenSource,
     arena: Arc<S14CausalBlockPrefixCheckpointArena>,
     program: S14CausalBlockSharedPrefixStateProgram,
     workspace: Option<GpuBuffer>,
@@ -110,9 +111,37 @@ impl S14CausalBlockPrefixStateProducer {
         arena: Arc<S14CausalBlockPrefixCheckpointArena>,
         program: S14CausalBlockSharedPrefixStateProgram,
     ) -> Result<Self> {
+        Self::new_with_source(
+            context,
+            arena,
+            program,
+            MaterializedTokenSource::SpeculativeDraft,
+        )
+    }
+
+    /// base0 只由显式 teacher-forced bootstrap 构造；普通构造器仍保持 draft/nonzero 合同。
+    pub fn new_forced_prefill(
+        context: Arc<VulkanContext>,
+        arena: Arc<S14CausalBlockPrefixCheckpointArena>,
+        program: S14CausalBlockSharedPrefixStateProgram,
+    ) -> Result<Self> {
+        Self::new_with_source(
+            context,
+            arena,
+            program,
+            MaterializedTokenSource::ForcedPrefill,
+        )
+    }
+
+    fn new_with_source(
+        context: Arc<VulkanContext>,
+        arena: Arc<S14CausalBlockPrefixCheckpointArena>,
+        program: S14CausalBlockSharedPrefixStateProgram,
+        source: MaterializedTokenSource,
+    ) -> Result<Self> {
         let base_position = arena.base_position();
         if !Arc::ptr_eq(&context, arena.context())
-            || base_position == 0
+            || (source == MaterializedTokenSource::SpeculativeDraft && base_position == 0)
             || arena.layout().block_size != BLOCK_SIZE
         {
             bail!("K4 prefix producer context/base/K 与 arena 漂移");
@@ -121,7 +150,7 @@ impl S14CausalBlockPrefixStateProducer {
             let program = program
                 .lock()
                 .map_err(|_| anyhow!("K4 prefix state program mutex poisoned"))?;
-            validate_program_identity(&program, &arena)?;
+            validate_program_identity(&program, &arena, source)?;
             let first = program.recipe(0, FULL_DEPTH_LAYERS[0])?;
             for layer in FULL_DEPTH_LAYERS {
                 for lane in 0..BLOCK_SIZE {
@@ -156,6 +185,7 @@ impl S14CausalBlockPrefixStateProducer {
         Ok(Self {
             context,
             base_position,
+            source,
             arena,
             program,
             workspace: Some(workspace),
@@ -174,6 +204,10 @@ impl S14CausalBlockPrefixStateProducer {
 
     pub fn arena(&self) -> &Arc<S14CausalBlockPrefixCheckpointArena> {
         &self.arena
+    }
+
+    pub fn source(&self) -> MaterializedTokenSource {
+        self.source
     }
 
     pub fn shared_program(&self) -> &S14CausalBlockSharedPrefixStateProgram {
@@ -249,7 +283,16 @@ impl S14CausalBlockPrefixStateProducer {
             bail!("K4 prefix producer L{} 未知 ratio {ratio}", inputs.layer);
         }
 
-        let generic_lanes = if ratio == 4 { 2 } else { BLOCK_SIZE };
+        // 每个连续 K4 都恰好包含一个 ratio4 boundary。boundary 及其后的 lane
+        // 不能由通用 producer 提前 rollover：它们必须等 dynamic boundary owner 先
+        // finalize/rollover，再按绝对 position 顺序继续。因此这里只闭合 boundary
+        // 之前的 lane，并把其余 application 全部显式留给 owner。
+        let ratio4_boundary_lane = if ratio == 4 {
+            Some(((BLOCK_SIZE as u32 - 1) - (self.base_position % BLOCK_SIZE as u32)) as usize)
+        } else {
+            None
+        };
+        let generic_lanes = ratio4_boundary_lane.unwrap_or(BLOCK_SIZE);
         let mut window_writebacks = 0usize;
         let mut completed = 0usize;
         let mut compressor_evaluations = 0usize;
@@ -257,11 +300,11 @@ impl S14CausalBlockPrefixStateProducer {
         for source_lane in 0..BLOCK_SIZE {
             let targets = source_lane..BLOCK_SIZE;
             for prefix_index in targets.clone() {
-                // ratio4 prefix3 的 lane2 尚未经过 boundary finalize/rollover 时，不能
-                // 同时打开 lane3 application。lane3 KV 仍在这里真实写入；boundary
-                // owner 在 lane2 seal 后再登记 begin/window receipt。
-                let deferred_ratio4_lane3 = ratio == 4 && source_lane == 3;
-                if !deferred_ratio4_lane3 {
+                // Window KV 仍由本 command 真实写入；但 boundary 及后续 lane 的状态
+                // application 必须在 owner 中按 finalize→rollover→tail 顺序登记。
+                let deferred_ratio4_owner_lane =
+                    ratio4_boundary_lane.is_some_and(|boundary_lane| source_lane >= boundary_lane);
+                if !deferred_ratio4_owner_lane {
                     program.begin_lane_application(prefix_index, inputs.layer, source_lane)?;
                 }
                 let source_offset = inputs
@@ -279,7 +322,7 @@ impl S14CausalBlockPrefixStateProducer {
                     inputs.layer,
                     S14Position0StateRowKind::WindowKv,
                 )?;
-                if !deferred_ratio4_lane3 {
+                if !deferred_ratio4_owner_lane {
                     program.mark_window_recorded(prefix_index, inputs.layer)?;
                 }
                 window_writebacks += 1;
@@ -366,7 +409,13 @@ impl S14CausalBlockPrefixStateProducer {
             layer: inputs.layer,
             window_writebacks,
             completed_lane_applications: completed,
-            deferred_ratio4_lane_applications: if ratio == 4 { 3 } else { 0 },
+            deferred_ratio4_lane_applications: ratio4_boundary_lane
+                .map(|boundary_lane| {
+                    (boundary_lane..BLOCK_SIZE)
+                        .map(|lane| BLOCK_SIZE - lane)
+                        .sum()
+                })
+                .unwrap_or(0),
             compressor_source_lane_evaluations: compressor_evaluations,
             serial_token_forward_calls: 0,
         })
@@ -487,9 +536,10 @@ impl S14CausalBlockPrefixStateProducer {
 fn validate_program_identity(
     program: &S14CausalBlockPrefixStateProgram,
     arena: &S14CausalBlockPrefixCheckpointArena,
+    source: MaterializedTokenSource,
 ) -> Result<()> {
     let base_position = arena.base_position();
-    if base_position == 0
+    if (source == MaterializedTokenSource::SpeculativeDraft && base_position == 0)
         || program.base_position() != base_position
         || program.block_size() != BLOCK_SIZE
         || program.identities().len() != BLOCK_SIZE

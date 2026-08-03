@@ -7,14 +7,15 @@
 use crate::{
     s14_causal_block_layer::{
         S14CausalBlockDeviceCheckpointStorage, S14CausalBlockDeviceFutureReceipt,
-        S14CausalBlockSelectedPrefix,
+        S14CausalBlockOwnedDeviceFuture, S14CausalBlockSelectedPrefix,
     },
+    s14_causal_block_prefix_arena::S14CausalBlockPrefixCheckpointArena,
     GpuBuffer, VulkanContext,
 };
 use anyhow::{bail, Context, Result};
 use ash::vk;
 use polaris_s14_runner::DecoderStateV1;
-use std::ops::Range;
+use std::{marker::PhantomData, ops::Range};
 
 const STATUS_BYTES: u64 = 4;
 const UPDATE_CHUNK_BYTES: usize = 65_536;
@@ -56,6 +57,7 @@ pub struct WholeTokenPreparedBlockCommit {
     block_size: usize,
     accepted_tokens: usize,
     checkpoint_index: usize,
+    host_device_bytes_verified: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,6 +67,36 @@ pub struct WholeTokenDeviceBlockCommitReceipt {
     pub position: u32,
     pub accepted_tokens: usize,
     pub checkpoint_index: usize,
+    pub host_device_bytes_verified: bool,
+}
+
+/// 当前 committed device checkpoint 的借用式强身份。`buffer` 的生命周期仍由
+/// `WholeTokenDeviceState` 独占；本回执只允许下游重绑器在 owner 存活且 identity 未漂移时使用。
+#[derive(Debug)]
+pub struct WholeTokenDeviceCommittedCheckpointBinding<'owner> {
+    buffer: vk::Buffer,
+    state_bytes: u64,
+    epoch: u64,
+    active_bank: usize,
+    owner: PhantomData<&'owner WholeTokenDeviceState>,
+}
+
+impl WholeTokenDeviceCommittedCheckpointBinding<'_> {
+    pub fn buffer(&self) -> vk::Buffer {
+        self.buffer
+    }
+
+    pub fn state_bytes(&self) -> u64 {
+        self.state_bytes
+    }
+
+    pub fn epoch(&self) -> u64 {
+        self.epoch
+    }
+
+    pub fn active_bank(&self) -> usize {
+        self.active_bank
+    }
 }
 
 /// 从已排空单token runtime移交给causal-block builder的唯一 committed bank。
@@ -89,10 +121,25 @@ struct WholeTokenBlockPublishPlan {
     checkpoint_offset: u64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct WholeTokenBlockPrefixSource {
+    base_position: u32,
+    block_size: usize,
+    checkpoint_arena: vk::Buffer,
+    checkpoint_arena_offset: u64,
+    checkpoint_arena_bytes: u64,
+    checkpoint_stride_bytes: u64,
+    checkpoint_state_bytes: u64,
+    ready_timeline: vk::Semaphore,
+    ready_timeline_value: u64,
+}
+
 pub struct WholeTokenDeviceState {
     banks: [GpuBuffer; 2],
     /// Block publish 总是先复制到第三块 scratch；即使接受偶数 token，也不覆盖当前 active。
     block_publish_scratch: GpuBuffer,
+    /// 每个 block 发布前的 host/device 字节核验复用同一持久映射，禁止热路径重复分配。
+    block_publish_readback: GpuBuffer,
     sticky_status: GpuBuffer,
     state_bytes: u64,
     active_bank: usize,
@@ -157,6 +204,22 @@ impl WholeTokenDeviceState {
                 return Err(error).context("allocate whole-token block publish scratch");
             }
         };
+        let block_publish_readback = match GpuBuffer::new(
+            ctx,
+            state_bytes,
+            vk::BufferUsageFlags::TRANSFER_DST,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            true,
+        ) {
+            Ok(buffer) => buffer,
+            Err(error) => {
+                block_publish_scratch.destroy(ctx);
+                bank1.destroy(ctx);
+                bank0.destroy(ctx);
+                return Err(error).context("allocate whole-token block publish readback");
+            }
+        };
         let sticky_status = match GpuBuffer::new(
             ctx,
             STATUS_BYTES,
@@ -167,6 +230,7 @@ impl WholeTokenDeviceState {
         ) {
             Ok(buffer) => buffer,
             Err(error) => {
+                block_publish_readback.destroy(ctx);
                 block_publish_scratch.destroy(ctx);
                 bank1.destroy(ctx);
                 bank0.destroy(ctx);
@@ -218,6 +282,7 @@ impl WholeTokenDeviceState {
         Ok(Self {
             banks: [bank0, bank1],
             block_publish_scratch,
+            block_publish_readback,
             sticky_status,
             state_bytes,
             active_bank,
@@ -243,6 +308,29 @@ impl WholeTokenDeviceState {
 
     pub fn state_bytes(&self) -> u64 {
         self.state_bytes
+    }
+
+    /// 返回真实 active bank 的窄 binding，不制造 initial hidden，也不延长 buffer 生命周期。
+    /// 第二个 StarFold K4 block 必须把本 binding 交给 committed-state/HC-QKV provider
+    /// 重绑器；token embedding hidden 仍由独立 K4 input owner 生成。重绑器接入前只能
+    /// 生成 launch gate，禁止伪造 host state、hidden 或任意 Vulkan handle。
+    pub fn committed_checkpoint_binding(
+        &self,
+    ) -> Result<WholeTokenDeviceCommittedCheckpointBinding<'_>> {
+        if self.phase != CandidatePhase::Idle {
+            bail!("candidate 存在时禁止借用 committed device checkpoint");
+        }
+        let buffer = self.banks[self.active_bank].handle();
+        if buffer == vk::Buffer::null() || self.state_bytes == 0 || self.active_bank >= 2 {
+            bail!("committed device checkpoint binding 非法");
+        }
+        Ok(WholeTokenDeviceCommittedCheckpointBinding {
+            buffer,
+            state_bytes: self.state_bytes,
+            epoch: self.epoch,
+            active_bank: self.active_bank,
+            owner: PhantomData,
+        })
     }
 
     pub fn candidate_position(&self) -> Option<u32> {
@@ -324,6 +412,7 @@ impl WholeTokenDeviceState {
         let Self {
             banks: [bank0, bank1],
             block_publish_scratch,
+            block_publish_readback,
             sticky_status,
             state_bytes,
             active_bank,
@@ -342,6 +431,7 @@ impl WholeTokenDeviceState {
             ctx.device.destroy_command_pool(command_pool, None);
         }
         sticky_status.destroy(ctx);
+        block_publish_readback.destroy(ctx);
         block_publish_scratch.destroy(ctx);
         let (buffer, inactive) = match active_bank {
             0 => (bank0, bank1),
@@ -713,11 +803,88 @@ impl WholeTokenDeviceState {
         ctx: &VulkanContext,
         selected: &S14CausalBlockSelectedPrefix<'_>,
     ) -> Result<WholeTokenPreparedBlockCommit> {
+        let device_future = selected.device_receipt();
+        self.prepare_owned_block_prefix_commit(
+            ctx,
+            device_future,
+            selected.accepted_tokens(),
+            selected.checkpoint_index(),
+            selected.checkpoint(),
+            false,
+        )
+    }
+
+    /// StarFold-neutral 的 device prefix prepare：只消费 terminal 返回的 owned future、
+    /// 最长前缀选择与同一份 host checkpoint，不依赖旧 union/page-plan 包装。
+    pub fn prepare_starfold_block_prefix_commit(
+        &mut self,
+        ctx: &VulkanContext,
+        device_future: &S14CausalBlockOwnedDeviceFuture,
+        accepted_tokens: usize,
+        checkpoint_index: usize,
+        checkpoint: &DecoderStateV1,
+    ) -> Result<WholeTokenPreparedBlockCommit> {
+        self.prepare_owned_block_prefix_commit(
+            ctx,
+            device_future.receipt(),
+            accepted_tokens,
+            checkpoint_index,
+            checkpoint,
+            true,
+        )
+    }
+
+    /// Prompt prefill 的 after-drain 非 terminal device prepare。源 checkpoint 直接来自
+    /// 同一份 sealed `S14CausalBlockPrefixCheckpointArena`；producer 已由 adapter drain，
+    /// 因此本入口不接收/等待 timeline，也不构造 terminal `OwnedDeviceFuture`。
+    pub(crate) fn prepare_starfold_teacher_forced_prefix_commit_after_drain(
+        &mut self,
+        ctx: &VulkanContext,
+        prefix_arena: &S14CausalBlockPrefixCheckpointArena,
+        committed_prefix: usize,
+        checkpoint: &DecoderStateV1,
+    ) -> Result<WholeTokenPreparedBlockCommit> {
+        prefix_arena.validate_host_readback_ready()?;
+        let layout = prefix_arena.layout();
+        if !std::ptr::eq(ctx, prefix_arena.context().as_ref()) || layout.block_size != 4 {
+            bail!("StarFold after-drain prefill prefix arena/context/K identity 非法");
+        }
+        let source = WholeTokenBlockPrefixSource {
+            base_position: prefix_arena.base_position(),
+            block_size: layout.block_size,
+            checkpoint_arena: prefix_arena.buffer().handle(),
+            checkpoint_arena_offset: prefix_arena.prefix_offset(0)?,
+            checkpoint_arena_bytes: layout.used_bytes,
+            checkpoint_stride_bytes: layout.checkpoint_stride_bytes,
+            checkpoint_state_bytes: layout.checkpoint_state_bytes,
+            ready_timeline: vk::Semaphore::null(),
+            ready_timeline_value: 0,
+        };
+        self.prepare_block_prefix_from_source(
+            ctx,
+            source,
+            committed_prefix,
+            committed_prefix.saturating_sub(1),
+            checkpoint,
+            true,
+        )
+    }
+
+    fn prepare_owned_block_prefix_commit(
+        &mut self,
+        ctx: &VulkanContext,
+        device_future: S14CausalBlockDeviceFutureReceipt,
+        accepted_tokens: usize,
+        checkpoint_index: usize,
+        checkpoint: &DecoderStateV1,
+        verify_host_device_bytes: bool,
+    ) -> Result<WholeTokenPreparedBlockCommit> {
         if self.phase != CandidatePhase::Idle {
             bail!("whole-token device 只有 idle 阶段可以 prepare block prefix");
         }
-        let device_future = selected.device_receipt();
-        let accepted_tokens = selected.accepted_tokens();
+        if device_future.storage != S14CausalBlockDeviceCheckpointStorage::PrefixCheckpoints {
+            bail!("owned block future 必须来自 PrefixCheckpoints storage");
+        }
         device_future
             .validate(
                 device_future.base_position,
@@ -725,15 +892,48 @@ impl WholeTokenDeviceState {
                 device_future.final_hidden,
             )
             .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        let source = WholeTokenBlockPrefixSource {
+            base_position: device_future.base_position,
+            block_size: device_future.block_size,
+            checkpoint_arena: device_future.checkpoint_arena,
+            checkpoint_arena_offset: device_future.checkpoint_arena_offset,
+            checkpoint_arena_bytes: device_future.checkpoint_arena_bytes,
+            checkpoint_stride_bytes: device_future.checkpoint_stride_bytes,
+            checkpoint_state_bytes: device_future.checkpoint_state_bytes,
+            ready_timeline: device_future.ready_timeline,
+            ready_timeline_value: device_future.ready_timeline_value,
+        };
+        self.prepare_block_prefix_from_source(
+            ctx,
+            source,
+            accepted_tokens,
+            checkpoint_index,
+            checkpoint,
+            verify_host_device_bytes,
+        )
+    }
+
+    fn prepare_block_prefix_from_source(
+        &mut self,
+        ctx: &VulkanContext,
+        source: WholeTokenBlockPrefixSource,
+        accepted_tokens: usize,
+        checkpoint_index: usize,
+        checkpoint: &DecoderStateV1,
+        verify_host_device_bytes: bool,
+    ) -> Result<WholeTokenPreparedBlockCommit> {
+        if self.phase != CandidatePhase::Idle {
+            bail!("whole-token device 只有 idle 阶段可以 prepare block prefix");
+        }
         let plan = build_block_publish_plan(
             self.active_bank,
             self.epoch,
             self.state_bytes,
-            device_future,
+            source,
             accepted_tokens,
-            selected.checkpoint(),
+            checkpoint,
         )?;
-        if plan.checkpoint_index != selected.checkpoint_index() {
+        if plan.checkpoint_index != checkpoint_index {
             bail!("selected host/device checkpoint index 不同源");
         }
 
@@ -747,9 +947,28 @@ impl WholeTokenDeviceState {
                 &vk::CommandBufferBeginInfo::default()
                     .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
             )?;
+            if source.ready_timeline == vk::Semaphore::null() {
+                let drained_source = vk::BufferMemoryBarrier::default()
+                    .src_access_mask(
+                        vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::TRANSFER_WRITE,
+                    )
+                    .dst_access_mask(vk::AccessFlags::TRANSFER_READ)
+                    .buffer(source.checkpoint_arena)
+                    .offset(source.checkpoint_arena_offset)
+                    .size(source.checkpoint_arena_bytes);
+                ctx.device.cmd_pipeline_barrier(
+                    self.command,
+                    vk::PipelineStageFlags::ALL_COMMANDS,
+                    vk::PipelineStageFlags::TRANSFER,
+                    vk::DependencyFlags::empty(),
+                    &[],
+                    &[drained_source],
+                    &[],
+                );
+            }
             ctx.device.cmd_copy_buffer(
                 self.command,
-                device_future.checkpoint_arena,
+                source.checkpoint_arena,
                 self.block_publish_scratch.handle(),
                 &[vk::BufferCopy::default()
                     .src_offset(plan.checkpoint_offset)
@@ -775,25 +994,74 @@ impl WholeTokenDeviceState {
                 &[],
             );
             ctx.device.end_command_buffer(self.command)?;
-            submit_and_wait_on_timeline(
-                ctx,
-                self.command,
-                self.fence,
-                device_future.ready_timeline,
-                device_future.ready_timeline_value,
-            )?;
+            if source.ready_timeline == vk::Semaphore::null() {
+                submit_and_wait(ctx, self.command, self.fence)?;
+            } else {
+                submit_and_wait_on_timeline(
+                    ctx,
+                    self.command,
+                    self.fence,
+                    source.ready_timeline,
+                    source.ready_timeline_value,
+                )?;
+            }
+        }
+        if verify_host_device_bytes {
+            self.verify_block_publish_scratch_matches(ctx, checkpoint.native_arena.bytes())?;
         }
         self.phase = CandidatePhase::BlockPrepared;
         Ok(WholeTokenPreparedBlockCommit {
             expected_epoch: self.epoch,
             next_epoch: plan.next_epoch,
             next_bank: plan.next_bank,
-            base_position: device_future.base_position,
+            base_position: source.base_position,
             next_position: plan.next_position,
-            block_size: device_future.block_size,
+            block_size: source.block_size,
             accepted_tokens,
             checkpoint_index: plan.checkpoint_index,
+            host_device_bytes_verified: verify_host_device_bytes,
         })
+    }
+
+    /// StarFold terminal 的 host candidate 本应来自同一 prefix arena 的 production readback；
+    /// 在 device publish 前再对选中 scratch 做一次逐字节核对，把这一点从 trait 假设升级为事实。
+    fn verify_block_publish_scratch_matches(
+        &mut self,
+        ctx: &VulkanContext,
+        expected: &[u8],
+    ) -> Result<()> {
+        if expected.len() as u64 != self.state_bytes {
+            bail!("StarFold host/device checkpoint byte length 漂移");
+        }
+        (|| -> Result<()> {
+            unsafe {
+                ctx.device
+                    .reset_command_pool(self.command_pool, vk::CommandPoolResetFlags::empty())?;
+                ctx.device.begin_command_buffer(
+                    self.command,
+                    &vk::CommandBufferBeginInfo::default()
+                        .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+                )?;
+                ctx.device.cmd_copy_buffer(
+                    self.command,
+                    self.block_publish_scratch.handle(),
+                    self.block_publish_readback.handle(),
+                    &[vk::BufferCopy::default().size(self.state_bytes)],
+                );
+                ctx.device.end_command_buffer(self.command)?;
+                submit_and_wait(ctx, self.command, self.fence)?;
+            }
+            let observed = unsafe {
+                std::slice::from_raw_parts(
+                    self.block_publish_readback.mapped() as *const u8,
+                    self.state_bytes as usize,
+                )
+            };
+            if observed != expected {
+                bail!("StarFold selected host/device checkpoint bytes 不同源");
+            }
+            Ok(())
+        })()
     }
 
     /// 所有可能失败的 GPU copy/wait 已完成；该发布只做不可失败的 owner swap 与元数据切换。
@@ -830,6 +1098,7 @@ impl WholeTokenDeviceState {
             position: prepared.next_position,
             accepted_tokens: prepared.accepted_tokens,
             checkpoint_index: prepared.checkpoint_index,
+            host_device_bytes_verified: prepared.host_device_bytes_verified,
         }
     }
 
@@ -864,7 +1133,9 @@ impl WholeTokenDeviceState {
                 )?;
             },
             CandidatePhase::InFlight => {
-                bail!("in-flight candidate 必须先由外部后端 drain，再使用 rollback_external_candidate")
+                bail!(
+                    "in-flight candidate 必须先由外部后端 drain，再使用 rollback_external_candidate"
+                )
             }
             CandidatePhase::Ready | CandidatePhase::Failed => {}
             CandidatePhase::BlockPrepared => {
@@ -954,6 +1225,7 @@ impl WholeTokenDeviceState {
             ctx.device.destroy_command_pool(self.command_pool, None);
         }
         self.sticky_status.destroy(ctx);
+        self.block_publish_readback.destroy(ctx);
         self.block_publish_scratch.destroy(ctx);
         self.banks[1].destroy(ctx);
         self.banks[0].destroy(ctx);
@@ -974,13 +1246,15 @@ fn build_block_publish_plan(
     active_bank: usize,
     base_epoch: u64,
     state_bytes: u64,
-    device_future: S14CausalBlockDeviceFutureReceipt,
+    source: WholeTokenBlockPrefixSource,
     accepted_tokens: usize,
     selected_host_checkpoint: &DecoderStateV1,
 ) -> Result<WholeTokenBlockPublishPlan> {
-    if device_future.storage != S14CausalBlockDeviceCheckpointStorage::PrefixCheckpoints
-        || device_future.checkpoint_state_bytes != state_bytes
+    if source.checkpoint_state_bytes != state_bytes
         || selected_host_checkpoint.native_arena.bytes().len() as u64 != state_bytes
+        || source.checkpoint_arena == vk::Buffer::null()
+        || source.checkpoint_stride_bytes < state_bytes
+        || (source.ready_timeline == vk::Semaphore::null()) != (source.ready_timeline_value == 0)
     {
         bail!("block prefix publish 的 K/state/accepted identity 非法");
     }
@@ -990,8 +1264,8 @@ fn build_block_publish_plan(
     let (next_epoch, next_bank, next_position, checkpoint_index) = block_prefix_identity(
         active_bank,
         base_epoch,
-        device_future.base_position,
-        device_future.block_size,
+        source.base_position,
+        source.block_size,
         accepted_tokens,
     )?;
     if selected_host_checkpoint.commit_epoch != next_epoch
@@ -1000,14 +1274,14 @@ fn build_block_publish_plan(
     {
         bail!("selected host/device prefix checkpoint 的 epoch/position/bank 不同源");
     }
-    let checkpoint_offset = device_future
+    let checkpoint_offset = source
         .checkpoint_stride_bytes
         .checked_mul(checkpoint_index as u64)
-        .and_then(|relative| device_future.checkpoint_arena_offset.checked_add(relative))
+        .and_then(|relative| source.checkpoint_arena_offset.checked_add(relative))
         .ok_or_else(|| anyhow::anyhow!("selected device checkpoint offset overflow"))?;
-    let arena_end = device_future
+    let arena_end = source
         .checkpoint_arena_offset
-        .checked_add(device_future.checkpoint_arena_bytes)
+        .checked_add(source.checkpoint_arena_bytes)
         .ok_or_else(|| anyhow::anyhow!("device checkpoint arena end overflow"))?;
     let checkpoint_end = checkpoint_offset
         .checked_add(state_bytes)

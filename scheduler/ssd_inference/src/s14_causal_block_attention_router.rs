@@ -59,8 +59,8 @@ pub struct S14CausalBlockAttentionRouterShape {
 }
 
 impl S14CausalBlockAttentionRouterShape {
-    /// 首版只闭合 position 1..126 的 pre-compression contiguous window。
-    /// position0 专核、position127+ ratio128/ring 与 paged ratio4 history 不在本 recorder 中。
+    /// 闭合 position0..126 的 pre-compression contiguous window；base0 的 committed rows
+    /// 数学上就是0，仅由上层 ForcedPrefill bootstrap 门开放。
     pub fn new(block_size: u32, base_position: u32, committed_window_rows: u32) -> Result<Self> {
         if !matches!(
             block_size,
@@ -68,8 +68,8 @@ impl S14CausalBlockAttentionRouterShape {
         ) {
             bail!("S14 causal-block attention/router K 只允许4或8");
         }
-        if base_position == 0 || committed_window_rows != base_position {
-            bail!("S14 causal-block attention 首版要求 committed_window_rows=base_position>=1");
+        if committed_window_rows != base_position {
+            bail!("S14 causal-block attention 要求 committed_window_rows=base_position");
         }
         let end = base_position
             .checked_add(block_size)
@@ -111,7 +111,10 @@ impl S14CausalBlockAttentionRouterShape {
 
     pub fn committed_window_bf16_bytes(self) -> Result<u64> {
         checked_bytes(
-            u64::from(self.committed_window_rows) * u64::from(S14_CAUSAL_BLOCK_ATTENTION_HEAD_DIM),
+            // Vulkan descriptor range 不能为0。base0 的 shader committed count 仍为0，
+            // 因而不会读取这一哨兵行；这里只保持 router/ratio4 共用 owner 可绑定。
+            u64::from(self.committed_window_rows.max(1))
+                * u64::from(S14_CAUSAL_BLOCK_ATTENTION_HEAD_DIM),
             BF16_BYTES,
             "causal-block committed window",
         )

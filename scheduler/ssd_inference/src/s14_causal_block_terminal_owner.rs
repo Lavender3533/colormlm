@@ -21,8 +21,10 @@ use crate::{
     },
     s14_causal_block_production_evidence::S14CausalBlockProductionEvidenceSnapshot,
     s14_causal_block_terminal_adapter::{
-        S14CausalBlockHostCandidateFinalizer, S14CausalBlockTerminalProductionSource,
-        S14CausalBlockTerminalResource, S14CausalBlockTerminalResourceOwner,
+        S14CausalBlockHostCandidateFinalizer,
+        S14CausalBlockTerminalProductionPublisher as S14RawTerminalPublisher,
+        S14CausalBlockTerminalProductionSource, S14CausalBlockTerminalResource,
+        S14CausalBlockTerminalResourceOwner,
     },
     s14_final_hc_head::{
         S14FinalHcHeadBindings, S14FinalHcHeadBufferSlice, S14FinalHcHeadDispatch,
@@ -405,6 +407,57 @@ impl S14CausalBlockProductionTerminalResourceOwner {
         routes_by_position: Vec<Vec<RouteDecision>>,
         host_candidates: Box<dyn S14CausalBlockHostCandidateFinalizer>,
     ) -> Result<S14CausalBlockTerminalPublishReceipt, String> {
+        let (source, receipt) = self.prepare_terminal_publication(
+            base_position,
+            final_hidden,
+            routes_by_position,
+            host_candidates,
+        )?;
+        if let Err(error) = publisher.publish(S14CausalBlockContextBound::new(
+            Arc::clone(&self.context),
+            source,
+        )) {
+            return Err(self.reject_after_publish_failure(error));
+        }
+        Ok(receipt)
+    }
+
+    /// StarFold 直接 terminal endpoint 的原生发布入口。该路径复用同一份 identity、
+    /// checkpoint seal、HC/norm prelude 与失败排空规则，但不进入旧 production bundle
+    /// 的 phase 包装。预测 token 仍只能由 raw channel 的 GPU batched head 产生。
+    pub(crate) fn record_and_publish_starfold(
+        self: &Arc<Self>,
+        publisher: &S14RawTerminalPublisher,
+        base_position: u32,
+        final_hidden: S14CausalBlockHiddenBinding,
+        routes_by_position: Vec<Vec<RouteDecision>>,
+        host_candidates: Box<dyn S14CausalBlockHostCandidateFinalizer>,
+    ) -> Result<S14CausalBlockTerminalPublishReceipt, String> {
+        let (source, receipt) = self.prepare_terminal_publication(
+            base_position,
+            final_hidden,
+            routes_by_position,
+            host_candidates,
+        )?;
+        if let Err(error) = publisher.publish(source) {
+            return Err(self.reject_after_publish_failure(error));
+        }
+        Ok(receipt)
+    }
+
+    fn prepare_terminal_publication(
+        self: &Arc<Self>,
+        base_position: u32,
+        final_hidden: S14CausalBlockHiddenBinding,
+        routes_by_position: Vec<Vec<RouteDecision>>,
+        host_candidates: Box<dyn S14CausalBlockHostCandidateFinalizer>,
+    ) -> Result<
+        (
+            S14CausalBlockTerminalProductionSource,
+            S14CausalBlockTerminalPublishReceipt,
+        ),
+        String,
+    > {
         self.validate_publication_identity(base_position, final_hidden, &routes_by_position)
             .map_err(|error| error.to_string())?;
         let checkpoints = self
@@ -432,24 +485,7 @@ impl S14CausalBlockProductionTerminalResourceOwner {
             host_candidates,
             resources,
         };
-        if let Err(error) = publisher.publish(S14CausalBlockContextBound::new(
-            Arc::clone(&self.context),
-            source,
-        )) {
-            let drain = self.wait_for_producer();
-            self.set_phase(if drain.is_ok() {
-                OwnerPhase::DrainedAfterReject
-            } else {
-                OwnerPhase::Poisoned
-            });
-            return match drain {
-                Ok(()) => Err(error),
-                Err(drain_error) => Err(format!(
-                    "terminal source publish 失败: {error}; producer drain 失败: {drain_error:#}"
-                )),
-            };
-        }
-        Ok(S14CausalBlockTerminalPublishReceipt {
+        let receipt = S14CausalBlockTerminalPublishReceipt {
             base_position,
             block_size: self.block_size,
             completed_layers: FULL_DEPTH_LAYERS.len(),
@@ -458,7 +494,23 @@ impl S14CausalBlockProductionTerminalResourceOwner {
             checkpoint_count: checkpoints.len(),
             head_chunk_count: S14_HEAD_CHUNK_COUNT as usize,
             predicted_tokens_prebuilt: false,
-        })
+        };
+        Ok((source, receipt))
+    }
+
+    fn reject_after_publish_failure(&self, error: String) -> String {
+        let drain = self.wait_for_producer();
+        self.set_phase(if drain.is_ok() {
+            OwnerPhase::DrainedAfterReject
+        } else {
+            OwnerPhase::Poisoned
+        });
+        match drain {
+            Ok(()) => error,
+            Err(drain_error) => format!(
+                "terminal source publish 失败: {error}; producer drain 失败: {drain_error:#}"
+            ),
+        }
     }
 
     fn validate_publication_identity(

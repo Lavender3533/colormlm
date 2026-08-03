@@ -1,6 +1,6 @@
 #version 450
 
-// base_position=1/5、K=4、ratio4 boundary-aware attention。
+// 任意连续 base_position、K=4、ratio4 boundary-aware attention。
 // committed_kv绑定base_position行，compressed_kv绑定截至boundary lane已写回的全部
 // compressed rows。boundary lane按物理顺序消费完整压缩前缀；末lane消费真实indexer
 // 排名。base5因此读取committed rows0..4，position7直读block0+1，position8按
@@ -28,8 +28,9 @@ layout(push_constant) uniform Push {
 const uint STATUS_INVALID_SHAPE = 1u;
 const uint STATUS_NON_FINITE = 2u;
 const uint STATUS_INVALID_COMPRESSED_INDEX = 4u;
-const uint BOUNDARY_LANE = 2u;
-const uint MAX_SEQUENCE_TOKENS = 11u;
+const uint BLOCK_SIZE = 4u;
+const uint INDEX_CAPACITY_ROWS = 32u;
+const uint MAX_SEQUENCE_TOKENS = 160u;
 
 shared float partial[64];
 shared float scores[MAX_SEQUENCE_TOKENS];
@@ -204,13 +205,13 @@ uint selected_compressed_row(
     uint compressed_rank,
     uint compressed_count
 ) {
-    // boundary lane刚完成当前4-token block：<=2行都必须可见，直接物理顺序读取。
-    if (block_lane == BOUNDARY_LANE) return compressed_rank;
-    // base5 lane0/1只有block0，真实indexer的唯一合法排列也是[0]。
+    uint boundary_lane = (BLOCK_SIZE - 1u) - (pc.base_position % BLOCK_SIZE);
+    // boundary lane刚完成当前4-token block：全部已压缩行按物理顺序可见。
+    if (block_lane == boundary_lane) return compressed_rank;
+    // 单行历史不需要启动indexer，唯一合法排列就是[0]。
     if (compressed_count == 1u) return 0u;
-    // 在当前fail-closed base1/5 ABI中，只有末lane会到这里；其buffer由真实
-    // post-boundary indexer写入完整排列。
-    return compressed_index.values[compressed_rank];
+    // 每个非-boundary lane 拥有独立 indexer 排名，禁止后一个 query 覆盖前一行。
+    return compressed_index.values[block_lane * INDEX_CAPACITY_ROWS + compressed_rank];
 }
 
 float load_sequence(
@@ -230,8 +231,8 @@ void main() {
     uint head = gl_WorkGroupID.x;
     uint block_lane = gl_WorkGroupID.y;
     uint lane = gl_LocalInvocationID.x;
-    if (pc.heads != 64u || pc.head_dim != 512u ||
-        (pc.base_position != 1u && pc.base_position != 5u) || pc.block_size != 4u) {
+    if (pc.heads != 64u || pc.head_dim != 512u || pc.block_size != BLOCK_SIZE ||
+        pc.base_position + pc.block_size > 127u) {
         if (lane == 0u) atomicOr(status_code, STATUS_INVALID_SHAPE);
         return;
     }
@@ -241,13 +242,14 @@ void main() {
     uint token_count = window_count + compressed_count;
     if (lane == 0u && token_count > MAX_SEQUENCE_TOKENS)
         atomicOr(status_code, STATUS_INVALID_SHAPE);
-    if (block_lane == 3u && lane == 0u && compressed_count > 1u) {
+    uint boundary_lane = (BLOCK_SIZE - 1u) - (pc.base_position % BLOCK_SIZE);
+    if (block_lane != boundary_lane && lane == 0u && compressed_count > 1u) {
         for (uint rank = 0u; rank < compressed_count; ++rank) {
-            uint selected = compressed_index.values[rank];
+            uint selected = compressed_index.values[block_lane * INDEX_CAPACITY_ROWS + rank];
             if (selected >= compressed_count)
                 atomicOr(status_code, STATUS_INVALID_COMPRESSED_INDEX);
             for (uint previous = 0u; previous < rank; ++previous) {
-                if (compressed_index.values[previous] == selected)
+                if (compressed_index.values[block_lane * INDEX_CAPACITY_ROWS + previous] == selected)
                     atomicOr(status_code, STATUS_INVALID_COMPRESSED_INDEX);
             }
         }

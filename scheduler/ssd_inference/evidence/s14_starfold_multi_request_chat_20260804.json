@@ -1,0 +1,57 @@
+{
+  "format": "polaris-s14-starfold-multi-request-chat-evidence-v1",
+  "recorded_at": "2026-08-04T04:44:26+08:00",
+  "model": "Polaris-S14",
+  "runtime": "S14 StarFold Rust/Vulkan production path",
+  "git_branch": "codex/polaris-s14-k4-runtime",
+  "executable": "scheduler/target/release/polaris_api.exe",
+  "executable_sha256": "94bebd02254327ffc5d112a1f262d34489a06aa2da92597333e41a8d565cdd1c",
+  "endpoint": "http://127.0.0.1:11435/v1/chat/completions",
+  "resident_process": {
+    "pid": 50760,
+    "restarted_between_requests": false,
+    "model_reloaded_between_requests": false,
+    "exhausted_after_first_request": false
+  },
+  "requests": [
+    {
+      "sequence": 1,
+      "user_text": "你好",
+      "http_status": 200,
+      "elapsed_seconds": 136.986,
+      "decoded_utf8_text": "你好"
+    },
+    {
+      "sequence": 2,
+      "user_text": "再见",
+      "http_status": 200,
+      "elapsed_seconds": 115.727,
+      "decoded_utf8_text": "再见"
+    }
+  ],
+  "hot_range_transport_optimization": {
+    "contract": "当 payload、proof 与长度均已在本地时跳过逐层 Python/JSONL transport；microtile 使用前仍执行 proof/SHA 校验",
+    "same_prompt": "再见",
+    "baseline_elapsed_seconds": 115.727,
+    "optimized_elapsed_seconds": 97.137,
+    "saved_seconds": 18.59,
+    "wall_clock_reduction_percent": 16.064
+  },
+  "chat_template": {
+    "codec": "official DeepSeek-V4 tokenizer/chat codec",
+    "assistant_mode_boundary": "</think>",
+    "reasoning_exposed_as_answer": false
+  },
+  "fallbacks_used": {
+    "v38_or_v47": false,
+    "python_executor": false,
+    "cpu_model": false,
+    "serial_token_forward": false,
+    "whole_model_fallback": false
+  },
+  "service_after_evidence": {
+    "stopped": true,
+    "port_11435_released": true
+  },
+  "claim_limit": "证明同一常驻 S14 StarFold 进程可以依次完成两个独立 HTTP 请求，并记录热 Range transport 优化的相邻墙钟变化；不宣称当前速度已达到 v47，也不证明模型质量接近 Claude/GPT。"
+}
