@@ -232,3 +232,32 @@ fast16/research/polaris_meridian_v1/HANDOFF_20260802_ASYNC_TIMELINE.md，
 - 当前唯一真实数值阻塞仍是position4 compressed indexer：必须完整执行
   `wq_b→RoPE→Hadamard/FP4→score/top-k→compressed attention`。backend仍诚实fail-closed；
   不得把结构闸门或runtime facade写成8--16 token、聊天接口或S14模型完成。
+
+## 2026-08-03 纠正后的当前断点：S14 K=4 block-major 模型本体
+
+- 单token production 已推进到position2051分页边界，N=8权威输出为
+  `[5,223,939,21,695,553,1266,16179]`；344次在线top-6、12,384个实际physical Range、
+  `cpu_compute_fallbacks=0`、`commit_epoch=8`均成立。热态约`14.638320s/token`，仍不是网页聊天速度。
+- 当前产品路径不再继续包装旧Python executor、固定BOS replay或独立网页。FullDepth43只作为
+  Polaris S14的全深度主干/验证器；v47后续只作草稿岛，Kimi/MiMo等只作能力岛。网页/API继续关闭，
+  只有新Rust/Vulkan S14模型门通过后才复用Open WebUI。
+- 分支`codex/polaris-s14-k4-runtime`的基线提交为`88b6621`。K=4/8已有block-major 43层调度、
+  图内在线top-6、实际Range union/grouped MoE、最长一致前缀与device checkpoint合同；禁止退化成
+  K次whole-token forward，强回执固定`serial_token_forward_calls=0`。
+- production terminal已收口为唯一post-seal路径：idle时安装真实terminal owner与host candidate
+  finalizer，43层seal后精确发布一次同源source；owner强持有K-row final HC/norm、32块真实head、
+  K份完整checkpoint与producer timeline。GPU batched head完成前不能预造prediction。
+- **当前唯一必要数值缺口不是下载页，而是K=4跨ratio4边界**。base position 1的四个lane对应
+  position `[1,2,3,4]`；position3必须执行remainder→main/indexer finalize/writeback→first
+  compressed-block attention→rollover，position4必须消费正式compressed indexer/sparse attention。
+  现有contiguous-window causal shader没有这条路径，不能用“输出了四行”冒充真实S14 K=4。
+- 与该边界同时收口的43层provider必须在同一block-major图内拥有真实static权重、K行RoPE/current
+  KV/committed KV，并生成每个lane的完整window KV、HC、ratio4/128 compressor与indexer prefix
+  checkpoint；terminal final hidden、checkpoint与producer timeline必须同源。
+- 下一顺序固定为：补K=4 ratio4 boundary-aware attention/state producer → 只跑library离线编译和每个
+  新模块一个秒级定向门 → 唯一一次Rust/Vulkan K=4 whole-token真门。真门必须同时证明43/43层、
+  在线top-6、实际Range proof/SHA/mmap、grouped MoE、ratio4数值路径、batched terminal/head、K份
+  checkpoint、最长一致前缀、零CPU fallback与零串行token forward；通过前不得宣称S14模型已完成。
+- 存储清理只处理高置信、无引用、可重建副本。最新约`1.188GiB`旧v17 build、已否决v18 `.npy`
+  和临时v38快照已移入Windows回收站；S14、v47/v38、v17 runtime-v3、v18 runtime-v2、供体、
+  Range/head/checkpoint及Rust/shader缓存全部保留。回收站未清空前这些空间仍可恢复且不会物理释放。

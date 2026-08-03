@@ -46,6 +46,11 @@ pub enum S14CausalBlockTerminalResource {
 pub trait S14CausalBlockTerminalResourceOwner: fmt::Debug {
     fn buffer(&self, resource: S14CausalBlockTerminalResource) -> Option<&GpuBuffer>;
     fn producer_timeline(&self) -> vk::Semaphore;
+
+    /// terminal recorder 已等待 producer timeline 且完成 GPU batched head 后调用。
+    /// concrete owner 必须在这里校验同一 timeline 覆盖的 HC/norm sticky status；
+    /// 校验成功前不得消费 host snapshot finalizer。
+    fn validate_after_producer_timeline(&self, expected_value: u64) -> Result<(), String>;
 }
 
 /// producer 已完成43层状态写入、但尚未绑定最终 token 的 K 份 host candidate。
@@ -301,7 +306,13 @@ impl S14CausalBlockTerminalProductionAdapter {
             producer_timeline: source.resources.producer_timeline(),
             producer_timeline_value: source.producer_timeline_value,
         };
-        self.recorder.record_gpu_export(input)
+        let export = self.recorder.record_gpu_export(input)?;
+        source
+            .resources
+            .validate_after_producer_timeline(source.producer_timeline_value)
+            .map_err(anyhow::Error::msg)
+            .context("validate production terminal HC/norm after producer timeline")?;
+        Ok(export)
     }
 }
 

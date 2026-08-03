@@ -361,7 +361,37 @@ impl fmt::Debug for S14CausalBlockOwnedDeviceFuture {
 /// 只有真实 backend 已拥有 K 份完整 KV/HC/compressor/indexer candidate，并能对
 /// K 行 terminal hidden 执行一次 batched final head 时才实现此接口。orchestrator
 /// 不生成 token、head 或状态，只校验 backend 的一次强回执并交给 runner 复核 checkpoint chain。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct S14CausalBlockPostSealReceipt {
+    pub hook_calls: u32,
+    pub completed_layers: usize,
+    pub base_position: u32,
+    pub block_size: usize,
+    pub published_terminal_sources: u32,
+    pub serial_token_forward_calls: u32,
+}
+
 pub trait S14CausalBlockCheckpointBackend: S14CausalBlockFullDepthBackend {
+    /// `seal_full_depth_layers` 已完成、terminal/head 尚未开始时的唯一 producer 窗口。
+    /// production 总装层在这里发布同一 block 的真实 terminal source；默认零调用仅供
+    /// 不需要 out-of-band source 的测试/专用 backend。禁止在 hook 内循环执行 token step。
+    fn publish_terminal_source_after_full_depth_seal(
+        &mut self,
+        completed_layers: usize,
+        base_position: u32,
+        final_hidden: S14CausalBlockHiddenBinding,
+        _routes_by_position: &[Vec<RouteDecision>],
+    ) -> Result<S14CausalBlockPostSealReceipt, String> {
+        Ok(S14CausalBlockPostSealReceipt {
+            hook_calls: 0,
+            completed_layers,
+            base_position,
+            block_size: final_hidden.block_size,
+            published_terminal_sources: 0,
+            serial_token_forward_calls: 0,
+        })
+    }
+
     fn run_batched_final_head_and_export_checkpoints(
         &mut self,
         completed_layers: usize,
@@ -701,6 +731,35 @@ pub fn execute_causal_block_full_depth_with_checkpoints<B: S14CausalBlockCheckpo
             backend,
             layers.completed_layers,
             layer_error("43层seal后 authoritative state 被修改"),
+        ));
+    }
+
+    let post_seal = match backend.publish_terminal_source_after_full_depth_seal(
+        layers.completed_layers,
+        layers.base_position,
+        layers.final_hidden,
+        &layers.routes_by_position,
+    ) {
+        Ok(receipt) => receipt,
+        Err(error) => {
+            return Err(abort_full_depth_after_error(
+                backend,
+                layers.completed_layers,
+                layer_error(format!("post-seal terminal source 发布失败: {error}")),
+            ));
+        }
+    };
+    if post_seal.completed_layers != layers.completed_layers
+        || post_seal.base_position != layers.base_position
+        || post_seal.block_size != layers.block_size
+        || post_seal.hook_calls > 1
+        || post_seal.published_terminal_sources != post_seal.hook_calls
+        || post_seal.serial_token_forward_calls != 0
+    {
+        return Err(abort_full_depth_after_error(
+            backend,
+            layers.completed_layers,
+            layer_error("post-seal terminal producer identity/调用计数漂移或退化为串行token"),
         ));
     }
 
@@ -1379,6 +1438,7 @@ mod tests {
         future_output: Option<BatchedWholeTokenOutput>,
         device_receipt_override: Option<S14CausalBlockDeviceFutureReceipt>,
         head_batch_override: Option<u32>,
+        post_seal_calls: u32,
         export_calls: u32,
     }
 
@@ -1506,12 +1566,40 @@ mod tests {
     }
 
     impl S14CausalBlockCheckpointBackend for FakeBackend {
+        fn publish_terminal_source_after_full_depth_seal(
+            &mut self,
+            completed_layers: usize,
+            base_position: u32,
+            final_hidden: S14CausalBlockHiddenBinding,
+            routes_by_position: &[Vec<RouteDecision>],
+        ) -> Result<S14CausalBlockPostSealReceipt, String> {
+            if self.active
+                || completed_layers != FULL_DEPTH_LAYERS.len()
+                || base_position != self.base_position
+                || routes_by_position.len() != final_hidden.block_size
+            {
+                return Err("fake post-seal identity 漂移".into());
+            }
+            self.post_seal_calls += 1;
+            Ok(S14CausalBlockPostSealReceipt {
+                hook_calls: 1,
+                completed_layers,
+                base_position,
+                block_size: final_hidden.block_size,
+                published_terminal_sources: 1,
+                serial_token_forward_calls: 0,
+            })
+        }
+
         fn run_batched_final_head_and_export_checkpoints(
             &mut self,
             _completed_layers: usize,
             final_hidden: S14CausalBlockHiddenBinding,
             _routes_by_position: &[Vec<RouteDecision>],
         ) -> Result<S14CausalBlockFinalOutput, String> {
+            if self.post_seal_calls != 1 {
+                return Err("terminal export 未位于唯一 post-seal producer 之后".into());
+            }
             self.export_calls += 1;
             final_hidden
                 .validate(self.routes.len())
@@ -1979,6 +2067,7 @@ mod tests {
             }
         );
         assert_eq!(backend.export_calls, 1);
+        assert_eq!(backend.post_seal_calls, 1);
         assert_eq!(backend.abort_calls, 0);
         let rollback = sealed.rollback(&authoritative).unwrap();
         assert_eq!(rollback.position, authoritative_before.position);

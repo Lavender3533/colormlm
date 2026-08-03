@@ -38,6 +38,7 @@ pub mod s14_causal_block_resources;
 pub mod s14_causal_block_single_layer;
 pub mod s14_causal_block_terminal;
 pub mod s14_causal_block_terminal_adapter;
+pub mod s14_causal_block_terminal_owner;
 pub mod s14_causal_block_union_materializer;
 pub mod s14_causal_block_vulkan_backend;
 pub mod s14_dual_queue_timeline;

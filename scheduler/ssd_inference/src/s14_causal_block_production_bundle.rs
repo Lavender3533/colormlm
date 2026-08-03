@@ -8,7 +8,7 @@
 use crate::{
     s14_causal_block_grouped_moe_recorder::build_s14_causal_block_concrete_moe_adapter,
     s14_causal_block_hc_qkv_adapter::{
-        S14CausalBlockProductionHcQkvAdapter, S14CausalBlockVulkanHcQkvAdapter,
+        S14CausalBlockProductionHcQkvAdapter,
     },
     s14_causal_block_hc_qkv_recorder::{
         S14CausalBlockHcQkvResourceProvider, S14CausalBlockHiddenBank,
@@ -20,7 +20,8 @@ use crate::{
         S14CausalBlockFinalOutput, S14CausalBlockFullDepthBackend,
         S14CausalBlockGroupedMoeOutput, S14CausalBlockHiddenBinding,
         S14CausalBlockLayerBackend, S14CausalBlockLayerInput, S14CausalBlockLayerRangePlan,
-        S14CausalBlockSealReceipt, S14CausalBlockUnionBankBinding,
+        S14CausalBlockPostSealReceipt, S14CausalBlockSealReceipt,
+        S14CausalBlockUnionBankBinding,
         S14CausalBlockUnionMaterializeReceipt,
     },
     s14_causal_block_moe_adapter::S14CausalBlockVulkanMoeAdapter,
@@ -29,10 +30,14 @@ use crate::{
         S14CausalBlockCheckpointArenaTelemetry,
     },
     s14_causal_block_terminal_adapter::{
-        s14_causal_block_terminal_production_channel,
+        s14_causal_block_terminal_production_channel, S14CausalBlockHostCandidateFinalizer,
         S14CausalBlockTerminalProductionAdapter, S14CausalBlockTerminalProductionPublisher,
         S14CausalBlockTerminalProductionSource, S14CausalBlockTerminalProviderTelemetry,
     },
+    s14_causal_block_terminal_owner::{
+        S14CausalBlockProductionTerminalResourceOwner, S14CausalBlockTerminalPublishReceipt,
+    },
+    s14_head_chunk_argmax::S14_HEAD_CHUNK_COUNT,
     s14_causal_block_vulkan_backend::S14CausalBlockVulkanBackend,
     s14_dynamic_page_cache_readiness::DynamicPageFetchMode,
     s14_dynamic_routed_page_plan::{FullDepthExpertCatalog, OnlineTop6},
@@ -101,6 +106,68 @@ pub trait S14CausalBlockProductionHcQkvResourceProvider:
     fn validate_production_bundle(&self, block_size: usize) -> Result<(), String>;
 }
 
+/// 同一个 production bundle 的一次性 post-seal producer。调用发生时43层已 seal/drain，
+/// final terminal/head 尚未提交；实现者必须用传入 publisher 发布一份真实 owner 保活的
+/// source，不能在 hook 内循环调用单 token forward。
+trait S14CausalBlockProductionPostSealTerminalProducer: fmt::Debug {
+    fn block_size(&self) -> usize;
+    fn base_position(&self) -> u32;
+
+    fn publish_terminal_source(
+        self: Box<Self>,
+        publisher: &S14CausalBlockProductionTerminalPublisher,
+        completed_layers: usize,
+        base_position: u32,
+        final_hidden: S14CausalBlockHiddenBinding,
+        routes_by_position: &[Vec<RouteDecision>],
+    ) -> Result<(), String>;
+}
+
+#[derive(Debug)]
+struct S14CausalBlockProductionOwnedTerminalProducer {
+    owner: Arc<S14CausalBlockProductionTerminalResourceOwner>,
+    host_candidates: Box<dyn S14CausalBlockHostCandidateFinalizer>,
+}
+
+impl S14CausalBlockProductionPostSealTerminalProducer
+    for S14CausalBlockProductionOwnedTerminalProducer
+{
+    fn block_size(&self) -> usize {
+        self.owner.block_size()
+    }
+
+    fn base_position(&self) -> u32 {
+        self.host_candidates.base_position()
+    }
+
+    fn publish_terminal_source(
+        self: Box<Self>,
+        publisher: &S14CausalBlockProductionTerminalPublisher,
+        completed_layers: usize,
+        base_position: u32,
+        final_hidden: S14CausalBlockHiddenBinding,
+        routes_by_position: &[Vec<RouteDecision>],
+    ) -> Result<(), String> {
+        let Self {
+            owner,
+            host_candidates,
+        } = *self;
+        let receipt = owner.record_and_publish(
+            publisher,
+            base_position,
+            final_hidden,
+            routes_by_position.to_vec(),
+            host_candidates,
+        )?;
+        validate_terminal_publish_receipt(
+            receipt,
+            completed_layers,
+            base_position,
+            final_hidden.block_size,
+        )
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct S14CausalBlockProductionBundleShape {
     block_size: usize,
@@ -163,6 +230,9 @@ enum BundlePhase {
     LayersSealed {
         base_position: u32,
     },
+    TerminalSourcePublished {
+        base_position: u32,
+    },
     AwaitingExportAck,
     Destroying,
     Poisoned,
@@ -174,7 +244,7 @@ type SharedBundlePhase = Arc<Mutex<BundlePhase>>;
 /// 只允许在同 bundle 的 FullDepth43 seal 后发布一次同 identity terminal source。所有 clone
 /// 共享 lifecycle；bundle 开始销毁后，旧 publisher 无法向已经失去 consumer 的 channel 发布。
 #[derive(Clone)]
-pub struct S14CausalBlockProductionTerminalPublisher {
+pub(crate) struct S14CausalBlockProductionTerminalPublisher {
     context: Arc<VulkanContext>,
     block_size: usize,
     phase: SharedBundlePhase,
@@ -193,7 +263,7 @@ impl fmt::Debug for S14CausalBlockProductionTerminalPublisher {
 }
 
 impl S14CausalBlockProductionTerminalPublisher {
-    pub fn publish(
+    pub(crate) fn publish(
         &self,
         source: S14CausalBlockContextBound<S14CausalBlockTerminalProductionSource>,
     ) -> Result<(), String> {
@@ -201,7 +271,7 @@ impl S14CausalBlockProductionTerminalPublisher {
         if !Arc::ptr_eq(&self.context, &source_context) {
             return Err("terminal production source 与 bundle VulkanContext owner 漂移".into());
         }
-        let phase = lock_phase(&self.phase)?;
+        let mut phase = lock_phase(&self.phase)?;
         let base_position = match *phase {
             BundlePhase::LayersSealed { base_position } => base_position,
             _ => return Err("terminal production source 只能在同一 FullDepth43 seal 后发布".into()),
@@ -212,10 +282,12 @@ impl S14CausalBlockProductionTerminalPublisher {
         {
             return Err("terminal production source 与 bundle base/K/FullDepth43 identity 漂移".into());
         }
-        self.inner.publish(source)
+        self.inner.publish(source)?;
+        *phase = BundlePhase::TerminalSourcePublished { base_position };
+        Ok(())
     }
 
-    pub fn telemetry(&self) -> Result<S14CausalBlockTerminalProviderTelemetry, String> {
+    fn telemetry(&self) -> Result<S14CausalBlockTerminalProviderTelemetry, String> {
         self.inner.telemetry()
     }
 }
@@ -229,6 +301,8 @@ pub struct S14CausalBlockProductionBundle {
     terminal_publisher: S14CausalBlockProductionTerminalPublisher,
     checkpoint_pool: Arc<S14CausalBlockCheckpointArenaPool>,
     hidden_banks: [S14CausalBlockHiddenBank; HIDDEN_BANK_COUNT],
+    post_seal_terminal_producer:
+        Option<Box<dyn S14CausalBlockProductionPostSealTerminalProducer>>,
     phase: SharedBundlePhase,
 }
 
@@ -240,6 +314,10 @@ impl fmt::Debug for S14CausalBlockProductionBundle {
             .field("block_size", &self.block_size)
             .field("phase", &self.phase.lock().ok().map(|phase| *phase))
             .field("backend_present", &self.backend.is_some())
+            .field(
+                "post_seal_terminal_producer_present",
+                &self.post_seal_terminal_producer.is_some(),
+            )
             .field("checkpoint_pool", &self.checkpoint_pool)
             .finish()
     }
@@ -254,8 +332,41 @@ impl S14CausalBlockProductionBundle {
         &self.context
     }
 
-    pub fn terminal_publisher(&self) -> S14CausalBlockProductionTerminalPublisher {
-        self.terminal_publisher.clone()
+    /// 为下一次 block 安装真实 terminal owner 与未完成 host candidate。调用方不接触 publisher；
+    /// bundle 只会在同一 FullDepth43 seal 后消费并发布这份 one-shot producer。
+    pub fn install_terminal_resources_for_next_block(
+        &mut self,
+        owner: Arc<S14CausalBlockProductionTerminalResourceOwner>,
+        host_candidates: Box<dyn S14CausalBlockHostCandidateFinalizer>,
+    ) -> Result<(), String> {
+        if !self.is_idle() || self.post_seal_terminal_producer.is_some() {
+            return Err("production bundle 只能在 idle 安装一个 terminal owner".into());
+        }
+        if self.terminal_publisher.telemetry()?.pending {
+            return Err("production bundle terminal provider 已有 pending source".into());
+        }
+        if !Arc::ptr_eq(&self.context, owner.context())
+            || owner.block_size() != self.block_size
+            || owner.checkpoint_state_bytes()
+                != self.checkpoint_pool.layout().checkpoint_state_bytes
+            || host_candidates.block_size() != self.block_size
+            || host_candidates
+                .base_position()
+                .checked_add(self.block_size as u32)
+                .is_none()
+        {
+            return Err(
+                "production terminal owner/finalizer 与 bundle context/K/checkpoint ABI 漂移"
+                    .into(),
+            );
+        }
+        self.post_seal_terminal_producer = Some(Box::new(
+            S14CausalBlockProductionOwnedTerminalProducer {
+                owner,
+                host_candidates,
+            },
+        ));
+        Ok(())
     }
 
     pub fn checkpoint_pool(&self) -> &Arc<S14CausalBlockCheckpointArenaPool> {
@@ -302,6 +413,7 @@ impl S14CausalBlockProductionBundle {
             set_phase(&self.phase, BundlePhase::Poisoned);
             return Err(format!("terminal provider pending source rollback 失败: {error}"));
         }
+        self.post_seal_terminal_producer.take();
         let backend = self
             .backend
             .as_mut()
@@ -426,6 +538,7 @@ where
         terminal_publisher,
         checkpoint_pool,
         hidden_banks,
+        post_seal_terminal_producer: None,
         phase,
     })
 }
@@ -496,6 +609,13 @@ impl S14CausalBlockFullDepthBackend for S14CausalBlockProductionBundle {
         if *phase != BundlePhase::Idle {
             return Err("production bundle 已有未释放 block/future".into());
         }
+        let producer = self
+            .post_seal_terminal_producer
+            .as_ref()
+            .ok_or_else(|| "production bundle 开始前缺少真实 terminal owner/finalizer".to_owned())?;
+        if producer.block_size() != block_size || producer.base_position() != base_position {
+            return Err("production terminal producer 与本次 block K/base position 漂移".into());
+        }
         let receipt = self.backend_mut()?.begin_full_depth_block(
             bank,
             base_position,
@@ -539,10 +659,11 @@ impl S14CausalBlockFullDepthBackend for S14CausalBlockProductionBundle {
         if matches!(*phase, BundlePhase::Idle | BundlePhase::Destroying | BundlePhase::Destroyed) {
             return Err("production bundle 当前没有可 abort 的 block".into());
         }
-        match self
+        let result = self
             .backend_mut()?
-            .drain_and_abort_full_depth_block(completed_layers)
-        {
+            .drain_and_abort_full_depth_block(completed_layers);
+        self.post_seal_terminal_producer.take();
+        match result {
             Ok(receipt) => {
                 *phase = BundlePhase::Idle;
                 Ok(receipt)
@@ -556,6 +677,71 @@ impl S14CausalBlockFullDepthBackend for S14CausalBlockProductionBundle {
 }
 
 impl S14CausalBlockCheckpointBackend for S14CausalBlockProductionBundle {
+    fn publish_terminal_source_after_full_depth_seal(
+        &mut self,
+        completed_layers: usize,
+        base_position: u32,
+        final_hidden: S14CausalBlockHiddenBinding,
+        routes_by_position: &[Vec<RouteDecision>],
+    ) -> Result<S14CausalBlockPostSealReceipt, String> {
+        {
+            let phase = lock_phase(&self.phase)?;
+            if *phase != (BundlePhase::LayersSealed { base_position }) {
+                return Err("production post-seal hook 不在同一 LayersSealed block".into());
+            }
+        }
+        if completed_layers != FULL_DEPTH_LAYERS.len()
+            || final_hidden.block_size != self.block_size
+            || routes_by_position.len() != self.block_size
+            || routes_by_position
+                .iter()
+                .any(|routes| routes.len() != FULL_DEPTH_LAYERS.len())
+        {
+            return Err("production post-seal hook K/43层/routes identity 漂移".into());
+        }
+        let before = self.terminal_publisher.telemetry()?;
+        if before.pending {
+            return Err("production post-seal hook 开始前已有 pending terminal source".into());
+        }
+        let producer = self
+            .post_seal_terminal_producer
+            .take()
+            .ok_or_else(|| "production bundle 缺少一次性 post-seal terminal producer".to_owned())?;
+        producer.publish_terminal_source(
+            &self.terminal_publisher,
+            completed_layers,
+            base_position,
+            final_hidden,
+            routes_by_position,
+        )?;
+        let after = self.terminal_publisher.telemetry()?;
+        let expected_published = before
+            .published
+            .checked_add(1)
+            .ok_or_else(|| "terminal publisher telemetry overflow".to_owned())?;
+        if after.published != expected_published
+            || after.rejected != before.rejected
+            || after.take_attempts != before.take_attempts
+            || !after.pending
+            || !matches!(
+                *lock_phase(&self.phase)?,
+                BundlePhase::TerminalSourcePublished {
+                    base_position: published_base
+                } if published_base == base_position
+            )
+        {
+            return Err("production post-seal producer 未精确发布一份同 block terminal source".into());
+        }
+        Ok(S14CausalBlockPostSealReceipt {
+            hook_calls: 1,
+            completed_layers,
+            base_position,
+            block_size: self.block_size,
+            published_terminal_sources: 1,
+            serial_token_forward_calls: 0,
+        })
+    }
+
     fn run_batched_final_head_and_export_checkpoints(
         &mut self,
         completed_layers: usize,
@@ -564,7 +750,7 @@ impl S14CausalBlockCheckpointBackend for S14CausalBlockProductionBundle {
     ) -> Result<S14CausalBlockFinalOutput, String> {
         let phase_owner = Arc::clone(&self.phase);
         let mut phase = lock_phase(&phase_owner)?;
-        if !matches!(*phase, BundlePhase::LayersSealed { .. })
+        if !matches!(*phase, BundlePhase::TerminalSourcePublished { .. })
             || final_hidden.block_size != self.block_size
             || routes_by_position.len() != self.block_size
         {
@@ -591,6 +777,29 @@ impl S14CausalBlockCheckpointBackend for S14CausalBlockProductionBundle {
         *phase = BundlePhase::Idle;
         Ok(())
     }
+}
+
+fn validate_terminal_publish_receipt(
+    receipt: S14CausalBlockTerminalPublishReceipt,
+    completed_layers: usize,
+    base_position: u32,
+    block_size: usize,
+) -> Result<(), String> {
+    if receipt.completed_layers != completed_layers
+        || completed_layers != FULL_DEPTH_LAYERS.len()
+        || receipt.base_position != base_position
+        || receipt.block_size != block_size
+        || receipt.producer_timeline_value == 0
+        || receipt.checkpoint_count != block_size
+        || receipt.head_chunk_count != S14_HEAD_CHUNK_COUNT as usize
+        || receipt.predicted_tokens_prebuilt
+    {
+        return Err(
+            "production terminal publish receipt K/43层/resource identity 漂移或预造预测token"
+                .into(),
+        );
+    }
+    Ok(())
 }
 
 fn validate_context_owner(
@@ -746,5 +955,36 @@ mod tests {
     fn builder_rejects_non_production_k_before_resource_construction() {
         let error = S14CausalBlockProductionBundleShape::new(6, 1, 1).unwrap_err();
         assert!(error.to_string().contains("K 只允许4或8"));
+    }
+
+    #[test]
+    fn post_seal_terminal_receipt_requires_one_real_k4_publication() {
+        let valid = S14CausalBlockTerminalPublishReceipt {
+            base_position: 1,
+            block_size: 4,
+            completed_layers: FULL_DEPTH_LAYERS.len(),
+            producer_timeline_value: 1,
+            normalized_head_rows_offset: 65_536,
+            checkpoint_count: 4,
+            head_chunk_count: S14_HEAD_CHUNK_COUNT as usize,
+            predicted_tokens_prebuilt: false,
+        };
+        validate_terminal_publish_receipt(
+            valid,
+            FULL_DEPTH_LAYERS.len(),
+            1,
+            4,
+        )
+        .unwrap();
+
+        let mut invalid = valid;
+        invalid.predicted_tokens_prebuilt = true;
+        assert!(validate_terminal_publish_receipt(
+            invalid,
+            FULL_DEPTH_LAYERS.len(),
+            1,
+            4,
+        )
+        .is_err());
     }
 }
