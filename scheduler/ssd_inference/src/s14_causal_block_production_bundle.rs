@@ -32,7 +32,7 @@ use crate::{
         S14CausalBlockTerminalProductionSource, S14CausalBlockTerminalProviderTelemetry,
     },
     s14_causal_block_terminal_owner::{
-        S14CausalBlockProductionTerminalResourceOwner, S14CausalBlockTerminalHeadUploadState,
+        S14CausalBlockProductionTerminalResourceOwner, S14CausalBlockTerminalHeadLeaseOwner,
         S14CausalBlockTerminalPublishReceipt,
     },
     s14_causal_block_union_materializer::S14CausalBlockSharedMappedAssetStore,
@@ -64,11 +64,10 @@ const HIDDEN_BANK_COUNT: usize = 2;
 /// FullDepth43 provider 在最后一层完成后交给 StarFold terminal 的同源只读 owner。
 /// trait 没有默认构造，production provider 必须显式返回其真实 manifest/weight plan 与
 /// 已执行本 block 静态层上传的同一个 uploader/store。
-#[derive(Clone)]
 pub struct S14CausalBlockProductionTerminalAssets {
     pub manifest: Arc<Position0WholeTokenManifest>,
     pub weight_plan: Arc<S14Position0HybridWeightPlan>,
-    pub head_upload: Arc<Mutex<S14CausalBlockTerminalHeadUploadState>>,
+    pub head_upload: S14CausalBlockTerminalHeadLeaseOwner,
 }
 
 impl fmt::Debug for S14CausalBlockProductionTerminalAssets {
@@ -77,7 +76,7 @@ impl fmt::Debug for S14CausalBlockProductionTerminalAssets {
             .debug_struct("S14CausalBlockProductionTerminalAssets")
             .field("manifest", &Arc::as_ptr(&self.manifest))
             .field("weight_plan", &Arc::as_ptr(&self.weight_plan))
-            .field("head_upload", &Arc::as_ptr(&self.head_upload))
+            .field("head_upload", &self.head_upload)
             .finish()
     }
 }

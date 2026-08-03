@@ -13,14 +13,19 @@
 //! 允许提交更长的匹配前缀。
 
 use crate::{
+    s14_starfold_cache::{
+        StarfoldVerifiedMappedLease, STARFOLD_VERIFIED_LEASE_CACHE_CONTRACT_VERSION,
+    },
     s14_starfold_k4_rebind::S14StarfoldK4BlockMode,
+    s14_starwave_transaction::{S14StarwaveProofWriter, S14StarwaveSha256},
     s14_whole_token_device::WholeTokenDeviceCommittedCheckpointBinding,
 };
 use polaris_s14_runner::{DecoderStateV1, MaterializedTokenSource, VOCAB_SIZE};
-use std::{error::Error, fmt};
+use std::{cmp::Ordering, error::Error, fmt, sync::Arc};
 
 pub const S14_STARWAVE_DRAFT_PHYSICAL_K: usize = 4;
 pub const S14_STARWAVE_DRAFT_EXPECTED_MIN_COMMITTABLE_TOKENS: usize = 1;
+pub const S14_STARWAVE_BLOCK_PROPOSAL_CONTRACT_VERSION: u32 = 1;
 
 pub type S14StarwaveDraftResult<T> = Result<T, S14StarwaveDraftError>;
 
@@ -70,6 +75,494 @@ impl S14StarwaveNoFallbackTelemetry {
             && self.cpu_fallback_forward_calls == 0
             && self.transformer_fallback_forward_calls == 0
     }
+}
+
+/// 一个 proposal 所消费的 authoritative base checkpoint 窄身份。
+///
+/// 它不替换现有 `DecoderStateV1` ABI，也不复制 native state；只冻结多位置候选必须共同
+/// 消费的 position/epoch/input/bank/arena/layout 身份。证书在 proposal 构造和 launch 前
+/// 都会重新与同一 authoritative state 比较。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct S14StarwaveBaseCheckpointIdentity {
+    position: u32,
+    commit_epoch: u64,
+    input_token_id: u32,
+    active_fixed_bank: u8,
+    arena_id: u64,
+    state_bytes: u64,
+    max_seq_len: u32,
+}
+
+impl S14StarwaveBaseCheckpointIdentity {
+    fn from_authoritative(authoritative: &DecoderStateV1) -> S14StarwaveDraftResult<Self> {
+        let state_bytes = u64::try_from(authoritative.native_arena.len()).map_err(|_| {
+            S14StarwaveDraftError::new("S14 StarWave base checkpoint state bytes overflow")
+        })?;
+        Ok(Self {
+            position: authoritative.position,
+            commit_epoch: authoritative.commit_epoch,
+            input_token_id: authoritative.input_token_id,
+            active_fixed_bank: authoritative.active_fixed_bank,
+            arena_id: authoritative.native_arena.arena_id(),
+            state_bytes,
+            max_seq_len: authoritative.native.max_seq_len,
+        })
+    }
+
+    fn validate_for(self, authoritative: &DecoderStateV1) -> bool {
+        u64::try_from(authoritative.native_arena.len()).is_ok_and(|state_bytes| {
+            self.position == authoritative.position
+                && self.commit_epoch == authoritative.commit_epoch
+                && self.input_token_id == authoritative.input_token_id
+                && self.active_fixed_bank == authoritative.active_fixed_bank
+                && self.arena_id == authoritative.native_arena.arena_id()
+                && self.state_bytes == state_bytes
+                && self.max_seq_len == authoritative.native.max_seq_len
+        })
+    }
+
+    pub const fn position(self) -> u32 {
+        self.position
+    }
+
+    pub const fn commit_epoch(self) -> u64 {
+        self.commit_epoch
+    }
+
+    pub const fn input_token_id(self) -> u32 {
+        self.input_token_id
+    }
+
+    pub const fn active_fixed_bank(self) -> u8 {
+        self.active_fixed_bank
+    }
+
+    pub const fn state_bytes(self) -> u64 {
+        self.state_bytes
+    }
+
+    pub const fn arena_id(self) -> u64 {
+        self.arena_id
+    }
+
+    pub const fn max_seq_len(self) -> u32 {
+        self.max_seq_len
+    }
+}
+
+/// 候选连续性的 committed-only 来源。这里没有草稿模型或未提交状态入口。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum S14StarwaveCandidateEvidenceSource {
+    InRequestCommittedHistory {
+        matched_suffix_tokens: u32,
+    },
+    ProcessCommittedTransitionAtlas {
+        context_tokens: u8,
+        committed_support: u32,
+    },
+}
+
+impl S14StarwaveCandidateEvidenceSource {
+    fn is_committed_evidence(self) -> bool {
+        match self {
+            Self::InRequestCommittedHistory {
+                matched_suffix_tokens,
+            } => matched_suffix_tokens != 0,
+            Self::ProcessCommittedTransitionAtlas {
+                context_tokens,
+                committed_support,
+            } => context_tokens != 0 && committed_support != 0,
+        }
+    }
+}
+
+/// verified lease 绑定的单 lane 预计物理成本。分母严格是
+/// `transfer_bytes / bandwidth + FLOPs / throughput + fixed_latency`，统一换算为 ns。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct S14StarwaveLanePhysicalEvidence {
+    lease_cache_contract_version: u32,
+    verified_lease_count: u32,
+    verified_physical_bytes: u64,
+    expected_transfer_bytes: u64,
+    expected_flops: u64,
+    bandwidth_bytes_per_second: u64,
+    throughput_flops_per_second: u64,
+    fixed_latency_ns: u64,
+    expected_entropy_drop_nanobits: u64,
+    transfer_latency_ns: u64,
+    compute_latency_ns: u64,
+    total_latency_ns: u64,
+    lease_identity_sha256: S14StarwaveSha256,
+}
+
+impl S14StarwaveLanePhysicalEvidence {
+    /// `leases` 只能来自 verified lease cache 的 `acquire_planned`；普通 mmap 无法构造
+    /// `StarfoldVerifiedMappedLease`。带宽、FLOPs 与固定延迟是调用方当前 block plan 的
+    /// 保守预计值，全部进入证书和路由分母。
+    pub fn from_verified_leases(
+        leases: &[Arc<StarfoldVerifiedMappedLease>],
+        expected_transfer_bytes: u64,
+        expected_flops: u64,
+        bandwidth_bytes_per_second: u64,
+        throughput_flops_per_second: u64,
+        fixed_latency_ns: u64,
+        expected_entropy_drop_nanobits: u64,
+    ) -> S14StarwaveDraftResult<Self> {
+        if leases.is_empty() {
+            return Err(S14StarwaveDraftError::new(
+                "S14 StarWave 多 lane 物理成本缺少 verified lease",
+            ));
+        }
+        if expected_entropy_drop_nanobits == 0 {
+            return Err(S14StarwaveDraftError::new("S14 StarWave 信息增益必须大于0"));
+        }
+        let mut physical_bytes = 0u64;
+        let mut writer = S14StarwaveProofWriter::new("polaris-s14-starwave-verified-leases-v1");
+        writer.write_u32(STARFOLD_VERIFIED_LEASE_CACHE_CONTRACT_VERSION);
+        writer.write_u64(leases.len() as u64);
+        for lease in leases {
+            let identity = lease.identity();
+            physical_bytes = physical_bytes
+                .checked_add(identity.payload_bytes)
+                .ok_or_else(|| {
+                    S14StarwaveDraftError::new("S14 StarWave verified lease bytes overflow")
+                })?;
+            writer.write_str(&identity.tensor);
+            writer.write_str(&identity.cache_key);
+            writer.write_str(&identity.range_key);
+            writer.write_u64(identity.payload_bytes);
+            writer.write_str(&identity.payload_sha256);
+            writer.write_str(&identity.proof_sha256);
+            writer.write_u32(identity.expert_id.map_or(u32::MAX, u32::from));
+        }
+        if expected_transfer_bytes > physical_bytes {
+            return Err(S14StarwaveDraftError::new(
+                "S14 StarWave expected transfer bytes 超过 verified physical bytes",
+            ));
+        }
+        let transfer_latency_ns = starwave_scaled_ceil_ns(
+            expected_transfer_bytes,
+            bandwidth_bytes_per_second,
+            "transfer bandwidth",
+        )?;
+        let compute_latency_ns = starwave_scaled_ceil_ns(
+            expected_flops,
+            throughput_flops_per_second,
+            "compute throughput",
+        )?;
+        let total_latency_ns = transfer_latency_ns
+            .checked_add(compute_latency_ns)
+            .and_then(|value| value.checked_add(fixed_latency_ns))
+            .ok_or_else(|| S14StarwaveDraftError::new("S14 StarWave route latency overflow"))?;
+        if total_latency_ns == 0 {
+            return Err(S14StarwaveDraftError::new(
+                "S14 StarWave route score 分母不能为0",
+            ));
+        }
+        Ok(Self {
+            lease_cache_contract_version: STARFOLD_VERIFIED_LEASE_CACHE_CONTRACT_VERSION,
+            verified_lease_count: u32::try_from(leases.len()).map_err(|_| {
+                S14StarwaveDraftError::new("S14 StarWave verified lease count overflow")
+            })?,
+            verified_physical_bytes: physical_bytes,
+            expected_transfer_bytes,
+            expected_flops,
+            bandwidth_bytes_per_second,
+            throughput_flops_per_second,
+            fixed_latency_ns,
+            expected_entropy_drop_nanobits,
+            transfer_latency_ns,
+            compute_latency_ns,
+            total_latency_ns,
+            lease_identity_sha256: writer.finish(),
+        })
+    }
+
+    fn validate(self) -> bool {
+        self.lease_cache_contract_version == STARFOLD_VERIFIED_LEASE_CACHE_CONTRACT_VERSION
+            && self.verified_lease_count != 0
+            && self.verified_physical_bytes != 0
+            && self.expected_transfer_bytes <= self.verified_physical_bytes
+            && self.expected_entropy_drop_nanobits != 0
+            && self.total_latency_ns != 0
+            && self.lease_identity_sha256 != S14StarwaveSha256::ZERO
+            && starwave_scaled_ceil_ns(
+                self.expected_transfer_bytes,
+                self.bandwidth_bytes_per_second,
+                "transfer bandwidth",
+            )
+            .is_ok_and(|value| value == self.transfer_latency_ns)
+            && starwave_scaled_ceil_ns(
+                self.expected_flops,
+                self.throughput_flops_per_second,
+                "compute throughput",
+            )
+            .is_ok_and(|value| value == self.compute_latency_ns)
+            && self
+                .transfer_latency_ns
+                .checked_add(self.compute_latency_ns)
+                .and_then(|value| value.checked_add(self.fixed_latency_ns))
+                == Some(self.total_latency_ns)
+    }
+
+    pub const fn expected_entropy_drop_nanobits(self) -> u64 {
+        self.expected_entropy_drop_nanobits
+    }
+
+    pub const fn verified_physical_bytes(self) -> u64 {
+        self.verified_physical_bytes
+    }
+
+    pub const fn expected_transfer_bytes(self) -> u64 {
+        self.expected_transfer_bytes
+    }
+
+    pub const fn expected_flops(self) -> u64 {
+        self.expected_flops
+    }
+
+    pub const fn total_latency_ns(self) -> u64 {
+        self.total_latency_ns
+    }
+
+    pub const fn transfer_latency_ns(self) -> u64 {
+        self.transfer_latency_ns
+    }
+
+    pub const fn compute_latency_ns(self) -> u64 {
+        self.compute_latency_ns
+    }
+
+    pub const fn fixed_latency_ns(self) -> u64 {
+        self.fixed_latency_ns
+    }
+
+    pub const fn lease_identity_sha256(self) -> S14StarwaveSha256 {
+        self.lease_identity_sha256
+    }
+}
+
+/// `预计不确定性降低 / (字节搬运时间 + FLOPs计算时间 + 固定延迟)` 的无浮点分数。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct S14StarwaveInformationGainScore {
+    numerator_nanobits: u64,
+    denominator_ns: u64,
+}
+
+impl S14StarwaveInformationGainScore {
+    pub const fn numerator_nanobits(self) -> u64 {
+        self.numerator_nanobits
+    }
+
+    pub const fn denominator_ns(self) -> u64 {
+        self.denominator_ns
+    }
+
+    /// 无浮点比较 `ΔH / physical_time`，供 navigator 在多个 committed 候选之间选择。
+    pub fn compare_efficiency(self, other: Self) -> Ordering {
+        (u128::from(self.numerator_nanobits) * u128::from(other.denominator_ns))
+            .cmp(&(u128::from(other.numerator_nanobits) * u128::from(self.denominator_ns)))
+    }
+}
+
+/// 单个候选 lane 的 production 证书。所有字段私有，调用方只能把 committed 来源、
+/// verified lease 成本与当前 authoritative context 一次性绑定。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct S14StarwaveCandidateLaneCertificate {
+    contract_version: u32,
+    lane: u8,
+    candidate_position: u32,
+    candidate_commit_epoch: u64,
+    token_id: u32,
+    base_checkpoint: S14StarwaveBaseCheckpointIdentity,
+    source: S14StarwaveCandidateEvidenceSource,
+    physical: S14StarwaveLanePhysicalEvidence,
+    score: S14StarwaveInformationGainScore,
+    certificate_sha256: S14StarwaveSha256,
+}
+
+impl S14StarwaveCandidateLaneCertificate {
+    pub fn from_verified_evidence(
+        context: S14StarwaveNavigatorContext<'_>,
+        lane: usize,
+        token_id: u32,
+        source: S14StarwaveCandidateEvidenceSource,
+        physical: S14StarwaveLanePhysicalEvidence,
+    ) -> S14StarwaveDraftResult<Self> {
+        if lane >= S14_STARWAVE_DRAFT_PHYSICAL_K || token_id >= VOCAB_SIZE {
+            return Err(S14StarwaveDraftError::new(
+                "S14 StarWave candidate certificate lane/token 越界",
+            ));
+        }
+        if !source.is_committed_evidence() || !physical.validate() {
+            return Err(S14StarwaveDraftError::new(
+                "S14 StarWave candidate certificate 缺少 committed/physical evidence",
+            ));
+        }
+        let authoritative = context.authoritative();
+        let candidate_position =
+            authoritative
+                .position
+                .checked_add(lane as u32)
+                .ok_or_else(|| {
+                    S14StarwaveDraftError::new("S14 StarWave candidate position overflow")
+                })?;
+        let candidate_commit_epoch = authoritative
+            .commit_epoch
+            .checked_add(lane as u64 + 1)
+            .ok_or_else(|| S14StarwaveDraftError::new("S14 StarWave candidate epoch overflow"))?;
+        let base_checkpoint = S14StarwaveBaseCheckpointIdentity::from_authoritative(authoritative)?;
+        let score = S14StarwaveInformationGainScore {
+            numerator_nanobits: physical.expected_entropy_drop_nanobits,
+            denominator_ns: physical.total_latency_ns,
+        };
+        let mut certificate = Self {
+            contract_version: S14_STARWAVE_BLOCK_PROPOSAL_CONTRACT_VERSION,
+            lane: lane as u8,
+            candidate_position,
+            candidate_commit_epoch,
+            token_id,
+            base_checkpoint,
+            source,
+            physical,
+            score,
+            certificate_sha256: S14StarwaveSha256::ZERO,
+        };
+        certificate.certificate_sha256 = starwave_lane_certificate_sha256(&certificate);
+        Ok(certificate)
+    }
+
+    fn validate_for(self, authoritative: &DecoderStateV1, lane: usize, token_id: u32) -> bool {
+        self.contract_version == S14_STARWAVE_BLOCK_PROPOSAL_CONTRACT_VERSION
+            && usize::from(self.lane) == lane
+            && self.token_id == token_id
+            && self.base_checkpoint.validate_for(authoritative)
+            && authoritative
+                .position
+                .checked_add(lane as u32)
+                .is_some_and(|value| value == self.candidate_position)
+            && authoritative
+                .commit_epoch
+                .checked_add(lane as u64 + 1)
+                .is_some_and(|value| value == self.candidate_commit_epoch)
+            && self.source.is_committed_evidence()
+            && self.physical.validate()
+            && self.score.numerator_nanobits == self.physical.expected_entropy_drop_nanobits
+            && self.score.denominator_ns == self.physical.total_latency_ns
+            && self.certificate_sha256 != S14StarwaveSha256::ZERO
+            && self.certificate_sha256 == starwave_lane_certificate_sha256(&self)
+    }
+
+    pub const fn lane(self) -> u8 {
+        self.lane
+    }
+
+    pub const fn candidate_position(self) -> u32 {
+        self.candidate_position
+    }
+
+    pub const fn candidate_commit_epoch(self) -> u64 {
+        self.candidate_commit_epoch
+    }
+
+    pub const fn token_id(self) -> u32 {
+        self.token_id
+    }
+
+    pub const fn base_checkpoint(self) -> S14StarwaveBaseCheckpointIdentity {
+        self.base_checkpoint
+    }
+
+    pub const fn source(self) -> S14StarwaveCandidateEvidenceSource {
+        self.source
+    }
+
+    pub const fn physical(self) -> S14StarwaveLanePhysicalEvidence {
+        self.physical
+    }
+
+    pub const fn score(self) -> S14StarwaveInformationGainScore {
+        self.score
+    }
+
+    pub const fn certificate_sha256(self) -> S14StarwaveSha256 {
+        self.certificate_sha256
+    }
+}
+
+fn starwave_scaled_ceil_ns(
+    quantity: u64,
+    rate_per_second: u64,
+    field: &'static str,
+) -> S14StarwaveDraftResult<u64> {
+    if quantity == 0 {
+        return Ok(0);
+    }
+    if rate_per_second == 0 {
+        return Err(S14StarwaveDraftError::new(format!(
+            "S14 StarWave {field} 缺失",
+        )));
+    }
+    let numerator = u128::from(quantity)
+        .checked_mul(1_000_000_000)
+        .ok_or_else(|| S14StarwaveDraftError::new("S14 StarWave route scale overflow"))?;
+    let denominator = u128::from(rate_per_second);
+    let value = numerator
+        .checked_add(denominator - 1)
+        .map(|scaled| scaled / denominator)
+        .ok_or_else(|| S14StarwaveDraftError::new("S14 StarWave route ceil overflow"))?;
+    u64::try_from(value)
+        .map_err(|_| S14StarwaveDraftError::new("S14 StarWave route latency 超出 u64"))
+}
+
+fn starwave_lane_certificate_sha256(
+    certificate: &S14StarwaveCandidateLaneCertificate,
+) -> S14StarwaveSha256 {
+    let mut writer = S14StarwaveProofWriter::new("polaris-s14-starwave-lane-certificate-v1");
+    writer.write_u32(certificate.contract_version);
+    writer.write_u8(certificate.lane);
+    writer.write_u32(certificate.candidate_position);
+    writer.write_u64(certificate.candidate_commit_epoch);
+    writer.write_u32(certificate.token_id);
+    writer.write_u32(certificate.base_checkpoint.position);
+    writer.write_u64(certificate.base_checkpoint.commit_epoch);
+    writer.write_u32(certificate.base_checkpoint.input_token_id);
+    writer.write_u8(certificate.base_checkpoint.active_fixed_bank);
+    writer.write_u64(certificate.base_checkpoint.arena_id);
+    writer.write_u64(certificate.base_checkpoint.state_bytes);
+    writer.write_u32(certificate.base_checkpoint.max_seq_len);
+    match certificate.source {
+        S14StarwaveCandidateEvidenceSource::InRequestCommittedHistory {
+            matched_suffix_tokens,
+        } => {
+            writer.write_u8(0);
+            writer.write_u32(matched_suffix_tokens);
+        }
+        S14StarwaveCandidateEvidenceSource::ProcessCommittedTransitionAtlas {
+            context_tokens,
+            committed_support,
+        } => {
+            writer.write_u8(1);
+            writer.write_u8(context_tokens);
+            writer.write_u32(committed_support);
+        }
+    }
+    writer.write_u32(certificate.physical.lease_cache_contract_version);
+    writer.write_u32(certificate.physical.verified_lease_count);
+    writer.write_u64(certificate.physical.verified_physical_bytes);
+    writer.write_u64(certificate.physical.expected_transfer_bytes);
+    writer.write_u64(certificate.physical.expected_flops);
+    writer.write_u64(certificate.physical.bandwidth_bytes_per_second);
+    writer.write_u64(certificate.physical.throughput_flops_per_second);
+    writer.write_u64(certificate.physical.fixed_latency_ns);
+    writer.write_u64(certificate.physical.expected_entropy_drop_nanobits);
+    writer.write_u64(certificate.physical.transfer_latency_ns);
+    writer.write_u64(certificate.physical.compute_latency_ns);
+    writer.write_u64(certificate.physical.total_latency_ns);
+    writer.write_sha256(certificate.physical.lease_identity_sha256);
+    writer.write_u64(certificate.score.numerator_nanobits);
+    writer.write_u64(certificate.score.denominator_ns);
+    writer.finish()
 }
 
 /// 导航器对“从 lane0 起最多可提交多少 token 且不会跨过 EOS”的显式证明声明。
@@ -301,6 +794,7 @@ pub struct S14StarwaveNavigatorDraft {
     draft_token_ids: [u32; S14_STARWAVE_DRAFT_PHYSICAL_K],
     policy: S14StarwaveDraftPolicy,
     commit_safety: S14StarwaveCommitSafety,
+    lane_certificates: [Option<S14StarwaveCandidateLaneCertificate>; S14_STARWAVE_DRAFT_PHYSICAL_K],
     no_fallback_telemetry: S14StarwaveNoFallbackTelemetry,
 }
 
@@ -313,6 +807,22 @@ impl S14StarwaveNavigatorDraft {
             draft_token_ids,
             policy: S14StarwaveDraftPolicy::NavigatorLane0Only,
             commit_safety: S14StarwaveCommitSafety::Lane0Only,
+            lane_certificates: [None; S14_STARWAVE_DRAFT_PHYSICAL_K],
+            no_fallback_telemetry,
+        }
+    }
+
+    fn lane0_only_with_certificates(
+        draft_token_ids: [u32; S14_STARWAVE_DRAFT_PHYSICAL_K],
+        lane_certificates: [Option<S14StarwaveCandidateLaneCertificate>;
+            S14_STARWAVE_DRAFT_PHYSICAL_K],
+        no_fallback_telemetry: S14StarwaveNoFallbackTelemetry,
+    ) -> Self {
+        Self {
+            draft_token_ids,
+            policy: S14StarwaveDraftPolicy::NavigatorLane0Only,
+            commit_safety: S14StarwaveCommitSafety::Lane0Only,
+            lane_certificates,
             no_fallback_telemetry,
         }
     }
@@ -322,6 +832,8 @@ impl S14StarwaveNavigatorDraft {
         draft_token_ids: [u32; S14_STARWAVE_DRAFT_PHYSICAL_K],
         eos_token_id: u32,
         navigator_horizon: usize,
+        lane_certificates: [Option<S14StarwaveCandidateLaneCertificate>;
+            S14_STARWAVE_DRAFT_PHYSICAL_K],
         no_fallback_telemetry: S14StarwaveNoFallbackTelemetry,
     ) -> S14StarwaveDraftResult<Self> {
         let prefix_cap = S14StarwaveEosAwarePrefixCap::for_draft(
@@ -334,6 +846,7 @@ impl S14StarwaveNavigatorDraft {
             draft_token_ids,
             policy: S14StarwaveDraftPolicy::EosAwareNavigator,
             commit_safety: S14StarwaveCommitSafety::EosAware(prefix_cap),
+            lane_certificates,
             no_fallback_telemetry,
         })
     }
@@ -355,6 +868,7 @@ impl S14StarwaveNavigatorDraft {
             draft_token_ids: [filler_token_id; S14_STARWAVE_DRAFT_PHYSICAL_K],
             policy,
             commit_safety: S14StarwaveCommitSafety::Lane0Only,
+            lane_certificates: [None; S14_STARWAVE_DRAFT_PHYSICAL_K],
             no_fallback_telemetry: S14StarwaveNoFallbackTelemetry::default(),
         })
     }
@@ -371,19 +885,57 @@ pub struct S14StarwaveProductionNavigatorOutput {
     candidate_count: usize,
     eos_token_id: Option<u32>,
     navigator_horizon: Option<usize>,
+    lane_certificates: [Option<S14StarwaveCandidateLaneCertificate>; S14_STARWAVE_DRAFT_PHYSICAL_K],
     no_fallback_telemetry: S14StarwaveNoFallbackTelemetry,
 }
 
 impl S14StarwaveProductionNavigatorOutput {
-    /// `candidate_token_ids` 必须是本次 navigator 真正产生的连续候选，长度为1..=4。
-    /// `navigator_horizon` 只有在 navigator 能证明前 N 个候选均属于同一因果轨迹时才传
-    /// `Some(N)`；缺少 EOS、horizon 越界或 horizon 超过真实候选数时不报假成功，而是
-    /// 在转换 proposal 时 fail-closed 为 lane0-only。
+    /// 无物理成本证书的兼容入口。候选仍可供 target 执行 lane0，但即使调用方声明了
+    /// horizon，也必须 fail-closed 为 lane0-only；2..=4 只能走
+    /// [`Self::from_certified_candidates`]。
     pub fn from_real_candidates(
         context: S14StarwaveNavigatorContext<'_>,
         candidate_token_ids: &[u32],
         eos_token_id: Option<u32>,
         navigator_horizon: Option<usize>,
+        no_fallback_telemetry: S14StarwaveNoFallbackTelemetry,
+    ) -> S14StarwaveDraftResult<Self> {
+        Self::from_candidate_contract(
+            context,
+            candidate_token_ids,
+            eos_token_id,
+            navigator_horizon,
+            &[],
+            no_fallback_telemetry,
+        )
+    }
+
+    /// 带 per-lane committed/lease/cost 证书的 production 入口。证书必须从 lane0 连续排列；
+    /// 某 lane 缺失或陈旧只截断 longest reliable prefix，后续 lane 不会令整个 block 回退。
+    pub fn from_certified_candidates(
+        context: S14StarwaveNavigatorContext<'_>,
+        candidate_token_ids: &[u32],
+        eos_token_id: Option<u32>,
+        navigator_horizon: Option<usize>,
+        lane_certificates: &[S14StarwaveCandidateLaneCertificate],
+        no_fallback_telemetry: S14StarwaveNoFallbackTelemetry,
+    ) -> S14StarwaveDraftResult<Self> {
+        Self::from_candidate_contract(
+            context,
+            candidate_token_ids,
+            eos_token_id,
+            navigator_horizon,
+            lane_certificates,
+            no_fallback_telemetry,
+        )
+    }
+
+    fn from_candidate_contract(
+        context: S14StarwaveNavigatorContext<'_>,
+        candidate_token_ids: &[u32],
+        eos_token_id: Option<u32>,
+        navigator_horizon: Option<usize>,
+        lane_certificates: &[S14StarwaveCandidateLaneCertificate],
         no_fallback_telemetry: S14StarwaveNoFallbackTelemetry,
     ) -> S14StarwaveDraftResult<Self> {
         if candidate_token_ids.is_empty()
@@ -406,20 +958,39 @@ impl S14StarwaveProductionNavigatorOutput {
                 "S14 StarWave production navigator 触发禁止的模型/runtime fallback",
             ));
         }
+        if lane_certificates.len() > candidate_token_ids.len() {
+            return Err(S14StarwaveDraftError::new(
+                "S14 StarWave lane certificate 数量超过真实候选",
+            ));
+        }
 
         let candidate_count = candidate_token_ids.len();
         let mut draft_token_ids =
             [candidate_token_ids[candidate_count - 1]; S14_STARWAVE_DRAFT_PHYSICAL_K];
         draft_token_ids[..candidate_count].copy_from_slice(candidate_token_ids);
 
-        // 错误或缺失的 EOS/horizon 只能降级为 lane0-only。这里不把调用方声明的
-        // horizon 截断成一个看似有效的值，避免把“无法证明”伪装成较短证明。
+        let authoritative = context.authoritative();
+        let mut certified = [None; S14_STARWAVE_DRAFT_PHYSICAL_K];
+        let mut reliable_prefix = 0usize;
+        for (lane, certificate) in lane_certificates.iter().copied().enumerate() {
+            if !certificate.validate_for(authoritative, lane, candidate_token_ids[lane]) {
+                break;
+            }
+            certified[lane] = Some(certificate);
+            reliable_prefix = lane + 1;
+        }
+
+        // EOS/horizon/cost 证据共同界定 longest reliable prefix。horizon 越界或 EOS
+        // 缺失仍退化 lane0；证书中途缺失则保留此前已连续证明的2..=4，而非整块回退。
         let eos_token_id = eos_token_id.filter(|&token_id| token_id < VOCAB_SIZE);
-        let navigator_horizon = navigator_horizon.filter(|&horizon| {
+        let requested_horizon = navigator_horizon.filter(|&horizon| {
             (2..=S14_STARWAVE_DRAFT_PHYSICAL_K).contains(&horizon)
                 && horizon <= candidate_count
                 && eos_token_id.is_some()
         });
+        let navigator_horizon = requested_horizon
+            .map(|horizon| horizon.min(reliable_prefix))
+            .filter(|&horizon| horizon >= 2);
 
         Ok(Self {
             authoritative_position: context.authoritative().position,
@@ -428,6 +999,7 @@ impl S14StarwaveProductionNavigatorOutput {
             candidate_count,
             eos_token_id,
             navigator_horizon,
+            lane_certificates: certified,
             no_fallback_telemetry,
         })
     }
@@ -442,6 +1014,12 @@ impl S14StarwaveProductionNavigatorOutput {
 
     pub const fn eos_token_id(&self) -> Option<u32> {
         self.eos_token_id
+    }
+
+    pub const fn lane_certificates(
+        &self,
+    ) -> &[Option<S14StarwaveCandidateLaneCertificate>; S14_STARWAVE_DRAFT_PHYSICAL_K] {
+        &self.lane_certificates
     }
 
     fn into_navigator_draft(
@@ -467,11 +1045,13 @@ impl S14StarwaveProductionNavigatorOutput {
                     self.draft_token_ids,
                     eos_token_id,
                     horizon,
+                    self.lane_certificates,
                     self.no_fallback_telemetry,
                 )
             }
-            _ => Ok(S14StarwaveNavigatorDraft::lane0_only(
+            _ => Ok(S14StarwaveNavigatorDraft::lane0_only_with_certificates(
                 self.draft_token_ids,
+                self.lane_certificates,
                 self.no_fallback_telemetry,
             )),
         }
@@ -592,6 +1172,7 @@ pub struct S14StarwaveDraftProposal {
     expected_min_committable_tokens: usize,
     effective_commit_limit: usize,
     eos_aware_prefix_cap: Option<S14StarwaveEosAwarePrefixCap>,
+    lane_certificates: [Option<S14StarwaveCandidateLaneCertificate>; S14_STARWAVE_DRAFT_PHYSICAL_K],
     no_fallback_telemetry: S14StarwaveNoFallbackTelemetry,
 }
 
@@ -674,6 +1255,14 @@ impl S14StarwaveDraftProposal {
         }
     }
 
+    /// 每个真实候选的 authoritative/checkpoint/物理成本证书；未证明的 padding lane 为
+    /// `None`。只有从 lane0 开始的连续证书前缀可能进入 `effective_commit_limit`。
+    pub const fn lane_certificates(
+        &self,
+    ) -> &[Option<S14StarwaveCandidateLaneCertificate>; S14_STARWAVE_DRAFT_PHYSICAL_K] {
+        &self.lane_certificates
+    }
+
     pub const fn no_fallback_telemetry(&self) -> S14StarwaveNoFallbackTelemetry {
         self.no_fallback_telemetry
     }
@@ -725,6 +1314,18 @@ impl S14StarwaveDraftProposal {
                     && self.eos_aware_prefix_cap.is_some_and(|cap| {
                         cap.limit() == self.effective_commit_limit
                             && cap.validate_for(authoritative, &self.draft_token_ids)
+                            && self.lane_certificates[..cap.navigator_horizon()]
+                                .iter()
+                                .enumerate()
+                                .all(|(lane, certificate)| {
+                                    certificate.is_some_and(|certificate| {
+                                        certificate.validate_for(
+                                            authoritative,
+                                            lane,
+                                            self.draft_token_ids[lane],
+                                        )
+                                    })
+                                })
                     })
             }
         };
@@ -807,6 +1408,7 @@ pub fn propose_s14_starwave_draft_with_navigator<N: S14StarwaveNavigator + ?Size
         expected_min_committable_tokens: S14_STARWAVE_DRAFT_EXPECTED_MIN_COMMITTABLE_TOKENS,
         effective_commit_limit,
         eos_aware_prefix_cap,
+        lane_certificates: navigation.lane_certificates,
         no_fallback_telemetry: navigation.no_fallback_telemetry,
     };
     proposal.validate_for(authoritative)?;

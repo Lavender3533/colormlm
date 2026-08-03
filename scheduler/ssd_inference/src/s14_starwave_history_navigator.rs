@@ -6,9 +6,10 @@
 //! 验证；不命中时 terminal 提交真实 fallback，因此本模块不改变目标模型数学。
 
 use crate::s14_starwave_draft::{
-    S14StarwaveDraftResult, S14StarwaveNavigatorContext, S14StarwaveNoFallbackTelemetry,
-    S14StarwaveProductionNavigator, S14StarwaveProductionNavigatorOutput,
-    S14_STARWAVE_DRAFT_PHYSICAL_K,
+    S14StarwaveCandidateEvidenceSource, S14StarwaveCandidateLaneCertificate,
+    S14StarwaveDraftResult, S14StarwaveLanePhysicalEvidence, S14StarwaveNavigatorContext,
+    S14StarwaveNoFallbackTelemetry, S14StarwaveProductionNavigator,
+    S14StarwaveProductionNavigatorOutput, S14_STARWAVE_DRAFT_PHYSICAL_K,
 };
 use std::{
     collections::HashMap,
@@ -64,6 +65,12 @@ struct AtlasContinuation {
     tokens: [u32; S14_STARWAVE_DRAFT_PHYSICAL_K],
     support: u32,
     last_touch: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct HistoryCandidateProposal {
+    tokens: Vec<u32>,
+    source: Option<S14StarwaveCandidateEvidenceSource>,
 }
 
 impl AtlasContinuation {
@@ -194,7 +201,7 @@ impl S14StarwaveTransitionAtlas {
         self.stats.resident_contexts = self.entries.len();
     }
 
-    fn propose(&mut self, history: &[u32]) -> Option<Vec<u32>> {
+    fn propose(&mut self, history: &[u32]) -> Option<HistoryCandidateProposal> {
         self.stats.queries = self.stats.queries.saturating_add(1);
         let max_suffix = S14_STARWAVE_TRANSITION_ATLAS_CONTEXT_TOKENS.min(history.len());
         for suffix_len in (1..=max_suffix).rev() {
@@ -215,7 +222,15 @@ impl S14StarwaveTransitionAtlas {
             }
             self.stats.hits = self.stats.hits.saturating_add(1);
             self.stats.multi_token_hits = self.stats.multi_token_hits.saturating_add(1);
-            return Some(candidate.as_vec());
+            return Some(HistoryCandidateProposal {
+                tokens: candidate.as_vec(),
+                source: Some(
+                    S14StarwaveCandidateEvidenceSource::ProcessCommittedTransitionAtlas {
+                        context_tokens: suffix_len as u8,
+                        committed_support: candidate.support,
+                    },
+                ),
+            });
         }
         self.stats.misses = self.stats.misses.saturating_add(1);
         None
@@ -273,6 +288,8 @@ pub struct S14StarwaveHistoryNavigator {
     max_suffix_tokens: usize,
     proposals: u64,
     multi_token_proposals: u64,
+    lane_physical_evidence:
+        Option<[S14StarwaveLanePhysicalEvidence; S14_STARWAVE_DRAFT_PHYSICAL_K]>,
 }
 
 impl S14StarwaveHistoryNavigator {
@@ -282,11 +299,22 @@ impl S14StarwaveHistoryNavigator {
             max_suffix_tokens: DEFAULT_MAX_SUFFIX_TOKENS,
             proposals: 0,
             multi_token_proposals: 0,
+            lane_physical_evidence: None,
         }
     }
 
     pub fn with_max_suffix_tokens(mut self, max_suffix_tokens: usize) -> Self {
         self.max_suffix_tokens = max_suffix_tokens.max(1);
+        self
+    }
+
+    /// 注入由当前 block plan 的 verified leases 签出的逐 lane 成本。没有该证据时，
+    /// history/atlas 仍可提供 lane0 猜测，但 production adapter 必须退化为 commit_limit=1。
+    pub fn with_lane_physical_evidence(
+        mut self,
+        lane_physical_evidence: [S14StarwaveLanePhysicalEvidence; S14_STARWAVE_DRAFT_PHYSICAL_K],
+    ) -> Self {
+        self.lane_physical_evidence = Some(lane_physical_evidence);
         self
     }
 
@@ -311,7 +339,7 @@ impl S14StarwaveHistoryNavigator {
         history
     }
 
-    fn local_multi_token_candidates(&self, history: &[u32]) -> Option<Vec<u32>> {
+    fn local_multi_token_candidates(&self, history: &[u32]) -> Option<HistoryCandidateProposal> {
         let end = history.len();
         let max_suffix = self.max_suffix_tokens.min(end.saturating_sub(1));
         for suffix_len in (1..=max_suffix).rev() {
@@ -326,14 +354,22 @@ impl S14StarwaveHistoryNavigator {
                 let candidate_end = end.min(candidate_start + S14_STARWAVE_DRAFT_PHYSICAL_K);
                 let candidates = history[candidate_start..candidate_end].to_vec();
                 if candidates.len() >= 2 {
-                    return Some(candidates);
+                    return Some(HistoryCandidateProposal {
+                        tokens: candidates,
+                        source: Some(
+                            S14StarwaveCandidateEvidenceSource::InRequestCommittedHistory {
+                                matched_suffix_tokens: u32::try_from(suffix_len)
+                                    .unwrap_or(u32::MAX),
+                            },
+                        ),
+                    });
                 }
             }
         }
         None
     }
 
-    fn candidates(&self, context: S14StarwaveNavigatorContext<'_>) -> Vec<u32> {
+    fn candidates(&self, context: S14StarwaveNavigatorContext<'_>) -> HistoryCandidateProposal {
         let history = Self::committed_input_chain(context);
         if let Some(candidates) = self.local_multi_token_candidates(&history) {
             return candidates;
@@ -343,7 +379,10 @@ impl S14StarwaveHistoryNavigator {
         }
         // 没有已提交转移时仍给 target 一个明确 lane0 候选；mismatch 时由真实 head
         // fallback，绝不把重复值或未提交草稿冒充多 token 证书。
-        vec![context.authoritative().input_token_id]
+        HistoryCandidateProposal {
+            tokens: vec![context.authoritative().input_token_id],
+            source: None,
+        }
     }
 }
 
@@ -354,15 +393,28 @@ impl S14StarwaveProductionNavigator for S14StarwaveHistoryNavigator {
     ) -> S14StarwaveDraftResult<S14StarwaveProductionNavigatorOutput> {
         let candidates = self.candidates(context);
         self.proposals = self.proposals.saturating_add(1);
-        if candidates.len() >= 2 {
+        if candidates.tokens.len() >= 2 {
             self.multi_token_proposals = self.multi_token_proposals.saturating_add(1);
         }
-        let horizon = (candidates.len() >= 2).then_some(candidates.len());
-        S14StarwaveProductionNavigatorOutput::from_real_candidates(
+        let horizon = (candidates.tokens.len() >= 2).then_some(candidates.tokens.len());
+        let mut certificates = Vec::new();
+        if let (Some(physical), Some(source)) = (self.lane_physical_evidence, candidates.source) {
+            for (lane, &token_id) in candidates.tokens.iter().enumerate() {
+                certificates.push(S14StarwaveCandidateLaneCertificate::from_verified_evidence(
+                    context,
+                    lane,
+                    token_id,
+                    source,
+                    physical[lane],
+                )?);
+            }
+        }
+        S14StarwaveProductionNavigatorOutput::from_certified_candidates(
             context,
-            &candidates,
+            &candidates.tokens,
             Some(self.eos_token_id),
             horizon,
+            &certificates,
             S14StarwaveNoFallbackTelemetry::default(),
         )
     }

@@ -22,6 +22,7 @@ use crate::{
     s14_causal_block_terminal_owner::S14CausalBlockTerminalHeadUploadState,
     s14_dynamic_page_cache_readiness::{materialize_planned_range_asset, DynamicPageFetchMode},
     s14_input_asset_plan::S14InputAssetPlanner,
+    s14_position0_hybrid_upload::S14Position0CausalBlockUploadLease,
     s14_position0_layer_program::S14Position0FullDepthLayerProgram,
     s14_position0_paged_weight_arena::{S14Position0PagedArenaPlan, S14Position0PagedWeightArena},
     s14_position0_weight_plan::S14Position0HybridWeightPlan,
@@ -165,7 +166,8 @@ impl S14StarfoldBlockResourceFactory for S14StarfoldConcreteFactory {
             &request.input_token_ids,
             request.expected_initial_hidden_generation,
         )?;
-        self.prepare_persistent_uploader(&authoritative, &source, request.block_sequence)?;
+        let upload_lease =
+            self.prepare_persistent_uploader(&authoritative, &source, request.block_sequence)?;
         let generation_position0_provenance = if request.mode
             == S14StarfoldK4BlockMode::SpeculativeGeneration
             && authoritative.position == 0
@@ -228,6 +230,7 @@ impl S14StarfoldBlockResourceFactory for S14StarfoldConcreteFactory {
             authoritative.clone(),
             request.input_token_ids,
             source.clone(),
+            upload_lease,
             generation_position0_provenance,
             request.expected_initial_hidden_generation,
             paged_arena,
@@ -447,6 +450,7 @@ impl S14StarfoldConcreteFactory {
         authoritative: DecoderStateV1,
         input_token_ids: [u32; S14_STARFOLD_CONCRETE_K],
         source: MaterializedTokenSource,
+        upload_lease: S14Position0CausalBlockUploadLease,
         position0_generation_provenance: Option<S14Position0CommittedGenerationProvenance>,
         hidden_generation: u64,
         paged_arena: Arc<S14Position0PagedWeightArena>,
@@ -570,6 +574,7 @@ impl S14StarfoldConcreteFactory {
             head_upload,
             base_position: authoritative.position,
             source: source.clone(),
+            upload_lease,
             authoritative: S14Base1K4AuthoritativeStateBinding {
                 native_state: authoritative.native.clone(),
                 device_state: authoritative_device_state,
@@ -636,14 +641,14 @@ impl S14StarfoldConcreteFactory {
         authoritative: &DecoderStateV1,
         source: &MaterializedTokenSource,
         block_sequence: u64,
-    ) -> Result<()> {
+    ) -> Result<S14Position0CausalBlockUploadLease> {
         if self.uploader_prepared_block_sequence == Some(block_sequence) {
             if self.uploader_prepared_base_position != Some(authoritative.position)
                 || self.uploader_prepared_source.as_ref() != Some(source)
             {
                 bail!("同一 block sequence 重试时禁止切换 authoritative position/source");
             }
-            let head = self
+            let mut head = self
                 .head_upload
                 .as_ref()
                 .context("S14 concrete terminal head uploader 已退休")?
@@ -651,49 +656,37 @@ impl S14StarfoldConcreteFactory {
                 .map_err(|_| anyhow!("S14 concrete terminal head uploader mutex poisoned"))?;
             return head
                 .uploader
-                .validate_causal_block_head_stream_start(&self.weight_plan)
-                .context("同一 block sequence 重试时 uploader 已离开 token 起点");
+                .issue_causal_block_upload_lease(
+                    &self.weight_plan,
+                    block_sequence,
+                    authoritative.position,
+                    *source,
+                )
+                .context("同一 block sequence 重取 uploader lease");
         }
         if self.prepared_blocks == 0 {
             if block_sequence != 0 || authoritative.position != 0 {
                 bail!("首个 concrete block 必须是 sequence0/base0");
             }
-            let head = self
-                .head_upload
-                .as_ref()
-                .context("S14 concrete terminal head uploader 已退休")?
-                .lock()
-                .map_err(|_| anyhow!("S14 concrete terminal head uploader mutex poisoned"))?;
-            head.uploader
-                .validate_causal_block_head_stream_start(&self.weight_plan)
-                .context("首个 concrete block uploader 不是 token 起点")?;
-            drop(head);
-            self.uploader_prepared_block_sequence = Some(block_sequence);
-            self.uploader_prepared_base_position = Some(authoritative.position);
-            self.uploader_prepared_source = Some(source.clone());
-            return Ok(());
-        }
-        let previous_source = self
-            .last_prepared_source
-            .as_ref()
-            .context("S14 concrete previous block source 缺失")?;
-        let previous_base = self
-            .last_prepared_base_position
-            .context("S14 concrete previous block base 缺失")?;
-        if authoritative.position <= previous_base {
-            bail!("上一 concrete block 尚未发布新的 authoritative position");
-        }
-        let previous_sequence = self
-            .last_prepared_block_sequence
-            .context("S14 concrete previous block sequence 缺失")?;
-        if self.uploader_prepared_block_sequence != Some(previous_sequence) {
-            bail!("concrete uploader/prepared block sequence lineage 漂移");
-        }
-        let expected_sequence = previous_sequence
-            .checked_add(1)
-            .context("S14 concrete block sequence overflow")?;
-        if block_sequence != expected_sequence || block_sequence != self.prepared_blocks {
-            bail!("concrete block sequence 未按 production adapter lineage 单调推进");
+        } else {
+            let previous_base = self
+                .last_prepared_base_position
+                .context("S14 concrete previous block base 缺失")?;
+            if authoritative.position <= previous_base {
+                bail!("上一 concrete block 尚未发布新的 authoritative position");
+            }
+            let previous_sequence = self
+                .last_prepared_block_sequence
+                .context("S14 concrete previous block sequence 缺失")?;
+            if self.uploader_prepared_block_sequence != Some(previous_sequence) {
+                bail!("concrete uploader/prepared block sequence lineage 漂移");
+            }
+            let expected_sequence = previous_sequence
+                .checked_add(1)
+                .context("S14 concrete block sequence overflow")?;
+            if block_sequence != expected_sequence || block_sequence != self.prepared_blocks {
+                bail!("concrete block sequence 未按 production adapter lineage 单调推进");
+            }
         }
         let mut head = self
             .head_upload
@@ -701,24 +694,20 @@ impl S14StarfoldConcreteFactory {
             .context("S14 concrete terminal head uploader 已退休")?
             .lock()
             .map_err(|_| anyhow!("S14 concrete terminal head uploader mutex poisoned"))?;
-        match previous_source {
-            MaterializedTokenSource::SpeculativeDraft => head
-                .uploader
-                .begin_next_causal_block_head_stream(&self.weight_plan)
-                .context("重开下一 generation block static/head stream")?,
-            MaterializedTokenSource::ForcedPrefill => head
-                .uploader
-                .begin_next_causal_block_after_forced_prefill(&self.weight_plan)
-                .context("重开 ForcedPrefill 后的下一 causal block stream")?,
-        }
-        head.uploader
-            .validate_causal_block_head_stream_start(&self.weight_plan)
-            .context("新 concrete block rearm 后 uploader 不是 token 起点")?;
+        let lease = head
+            .uploader
+            .issue_causal_block_upload_lease(
+                &self.weight_plan,
+                block_sequence,
+                authoritative.position,
+                *source,
+            )
+            .context("签发 concrete block-scoped uploader lease")?;
         drop(head);
         self.uploader_prepared_block_sequence = Some(block_sequence);
         self.uploader_prepared_base_position = Some(authoritative.position);
-        self.uploader_prepared_source = Some(source.clone());
-        Ok(())
+        self.uploader_prepared_source = Some(*source);
+        Ok(lease)
     }
 
     /// 只在请求级 stage/provider/external owners 已全部退出后调用。它复用同一个
@@ -727,10 +716,6 @@ impl S14StarfoldConcreteFactory {
         if self.prepared_blocks == 0 {
             return Ok(());
         }
-        let previous_source = self
-            .last_prepared_source
-            .as_ref()
-            .context("request rearm 缺少上一 block source")?;
         let previous_sequence = self
             .last_prepared_block_sequence
             .context("request rearm 缺少上一 block sequence")?;
@@ -743,19 +728,9 @@ impl S14StarfoldConcreteFactory {
             .context("S14 concrete terminal head uploader 已退休")?
             .lock()
             .map_err(|_| anyhow!("S14 concrete terminal head uploader mutex poisoned"))?;
-        match previous_source {
-            MaterializedTokenSource::SpeculativeDraft => head
-                .uploader
-                .begin_next_causal_block_head_stream(&self.weight_plan)
-                .context("新请求前重开 generation static/head stream")?,
-            MaterializedTokenSource::ForcedPrefill => head
-                .uploader
-                .begin_next_causal_block_after_forced_prefill(&self.weight_plan)
-                .context("新请求前重开 ForcedPrefill static/head stream")?,
-        }
         head.uploader
-            .validate_causal_block_head_stream_start(&self.weight_plan)
-            .context("新请求 rearm 后 uploader 不是 sequence0 起点")?;
+            .reset_causal_block_request_lineage(&self.weight_plan)
+            .context("新请求前关闭上一 block uploader lease lineage")?;
         drop(head);
         self.uploader_prepared_block_sequence = None;
         self.uploader_prepared_base_position = None;

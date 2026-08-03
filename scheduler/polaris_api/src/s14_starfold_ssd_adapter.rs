@@ -661,6 +661,9 @@ fn resident_inventory_from_ssd(
             "verified_lease_cache_capacity_entries",
         )?,
         verified_lease_cache_contract_version: receipt.verified_lease_cache_contract_version,
+        packed_l2_owners: count_u32(receipt.packed_l2_owners, "packed_l2_owners")?,
+        packed_l2_capacity_bytes: receipt.packed_l2_capacity_bytes,
+        packed_l2_contract_version: receipt.packed_l2_contract_version,
         starwave_transition_atlas_owners: count_u32(
             receipt.starwave_transition_atlas_owners,
             "starwave_transition_atlas_owners",

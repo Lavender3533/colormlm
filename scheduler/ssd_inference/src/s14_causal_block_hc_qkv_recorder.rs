@@ -373,9 +373,8 @@ pub struct S14CausalBlockHiddenBank {
 }
 
 /// 已 seal 的同一个 K-row recorder 向 StarFold direct terminal 暴露的最窄 owner 集。
-/// final hidden 必须唯一命中当前 A/B bank；prefix arena 与 terminal assets 均只克隆 Arc，
-/// 不创建第二套状态、uploader 或 paged arena。
-#[derive(Clone)]
+/// final hidden 必须唯一命中当前 A/B bank；terminal assets 携带 one-shot uploader lease，
+/// 因而本 owner 不实现 Clone，也不创建第二套状态、uploader 或 paged arena。
 pub struct S14CausalBlockStarfoldTerminalBlockOwners {
     pub context: Arc<VulkanContext>,
     pub final_hidden: S14CausalBlockTerminalOwnedBufferSlice,

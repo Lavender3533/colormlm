@@ -23,6 +23,10 @@ use crate::{
         s14_starfold_decoder_state_sha256, S14StarfoldK4CommitReceipt,
         S14StarfoldK4TerminalChainOwner, S14_STARFOLD_K4_BLOCK_SIZE,
     },
+    s14_starfold_packed_l2::{
+        S14_STARFOLD_PACKED_L2_CONTRACT_VERSION, S14_STARFOLD_PACKED_L2_MAX_BYTES,
+        S14_STARFOLD_PACKED_L2_MIB_BYTES,
+    },
     s14_starfold_production_resources::{
         S14StarfoldK4ProductionResourceInputs, S14StarfoldK4ProductionResources,
         S14StarfoldPersistentResourceInventory,
@@ -135,6 +139,9 @@ pub struct S14StarfoldResidentResourceContract {
     pub verified_lease_cache_owners: usize,
     pub verified_lease_cache_capacity_entries: usize,
     pub verified_lease_cache_contract_version: u32,
+    pub packed_l2_owners: usize,
+    pub packed_l2_capacity_bytes: u64,
+    pub packed_l2_contract_version: u32,
     pub starwave_transition_atlas_owners: usize,
     pub starwave_transition_atlas_capacity_entries: usize,
     pub starwave_transition_atlas_contract_version: u32,
@@ -324,6 +331,9 @@ impl<F: S14StarfoldBlockResourceFactory> S14StarfoldProductionRoot<F> {
         let factory_inventory = factory.resident_owner_inventory(context, paged_arena)?;
         let forbidden = factory_inventory.forbidden;
         let verified_lease_cache = process_starfold_verified_lease_cache();
+        let packed_l2 = runtime
+            .starfold_packed_l2_cache_stats()
+            .context("resident contract 缺少 StarFold packed L2 owner")?;
         let _transition_atlas = process_starwave_transition_atlas_stats();
         let expected_physical_allocation = u64::from(windows.microtile_bytes)
             .checked_mul(u64::try_from(S14_STARFOLD_WINDOW_COUNT)?)
@@ -343,6 +353,10 @@ impl<F: S14StarfoldBlockResourceFactory> S14StarfoldProductionRoot<F> {
             && factory_inventory.context_bindings == 1
             && factory_inventory.paged_arena_bindings == 1
             && factory_inventory.verified_mapped_asset_store_owners == 1
+            && packed_l2.capacity_bytes <= S14_STARFOLD_PACKED_L2_MAX_BYTES
+            && packed_l2.capacity_bytes % S14_STARFOLD_PACKED_L2_MIB_BYTES == 0
+            && packed_l2.resident_bytes <= packed_l2.capacity_bytes
+            && (packed_l2.capacity_bytes != 0 || packed_l2.entries == 0)
             && factory_inventory.terminal_head_uploader_owners == 1
             && factory_inventory.request_owned == S14StarfoldBlockOwnerInventory::default()
             && forbidden == S14StarfoldForbiddenPathCounters::default()
@@ -366,6 +380,9 @@ impl<F: S14StarfoldBlockResourceFactory> S14StarfoldProductionRoot<F> {
             verified_lease_cache_owners: 1,
             verified_lease_cache_capacity_entries: verified_lease_cache.capacity_entries(),
             verified_lease_cache_contract_version: STARFOLD_VERIFIED_LEASE_CACHE_CONTRACT_VERSION,
+            packed_l2_owners: 1,
+            packed_l2_capacity_bytes: packed_l2.capacity_bytes,
+            packed_l2_contract_version: S14_STARFOLD_PACKED_L2_CONTRACT_VERSION,
             starwave_transition_atlas_owners: 1,
             starwave_transition_atlas_capacity_entries: S14_STARWAVE_TRANSITION_ATLAS_CAPACITY,
             starwave_transition_atlas_contract_version:

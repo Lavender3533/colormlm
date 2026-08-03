@@ -31,7 +31,10 @@ use crate::{
         S14FinalHcHeadPipeline, S14FinalHcHeadShape,
     },
     s14_head_chunk_argmax::{S14HeadChunkArgmaxShape, S14_HEAD_CHUNK_COUNT},
-    s14_position0_hybrid_upload::{S14Position0HeadChunkReceipt, S14Position0HybridUploader},
+    s14_position0_hybrid_upload::{
+        S14Position0CausalBlockUploadLease, S14Position0HeadChunkReceipt,
+        S14Position0HybridUploader,
+    },
     s14_position0_mapped_assets::VerifiedMappedAssetStore,
     s14_position0_paged_weight_arena::S14Position0PagedWeightArena,
     s14_position0_weight_plan::S14Position0HybridWeightPlan,
@@ -79,6 +82,45 @@ pub struct S14CausalBlockTerminalHeadUploadState {
     pub store: VerifiedMappedAssetStore,
 }
 
+/// Provider one-shot 交给 terminal 的同源 uploader capability。wrapper 不实现 Clone，
+/// 防止同一 block lease 被两个 terminal owner 消费。
+pub struct S14CausalBlockTerminalHeadLeaseOwner {
+    state: Arc<Mutex<S14CausalBlockTerminalHeadUploadState>>,
+    lease: S14Position0CausalBlockUploadLease,
+}
+
+impl S14CausalBlockTerminalHeadLeaseOwner {
+    pub fn new(
+        state: Arc<Mutex<S14CausalBlockTerminalHeadUploadState>>,
+        lease: S14Position0CausalBlockUploadLease,
+    ) -> Self {
+        Self { state, lease }
+    }
+
+    pub const fn lease(&self) -> S14Position0CausalBlockUploadLease {
+        self.lease
+    }
+
+    fn into_parts(
+        self,
+    ) -> (
+        Arc<Mutex<S14CausalBlockTerminalHeadUploadState>>,
+        S14Position0CausalBlockUploadLease,
+    ) {
+        (self.state, self.lease)
+    }
+}
+
+impl fmt::Debug for S14CausalBlockTerminalHeadLeaseOwner {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("S14CausalBlockTerminalHeadLeaseOwner")
+            .field("state", &Arc::as_ptr(&self.state))
+            .field("lease", &self.lease)
+            .finish()
+    }
+}
+
 impl fmt::Debug for S14CausalBlockTerminalHeadUploadState {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
@@ -101,7 +143,7 @@ pub struct S14CausalBlockTerminalResourceOwnerInputs {
     pub paged_arena: Arc<S14Position0PagedWeightArena>,
     pub head_manifest: Arc<Position0WholeTokenManifest>,
     pub head_weight_plan: Arc<S14Position0HybridWeightPlan>,
-    pub head_upload: Arc<Mutex<S14CausalBlockTerminalHeadUploadState>>,
+    pub head_upload: S14CausalBlockTerminalHeadLeaseOwner,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -213,6 +255,7 @@ pub struct S14CausalBlockProductionTerminalResourceOwner {
     head_manifest: Arc<Position0WholeTokenManifest>,
     head_weight_plan: Arc<S14Position0HybridWeightPlan>,
     head_upload: Arc<Mutex<S14CausalBlockTerminalHeadUploadState>>,
+    head_upload_lease: S14Position0CausalBlockUploadLease,
     layout: S14CausalBlockTerminalArenaLayout,
     arena: Option<GpuBuffer>,
     status_readback: Option<GpuBuffer>,
@@ -239,6 +282,7 @@ impl fmt::Debug for S14CausalBlockProductionTerminalResourceOwner {
                 &self.prefix_checkpoint_arena.layout().block_size,
             )
             .field("head_chunk_count", &(S14_HEAD_CHUNK_COUNT as usize))
+            .field("head_upload_lease", &self.head_upload_lease)
             .field("paged_arena", &Arc::as_ptr(&self.paged_arena))
             .field("layout", &self.layout)
             .field("producer_timeline", &self.producer_timeline)
@@ -259,6 +303,7 @@ impl S14CausalBlockProductionTerminalResourceOwner {
             head_weight_plan,
             head_upload,
         } = inputs;
+        let (head_upload, head_upload_lease) = head_upload.into_parts();
         if !context.timeline_semaphore || !matches!(block_size, 4 | 8) {
             bail!("production terminal owner 要求 timeline semaphore 与 K=4/8");
         }
@@ -272,6 +317,13 @@ impl S14CausalBlockProductionTerminalResourceOwner {
             if !state.uploader.resident_static_uploaded() {
                 bail!("production terminal HC/norm 绑定前 resident-small 尚未完成 verified upload");
             }
+            state
+                .uploader
+                .validate_causal_block_terminal_head_stream_for_lease(
+                    &head_weight_plan,
+                    &head_upload_lease,
+                )
+                .context("production terminal owner 绑定 uploader lease")?;
         }
         let terminal_static = resolve_terminal_static_slices(paged_arena.as_ref())?;
         validate_external_resources(
@@ -359,6 +411,7 @@ impl S14CausalBlockProductionTerminalResourceOwner {
             head_manifest,
             head_weight_plan,
             head_upload,
+            head_upload_lease,
             layout,
             arena: Some(arena),
             status_readback: Some(status_readback),
@@ -724,16 +777,20 @@ impl S14CausalBlockTerminalResourceOwner for S14CausalBlockProductionTerminalRes
         if chunk == 0 {
             state
                 .uploader
-                .validate_causal_block_terminal_head_stream(&self.head_weight_plan)
+                .begin_causal_block_terminal_head_stream(
+                    &self.head_weight_plan,
+                    &self.head_upload_lease,
+                )
                 .map_err(|error| {
                     format!(
-                        "production terminal head uploader 未处于 causal-block terminal head 流起点: {error:#}"
+                        "production terminal head uploader 无法进入 lease-bound head 流: {error:#}"
                     )
                 })?;
         }
         let receipt = state
             .uploader
-            .record_next_head_chunk_copy(
+            .record_next_head_chunk_copy_for_causal_block(
+                &self.head_upload_lease,
                 ctx,
                 command,
                 &self.head_manifest,
@@ -758,7 +815,8 @@ impl S14CausalBlockTerminalResourceOwner for S14CausalBlockProductionTerminalRes
             .map_err(|_| "production terminal head uploader poisoned".to_owned())?;
         let S14CausalBlockTerminalHeadUploadState { uploader, store } = &mut *state;
         uploader
-            .stage_recorded_head_chunk(
+            .stage_recorded_head_chunk_for_causal_block(
+                &self.head_upload_lease,
                 &self.head_manifest,
                 &self.head_weight_plan,
                 store,
@@ -770,13 +828,27 @@ impl S14CausalBlockTerminalResourceOwner for S14CausalBlockProductionTerminalRes
 
     fn abort_head_stream_after_drain(&self) {
         if let Ok(mut state) = self.head_upload.lock() {
-            state.uploader.abort_persistent_token_after_drain();
+            let _ = state.uploader.abort_causal_block_lease_after_drain(
+                &self.head_weight_plan,
+                &self.head_upload_lease,
+            );
         }
     }
 
     fn validate_after_producer_timeline(&self, expected_value: u64) -> Result<(), String> {
         self.read_status_after_timeline(expected_value)
-            .map_err(|error| error.to_string())
+            .map_err(|error| error.to_string())?;
+        let state = self
+            .head_upload
+            .lock()
+            .map_err(|_| "production terminal head uploader poisoned".to_owned())?;
+        state
+            .uploader
+            .validate_causal_block_terminal_complete(
+                &self.head_weight_plan,
+                &self.head_upload_lease,
+            )
+            .map_err(|error| format!("production terminal lease 完成态未闭合: {error:#}"))
     }
 }
 

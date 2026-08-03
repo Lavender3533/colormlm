@@ -19,6 +19,10 @@ use crate::{
         StarfoldVerifiedLeaseValidationEpoch, StarfoldVerifiedMappedLease, STARFOLD_B4_LANES,
         STARFOLD_ONE_MIB, STARFOLD_TOP_K,
     },
+    s14_starfold_packed_l2::{
+        S14StarfoldPackedL2Cache, S14StarfoldPackedL2Config, S14StarfoldPackedL2Key,
+        S14StarfoldPackedL2Stats,
+    },
     s14_starfold_transfer_executor::S14StarfoldTransferExecutor,
     s14_starfold_vulkan_windows::{
         S14StarfoldBufferSpec, S14StarfoldComputePairRecording, S14StarfoldComputePairTicket,
@@ -1007,6 +1011,7 @@ pub struct S14StarfoldRuntime {
     contract: S14StarfoldDoubleWindowContract,
     resource_owner: Option<S14StarfoldVulkanResourceOwner>,
     transfer_executor: Option<S14StarfoldTransferExecutor>,
+    packed_l2: S14StarfoldPackedL2Cache,
 }
 
 impl S14StarfoldRuntime {
@@ -1037,6 +1042,8 @@ impl S14StarfoldRuntime {
             .begin_validation_epoch()
             .map_err(anyhow::Error::new)
             .context("签发 S14 StarFold 初始 verified lease validation epoch")?;
+        let packed_l2 = S14StarfoldPackedL2Cache::new(S14StarfoldPackedL2Config::from_env()?)
+            .context("初始化 S14 StarFold packed MXFP4 RAM L2")?;
         Ok(Self {
             cache_root: cache_root.to_path_buf(),
             page_fetch_mode,
@@ -1044,6 +1051,7 @@ impl S14StarfoldRuntime {
             contract,
             resource_owner: Some(resource_owner),
             transfer_executor: Some(transfer_executor),
+            packed_l2,
         })
     }
 
@@ -1090,6 +1098,10 @@ impl S14StarfoldRuntime {
             .stats()
             .map_err(anyhow::Error::new)
             .context("读取 S14 StarFold 进程级 verified lease cache stats")
+    }
+
+    pub fn packed_l2_cache_stats(&self) -> S14StarfoldPackedL2Stats {
+        self.packed_l2.stats()
     }
 
     /// 每个 prompt request 只签发一次；同一请求的所有 K4 block 共用该纪元。
@@ -1182,7 +1194,7 @@ impl S14StarfoldRuntime {
     /// 把同一 layer/expert/projection 的 MXFP4 weight 与 scale proof 固定拼成一个 payload。
     /// 两个输入都必须是 `Single`，从而禁止 packed-on-packed 造成 proof 身份递归或重复打包。
     pub fn pack_verified_mxfp4(
-        &self,
+        &mut self,
         weight: Arc<S14StarfoldVerifiedMicrotile>,
         scale: Arc<S14StarfoldVerifiedMicrotile>,
     ) -> Result<Arc<S14StarfoldVerifiedMicrotile>> {
@@ -1193,6 +1205,14 @@ impl S14StarfoldRuntime {
             .as_single()
             .context("S14 StarFold MXFP4 scale proof 必须是 Single")?;
         validate_mxfp4_proof_pair(weight_single.source(), scale_single.source())?;
+        let packed_l2_key = S14StarfoldPackedL2Key::from_sources(
+            weight_single.source(),
+            scale_single.source(),
+            self.contract.microtile_bytes,
+        )?;
+        if let Some(cached) = self.packed_l2.lookup(&packed_l2_key) {
+            return Ok(cached);
+        }
 
         let weight_bytes = u64::try_from(weight_single.bytes().len())
             .context("S14 StarFold MXFP4 weight bytes 超出 u64")?;
@@ -1216,7 +1236,7 @@ impl S14StarfoldRuntime {
             bail!("S14 StarFold packed MXFP4 payload 长度漂移");
         }
         let bytes: Arc<[u8]> = Arc::from(packed.into_boxed_slice());
-        Ok(Arc::new(S14StarfoldVerifiedMicrotile::PackedMxfp4(
+        let packed = Arc::new(S14StarfoldVerifiedMicrotile::PackedMxfp4(
             S14StarfoldPackedMxfp4ProofLease {
                 bytes,
                 weight,
@@ -1229,7 +1249,8 @@ impl S14StarfoldRuntime {
                     total_bytes,
                 },
             },
-        )))
+        ));
+        self.packed_l2.admit(packed_l2_key, packed)
     }
 
     pub fn reserve_verified_upload(

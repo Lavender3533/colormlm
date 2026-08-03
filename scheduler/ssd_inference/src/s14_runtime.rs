@@ -49,6 +49,7 @@ use crate::{
     s14_position0_weight_plan::S14Position0HybridWeightPlan,
     s14_position0_whole_token::Position0GpuCandidate,
     s14_position0_workspace::S14Position0WorkspaceSlot,
+    s14_starfold_packed_l2::S14StarfoldPackedL2Stats,
     s14_starfold_production_resources::S14StarfoldOwnedRuntimeParts,
     s14_starfold_runtime::{
         S14StarfoldDoubleWindowContract, S14StarfoldKBlockLayerPlan, S14StarfoldRuntime,
@@ -627,6 +628,12 @@ impl S14Runtime {
         self.starfold_runtime
             .as_ref()
             .map(S14StarfoldRuntime::physical_allocation_bytes)
+    }
+
+    pub fn starfold_packed_l2_cache_stats(&self) -> Option<S14StarfoldPackedL2Stats> {
+        self.starfold_runtime
+            .as_ref()
+            .map(S14StarfoldRuntime::packed_l2_cache_stats)
     }
 
     pub fn plan_starfold_k4_k8_layer(

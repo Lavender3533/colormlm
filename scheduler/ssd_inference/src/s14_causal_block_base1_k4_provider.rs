@@ -17,7 +17,10 @@ use crate::{
         S14CausalBlockProductionHcQkvResourceProvider, S14CausalBlockProductionTerminalAssets,
     },
     s14_causal_block_ratio4_boundary::S14CausalBlockRatio4BoundaryStateRecorder,
-    s14_causal_block_terminal_owner::S14CausalBlockTerminalHeadUploadState,
+    s14_causal_block_terminal_owner::{
+        S14CausalBlockTerminalHeadLeaseOwner, S14CausalBlockTerminalHeadUploadState,
+    },
+    s14_position0_hybrid_upload::S14Position0CausalBlockUploadLease,
     s14_position0_layer_backend::{build_position0_layer_graph_plan, S14Position0L0GraphPlan},
     s14_position0_paged_weight_arena::{S14Position0PagedArenaPlan, S14Position0PagedWeightArena},
     s14_position0_state_writeback::S14Position0StateWritebackLayout,
@@ -64,6 +67,7 @@ pub struct S14Base1K4ProviderInputs {
     pub weight_plan: Arc<S14Position0HybridWeightPlan>,
     pub paged_arena: Arc<S14Position0PagedWeightArena>,
     pub head_upload: Arc<Mutex<S14CausalBlockTerminalHeadUploadState>>,
+    pub upload_lease: S14Position0CausalBlockUploadLease,
     /// 当前块的真实起始位置。首块为1；后续块必须来自已提交checkpoint。
     pub base_position: u32,
     /// Provider 构造时冻结的 token 来源，禁止逐层把 prefill 冒充 draft。
@@ -135,6 +139,7 @@ pub struct S14Base1K4ProductionHcQkvProvider {
     weight_plan: Arc<S14Position0HybridWeightPlan>,
     paged_arena: Arc<S14Position0PagedWeightArena>,
     head_upload: Arc<Mutex<S14CausalBlockTerminalHeadUploadState>>,
+    terminal_upload_lease: Mutex<Option<S14Position0CausalBlockUploadLease>>,
     base_position: u32,
     source: MaterializedTokenSource,
     state_layout: S14Position0StateWritebackLayout,
@@ -156,6 +161,7 @@ impl fmt::Debug for S14Base1K4ProductionHcQkvProvider {
             .debug_struct("S14Base1K4ProductionHcQkvProvider")
             .field("context", &Arc::as_ptr(&self.context))
             .field("base_position", &self.base_position)
+            .field("terminal_upload_lease", &self.terminal_upload_lease)
             .field("input_token_ids", &self.input_token_ids)
             .field("graph_count", &self.graphs.len())
             .field("ratio4_state_count", &self.ratio4_boundary_states.len())
@@ -180,6 +186,7 @@ pub fn build_s14_base1_k4_production_hc_qkv_provider(
         weight_plan,
         paged_arena,
         head_upload,
+        upload_lease,
         base_position,
         source,
         authoritative,
@@ -189,6 +196,11 @@ pub fn build_s14_base1_k4_production_hc_qkv_provider(
     } = inputs;
 
     validate_authoritative_state(&authoritative, base_position, source)?;
+    if upload_lease.base_position() != base_position || upload_lease.source() != source {
+        bail!(
+            "base1/K4 uploader lease 与 provider base/source 漂移: lease={upload_lease:?} base={base_position} source={source:?}"
+        );
+    }
     manifest
         .validate()
         .map_err(|error| anyhow!("position0 manifest invalid: {error}"))?;
@@ -280,6 +292,7 @@ pub fn build_s14_base1_k4_production_hc_qkv_provider(
         weight_plan,
         paged_arena,
         head_upload,
+        terminal_upload_lease: Mutex::new(Some(upload_lease)),
         base_position,
         source,
         state_layout,
@@ -390,6 +403,14 @@ impl S14Base1K4ProductionHcQkvProvider {
         if self.paged_arena.plan() != &expected_arena_plan {
             bail!("K4 terminal assets 的 manifest/weight plan/paged arena 不同源");
         }
+        let mut lease_owner = self
+            .terminal_upload_lease
+            .lock()
+            .map_err(|_| anyhow!("K4 terminal upload lease mutex poisoned"))?;
+        let lease = lease_owner
+            .as_ref()
+            .copied()
+            .context("K4 terminal_assets upload lease 已被 one-shot 消费")?;
         let upload = self
             .head_upload
             .lock()
@@ -399,13 +420,20 @@ impl S14Base1K4ProductionHcQkvProvider {
         }
         upload
             .uploader
-            .validate_causal_block_terminal_head_stream(&self.weight_plan)
+            .validate_causal_block_terminal_head_stream_for_lease(&self.weight_plan, &lease)
             .context("K4 terminal head uploader 尚未完成本 block static stream")?;
         drop(upload);
+        let lease = lease_owner
+            .take()
+            .context("K4 terminal upload lease one-shot take 漂移")?;
+        drop(lease_owner);
         Ok(S14CausalBlockProductionTerminalAssets {
             manifest: Arc::clone(&self.manifest),
             weight_plan: Arc::clone(&self.weight_plan),
-            head_upload: Arc::clone(&self.head_upload),
+            head_upload: S14CausalBlockTerminalHeadLeaseOwner::new(
+                Arc::clone(&self.head_upload),
+                lease,
+            ),
         })
     }
 
@@ -455,12 +483,20 @@ impl S14Base1K4ProductionHcQkvProvider {
         }
 
         let static_receipt = {
+            let upload_lease = self
+                .terminal_upload_lease
+                .lock()
+                .map_err(|_| anyhow!("base1/K4 terminal upload lease mutex poisoned"))?
+                .as_ref()
+                .copied()
+                .context("base1/K4 static prepare 时 upload lease 已被 terminal 消费")?;
             let mut upload = self
                 .head_upload
                 .lock()
                 .map_err(|_| anyhow!("base1/K4 head upload/store mutex poisoned"))?;
             let S14CausalBlockTerminalHeadUploadState { uploader, store } = &mut *upload;
-            uploader.prepare_next_static_layer(
+            uploader.prepare_next_static_layer_for_causal_block(
+                &upload_lease,
                 &self.context,
                 &self.manifest,
                 &self.weight_plan,
@@ -557,6 +593,17 @@ impl S14Base1K4ProductionHcQkvProvider {
         {
             bail!("base1/K4 provider core readiness K/position/43层/phase 漂移");
         }
+        let lease_owner = self
+            .terminal_upload_lease
+            .lock()
+            .map_err(|_| anyhow!("base1/K4 terminal upload lease mutex poisoned"))?;
+        let lease = lease_owner
+            .as_ref()
+            .context("base1/K4 provider core 缺少 block-scoped upload lease")?;
+        if lease.base_position() != self.base_position || lease.source() != self.source {
+            bail!("base1/K4 provider core uploader lease base/source 漂移");
+        }
+        drop(lease_owner);
         validate_ratio4_state_owners(
             &self.context,
             &self.ratio4_boundary_states,

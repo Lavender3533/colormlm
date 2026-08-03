@@ -22,10 +22,16 @@ use crate::{
 };
 use anyhow::{anyhow, bail, Context, Result};
 use ash::vk;
-use polaris_s14_runner::{Position0Asset, Position0WholeTokenManifest, FULL_DEPTH_LAYERS};
-use std::sync::Arc;
+use polaris_s14_runner::{
+    MaterializedTokenSource, Position0Asset, Position0WholeTokenManifest, FULL_DEPTH_LAYERS,
+};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
 
 const MIN_RUNTIME_VRAM_RESERVE_BYTES: u64 = 512 * 1024 * 1024;
+static NEXT_CAUSAL_BLOCK_UPLOADER_ID: AtomicU64 = AtomicU64::new(1);
 
 /// 目标 buffer 必须支持 transfer/graphics queue family 并发访问，或者两者属于同一 family。
 /// Hybrid arena 可独立实现该接口，上传器不依赖或修改现有 full-upload arena。
@@ -273,6 +279,70 @@ pub struct S14Position0HybridUploadStats {
     pub transfer_submits: u64,
 }
 
+/// Factory 为一个物理 causal block 签发的 uploader capability。字段私有且只能由绑定的
+/// `S14Position0HybridUploader` 创建；epoch 在同一 persistent uploader 生命周期内单调递增。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct S14Position0CausalBlockUploadLease {
+    uploader_id: u64,
+    epoch: u64,
+    block_sequence: u64,
+    base_position: u32,
+    source: MaterializedTokenSource,
+}
+
+impl S14Position0CausalBlockUploadLease {
+    pub const fn uploader_id(self) -> u64 {
+        self.uploader_id
+    }
+
+    pub const fn epoch(self) -> u64 {
+        self.epoch
+    }
+
+    pub const fn block_sequence(self) -> u64 {
+        self.block_sequence
+    }
+
+    pub const fn base_position(self) -> u32 {
+        self.base_position
+    }
+
+    pub const fn source(self) -> MaterializedTokenSource {
+        self.source
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum S14Position0CausalBlockLeasePhase {
+    Issued,
+    TerminalActive,
+    TerminalComplete,
+    Aborted,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ActiveCausalBlockUploadLease {
+    lease: S14Position0CausalBlockUploadLease,
+    phase: S14Position0CausalBlockLeasePhase,
+}
+
+/// 所有 causal-block 判定错误都应携带此快照，避免把 static/head/routed/pending 或 lease
+/// 漂移压成一个布尔值。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct S14Position0CausalBlockProgressSnapshot {
+    pub active_lease: Option<S14Position0CausalBlockUploadLease>,
+    pub lease_phase: Option<S14Position0CausalBlockLeasePhase>,
+    pub static_complete: bool,
+    pub next_runtime_static_layer: usize,
+    pub runtime_static_layer_count: usize,
+    pub next_routed_layer: usize,
+    pub pending_layer: Option<S14Position0LayerCopyReceipt>,
+    pub next_head_chunk: u64,
+    pub head_chunk_count: u64,
+    pub pending_head_chunk: Option<S14Position0HeadChunkReceipt>,
+    pub stats: S14Position0HybridUploadStats,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct HybridUploadProgress {
     static_complete: bool,
@@ -419,6 +489,9 @@ impl HybridUploadProgress {
 /// 有限 staging 的同步 transfer 实现。每次调用返回前 fence 已完成，所以 scratch
 /// 可以安全复用；后续可在不改变 payload/布局合同的前提下替换为 timeline 异步提交。
 pub struct S14Position0HybridUploader {
+    causal_block_uploader_id: u64,
+    next_causal_block_lease_epoch: u64,
+    active_causal_block_lease: Option<ActiveCausalBlockUploadLease>,
     static_staging: [GpuBuffer; S14_POSITION0_ROLLING_BANKS],
     routed_staging: [GpuBuffer; S14_POSITION0_ROLLING_BANKS],
     head_staging: [GpuBuffer; S14_POSITION0_ROLLING_BANKS],
@@ -432,6 +505,11 @@ pub struct S14Position0HybridUploader {
 
 impl S14Position0HybridUploader {
     pub fn new(ctx: &VulkanContext, plan: &S14Position0HybridWeightPlan) -> Result<Self> {
+        let causal_block_uploader_id = NEXT_CAUSAL_BLOCK_UPLOADER_ID
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                current.checked_add(1)
+            })
+            .map_err(|_| anyhow!("causal-block persistent uploader id overflow"))?;
         let staging_plan = S14Position0HybridStagingPlan::build(plan)?;
         let required_vram = plan
             .device_weight_bytes
@@ -520,6 +598,9 @@ impl S14Position0HybridUploader {
             }
         };
         Ok(Self {
+            causal_block_uploader_id,
+            next_causal_block_lease_epoch: 1,
+            active_causal_block_lease: None,
             static_staging,
             routed_staging,
             head_staging,
@@ -565,6 +646,25 @@ impl S14Position0HybridUploader {
             && self.progress.pending_head_chunk.is_none()
     }
 
+    pub fn causal_block_progress_snapshot(
+        &self,
+        plan: &S14Position0HybridWeightPlan,
+    ) -> S14Position0CausalBlockProgressSnapshot {
+        S14Position0CausalBlockProgressSnapshot {
+            active_lease: self.active_causal_block_lease.map(|active| active.lease),
+            lease_phase: self.active_causal_block_lease.map(|active| active.phase),
+            static_complete: self.progress.static_complete,
+            next_runtime_static_layer: self.progress.next_runtime_static_layer,
+            runtime_static_layer_count: plan.routed_layers.len(),
+            next_routed_layer: self.progress.next_routed_layer,
+            pending_layer: self.progress.pending_layer,
+            next_head_chunk: self.progress.next_head_chunk,
+            head_chunk_count: plan.head_chunk_count,
+            pending_head_chunk: self.progress.pending_head_chunk,
+            stats: self.stats,
+        }
+    }
+
     /// 新 causal block 交给 provider 前的严格 token-start 合同。该检查与持久
     /// allocation 无关，只验证上一 block 已经按 sequence 完成 rearm；错误信息保留
     /// 全部控制游标，避免昂贵真实性门只得到一个合并布尔值。
@@ -581,15 +681,8 @@ impl S14Position0HybridUploader {
             || progress.pending_head_chunk.is_some()
         {
             bail!(
-                "causal-block head stream 起点未闭合: static_complete={} next_static={}/{} next_routed={} next_head={}/{} pending_layer={} pending_head={}",
-                progress.static_complete,
-                progress.next_runtime_static_layer,
-                plan.routed_layers.len(),
-                progress.next_routed_layer,
-                progress.next_head_chunk,
-                plan.head_chunk_count,
-                progress.pending_layer.is_some(),
-                progress.pending_head_chunk.is_some(),
+                "causal-block head stream 起点未闭合: snapshot={:?}",
+                self.causal_block_progress_snapshot(plan),
             );
         }
         Ok(())
@@ -611,15 +704,281 @@ impl S14Position0HybridUploader {
             || progress.pending_head_chunk.is_some()
         {
             bail!(
-                "causal-block terminal head stream 未闭合: static_complete={} next_static={}/{} next_routed={} next_head={}/{} pending_layer={} pending_head={}",
-                progress.static_complete,
-                progress.next_runtime_static_layer,
-                plan.routed_layers.len(),
-                progress.next_routed_layer,
-                progress.next_head_chunk,
-                plan.head_chunk_count,
-                progress.pending_layer.is_some(),
-                progress.pending_head_chunk.is_some(),
+                "causal-block terminal head stream 未闭合: snapshot={:?}",
+                self.causal_block_progress_snapshot(plan),
+            );
+        }
+        Ok(())
+    }
+
+    /// 为一个物理 causal block 签发唯一的 sequence/base/source capability。同一 block 在
+    /// provider 尚未推进 static 游标时可幂等重取同一 lease；下一 block 只有在上一
+    /// generation lease 完成 terminal，或上一 ForcedPrefill 完整 drain 后才可签发。
+    pub fn issue_causal_block_upload_lease(
+        &mut self,
+        plan: &S14Position0HybridWeightPlan,
+        block_sequence: u64,
+        base_position: u32,
+        source: MaterializedTokenSource,
+    ) -> Result<S14Position0CausalBlockUploadLease> {
+        if let Some(active) = self.active_causal_block_lease {
+            if active.lease.block_sequence == block_sequence
+                && active.lease.base_position == base_position
+                && active.lease.source == source
+            {
+                if active.phase != S14Position0CausalBlockLeasePhase::Issued {
+                    bail!(
+                        "causal-block lease 重取时 phase 非 Issued: snapshot={:?}",
+                        self.causal_block_progress_snapshot(plan)
+                    );
+                }
+                self.validate_causal_block_head_stream_start(plan)?;
+                return Ok(active.lease);
+            }
+
+            let expected_sequence = active
+                .lease
+                .block_sequence
+                .checked_add(1)
+                .context("causal-block lease sequence overflow")?;
+            if block_sequence != expected_sequence || base_position <= active.lease.base_position {
+                bail!(
+                    "causal-block lease lineage 非单调: requested_sequence={} requested_base={} snapshot={:?}",
+                    block_sequence,
+                    base_position,
+                    self.causal_block_progress_snapshot(plan)
+                );
+            }
+            match (active.lease.source, active.phase) {
+                (
+                    MaterializedTokenSource::SpeculativeDraft,
+                    S14Position0CausalBlockLeasePhase::TerminalComplete,
+                ) => self
+                    .progress
+                    .prepare_next_causal_block_head(plan)
+                    .context("上一 generation lease 完成后重开下一 block")?,
+                (
+                    MaterializedTokenSource::ForcedPrefill,
+                    S14Position0CausalBlockLeasePhase::Issued,
+                ) => {
+                    self.validate_forced_prefill_causal_block_closed(plan)?;
+                    self.progress.reset_token();
+                }
+                _ => {
+                    bail!(
+                        "上一 causal-block lease 未达到可签发下一块的 phase: snapshot={:?}",
+                        self.causal_block_progress_snapshot(plan)
+                    )
+                }
+            }
+        } else if block_sequence != 0 || base_position != 0 {
+            bail!(
+                "无 active lease 时首块必须 sequence0/base0: requested_sequence={} requested_base={} snapshot={:?}",
+                block_sequence,
+                base_position,
+                self.causal_block_progress_snapshot(plan)
+            );
+        }
+
+        self.validate_causal_block_head_stream_start(plan)?;
+        let epoch = self.next_causal_block_lease_epoch;
+        self.next_causal_block_lease_epoch = epoch
+            .checked_add(1)
+            .context("causal-block upload lease epoch overflow")?;
+        let lease = S14Position0CausalBlockUploadLease {
+            uploader_id: self.causal_block_uploader_id,
+            epoch,
+            block_sequence,
+            base_position,
+            source,
+        };
+        self.active_causal_block_lease = Some(ActiveCausalBlockUploadLease {
+            lease,
+            phase: S14Position0CausalBlockLeasePhase::Issued,
+        });
+        Ok(lease)
+    }
+
+    pub fn validate_causal_block_terminal_head_stream_for_lease(
+        &self,
+        plan: &S14Position0HybridWeightPlan,
+        lease: &S14Position0CausalBlockUploadLease,
+    ) -> Result<()> {
+        self.require_causal_block_lease(lease, S14Position0CausalBlockLeasePhase::Issued, plan)?;
+        if lease.source != MaterializedTokenSource::SpeculativeDraft {
+            bail!(
+                "ForcedPrefill lease 禁止进入 generation terminal: lease={lease:?} snapshot={:?}",
+                self.causal_block_progress_snapshot(plan)
+            );
+        }
+        self.validate_causal_block_terminal_head_stream(plan)
+    }
+
+    /// terminal chunk0 唯一把 lease 从 Issued 推进到 TerminalActive。
+    pub fn begin_causal_block_terminal_head_stream(
+        &mut self,
+        plan: &S14Position0HybridWeightPlan,
+        lease: &S14Position0CausalBlockUploadLease,
+    ) -> Result<()> {
+        self.validate_causal_block_terminal_head_stream_for_lease(plan, lease)?;
+        self.active_causal_block_lease
+            .as_mut()
+            .expect("上面已验证 active lease")
+            .phase = S14Position0CausalBlockLeasePhase::TerminalActive;
+        Ok(())
+    }
+
+    pub fn validate_causal_block_terminal_active(
+        &self,
+        plan: &S14Position0HybridWeightPlan,
+        lease: &S14Position0CausalBlockUploadLease,
+    ) -> Result<()> {
+        self.require_causal_block_lease(
+            lease,
+            S14Position0CausalBlockLeasePhase::TerminalActive,
+            plan,
+        )
+    }
+
+    /// 最后一个 staged head chunk 完成后只 seal lease，不 reset static/head 游标。
+    pub fn complete_causal_block_terminal_head_stream(
+        &mut self,
+        plan: &S14Position0HybridWeightPlan,
+        lease: &S14Position0CausalBlockUploadLease,
+    ) -> Result<()> {
+        self.validate_causal_block_terminal_active(plan, lease)?;
+        let progress = &self.progress;
+        if !progress.static_complete
+            || progress.next_runtime_static_layer != plan.routed_layers.len()
+            || progress.next_routed_layer != 0
+            || progress.pending_layer.is_some()
+            || progress.next_head_chunk != plan.head_chunk_count
+            || progress.pending_head_chunk.is_some()
+        {
+            bail!(
+                "causal-block terminal 完成态未闭合: lease={lease:?} snapshot={:?}",
+                self.causal_block_progress_snapshot(plan)
+            );
+        }
+        self.active_causal_block_lease
+            .as_mut()
+            .expect("上面已验证 active lease")
+            .phase = S14Position0CausalBlockLeasePhase::TerminalComplete;
+        Ok(())
+    }
+
+    pub fn validate_causal_block_terminal_complete(
+        &self,
+        plan: &S14Position0HybridWeightPlan,
+        lease: &S14Position0CausalBlockUploadLease,
+    ) -> Result<()> {
+        self.require_causal_block_lease(
+            lease,
+            S14Position0CausalBlockLeasePhase::TerminalComplete,
+            plan,
+        )?;
+        let progress = &self.progress;
+        if progress.next_head_chunk != plan.head_chunk_count
+            || progress.pending_head_chunk.is_some()
+            || progress.pending_layer.is_some()
+        {
+            bail!(
+                "causal-block completed lease 的物理游标漂移: lease={lease:?} snapshot={:?}",
+                self.causal_block_progress_snapshot(plan)
+            );
+        }
+        Ok(())
+    }
+
+    /// 仅在 terminal 已 drain 后使用。失败块被标记 Aborted 并清理控制游标，但不会释放
+    /// persistent store/staging；Aborted lease 不能签发下一块。
+    pub fn abort_causal_block_lease_after_drain(
+        &mut self,
+        plan: &S14Position0HybridWeightPlan,
+        lease: &S14Position0CausalBlockUploadLease,
+    ) -> Result<()> {
+        let active = self
+            .active_causal_block_lease
+            .context("abort causal-block lease 时没有 active lease")?;
+        if active.lease != *lease {
+            bail!(
+                "abort causal-block lease 身份漂移: requested={lease:?} snapshot={:?}",
+                self.causal_block_progress_snapshot(plan)
+            );
+        }
+        self.progress.reset_token();
+        self.active_causal_block_lease
+            .as_mut()
+            .expect("上面已验证 active lease")
+            .phase = S14Position0CausalBlockLeasePhase::Aborted;
+        Ok(())
+    }
+
+    /// 请求级 provider/terminal owners 全部退出后，把已完成的 persistent lease lineage 清回
+    /// sequence0/base0。epoch 不回退，store/staging/command/fence 均继续复用。
+    pub fn reset_causal_block_request_lineage(
+        &mut self,
+        plan: &S14Position0HybridWeightPlan,
+    ) -> Result<()> {
+        if let Some(active) = self.active_causal_block_lease {
+            match (active.lease.source, active.phase) {
+                (
+                    MaterializedTokenSource::SpeculativeDraft,
+                    S14Position0CausalBlockLeasePhase::TerminalComplete,
+                ) => self.progress.prepare_next_causal_block_head(plan)?,
+                (
+                    MaterializedTokenSource::ForcedPrefill,
+                    S14Position0CausalBlockLeasePhase::Issued,
+                ) => {
+                    self.validate_forced_prefill_causal_block_closed(plan)?;
+                    self.progress.reset_token();
+                }
+                _ => bail!(
+                    "请求结束时 causal-block lease 未安全闭合: snapshot={:?}",
+                    self.causal_block_progress_snapshot(plan)
+                ),
+            }
+            self.active_causal_block_lease = None;
+        }
+        self.validate_causal_block_head_stream_start(plan)
+    }
+
+    fn require_causal_block_lease(
+        &self,
+        lease: &S14Position0CausalBlockUploadLease,
+        expected_phase: S14Position0CausalBlockLeasePhase,
+        plan: &S14Position0HybridWeightPlan,
+    ) -> Result<()> {
+        let active = self.active_causal_block_lease.with_context(|| {
+            format!(
+                "causal-block lease 缺失: requested={lease:?} snapshot={:?}",
+                self.causal_block_progress_snapshot(plan)
+            )
+        })?;
+        if active.lease != *lease || active.phase != expected_phase {
+            bail!(
+                "causal-block lease/phase 漂移: requested={lease:?} expected_phase={expected_phase:?} snapshot={:?}",
+                self.causal_block_progress_snapshot(plan)
+            );
+        }
+        Ok(())
+    }
+
+    fn validate_forced_prefill_causal_block_closed(
+        &self,
+        plan: &S14Position0HybridWeightPlan,
+    ) -> Result<()> {
+        let progress = &self.progress;
+        if !progress.static_complete
+            || progress.next_runtime_static_layer != plan.routed_layers.len()
+            || progress.next_routed_layer != 0
+            || progress.pending_layer.is_some()
+            || progress.next_head_chunk != 0
+            || progress.pending_head_chunk.is_some()
+        {
+            bail!(
+                "ForcedPrefill causal-block 未完整 drain: snapshot={:?}",
+                self.causal_block_progress_snapshot(plan)
             );
         }
         Ok(())
@@ -633,6 +992,12 @@ impl S14Position0HybridUploader {
         &mut self,
         plan: &S14Position0HybridWeightPlan,
     ) -> Result<()> {
+        if self.active_causal_block_lease.is_some() {
+            bail!(
+                "active causal-block lease 禁止 legacy rearm: snapshot={:?}",
+                self.causal_block_progress_snapshot(plan)
+            );
+        }
         self.progress.prepare_next_causal_block_head(plan)
     }
 
@@ -643,26 +1008,13 @@ impl S14Position0HybridUploader {
         &mut self,
         plan: &S14Position0HybridWeightPlan,
     ) -> Result<()> {
-        let progress = &self.progress;
-        if !progress.static_complete
-            || progress.next_runtime_static_layer != plan.routed_layers.len()
-            || progress.next_routed_layer != 0
-            || progress.pending_layer.is_some()
-            || progress.next_head_chunk != 0
-            || progress.pending_head_chunk.is_some()
-        {
+        if self.active_causal_block_lease.is_some() {
             bail!(
-                "ForcedPrefill causal-block 未完整 drain: static_complete={} next_static={}/{} next_routed={} next_head={}/{} pending_layer={} pending_head={}",
-                progress.static_complete,
-                progress.next_runtime_static_layer,
-                plan.routed_layers.len(),
-                progress.next_routed_layer,
-                progress.next_head_chunk,
-                plan.head_chunk_count,
-                progress.pending_layer.is_some(),
-                progress.pending_head_chunk.is_some(),
+                "active causal-block lease 禁止 legacy ForcedPrefill rearm: snapshot={:?}",
+                self.causal_block_progress_snapshot(plan)
             );
         }
+        self.validate_forced_prefill_causal_block_closed(plan)?;
         self.progress.reset_token();
         Ok(())
     }
@@ -778,6 +1130,36 @@ impl S14Position0HybridUploader {
     /// 为当前层准备 non-expert/router/shared 静态权重。常驻层返回零拷贝命中；
     /// 分页层把该层全部资产合并为一次 transfer submit。调用顺序必须为 L0→L42。
     pub fn prepare_next_static_layer(
+        &mut self,
+        ctx: &VulkanContext,
+        manifest: &Position0WholeTokenManifest,
+        plan: &S14Position0HybridWeightPlan,
+        store: &mut VerifiedMappedAssetStore,
+        target: &dyn S14Position0HybridUploadTarget,
+    ) -> Result<S14Position0StaticLayerUploadReceipt> {
+        if self.active_causal_block_lease.is_some() {
+            bail!(
+                "active causal-block lease 禁止无 lease static prepare: snapshot={:?}",
+                self.causal_block_progress_snapshot(plan)
+            );
+        }
+        self.prepare_next_static_layer_inner(ctx, manifest, plan, store, target)
+    }
+
+    pub fn prepare_next_static_layer_for_causal_block(
+        &mut self,
+        lease: &S14Position0CausalBlockUploadLease,
+        ctx: &VulkanContext,
+        manifest: &Position0WholeTokenManifest,
+        plan: &S14Position0HybridWeightPlan,
+        store: &mut VerifiedMappedAssetStore,
+        target: &dyn S14Position0HybridUploadTarget,
+    ) -> Result<S14Position0StaticLayerUploadReceipt> {
+        self.require_causal_block_lease(lease, S14Position0CausalBlockLeasePhase::Issued, plan)?;
+        self.prepare_next_static_layer_inner(ctx, manifest, plan, store, target)
+    }
+
+    fn prepare_next_static_layer_inner(
         &mut self,
         ctx: &VulkanContext,
         manifest: &Position0WholeTokenManifest,
@@ -1344,6 +1726,36 @@ impl S14Position0HybridUploader {
         plan: &S14Position0HybridWeightPlan,
         target: &dyn S14Position0HybridUploadTarget,
     ) -> Result<S14Position0HeadChunkReceipt> {
+        if self.active_causal_block_lease.is_some() {
+            bail!(
+                "active causal-block lease 禁止无 lease head record: snapshot={:?}",
+                self.causal_block_progress_snapshot(plan)
+            );
+        }
+        unsafe { self.record_next_head_chunk_copy_inner(ctx, command, manifest, plan, target) }
+    }
+
+    pub unsafe fn record_next_head_chunk_copy_for_causal_block(
+        &mut self,
+        lease: &S14Position0CausalBlockUploadLease,
+        ctx: &VulkanContext,
+        command: vk::CommandBuffer,
+        manifest: &Position0WholeTokenManifest,
+        plan: &S14Position0HybridWeightPlan,
+        target: &dyn S14Position0HybridUploadTarget,
+    ) -> Result<S14Position0HeadChunkReceipt> {
+        self.validate_causal_block_terminal_active(plan, lease)?;
+        unsafe { self.record_next_head_chunk_copy_inner(ctx, command, manifest, plan, target) }
+    }
+
+    unsafe fn record_next_head_chunk_copy_inner(
+        &mut self,
+        ctx: &VulkanContext,
+        command: vk::CommandBuffer,
+        manifest: &Position0WholeTokenManifest,
+        plan: &S14Position0HybridWeightPlan,
+        target: &dyn S14Position0HybridUploadTarget,
+    ) -> Result<S14Position0HeadChunkReceipt> {
         plan.validate(manifest)?;
         validate_target_sizes(plan, target)?;
         self.require_static_complete(plan)?;
@@ -1366,6 +1778,41 @@ impl S14Position0HybridUploader {
     /// head Range 填充已录制 copy 引用的 staging bank。本方法不录制
     /// Vulkan command、不 submit、不 wait。成功后才推进 chunk 顺序与字节统计。
     pub fn stage_recorded_head_chunk(
+        &mut self,
+        manifest: &Position0WholeTokenManifest,
+        plan: &S14Position0HybridWeightPlan,
+        store: &mut VerifiedMappedAssetStore,
+        receipt: S14Position0HeadChunkReceipt,
+        timeline_bank: usize,
+    ) -> Result<S14Position0HeadChunkReceipt> {
+        if self.active_causal_block_lease.is_some() {
+            bail!(
+                "active causal-block lease 禁止无 lease head stage: snapshot={:?}",
+                self.causal_block_progress_snapshot(plan)
+            );
+        }
+        self.stage_recorded_head_chunk_inner(manifest, plan, store, receipt, timeline_bank)
+    }
+
+    pub fn stage_recorded_head_chunk_for_causal_block(
+        &mut self,
+        lease: &S14Position0CausalBlockUploadLease,
+        manifest: &Position0WholeTokenManifest,
+        plan: &S14Position0HybridWeightPlan,
+        store: &mut VerifiedMappedAssetStore,
+        receipt: S14Position0HeadChunkReceipt,
+        timeline_bank: usize,
+    ) -> Result<S14Position0HeadChunkReceipt> {
+        self.validate_causal_block_terminal_active(plan, lease)?;
+        let staged =
+            self.stage_recorded_head_chunk_inner(manifest, plan, store, receipt, timeline_bank)?;
+        if self.progress.next_head_chunk == plan.head_chunk_count {
+            self.complete_causal_block_terminal_head_stream(plan, lease)?;
+        }
+        Ok(staged)
+    }
+
+    fn stage_recorded_head_chunk_inner(
         &mut self,
         manifest: &Position0WholeTokenManifest,
         plan: &S14Position0HybridWeightPlan,
@@ -1423,6 +1870,12 @@ impl S14Position0HybridUploader {
         store: &mut VerifiedMappedAssetStore,
         target: &dyn S14Position0HybridUploadTarget,
     ) -> Result<S14Position0HeadChunkReceipt> {
+        if self.active_causal_block_lease.is_some() {
+            bail!(
+                "active causal-block lease 禁止 synchronous head upload: snapshot={:?}",
+                self.causal_block_progress_snapshot(plan)
+            );
+        }
         plan.validate(manifest)?;
         validate_target_sizes(plan, target)?;
         self.require_static_complete(plan)?;

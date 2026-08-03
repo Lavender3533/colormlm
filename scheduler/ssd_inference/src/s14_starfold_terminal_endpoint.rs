@@ -19,7 +19,7 @@ use crate::{
     },
     s14_causal_block_terminal_owner::{
         S14CausalBlockOwnedBufferSlice, S14CausalBlockProductionTerminalResourceOwner,
-        S14CausalBlockTerminalHeadUploadState, S14CausalBlockTerminalPublishReceipt,
+        S14CausalBlockTerminalHeadLeaseOwner, S14CausalBlockTerminalPublishReceipt,
         S14CausalBlockTerminalResourceOwnerInputs,
     },
     s14_causal_block_vulkan_backend::S14CausalBlockVulkanTerminalRecorder,
@@ -29,7 +29,7 @@ use crate::{
 };
 use anyhow::{bail, Context, Result};
 use polaris_s14_runner::{Position0WholeTokenManifest, RouteDecision, FULL_DEPTH_LAYERS};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum S14StarfoldTerminalEndpointPhase {
@@ -49,7 +49,7 @@ pub struct S14StarfoldTerminalBlockInputs {
     pub paged_arena: Arc<S14Position0PagedWeightArena>,
     pub head_manifest: Arc<Position0WholeTokenManifest>,
     pub head_weight_plan: Arc<S14Position0HybridWeightPlan>,
-    pub head_upload: Arc<Mutex<S14CausalBlockTerminalHeadUploadState>>,
+    pub head_upload: S14CausalBlockTerminalHeadLeaseOwner,
     pub routes_by_position: Vec<Vec<RouteDecision>>,
     pub host_candidates: Box<dyn S14CausalBlockHostCandidateFinalizer>,
 }

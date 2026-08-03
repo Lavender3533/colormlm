@@ -7,6 +7,11 @@ use crate::{
         S14StarfoldMxfp4TileDispatch, S14StarfoldMxfp4TileRecorder,
         S14StarfoldMxfp4TileRecordingReceipt, S14StarfoldMxfp4TileShape,
     },
+    s14_starfold_routed_executor::constellation_packet::{
+        S14StarfoldConstellationMemberReceipt, S14StarfoldConstellationPacket,
+        S14StarfoldConstellationPacketKey, S14StarfoldConstellationPacketReceipt,
+        S14StarfoldConstellationReadyPacket, S14_STARFOLD_CONSTELLATION_CONTRACT_VERSION,
+    },
     s14_starfold_runtime::S14StarfoldVerifiedMicrotile,
     s14_starfold_vulkan_windows::{
         S14StarfoldBufferBarrier, S14StarfoldComputeReceipt, S14StarfoldComputeRecording,
@@ -39,6 +44,7 @@ struct ComputeSlot {
     state: ComputeSlotState,
     dispatches: Vec<S14StarfoldMxfp4TileDispatch>,
     proof: Option<Arc<S14StarfoldVerifiedMicrotile>>,
+    constellation: Option<Arc<S14StarfoldConstellationPacket>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -85,6 +91,56 @@ impl S14StarfoldMxfp4ComputeSubmissionReceipt {
             || self.queue_submit_calls != 1
         {
             bail!("S14 Starfold MXFP4 compute 回执不能证明完整 command 生命周期");
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct S14StarfoldConstellationComputeSubmissionReceipt {
+    pub packet: S14StarfoldConstellationPacketReceipt,
+    pub owner_id: u64,
+    pub submission_serial: u64,
+    pub consumer_id: u64,
+    pub wait_transfer: S14StarfoldTimelinePoint,
+    pub signal_compute: S14StarfoldTimelinePoint,
+    pub compute: S14StarfoldComputeReceipt<S14StarfoldConstellationPacketKey>,
+    pub tiles: Vec<S14StarfoldMxfp4TileRecordingReceipt>,
+    pub lane_dispatches: u32,
+    pub acquire_barrier_calls: u32,
+    pub output_barrier_calls: u32,
+    pub release_barrier_calls: u32,
+    pub begin_command_calls: u32,
+    pub end_command_calls: u32,
+    pub queue_submit_calls: u32,
+}
+
+impl S14StarfoldConstellationComputeSubmissionReceipt {
+    pub fn validate(&self) -> Result<()> {
+        self.packet.validate()?;
+        if self.tiles.is_empty() || self.tiles.len() != self.lane_dispatches as usize {
+            bail!("S14 StarFold 星座 compute lane/tile 回执数量漂移");
+        }
+        for tile in &self.tiles {
+            tile.validate()?;
+        }
+        let expected_release = self.compute.residency_retired as u32;
+        if self.owner_id == 0
+            || self.submission_serial == 0
+            || self.packet.key != self.compute.key
+            || self.packet.window != self.compute.window
+            || self.packet.window_generation != self.compute.window_generation
+            || self.consumer_id != self.compute.consumer_id
+            || self.signal_compute != self.compute.completion
+            || self.wait_transfer.generation != self.signal_compute.generation
+            || self.output_barrier_calls != self.lane_dispatches
+            || self.acquire_barrier_calls > 1
+            || self.release_barrier_calls != expected_release
+            || self.begin_command_calls != 1
+            || self.end_command_calls != 1
+            || self.queue_submit_calls != 1
+        {
+            bail!("S14 StarFold 星座 compute 回执不能证明单 command 生命周期");
         }
         Ok(())
     }
@@ -202,6 +258,7 @@ impl S14StarfoldMxfp4ComputeOwner {
                     state: ComputeSlotState::Idle,
                     dispatches: Vec::new(),
                     proof: None,
+                    constellation: None,
                 },
                 ComputeSlot {
                     command_buffer: command_buffers[1],
@@ -209,6 +266,7 @@ impl S14StarfoldMxfp4ComputeOwner {
                     state: ComputeSlotState::Idle,
                     dispatches: Vec::new(),
                     proof: None,
+                    constellation: None,
                 },
             ],
             next_submission_serial: 1,
@@ -218,6 +276,18 @@ impl S14StarfoldMxfp4ComputeOwner {
 
     pub const fn owner_id(&self) -> u64 {
         self.owner_id
+    }
+
+    /// 星座 packer 用同一 physical device 的真实 descriptor offset 对齐，避免用 256
+    /// 之类经验常量制造设备相关失败。
+    pub fn descriptor_offset_alignment(&self) -> u64 {
+        let limits = unsafe {
+            self.context
+                .instance
+                .get_physical_device_properties(self.context.physical)
+                .limits
+        };
+        limits.min_storage_buffer_offset_alignment.max(1)
     }
 
     /// 一次 compute submission 复用同一 resident packed tile，连续处理所有命中专家的
@@ -362,6 +432,7 @@ impl S14StarfoldMxfp4ComputeOwner {
         };
         self.slots[slot_index].dispatches = dispatches;
         self.slots[slot_index].proof = Some(proof);
+        self.slots[slot_index].constellation = None;
         let receipt = S14StarfoldMxfp4ComputeSubmissionReceipt {
             owner_id: self.owner_id,
             submission_serial,
@@ -384,6 +455,191 @@ impl S14StarfoldMxfp4ComputeOwner {
             } else {
                 0
             },
+            begin_command_calls: 1,
+            end_command_calls: 1,
+            queue_submit_calls: 1,
+        };
+        receipt.validate()?;
+        Ok(receipt)
+    }
+
+    /// 一个 resident 星座包只预留一次 window consumer，并在同一 command buffer 内依次
+    /// dispatch 包中所有专家及其命中 lane。packet 本身持有每个专家的 proof/SHA lease，
+    /// 直到对应 A/B fence 完成才会从 slot 释放。
+    pub fn submit_ready_constellation_batch(
+        &mut self,
+        windows: &mut S14StarfoldVulkanWindows<S14StarfoldConstellationPacketKey>,
+        ready: S14StarfoldConstellationReadyPacket,
+        consumer_id: u64,
+    ) -> Result<S14StarfoldConstellationComputeSubmissionReceipt> {
+        if self.destroyed {
+            bail!("S14 StarFold 星座 compute owner 已销毁");
+        }
+        let (ready, packet) = ready.into_parts();
+        packet.validate()?;
+        let config = windows.config();
+        if config.queues.compute_queue != self.context.q_graphics
+            || config.queues.compute_family != self.context.qf_graphics
+            || config.window_bytes != u64::from(packet.window_capacity_bytes)
+        {
+            bail!("S14 StarFold 星座 packet/window/compute queue 合同漂移");
+        }
+        let slot_index = ready.window().index();
+        self.wait_slot(slot_index)?;
+        if self.slots[slot_index].state != ComputeSlotState::Idle {
+            bail!("S14 StarFold 星座 {} compute slot 仍在执行", ready.window());
+        }
+        if ready.key() != packet.key() || ready.byte_len() != packet.payload_bytes {
+            bail!("S14 StarFold 星座 ready binding identity/bytes 漂移");
+        }
+
+        let lane_dispatches = packet.members().iter().try_fold(0usize, |sum, member| {
+            validate_owner_config(&self.context, config, member.shape)?;
+            sum.checked_add(member.lanes().len())
+                .context("S14 StarFold 星座 lane dispatch count overflow")
+        })?;
+        if lane_dispatches == 0 {
+            bail!("S14 StarFold 星座没有 lane dispatch");
+        }
+
+        let (ticket, recording) = windows
+            .reserve_compute(ready, consumer_id)
+            .map_err(anyhow::Error::new)
+            .context("预留 S14 StarFold 星座 compute consumer")?;
+        if let Err(error) =
+            validate_compute_contract(config, ticket, recording, packet.payload_bytes)
+        {
+            return rollback_reservation(windows, ticket, error);
+        }
+
+        let mut dispatches = Vec::with_capacity(lane_dispatches);
+        for member in packet.members() {
+            let Some(raw_offset) = recording.buffer_offset.checked_add(member.window_offset) else {
+                destroy_dispatches(&self.context, dispatches);
+                return rollback_reservation(
+                    windows,
+                    ticket,
+                    anyhow!("S14 StarFold 星座 descriptor offset overflow"),
+                );
+            };
+            for lane in member.lanes() {
+                let bindings = S14StarfoldMxfp4TileBindings {
+                    input_f32: lane.input_f32,
+                    raw_window: S14StarfoldMxfp4ExternalSlice {
+                        buffer: recording.buffer,
+                        capacity_bytes: config.window_bytes,
+                        offset: raw_offset,
+                        logical_bytes: member.payload_bytes,
+                    },
+                    output_f32: lane.output_f32,
+                    scale_audit: member.scale_audit,
+                };
+                match self
+                    .pipeline
+                    .as_ref()
+                    .context("S14 StarFold MXFP4 tile pipeline 已销毁")?
+                    .bind_external_tile(&self.context, member.shape, member.tile_index, bindings)
+                {
+                    Ok(dispatch) => dispatches.push(dispatch),
+                    Err(error) => {
+                        destroy_dispatches(&self.context, dispatches);
+                        return rollback_reservation(windows, ticket, error);
+                    }
+                }
+            }
+        }
+        if dispatches.len() != lane_dispatches || dispatches.is_empty() {
+            destroy_dispatches(&self.context, dispatches);
+            return rollback_reservation(
+                windows,
+                ticket,
+                anyhow!("S14 StarFold 星座 descriptor/lane 数量漂移"),
+            );
+        }
+
+        let submission_serial = self.next_submission_serial;
+        self.next_submission_serial = match self.next_submission_serial.checked_add(1) {
+            Some(next) => next,
+            None => {
+                destroy_dispatches(&self.context, dispatches);
+                return rollback_reservation(
+                    windows,
+                    ticket,
+                    anyhow!("S14 StarFold 星座 compute submission serial 溢出"),
+                );
+            }
+        };
+        let command_buffer = self.slots[slot_index].command_buffer;
+        let fence = self.slots[slot_index].fence;
+        if let Err(error) = self.begin_command(command_buffer) {
+            destroy_dispatches(&self.context, dispatches);
+            return rollback_reservation(windows, ticket, error);
+        }
+        let recorded = unsafe {
+            self.record_constellation_commands(command_buffer, recording, &packet, &dispatches)
+        };
+        let (members, tile_receipts) = match recorded {
+            Ok(receipts) => receipts,
+            Err(error) => {
+                let reset = self.reset_unsubmitted(command_buffer);
+                destroy_dispatches(&self.context, dispatches);
+                return rollback_after_recording(windows, ticket, error, reset);
+            }
+        };
+        if let Err(error) = unsafe { self.context.device.end_command_buffer(command_buffer) }
+            .context("结束 S14 StarFold 星座 compute command buffer")
+        {
+            let reset = self.reset_unsubmitted(command_buffer);
+            destroy_dispatches(&self.context, dispatches);
+            return rollback_after_recording(windows, ticket, error, reset);
+        }
+
+        let submit =
+            unsafe { windows.submit_compute(&self.context.device, ticket, command_buffer, fence) }
+                .map_err(anyhow::Error::new)
+                .context("提交 S14 StarFold 星座 compute queue");
+        let compute = match submit {
+            Ok(receipt) => receipt,
+            Err(error) => {
+                let reset = self.reset_unsubmitted(command_buffer);
+                destroy_dispatches(&self.context, dispatches);
+                return rollback_after_recording(windows, ticket, error, reset);
+            }
+        };
+
+        self.slots[slot_index].state = ComputeSlotState::InFlight {
+            submission_serial,
+            window_generation: ready.window_generation(),
+        };
+        self.slots[slot_index].dispatches = dispatches;
+        self.slots[slot_index].constellation = Some(Arc::clone(&packet));
+        let packet_receipt = S14StarfoldConstellationPacketReceipt {
+            contract_version: S14_STARFOLD_CONSTELLATION_CONTRACT_VERSION,
+            key: packet.key(),
+            window: ready.window(),
+            window_generation: ready.window_generation(),
+            packet_bytes: packet.payload_bytes,
+            logical_payload_bytes: packet.logical_payload_bytes,
+            members,
+            transfer_submit_calls: 1,
+            compute_submit_calls: 1,
+            serial_token_forward_calls: 0,
+        };
+        let lane_dispatches = u32::try_from(lane_dispatches)
+            .context("S14 StarFold 星座 lane dispatch count 超出 u32")?;
+        let receipt = S14StarfoldConstellationComputeSubmissionReceipt {
+            packet: packet_receipt,
+            owner_id: self.owner_id,
+            submission_serial,
+            consumer_id,
+            wait_transfer: recording.wait_transfer,
+            signal_compute: recording.signal_compute,
+            compute,
+            tiles: tile_receipts,
+            lane_dispatches,
+            acquire_barrier_calls: recording.acquire_from_transfer.is_some() as u32,
+            output_barrier_calls: lane_dispatches,
+            release_barrier_calls: recording.release_to_transfer.is_some() as u32,
             begin_command_calls: 1,
             end_command_calls: 1,
             queue_submit_calls: 1,
@@ -462,6 +718,69 @@ impl S14StarfoldMxfp4ComputeOwner {
         Ok(receipts)
     }
 
+    unsafe fn record_constellation_commands(
+        &self,
+        command_buffer: vk::CommandBuffer,
+        recording: S14StarfoldComputeRecording,
+        packet: &S14StarfoldConstellationPacket,
+        dispatches: &[S14StarfoldMxfp4TileDispatch],
+    ) -> Result<(
+        Vec<S14StarfoldConstellationMemberReceipt>,
+        Vec<S14StarfoldMxfp4TileRecordingReceipt>,
+    )> {
+        let expected_dispatches = packet.members().iter().try_fold(0usize, |sum, member| {
+            sum.checked_add(member.lanes().len())
+                .context("S14 StarFold 星座 record lane count overflow")
+        })?;
+        if expected_dispatches == 0 || expected_dispatches != dispatches.len() {
+            bail!("S14 StarFold 星座 record descriptor/lane 数量漂移");
+        }
+        if let Some(acquire) = &recording.acquire_from_transfer {
+            unsafe { acquire.record(&self.context.device, command_buffer) };
+        }
+        let mut cursor = 0usize;
+        let mut members = Vec::with_capacity(packet.members().len());
+        let mut receipts = Vec::with_capacity(dispatches.len());
+        for member in packet.members() {
+            for lane in member.lanes() {
+                let dispatch = dispatches
+                    .get(cursor)
+                    .context("S14 StarFold 星座 dispatch cursor 越界")?;
+                let tile = unsafe {
+                    self.pipeline
+                        .as_ref()
+                        .context("S14 StarFold MXFP4 tile pipeline 已销毁")?
+                        .record_tile(&self.context, command_buffer, dispatch)
+                }?;
+                unsafe {
+                    record_output_barrier(
+                        &self.context.device,
+                        command_buffer,
+                        lane.output_f32,
+                        tile,
+                    )?;
+                }
+                receipts.push(tile);
+                cursor += 1;
+            }
+            members.push(S14StarfoldConstellationMemberReceipt {
+                expert_id: member.expert_id,
+                source_key: member.source_key,
+                window_offset: member.window_offset,
+                payload_bytes: member.payload_bytes,
+                lane_dispatches: u32::try_from(member.lanes().len())
+                    .context("S14 StarFold 星座 member lane count 超出 u32")?,
+            });
+        }
+        if cursor != dispatches.len() {
+            bail!("S14 StarFold 星座 dispatch cursor 未完整消费");
+        }
+        if let Some(release) = &recording.release_to_transfer {
+            unsafe { release.record(&self.context.device, command_buffer) };
+        }
+        Ok((members, receipts))
+    }
+
     fn reset_unsubmitted(&self, command_buffer: vk::CommandBuffer) -> Result<()> {
         unsafe {
             self.context
@@ -493,7 +812,9 @@ impl S14StarfoldMxfp4ComputeOwner {
         if self.slots[index].dispatches.is_empty() {
             bail!("S14 Starfold MXFP4 in-flight slot 缺少 descriptor lifetime owner");
         }
-        if self.slots[index].proof.take().is_none() {
+        let has_single_proof = self.slots[index].proof.take().is_some();
+        let has_constellation = self.slots[index].constellation.take().is_some();
+        if has_single_proof == has_constellation {
             bail!("S14 Starfold MXFP4 in-flight slot 缺少 proof/SHA lifetime owner");
         }
         destroy_dispatches(
@@ -533,6 +854,7 @@ impl S14StarfoldMxfp4ComputeOwner {
         for slot in &mut self.slots {
             destroy_dispatches(&self.context, std::mem::take(&mut slot.dispatches));
             slot.proof.take();
+            slot.constellation.take();
         }
         unsafe {
             self.context.device.destroy_fence(self.slots[1].fence, None);
