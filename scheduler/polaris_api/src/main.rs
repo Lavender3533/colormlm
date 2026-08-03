@@ -8,6 +8,8 @@ use ssd_inference::{
 };
 use std::{env, io, net::SocketAddr, path::PathBuf, sync::Arc};
 
+const DEFAULT_STARFOLD_MICROTILE_MIB: u32 = 16;
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let address: SocketAddr = env::var("POLARIS_API_ADDR")
@@ -20,7 +22,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let default_max_tokens = env_u32("POLARIS_S14_DEFAULT_MAX_TOKENS", 16)?;
     let queue_capacity = env_usize("POLARIS_S14_QUEUE_CAPACITY", 1)?;
     let explicit_page_fetch = env_bool("POLARIS_S14_EXPLICIT_PAGE_FETCH", false)?;
-    let starfold_microtile_mib = env_u32("POLARIS_S14_STARFOLD_MICROTILE_MIB", 8)?;
+    let starfold_microtile_mib = env_u32(
+        "POLARIS_S14_STARFOLD_MICROTILE_MIB",
+        DEFAULT_STARFOLD_MICROTILE_MIB,
+    )?;
     if explicit_page_fetch {
         require_proxy_policy()?;
     }
@@ -71,6 +76,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = tokio::net::TcpListener::bind(address).await?;
 
     eprintln!("Polaris S14 StarFold API 正在监听 http://{address}");
+    eprintln!(
+        "StarFold resident windows=2x{starfold_microtile_mib} MiB, routed_path={}; \
+         POLARIS_S14_STARFOLD_MICROTILE_MIB=8 可显式回退 microtile",
+        if starfold_microtile_mib >= 16 {
+            "constellation"
+        } else {
+            "microtile"
+        }
+    );
     eprintln!(
         "resident worker 正在加载官方 codec 与唯一 S14 StarFold root；ready 前 health/模型发现/生成均返回 HTTP 503。"
     );
