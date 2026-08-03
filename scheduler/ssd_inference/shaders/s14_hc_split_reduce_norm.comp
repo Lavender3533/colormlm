@@ -1,0 +1,177 @@
+#version 450
+
+// DeepSeek-V4 mHC pre 的第二段：
+//   24 mixing logits -> pre/post/4x4 Sinkhorn -> 四流 reduce
+//   -> BF16 边界 -> 官方 FP32 RMSNorm -> BF16/F32 双输出。
+//
+// 单 workgroup 负责一个 token。hidden 上限固定 4096，正好覆盖正式模型。
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer Hidden {
+    uint packed_bf16[];
+} hidden_state;
+layout(set = 0, binding = 1, std430) readonly buffer Mixes {
+    float values[];
+} mixes;
+layout(set = 0, binding = 2, std430) readonly buffer HcScale {
+    float values[];
+} hc_scale;
+layout(set = 0, binding = 3, std430) readonly buffer HcBase {
+    float values[];
+} hc_base;
+layout(set = 0, binding = 4, std430) readonly buffer NormWeight {
+    uint packed_bf16[];
+} norm_weight;
+layout(set = 0, binding = 5, std430) writeonly buffer OutputBf16 {
+    uint packed_bf16[];
+} output_bf16;
+layout(set = 0, binding = 6, std430) writeonly buffer OutputF32 {
+    float values[];
+} output_f32;
+// [post0..post3, comb00..comb33]
+layout(set = 0, binding = 7, std430) writeonly buffer Aux {
+    float values[];
+} aux;
+layout(set = 0, binding = 8, std430) readonly buffer InverseRms {
+    float value;
+} inverse_rms;
+
+layout(push_constant) uniform Push {
+    uint hidden;
+    float norm_eps;
+} pc;
+
+shared float pre[4];
+shared float post[4];
+shared float comb[16];
+shared float branch[4096];
+shared float partial[256];
+
+float load_hidden(uint scalar_index) {
+    uint word = hidden_state.packed_bf16[scalar_index >> 1u];
+    uint bits = ((scalar_index & 1u) == 0u) ? (word & 0xffffu) : (word >> 16u);
+    return uintBitsToFloat(bits << 16u);
+}
+
+float load_norm_weight(uint scalar_index) {
+    uint word = norm_weight.packed_bf16[scalar_index >> 1u];
+    uint bits = ((scalar_index & 1u) == 0u) ? (word & 0xffffu) : (word >> 16u);
+    return uintBitsToFloat(bits << 16u);
+}
+
+uint float_to_bf16_bits(float value) {
+    uint bits = floatBitsToUint(value);
+    uint exponent = bits & 0x7f800000u;
+    if (exponent == 0x7f800000u) {
+        return bits >> 16u;
+    }
+    uint rounded = bits + 0x00007fffu + ((bits >> 16u) & 1u);
+    return rounded >> 16u;
+}
+
+float round_bf16(float value) {
+    return uintBitsToFloat(float_to_bf16_bits(value) << 16u);
+}
+
+float sigmoid_stable(float value) {
+    if (value >= 0.0) {
+        return 1.0 / (1.0 + exp(-value));
+    }
+    float e = exp(value);
+    return e / (1.0 + e);
+}
+
+void build_mixes() {
+    const float hc_eps = 1.0e-6;
+    for (uint i = 0u; i < 4u; ++i) {
+        pre[i] = sigmoid_stable(
+            mixes.values[i] * inverse_rms.value * hc_scale.values[0] + hc_base.values[i]
+        ) + hc_eps;
+        post[i] = 2.0 * sigmoid_stable(
+            mixes.values[4u + i] * inverse_rms.value * hc_scale.values[1] + hc_base.values[4u + i]
+        );
+    }
+
+    for (uint row = 0u; row < 4u; ++row) {
+        float row_max = -3.402823466e+38;
+        for (uint col = 0u; col < 4u; ++col) {
+            uint index = row * 4u + col;
+            float value = mixes.values[8u + index] * inverse_rms.value * hc_scale.values[2]
+                + hc_base.values[8u + index];
+            comb[index] = value;
+            row_max = max(row_max, value);
+        }
+        float row_sum = 0.0;
+        for (uint col = 0u; col < 4u; ++col) {
+            uint index = row * 4u + col;
+            comb[index] = exp(comb[index] - row_max);
+            row_sum += comb[index];
+        }
+        for (uint col = 0u; col < 4u; ++col) {
+            uint index = row * 4u + col;
+            comb[index] = comb[index] / row_sum + hc_eps;
+        }
+    }
+
+    // 官方第一轮先列归一化；之后 19 轮依次行、列归一化。
+    for (uint col = 0u; col < 4u; ++col) {
+        float sum = 0.0;
+        for (uint row = 0u; row < 4u; ++row) sum += comb[row * 4u + col];
+        for (uint row = 0u; row < 4u; ++row) comb[row * 4u + col] /= (sum + hc_eps);
+    }
+    for (uint iteration = 1u; iteration < 20u; ++iteration) {
+        for (uint row = 0u; row < 4u; ++row) {
+            float sum = 0.0;
+            for (uint col = 0u; col < 4u; ++col) sum += comb[row * 4u + col];
+            for (uint col = 0u; col < 4u; ++col) comb[row * 4u + col] /= (sum + hc_eps);
+        }
+        for (uint col = 0u; col < 4u; ++col) {
+            float sum = 0.0;
+            for (uint row = 0u; row < 4u; ++row) sum += comb[row * 4u + col];
+            for (uint row = 0u; row < 4u; ++row) comb[row * 4u + col] /= (sum + hc_eps);
+        }
+    }
+}
+
+void main() {
+    uint lane = gl_LocalInvocationID.x;
+    if (lane == 0u) {
+        build_mixes();
+        for (uint i = 0u; i < 4u; ++i) aux.values[i] = post[i];
+        for (uint i = 0u; i < 16u; ++i) aux.values[4u + i] = comb[i];
+    }
+    barrier();
+
+    float sum_sq = 0.0;
+    for (uint d = lane; d < pc.hidden; d += 256u) {
+        float value = 0.0;
+        for (uint stream = 0u; stream < 4u; ++stream) {
+            value += pre[stream] * load_hidden(stream * pc.hidden + d);
+        }
+        value = round_bf16(value);
+        branch[d] = value;
+        sum_sq += value * value;
+    }
+    partial[lane] = sum_sq;
+    barrier();
+
+    for (uint stride = 128u; stride > 0u; stride >>= 1u) {
+        if (lane < stride) partial[lane] += partial[lane + stride];
+        barrier();
+    }
+
+    float inv_rms = inversesqrt(partial[0] / float(pc.hidden) + pc.norm_eps);
+    uint packed_count = (pc.hidden + 1u) >> 1u;
+    for (uint pair = lane; pair < packed_count; pair += 256u) {
+        uint d0 = pair * 2u;
+        uint d1 = d0 + 1u;
+        float y0 = round_bf16(branch[d0] * inv_rms * load_norm_weight(d0));
+        float y1 = (d1 < pc.hidden)
+            ? round_bf16(branch[d1] * inv_rms * load_norm_weight(d1))
+            : 0.0;
+        output_bf16.packed_bf16[pair] = float_to_bf16_bits(y0) | (float_to_bf16_bits(y1) << 16u);
+        output_f32.values[d0] = y0;
+        if (d1 < pc.hidden) output_f32.values[d1] = y1;
+    }
+}

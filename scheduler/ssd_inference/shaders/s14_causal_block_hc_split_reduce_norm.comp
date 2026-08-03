@@ -1,0 +1,128 @@
+#version 450
+
+layout(local_size_x = 256) in;
+layout(set = 0, binding = 0, std430) readonly buffer Hidden { uint packed[]; } hidden_state;
+layout(set = 0, binding = 1, std430) readonly buffer Mixes { float values[]; } mixes;
+layout(set = 0, binding = 2, std430) readonly buffer Scale { float values[]; } scale;
+layout(set = 0, binding = 3, std430) readonly buffer Base { float values[]; } base_values;
+layout(set = 0, binding = 4, std430) readonly buffer Norm { uint packed[]; } norm;
+layout(set = 0, binding = 5, std430) writeonly buffer OutputBf16 { uint packed[]; } output_bf16;
+layout(set = 0, binding = 6, std430) writeonly buffer OutputF32 { float values[]; } output_f32;
+layout(set = 0, binding = 7, std430) writeonly buffer Aux { float values[]; } aux;
+layout(set = 0, binding = 8, std430) readonly buffer Inverse { float values[]; } inverse;
+layout(push_constant) uniform Push { uint hidden; uint batch; float epsilon; } pc;
+shared float pre[4];
+shared float post[4];
+shared float comb[16];
+shared float branch[4096];
+shared float partial[256];
+
+float load_hidden(uint index) {
+    uint word = hidden_state.packed[index >> 1u];
+    uint bits = (index & 1u) == 0u ? word & 0xffffu : word >> 16u;
+    return uintBitsToFloat(bits << 16u);
+}
+float load_norm(uint index) {
+    uint word = norm.packed[index >> 1u];
+    uint bits = (index & 1u) == 0u ? word & 0xffffu : word >> 16u;
+    return uintBitsToFloat(bits << 16u);
+}
+uint bf16_bits(float value) {
+    uint bits = floatBitsToUint(value);
+    if ((bits & 0x7f800000u) == 0x7f800000u) return bits >> 16u;
+    return (bits + 0x7fffu + ((bits >> 16u) & 1u)) >> 16u;
+}
+float bf16(float value) { return uintBitsToFloat(bf16_bits(value) << 16u); }
+float sigmoid_stable(float value) {
+    if (value >= 0.0) return 1.0 / (1.0 + exp(-value));
+    float e = exp(value);
+    return e / (1.0 + e);
+}
+void build_mixes(uint token) {
+    const float hc_eps = 1.0e-6;
+    uint mix_base = token * 24u;
+    for (uint i = 0u; i < 4u; ++i) {
+        pre[i] = sigmoid_stable(mixes.values[mix_base + i] * inverse.values[token]
+            * scale.values[0] + base_values.values[i]) + hc_eps;
+        post[i] = 2.0 * sigmoid_stable(mixes.values[mix_base + 4u + i]
+            * inverse.values[token] * scale.values[1] + base_values.values[4u + i]);
+    }
+    for (uint row = 0u; row < 4u; ++row) {
+        float maximum = -3.402823466e+38;
+        for (uint col = 0u; col < 4u; ++col) {
+            uint i = row * 4u + col;
+            comb[i] = mixes.values[mix_base + 8u + i] * inverse.values[token]
+                * scale.values[2] + base_values.values[8u + i];
+            maximum = max(maximum, comb[i]);
+        }
+        float sum = 0.0;
+        for (uint col = 0u; col < 4u; ++col) {
+            uint i = row * 4u + col;
+            comb[i] = exp(comb[i] - maximum);
+            sum += comb[i];
+        }
+        for (uint col = 0u; col < 4u; ++col) {
+            uint i = row * 4u + col;
+            comb[i] = comb[i] / sum + hc_eps;
+        }
+    }
+    for (uint col = 0u; col < 4u; ++col) {
+        float sum = 0.0;
+        for (uint row = 0u; row < 4u; ++row) sum += comb[row * 4u + col];
+        for (uint row = 0u; row < 4u; ++row) comb[row * 4u + col] /= sum + hc_eps;
+    }
+    for (uint iteration = 1u; iteration < 20u; ++iteration) {
+        for (uint row = 0u; row < 4u; ++row) {
+            float sum = 0.0;
+            for (uint col = 0u; col < 4u; ++col) sum += comb[row * 4u + col];
+            for (uint col = 0u; col < 4u; ++col) comb[row * 4u + col] /= sum + hc_eps;
+        }
+        for (uint col = 0u; col < 4u; ++col) {
+            float sum = 0.0;
+            for (uint row = 0u; row < 4u; ++row) sum += comb[row * 4u + col];
+            for (uint row = 0u; row < 4u; ++row) comb[row * 4u + col] /= sum + hc_eps;
+        }
+    }
+}
+void main() {
+    uint token = gl_WorkGroupID.y;
+    uint lane = gl_LocalInvocationID.x;
+    if (token >= pc.batch) return;
+    uint hidden_base = token * 4u * pc.hidden;
+    uint branch_base = token * pc.hidden;
+    if (lane == 0u) {
+        build_mixes(token);
+        uint aux_base = token * 20u;
+        for (uint i = 0u; i < 4u; ++i) aux.values[aux_base + i] = post[i];
+        for (uint i = 0u; i < 16u; ++i) aux.values[aux_base + 4u + i] = comb[i];
+    }
+    barrier();
+    float sum_sq = 0.0;
+    for (uint d = lane; d < pc.hidden; d += 256u) {
+        float value = 0.0;
+        for (uint stream = 0u; stream < 4u; ++stream)
+            value += pre[stream] * load_hidden(
+                hidden_base + stream * pc.hidden + d);
+        value = bf16(value);
+        branch[d] = value;
+        sum_sq += value * value;
+    }
+    partial[lane] = sum_sq;
+    barrier();
+    for (uint stride = 128u; stride > 0u; stride >>= 1u) {
+        if (lane < stride) partial[lane] += partial[lane + stride];
+        barrier();
+    }
+    float inv = inversesqrt(partial[0] / float(pc.hidden) + pc.epsilon);
+    uint packed_per_token = pc.hidden >> 1u;
+    for (uint pair = lane; pair < packed_per_token; pair += 256u) {
+        uint d0 = pair * 2u;
+        uint d1 = d0 + 1u;
+        float y0 = bf16(branch[d0] * inv * load_norm(d0));
+        float y1 = bf16(branch[d1] * inv * load_norm(d1));
+        output_bf16.packed[token * packed_per_token + pair] =
+            bf16_bits(y0) | (bf16_bits(y1) << 16u);
+        output_f32.values[branch_base + d0] = y0;
+        output_f32.values[branch_base + d1] = y1;
+    }
+}

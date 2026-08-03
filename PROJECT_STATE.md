@@ -1550,3 +1550,350 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
   HC/RMSNorm、attention/KV/compressor、router后处理、grouped MoE与final head绑定到同一candidate，
   闭合position0 BOS的首个单进程完整token。当前仍没有可聊天体验、质量、Kimi前端或Claude/GPT
   追赶完成证据。
+
+## 2026-08-02：FullDepth43 Hybrid 全常驻否决与自适应分页上传通过
+
+- 位置 0 的真实逻辑资产为 `11,236,196,572 B`。初版 Hybrid 把约 `6.73GB`
+  attention/router/shared 静态权重全部常驻，并为 routed 与 head 各保留双 bank；权重请求
+  `6,955,425,792 B`。即使把 6.73GB 拆为 43 个最大不足 192MiB 的 allocation，RX5700XT
+  在当前 WDDM 桌面占用下仍于 L36/L39 返回显存不足。该负门已证明 Vulkan heap 总量不能
+  代替实际进程预算，禁止继续把全常驻写成可运行方案。
+- 新增自适应分页 arena：先物理锁定 512MiB workspace、resident-small、routed/head 双 bank
+  与 static 双 stream bank，再按 L0→L42 贪心常驻。真实运行成功常驻 `32/43` 层，11 层
+  流式；总 allocation `6,105,279,232 B`，分配 `543.4714ms`，每 token 重复 static 上传量
+  从全量 `6,727,605,760 B` 降为 `1,734,026,496 B`。可选缓存失败不跳层、不改权重。
+- SHA→只读 mmap→staging→GPU 上传链已在同一分页 arena 上验证 resident static、首个
+  streamed static、L0 routed 与 head chunk0 四类目标，128B GPU 回读逐字节一致。静态冷启动
+  从逐资产 `1,088` 次 submit、`92,198.7870ms`，收敛到逐物理层 `36` 次 submit、
+  `26,590.2743ms`；后者还上传了更多静态字节。权威记录见
+  `fast16/research/polaris_meridian_v1/whole_token_runtime/PAGED_HYBRID_WEIGHT_RUNTIME.md`。
+- 这仍不是完整 token：下一硬门保持不变，必须由 concrete `Position0LayerBackend` 把真实
+  attention/router/MoE/HC/chunked-head 录入同一个 candidate，最终得到 token 5 并原子提交。
+## 2026-08-02：FullDepth43 首枚单进程完整 token 与原子状态提交
+
+- RX 5700 XT 上首次闭合 `BOS embedding → L0..L42 → final HC/RMSNorm → 32块真实BF16
+  output head → GPU argmax → token 5`。同一次入口还回读并验证43层 KV/compressor/indexer
+  状态，将 terminal HC 写入 inactive device bank，最后以两阶段方式同时发布 host/device
+  `DecoderState`；回执为 `commit_epoch=1, active_bank=1`。
+- 实测层段 `11,547.844 ms`、终端段 `2,672.783 ms`、完整段 `15,565.704 ms`；L42 hidden
+  SHA-256 为 `6ad6ec7bab0ac9a13e5065f2bb116e1df66ec9a850f05edccfcfc9e3a3279b60`。
+  该数字只属于同步首 token 门，约 `0.0642 token/s`，不是可聊天速度。
+- 首门显式使用 `manifest_reference_replay`：在线 GPU router 仍执行，但固定 BOS 已打包的六路
+  专家页与原生参考权重负责 MoE。此前 L3 同专家集合仅排序交换已由 GPU slot-align 正确处理；
+  L4 开始在线数值轨迹会改变集合，因此禁止拿错误专家页硬算，也禁止把本门写成动态路由证明。
+- 下一速度硬线只允许三项：无 host-wait 的双 bank head stager、真实43层与 terminal 共用
+  `S14Position0PagedLayerTimeline`、在线 route 后的专家页 miss/prefetch。完成前不得宣称多 token、
+  网页聊天、20--50 token/s、Kimi前端或Claude/GPT质量晋级。
+- 权威证据：`scheduler/ssd_inference/evidence/fulldepth43_position0_whole_token_rx5700xt_20260802.json`。
+
+## 2026-08-02：异步 whole-token 接线断点
+
+- 43层 paged timeline bridge、双 bank head stager、精确 device dirty write-set 已完成；秒级定向门分别为 3/3+5/5、12/12、7/7。
+- 层 static/routed 双 bank `record→stage` API、43份 immutable descriptor 快照、外部 layer/head command 录制入口已加入，`cargo check --offline -p ssd_inference --lib` 通过。
+- 当前尚未产出统一 production example，也尚未跑新的真实 BOS 数值门；不得把基础 API 编译通过写成速度晋级。
+- 精确继续入口：`fast16/research/polaris_meridian_v1/HANDOFF_20260802_ASYNC_TIMELINE.md`。
+- FastCtx v0.2.3 已安装并通过 MCP 握手；新 Co​dex 任务生效，当前任务不会热加载。
+
+## 2026-08-02：production paged whole-token 首门通过
+
+- 新production example已把BOS prologue、43层、terminal prelude、32块head、最终readback与
+  host/device原子提交接入同一个paged timeline；只跑目标编译门和一次真实BOS门，未跑旧长榜。
+- RX 5700 XT真实结果保持token `5`、L42 hidden SHA
+  `6ad6ec7bab0ac9a13e5065f2bb116e1df66ec9a850f05edccfcfc9e3a3279b60`、43/43层、
+  `commit_epoch=1`与`active_bank=1`。runtime为`11.520325s`，相对旧同步`15.565704s`
+  缩短约`25.99%`。
+- 43次layer compute host wait与32次分层/head uploader fence wait已消失；static cold-start wait
+  尚未单独计数，backend cleanup仍有一次device-wide idle。双bank staging还有71次producer
+  reuse wait，加最终wait后timeline host API wait为72，不能写成单wait或可交互速度。
+- 路由仍为固定BOS的`manifest_reference_replay`。下一硬线是后台化producer staging、在线top-6
+  与真实连续token；在这些通过前不得宣称网页聊天、动态路由或Claude/GPT质量晋级。证据见
+  `scheduler/ssd_inference/evidence/fulldepth43_position0_paged_whole_token_rx5700xt_20260802.json`。
+- 真实门后只做编译级生命周期收紧：final-wait失败会保留drain路径；新增external candidate armed
+  语义；成功external timeline收敛后backend销毁不再额外`device_wait_idle`。按不重复真实门要求，
+  这些收紧未二次跑BOS；常驻服务前仍须补统一错误`drain/rollback`守卫。
+
+## 2026-08-02：Polaris S14 产品主线纠正
+
+- 产品目标明确为 **Polaris S14 新架构模型本体**；FullDepth43 是 S14 的全深度主干/验证器，
+  不是独立交付模型。v47 后续只作 S14 草稿岛，Kimi 等只作能力岛。
+- 旧 Python FullDepth43 executor 和固定 `0→5→223` 连续包装器已降级为历史诊断并停止扩展；
+  自研网页、Ollama/OpenAI API 外壳也全部后置，不能用接口壳冒充模型完成。
+- host 侧状态事务已泛化为 `TokenStateTxn`：position0/1/2 可原子提交，position1 写 window row1、
+  ratio4 remainder row5、ratio128 remainder row1；position3 首次 ratio4 compressed block 尚未接入，
+  因而继续明确 `UnsupportedPosition(3)`。这只证明提交/回滚合同，不等于 production GPU 已完成
+  position1 attention 与 device writeback。
+- 任意 token/position 资产计划已闭合 embedding 精确 8KiB Range、RoPE、window/APE/remainder 与
+  cache proof，并由 production prologue 实际消费经 SHA 验证的 embedding，不再把 BOS 行当成通用
+  输入。在线 top-6 已能构造并本地验证 36 个真实 weight/scale Range，再打包为80,216,064 B、
+  256B 对齐的 routed arena；Vulkan layer backend 也已拆为 router probe 与 dynamic MoE continuation。
+- production position0 example 已默认使用逐层
+  `static→router probe→48B top-6 readback→36 Range materialize→canonical routed upload→MoE continuation`，
+  manifest replay只保留为显式历史诊断。position1两行window-KV+RoPE attention专用Vulkan核已在
+  ratio0/4两种频率上各32,768元素逐位等于CPU参考，position1 device recipe也已闭合读取window
+  row0、写row1、APE row1、ratio4 row5与ratio128 row1。当前只剩把这些position1部件接入同一
+  production N=2入口并跑一次必要真门；继续禁止旧长榜、全量回归或重复真实 A/B。
+
+## 2026-08-02：Polaris S14 production 在线双 token 真门通过
+
+- 新 Rust/Vulkan production paged runtime 已连续执行 position 0/1：输入 `0 -> 5`，再输入
+  `5 -> 223`。两个 position 均完成 43/43 层在线 router probe、原生 top-6、按实际专家身份
+  materialize 36 个真实 Range、动态 routed arena 上传、MoE continuation 与真实 final head；
+  路由模式为 `online_probe_dynamic_ranges`，未使用旧 manifest replay 或 Python executor。
+- 热缓存 local-only 独立门总耗时 `25.233s`：position0 `12.528s`、position1 `10.808s`；输出
+  `[5,223]`，最终 `commit_epoch=2`、`active_bank=0`，86/86 层、零 fallback、stderr 为空且无残留
+  example/fetch 进程。position0/1 的 L42 hidden SHA-256 分别为
+  `5fa67f05803d4b7564e9ba1550a397c38de0c0fc0ff8ccd3cb54d78ab96d41d7` 和
+  `cac2147eb8d1034baa079ff8468419e943bd94f6d7f9ffc1244605791cdbe406`。
+- 一次显式缺页运行在 position1/L41 为在线新命中的 E115/E169 补齐12页、`26,738,688 B`；下载后
+  同样完成 `[5,223]`，总耗时 `140.480s`。12/12页均有 HTTPS 206、精确 Content-Range、完整
+  SHA与尺寸证据；缓存无 `.part` 或零字节文件。该结果证明冷下载与热模型执行成本必须分开报告。
+- 上轮 Rust 父进程消失而 Python 下载仍存活的根因是外层约720秒强杀，不是模型主动退出。
+  动态fetch现改为独立持久 manifest/stdout/stderr、显式轮询、默认7200秒内部超时及失败
+  kill+wait回收；外层被杀时诊断文件仍保留在 Range cache 的 `_dynamic_fetch_logs`。
+- **当前下一硬阻塞已从 position1 转为 position2+**：现有 production example仍故意
+  fail-closed，position3首次 ratio-4 compressed block 尚未进入同一GPU candidate。下一顺序为
+  position2常规窗口状态 -> position3 ratio4边界 -> 至少8--16 token短生成；与此同时只并行接
+  OpenAI/Ollama协议适配器，前端复用Open WebUI，不自研网页。当前热态约12.6秒/token，仍不是
+  流畅聊天或20--50 token/s证据。
+
+## 2026-08-03：Polaris S14 production 在线 N=4 真门通过
+
+- 新 Rust/Vulkan production paged runtime 的首次 N=4 主进程明确以 exit code `0` 完成，墙钟约
+  `1897.1s`；该时间包含首次按在线路由补齐精确 Range 页，不是热态聊天速度。为遵守“只跑一次
+  必要真实门”，为补日志格式而启动的重复复核已在编译阶段终止，没有启动第二个模型实例；当前
+  cargo/example/fetch 目标进程均为0。
+- position0--3 均完成 `43/43` 层；已直接恢复的前三个输出为 `5、223、939`。position3 的单项
+  token 摘要位于被工具截断的中段，未用推断补写；硬门只冻结前缀 `[5,223]`，该前缀已通过。
+- `172` 次在线 top-6 route、`6192` 个实际 physical Range、`cpu_compute_fallbacks=0` 全部通过；
+  最终 `commit_epoch=4`，host/device `position=4`、epoch与active bank一致，position3 ratio4
+  compressed block/rollover已提交。
+- position4 继续按合同 fail-closed，`position4_numeric_backend_pending=true`。这说明 position0--3
+  的连续状态与首次 ratio4 压缩边界已经真实成立，但仍不是通用可聊天模型完成证据。
+- 下一硬线改为 position4+：实现真实 compressed indexer 选择与通用 attention，解除
+  `whole_token.rs`、`position0_state.rs`、state writeback和production backend的 position3 上限；
+  先跑秒级结构/编译门，再只跑一次8--16 token必要短生成。通过后才把持久 S14 runtime 接入
+  既有 `/api/chat`、`/v1/chat/completions`，前端复用 Open WebUI。
+
+## 2026-08-03：position4+ 结构闸门与持久 S14 runtime facade
+
+- host `DecoderStateV1/TokenStateTxn`、device candidate、paged timeline 与 state writeback 已将普通
+  position 和重复 ratio4 边界泛化到 position126；结构测试真实提交到 position8，并验证 position7
+  生成第二个 ratio4 compressed block，而不是复用 position3 残留。position127 的 ratio128 首边界
+  继续 fail-closed。本轮只跑秒级定向门，没有启动模型、重复 N=4 或运行旧长榜。
+- 新增 `scheduler/ssd_inference/src/s14_runtime.rs`：`S14Runtime` 常驻 Vulkan context、paged arena、
+  layer plans、input planner 与 expert catalog；`S14Session` 独占 host/device 连续状态；`step()` 保留
+  production 在线 top-6、动态 Range、terminal/head、dirty write-set 与失败 drain/rollback 顺序。
+  `cargo check --offline -p ssd_inference --lib` 通过。
+- prompt prefill 新增正式原子 `WholeTokenCandidate::commit_with_next_input`：当前 step 的真实预测仍写
+  ledger，下一输入可强制为下一枚真实 prompt token；runtime 不再在提交后直接改 public state 字段。
+  定向 whole-token 测试 5/5 通过。
+- position3 attention 的 softmax 已锁定到与 position1/2 相同的确定性 RTE exp/reciprocal 路径，
+  不再依赖驱动实现相关的 GLSL `exp`/除法；结构防回归测试 2/2 与 shader 编译通过。
+- **当前仍未完成 position4 数值模型门**：`production_attention_mode` 继续拒绝 position4+，必须实现
+  `indexer.wq_b → position RoPE → Hadamard → FP4 QDQ → score/ReLU-weight/top-k → selected
+  compressed KV attention`，并将 compressed RoPE/finalize 从 position3 特例泛化。完成后才允许
+  唯一一次8--16 token Rust/Vulkan短生成，再接 `polaris_api` 单 worker 与 Open WebUI。
+
+## 2026-08-03：N=8后 dynamic routed transfer 去逐层 fence
+
+- 权威N=8 production日志为`.tmp-polaris-tests/n8-production-20260803-proxy.stdout.log`：输出
+  `[5,223,939,21,695,553,1266,16179]`、344次在线top-6、12384个physical Range、零CPU fallback、
+  `commit_epoch=8`均通过。position0--6热态均值为`14.638320s/token`（`0.068314 token/s`）；
+  position7的`119.549109s`包含11次显式冷缺页下载，不能混入热态。
+- N=8每个热token仍记录43次router probe host wait、43次dynamic routed transfer fence wait、
+  23次streamed-static fence和1次final wait，共140次host API wait。日志未给各类exclusive毫秒，
+  因而只把它判为最强串行结构瓶颈，不虚报为已计时的最大阶段；既有前代profile的attention
+  exclusive约9s/token只作先验。
+- 已把online top-6 routed payload的canonical staging→device copy录入现有whole-token transfer
+  command/timeline；matching MoE continuation等待transfer ticket，不再为43层分别`submit+fence wait`。
+  production runtime与N=8 example两个调用点均切换，结构目标为
+  `dynamic_routed_transfer_fence_waits=43→0`；router的48B决策回读继续保留。
+- `cargo check --offline -p ssd_inference --lib`、production example check、hybrid staging与ratio4
+  timeline两个定向单测、异步调用点结构门全部通过。本轮没有启动模型或重复N=8，故没有端到端
+  提速数字；完整记录见`fast16/research/polaris_meridian_v1/whole_token_runtime/ASYNC_DYNAMIC_ROUTED_TIMELINE.md`。
+- 该改动不减少每token约`3.614GB static + 3.449GB routed + 1.059GB head`的逻辑搬运合同，单独
+  不可能达到20--50 token/s。下一主线仍须把GPU router与分页预取、K=4/8 union块接入同一持久
+  runtime，以块级复用实际权重扫描；局部kernel、结构wait和端到端token/s继续严格分开。
+
+## 2026-08-03：Open WebUI 普通聊天桥接纠正与 K=4/8 whole-token 合同
+
+- Open WebUI 0.11.0 原先同时从 Ollama 与 OpenAI 两个 provider 发现同名 `Polaris-S14`，造成模型
+  归属冲突；现已固定为 OpenAI-only `http://127.0.0.1:11435/v1`，网页仍复用 Open WebUI。
+- Open WebUI 还会把空 `tools`/`tool_choice=auto` 或默认 builtin tools 注入普通 UI 请求。API 已将
+  空工具集规范化为物理无工具路径；Open WebUI 模型元数据明确关闭当前尚未实现的 builtin tools、
+  terminal 与 file context，并固定 `temperature=0`。真正非空工具请求仍在 DSML ABI 完成前
+  fail-closed，不伪造 `tool_calls`。
+- 无关的本地 RAG embedding 下载与标题、标签、追问、搜索/检索查询任务均已关闭。数据库在修改前
+  备份为 `webui.db.before-openai-only-20260803`；启动脚本固化 OpenAI-only 与 RAG 旁路环境。
+- 新 release API 与 Open WebUI health 均为 HTTP 200，模型发现只返回 `Polaris-S14`。一次必要的
+  真实 OpenAI 非流式 1-token 门使用 `tools=[]/tool_choice=auto`，30.072秒返回“好的”，prompt 5、
+  completion 1；协议定向测试22项全部通过。网页可见回复仍以用户刷新后的新会话为最终体验确认。
+- K=4/8 新合同只接受一次 `batched_causal_whole_token` forward，持有每位置完整状态checkpoint，
+  支持最长一致前缀原子提交、fallback与完整rollback，拒绝K次串行伪batch。N=8真实路由审计显示
+  满接受K=8可把逻辑搬运从`8.122GB/token`降到`2.707GB/token`（约-66.68%），但纯union的PCIe
+  乐观上界仍约`8.14 token/s`；20--50 token/s还必须依赖跨块固定权重常驻和routed union高命中。
+
+## 2026-08-03：200K 状态边界与分层容量合同
+
+- host `TokenStateTxn` 已实现 position `127,255,...` 的 ratio128 compressed KV 原子发布；
+  `DecoderStateV1` 与 K=4/8 `WholeTokenFutureBlock` 不再在 position127 结构性截断。position127
+  提交和 K=4 跨首个 ratio128 边界两个定向门均通过，未启动模型或旧榜。
+- 新 `LongContextMemoryPlan` 从真实 `NativeState` ABI 计算 200K：flat arena
+  `1,393,885,184 B`，粗暴 A/B 为`2,787,770,368 B`；而普通token dirty write-set只有
+  `373,760 B`，ratio4+ratio128同时边界也只有`636,160 B`。生产策略因此硬固定为
+  hot state/indexer/coarse history常驻、`1,075,200,000 B` ratio4 main history分页、candidate只做
+  dirty-page COW和logical-length原子发布，禁止整arena复制。
+- 当前还缺 production Vulkan ratio128 finalize/device writeback、200K长度实测和长prompt取回门；
+  只能记为“host状态与容量边界成立”，不得写成200K真实对话已完成。详见
+  `fast16/research/polaris_meridian_v1/whole_token_runtime/S14_200K_CONTEXT_PLAN.md`。
+- 用户暂停网页体验后，`11435` API与`3000` Open WebUI已停止，释放资源给Rust/Vulkan研发。
+  另清理了可由本地完整供体重建的v17原始Range、v16 full-shard/source重复件与已否决v18
+  runtime-v1，约释放18GiB；S14、v38、v47、v17 runtime-v3、v18 runtime-v2与供体权重全部保留。
+
+## 2026-08-03：position127 ratio128 production 数值边界闭合
+
+- production layer backend 已解锁 position127：同一层 command 先发布当前 ratio128 remainder，
+  再执行128行pool、512维RMSNorm、compressed RoPE与group64 E4M3 QDQ，并将block0写入inactive
+  candidate 的原生`kv.cache[128]`；attention随后消费127个历史window行、当前row127和block0。
+- ratio128 attention不读取ratio4 indexer。shader使用官方`block0..N-1`确定顺序；descriptor中的
+  index缓冲写入越界sentinel后，RX 5700 XT秒级数值门仍以sticky status 0通过，32,768个BF16
+  输出符合冻结解析值，GPU执行约`2.4814ms`。这只证明position127 attention原语与接线边界，
+  不是128-token整模真跑、聊天速度或质量证据。
+- 定向结构门、ratio128 finalize门、KV消费顺序门、目标example编译和library编译均通过；没有
+  启动模型、网页或旧长榜。position128环形window覆盖/逻辑顺序仍单独fail-closed，下一步只处理
+  ring wrap，不能把position127数值门写成200K上下文已经完成。
+
+## 2026-08-03：position128 首个环形 window 结构与数值门闭合
+
+- production paged timeline、device candidate、layer backend与state writeback的上界从position127
+  精确推进到position128；position129继续fail-closed。当前token仍从独立workspace进入attention，
+  已提交window按物理row1..127的逻辑顺序读取，完成后才用当前KV覆盖inactive candidate的row0。
+- 三类层分别闭合：ratio0使用零compressed的ring sparse attention；ratio4使用真实indexer与32个
+  compressed block；ratio128按官方确定顺序消费既有block0。state writeback结构门确认43层均读取
+  完整128行committed window、只把当前KV写入物理row0，非压缩边界不伪造新compressed block。
+- RX 5700 XT ratio128 position128数值门把被淘汰的物理row0写成`999` sentinel，输出仍严格对应
+  row1..127、当前row0与compressed block0，证明sentinel未被消费；32,768个BF16输出通过，sticky
+  status为0，GPU执行约`2.6119ms`。6个ring-wrap定向测试与library编译通过；未启动整模或旧榜。
+- 该结果仍不是129-token整模真跑或200K上下文完成。下一结构边界为position129+通用环形推进；
+  性能主线继续是K=4/8 block-major真实Vulkan backend与checkpoint/最长前缀原子提交。
+
+## 2026-08-03：position129--254 首个完整 ring cycle 公式铺开
+
+- production paged timeline、device candidate、layer attention与sparse attention已按同一环形公式推进到
+  position254；position255第二次ratio128 finalize/attention仍独立fail-closed。position254的当前
+  KV写物理row126，attention按逻辑顺序读取已提交row127、row0..125，再消费独立current row126。
+- position254三类层结构门分别确认ratio0使用`RingWindow`、ratio4消费63个compressed block、
+  ratio128消费既有block0；`window_start=127`、`previous_count=127`。这不是255-token整模真跑，
+  也不代表第二个ratio128边界或200K上下文已经完成。
+- 修复了同一泛化中的早期位置回归：ratio128层在position4--126没有可消费的compressed block，必须
+  继续走`PreCompressionWindow`；此前无条件构造`compressed_count=0`的确定性ratio128 attention，
+  会在真实短生成position4被shape门拒绝。position4/126与position254定向测试均通过，library编译和
+  7个ring定向门通过；未运行旧长榜或新的整模真实门。
+- 随后交叉审计发现ratio4 finalize的目标行函数仍遗留`position>126`旧硬门；这意味着只放行attention
+  并不能证明position127--254的FullDepth43 production已经闭合。该门已按当前production上界推进到
+  position254，并定向确认position127写main/indexer block31、position251写block62；重复边界公式门
+  通过。尚未做新的43层整模真实门，因此本节只能记为环形attention与compressed目标行结构成立。
+- 高置信历史冗余清理永久删除5个无当前引用的binary payload，共`398,858,784 B`：v18
+  `candidate-prior-0`中与保留候选逐SHA相同的3个矩阵、已有NPZ替代的`capture_dev60b.bin`、
+  以及已由v2替代的v19 `runtime-head-v1/weights.bin`。S14、v47、v38、供体、分页缓存与报告均保留；
+  其余约2.17GiB历史负对照未删除。
+
+## 2026-08-03：position255 第二次 ratio128 与同步 ratio4 边界闭合
+
+- production paged timeline、device candidate、layer backend、state writeback、ratio4 index query与
+  sparse attention上界精确推进到position255；position256继续fail-closed。当前token写物理row127，
+  attention按逻辑顺序读取已提交row0..126，再消费独立current row127。
+- position255是两个压缩边界同轮发生：ratio4层先生成block63，写main row191/index row63，使用
+  compressed RoPE position252并完成4行rollover；ratio128层先生成block1，写main row129，使用
+  compressed RoPE position128且不rollover。attention随后分别消费64个ratio4块、以及确定顺序的
+  ratio128 block0+block1。state writeback与backend目标行定向门均通过。
+- 扩展后的RX 5700 XT ratio128秒级数值门使用物理row127=`999`淘汰sentinel，并把固定ABI的两个
+  index descriptor槽均写越界sentinel；shader仍以隐式block0..1顺序完成32,768个BF16输出，期望
+  首元素`0x4282`逐位通过、sticky status为0，GPU dispatch约`2.6708ms`。首次运行还抓到并修复了
+  “第二块时未使用index descriptor容量仍固定4B”的example ABI假设。
+- 本节只证明position255双压缩边界的host/device写集、finalize/attention顺序与ratio128 attention
+  原语；没有运行256-token FullDepth43整模、200K长上下文或旧长榜，不得外推为网页长对话完成。
+
+## 2026-08-03：连续公式推进到固定 ratio4 cache 的自然容量尾 position2050
+
+- position255数值边界通过后，不再逐个枚举后续ratio128边界；production paged timeline、device
+  candidate、layer backend与ratio4 index query按同一公式直接推进到当前固定ABI的自然容量尾。
+- position2047定向门确认同轮生成ratio4最后可容纳的block511（main row639/index row511）与
+  ratio128 block15（main row143、compressed RoPE position1920），state writeback与backend目标
+  绑定均通过。position2050继续消费全部512个ratio4块与16个ratio128块，window_start=3、当前写
+  物理row2；对应attention、timeline和device容量门全部通过。
+- position2051继续fail-closed不是人为短上限：它会生成ratio4第513块，超过固定main/indexer
+  compressed cache与shader `INDEX_TOP_K=512`。下一连续状态硬线因此是把ratio4 main history与
+  indexer history接入已设计的分页logical-length层，再扩attention的分段top-k/页绑定；只改常量
+  或覆盖旧块都不允许。
+- 本轮没有再跑GPU门或整模；position2047/2050只是host/device结构与容量证明，不是2051-token
+  FullDepth43真实生成、200K实测或端到端速度证据。
+
+## 2026-08-03：production K=4/8 attention/router recorder 首个真实 GPU 门
+
+- 新增独立 `s14_causal_block_attention_router` Vulkan 模块与两枚专用 shader。一次 recorder 在同一
+  command buffer 内录制一个 `dispatch(64,K,1)` block-causal attention、一次共享 BF16 router
+  权重扫描和一个 `dispatch(K,1,1)` 在线 top-6；K只允许4/8，回执明确
+  `serial_token_forward_calls=0`，不允许退化为K次串行whole-token。
+- 首版数值边界诚实限定为position1--126的pre-compression contiguous window；输入是正式Q/KV/HC
+  投影之后的device slices，输出为K行attention与route device rows。HC/post-attention写回尚未接入，
+  回执固定`hc_hidden_integration_complete=false`，因此不能写成完整causal-block或S14聊天完成。
+- RX 5700 XT唯一一次K=4零输入定向数值门通过：四行attention逐元素为0、四行router logits为+0、
+  四行在线top-6均为expert `0..5`且权重各`0.25`；sticky status为0。GPU command墙钟
+  `6.5565ms`，回执为attention dispatch 1、router weight scan 1、route dispatch 1、串行token
+  forward 0。`cargo check --offline -p ssd_inference --lib`与定向结构门2/2通过；未启动整模、网页或旧榜。
+- 下一硬线是把正式HC/QKV投影与post-attention HC写回接到该recorder，再注入production causal-block
+  backend；只有43层、grouped MoE、batched head和K份checkpoint同图闭合后，才允许一次必要真实块门。
+
+## 2026-08-03：S14 position2051 production分页与K-prefix原子发布收口
+
+- ratio4 position2051不再覆盖固定512块：block512发布到history page1/row0，logical length
+  `512→513`；同一layer command内逐页indexer、双bank global top-512、分页main-KV gather与
+  512行sparse attention已接入production backend。position2052+继续fail-closed，尚未接通用
+  host/SSD page materializer与跨页驻留生命周期。
+- production layer、paged timeline与whole-token device的候选上限均精确推进到position2051；
+  position2052仍拒绝。position2051目前只通过秒级结构门，未运行2051-token整模或200K长上下文。
+- K=4/8 sealed future现绑定一次batched head回执、K份host checkpoint、owned device prefix
+  checkpoint arena及producer timeline。最长一致前缀先复制到第三块device scratch，host提交
+  成功后才进行不可失败的device bank swap；epoch/position/bank/checkpoint index逐项同源。
+- production Vulkan backend新增显式export验收闩锁：terminal future未被orchestrator完整校验前
+  禁止开始下一block；成功封入sealed future后才解除闩锁，错误路径drain/abort并由owned lease
+  归还arena，避免下一block覆盖尚未决策的future。
+- 当前仍不得宣称K=4数值闭环：独立K-lane causal attention/router虽已有一次K=4零输入GPU门，
+  但正式HC/QKV输入与post-attention HC写回尚未接入production backend；union Range uploader、
+  grouped MoE recorder、batched terminal/head与checkpoint arena allocator也仍在接线。它们闭合后
+  只运行一次必要Rust/Vulkan K=4 whole-token真门；不跑旧Python executor、固定BOS replay或旧长榜。
+- 权威速度仍是N=8热态约`14.638320s/token`（`0.068314 token/s`）。K=4/8只是第一阶段摊薄
+  搬运；达到20--50 token/s还必须消除跨block static重复扫描并让routed union获得真实驻留/命中，
+  最终只以端到端实测为准。
+- 存储清理仅删除高置信无引用、可重建副本，本轮释放约`558.257 MiB`；此前另清理约18GiB历史
+  重复件。S14、v47/v38、v17/v18运行包、供体权重、Range cache与真实1.059GB head全部保留；
+  D盘当前约有`81.937 GiB`空闲，编译期间不清target/debug或shader缓存。
+
+## 2026-08-03：K=4 single-layer production数据面与terminal host checkpoint断环
+
+- `s14_causal_block_production_bundle`的最后一个编译断点已修复；library离线编译与bundle唯一
+  秒级拒绝门通过。bundle继续要求同一`Arc<VulkanContext>`、FullDepth43 catalog、真实HC/QKV
+  provider、owned hidden/union、terminal source与checkpoint pool，缺项时在首次模型计算前拒绝。
+- 新增single-layer production owner，把`HC/QKV→attention/router→在线top-6→实际Range identity/
+  proof/SHA/mmap→union upload→grouped MoE→next-layer hidden`闭合为一次layer forward。由于真实专家页
+  必须在GPU route回读后才能确定，诚实结构为route/HC一次submit、Range upload+MoE一次submit，
+  总计2次；`serial_token_forward_calls=0`，不得写成单submit或K次whole-token。
+- K=4短Vulkan合成门通过：24个route slot、下一层hidden identity与有限值、owned output、drain均
+  闭合，wall约`127.644ms`。该门使用零权重/合成union验证数据面；production adapter的真实Range
+  proof/SHA/mmap路径已编译并有结构门，但真实模型页数值只允许并入后续唯一whole-token真门。
+- terminal source旧合同要求在GPU head前预制完整host output，且错误假定
+  `checkpoint.input_token_id==predicted_token_id`，形成循环依赖并破坏speculative teacher-force。
+  现已改为GPU batched head回读后再消费一次性host candidate finalizer；K/base/routes/checkpoint
+  position/GPU prediction逐项重验，teacher-force链留给`WholeTokenFutureBlock`权威校验。
+- 新增具体K=4/8 prepared host snapshot finalizer：producer提供每个前缀的完整native state+arena
+  owner，GPU head返回后才补齐token ledger、epoch、A/B bank与下一draft输入。K=4最长前缀结构门以
+  `[5,223]`接受、token17 fallback通过；`NativeStateArena`新增严格长度/arena/layout校验的
+  verified-checkpoint readback构造入口。library编译与相关定向门通过，未跑旧长榜。
+- 当前不得宣称K=4 whole-token完成。剩余最大数值缺口是43层producer必须在block-major图内生成K份
+  真实KV/HC/compressor/indexer prefix snapshot；每个K=4块必跨一次ratio4边界，不能靠选择位置绕过。
+  还需把terminal HC/norm、32块head资源与producer timeline同源发布，然后才运行唯一一次必要
+  Rust/Vulkan K=4 whole-token真门。
+- 本轮另将约`1.188GiB`高置信无引用/可重建冗余移入Windows回收站：旧v17 batch build、24个
+  已否决v18候选`.npy`及两个临时v38快照。它们可恢复，清空对应回收站项后才物理释放空间；S14、
+  v47/v38、v17 runtime-v3、v18 runtime-v2、供体、Range/head/checkpoint与Rust/shader缓存均未触碰。

@@ -1,0 +1,109 @@
+#version 450
+
+// Merge one ratio4 indexer page into the running global top-512.
+// Pages are visited in increasing logical order. Explicit score/index tie-breaking
+// preserves the official stable descending order across page boundaries.
+
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer GlobalScoresIn {
+    float values[];
+} global_scores_in;
+layout(set = 0, binding = 1, std430) readonly buffer GlobalIndicesIn {
+    uint values[];
+} global_indices_in;
+layout(set = 0, binding = 2, std430) readonly buffer PageScores {
+    float values[];
+} page_scores;
+layout(set = 0, binding = 3, std430) readonly buffer PageIndices {
+    uint values[];
+} page_indices;
+layout(set = 0, binding = 4, std430) writeonly buffer GlobalScoresOut {
+    float values[];
+} global_scores_out;
+layout(set = 0, binding = 5, std430) writeonly buffer GlobalIndicesOut {
+    uint values[];
+} global_indices_out;
+layout(set = 0, binding = 6, std430) buffer Status {
+    uint code;
+} status;
+
+layout(push_constant) uniform Push {
+    uint global_count;
+    uint page_count;
+    uint page_base;
+    uint logical_count;
+    uint output_count;
+} pc;
+
+const uint TOP_K = 512u;
+const uint MERGE_CAPACITY = 1024u;
+const uint STATUS_NON_FINITE = 8u;
+const uint STATUS_INVALID_INDEX = 16u;
+const uint STATUS_SHAPE = 32u;
+
+shared precise float scores[1024];
+shared uint indices[1024];
+
+bool better(float candidate_score, uint candidate_index, float best_score, uint best_index) {
+    return candidate_score > best_score
+        || (candidate_score == best_score && candidate_index < best_index);
+}
+
+void main() {
+    uint lane = gl_LocalInvocationID.x;
+    uint total = pc.global_count + pc.page_count;
+    if (pc.global_count > TOP_K || pc.page_count == 0u || pc.page_count > TOP_K
+        || total > MERGE_CAPACITY || pc.output_count != min(total, TOP_K)
+        || pc.page_base + pc.page_count != pc.logical_count) {
+        if (lane == 0u) atomicOr(status.code, STATUS_SHAPE);
+        return;
+    }
+
+    for (uint slot = lane; slot < total; slot += 64u) {
+        float score;
+        uint index;
+        if (slot < pc.global_count) {
+            score = global_scores_in.values[slot];
+            index = global_indices_in.values[slot];
+            if (index >= pc.page_base) atomicOr(status.code, STATUS_INVALID_INDEX);
+        } else {
+            uint page_slot = slot - pc.global_count;
+            score = page_scores.values[page_slot];
+            uint local_index = page_indices.values[page_slot];
+            if (local_index >= pc.page_count) {
+                atomicOr(status.code, STATUS_INVALID_INDEX);
+                local_index = 0u;
+            }
+            index = pc.page_base + local_index;
+        }
+        if (isnan(score) || isinf(score)) {
+            atomicOr(status.code, STATUS_NON_FINITE);
+            score = -uintBitsToFloat(0x7f800000u);
+        }
+        scores[slot] = score;
+        indices[slot] = index;
+    }
+    barrier();
+
+    // 只发布top-512。严格score/index比较使结果与全历史稳定排序一致；
+    // lane0串行选择避免不同驱动的并行排序不稳定性。
+    if (lane == 0u) {
+        for (uint out_slot = 0u; out_slot < pc.output_count; ++out_slot) {
+            uint best = out_slot;
+            for (uint candidate = out_slot + 1u; candidate < total; ++candidate) {
+                if (better(scores[candidate], indices[candidate], scores[best], indices[best])) {
+                    best = candidate;
+                }
+            }
+            precise float best_score = scores[best];
+            uint best_index = indices[best];
+            scores[best] = scores[out_slot];
+            indices[best] = indices[out_slot];
+            scores[out_slot] = best_score;
+            indices[out_slot] = best_index;
+            global_scores_out.values[out_slot] = best_score;
+            global_indices_out.values[out_slot] = best_index;
+        }
+    }
+}

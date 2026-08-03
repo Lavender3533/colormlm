@@ -1,0 +1,35 @@
+#version 450
+
+layout(local_size_x = 256) in;
+layout(set = 0, binding = 0, std430) readonly buffer Hidden { uint packed[]; } hidden_state;
+layout(set = 0, binding = 1, std430) writeonly buffer Expanded { float values[]; } expanded;
+layout(set = 0, binding = 2, std430) writeonly buffer Inverse { float values[]; } inverse;
+layout(push_constant) uniform Push { uint hidden; uint batch; float epsilon; } pc;
+shared float partial[256];
+
+float load_bf16(uint index) {
+    uint word = hidden_state.packed[index >> 1u];
+    uint bits = (index & 1u) == 0u ? word & 0xffffu : word >> 16u;
+    return uintBitsToFloat(bits << 16u);
+}
+void main() {
+    uint token = gl_WorkGroupID.y;
+    uint lane = gl_LocalInvocationID.x;
+    if (token >= pc.batch) return;
+    uint count = pc.hidden * 4u;
+    uint base = token * count;
+    float sum = 0.0;
+    for (uint i = lane; i < count; i += 256u) {
+        float value = load_bf16(base + i);
+        sum += value * value;
+        expanded.values[base + i] = value;
+    }
+    partial[lane] = sum;
+    barrier();
+    for (uint stride = 128u; stride > 0u; stride >>= 1u) {
+        if (lane < stride) partial[lane] += partial[lane + stride];
+        barrier();
+    }
+    if (lane == 0u) inverse.values[token] =
+        inversesqrt(partial[0] / float(count) + pc.epsilon);
+}

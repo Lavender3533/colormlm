@@ -1,0 +1,54 @@
+#version 450
+
+// K=4/8 shared-weight FP8 projection: x[batch,K] * weight[N,K] -> y[batch,N].
+layout(local_size_x = 128) in;
+layout(set = 0, binding = 0) readonly buffer X { float x[]; };
+layout(set = 0, binding = 1) readonly buffer Weight { uint weight_words[]; };
+layout(set = 0, binding = 2) readonly buffer WeightScale { uint scale_words[]; };
+layout(set = 0, binding = 3) writeonly buffer Y { float y[]; };
+layout(push_constant) uniform Push { uint N; uint K; uint batch; } pc;
+shared float partial[128];
+
+uint weight_byte(uint index) {
+    uint word = weight_words[index >> 2u];
+    return (word >> ((index & 3u) * 8u)) & 0xffu;
+}
+uint scale_byte(uint index) {
+    uint word = scale_words[index >> 2u];
+    return (word >> ((index & 3u) * 8u)) & 0xffu;
+}
+float e4m3fn(uint code) {
+    uint exponent = (code >> 3u) & 15u;
+    uint mantissa = code & 7u;
+    float magnitude = exponent == 0u
+        ? float(mantissa) * 0.001953125
+        : (exponent == 15u && mantissa == 7u
+            ? uintBitsToFloat(0x7fc00000u)
+            : ldexp(1.0 + float(mantissa) * 0.125, int(exponent) - 7));
+    return (code & 0x80u) == 0u ? magnitude : -magnitude;
+}
+float ue8m0(uint code) { return ldexp(1.0, int(code) - 127); }
+
+void main() {
+    uint n = gl_WorkGroupID.x;
+    uint row = gl_WorkGroupID.y;
+    uint lane = gl_LocalInvocationID.x;
+    if (n >= pc.N || row >= pc.batch) return;
+    uint k_tiles = (pc.K + 127u) >> 7u;
+    uint weight_base = n * pc.K;
+    uint scale_base = (n >> 7u) * k_tiles;
+    uint input_base = row * pc.K;
+    float acc = 0.0;
+    for (uint k = lane; k < pc.K; k += 128u) {
+        acc += x[input_base + k]
+            * e4m3fn(weight_byte(weight_base + k))
+            * ue8m0(scale_byte(scale_base + (k >> 7u)));
+    }
+    partial[lane] = acc;
+    barrier();
+    for (uint stride = 64u; stride > 0u; stride >>= 1u) {
+        if (lane < stride) partial[lane] += partial[lane + stride];
+        barrier();
+    }
+    if (lane == 0u) y[row * pc.N + n] = partial[0];
+}

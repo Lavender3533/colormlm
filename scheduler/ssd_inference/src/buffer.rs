@@ -3,9 +3,9 @@
 //! Wraps a (VkBuffer, VkDeviceMemory, optional mapped pointer) tuple with
 //! RAII cleanup. Higher layers compose these into VRAM pool / staging rings.
 
+use crate::device::VulkanContext;
 use anyhow::{anyhow, Result};
 use ash::vk;
-use crate::device::VulkanContext;
 
 pub struct GpuBuffer {
     buf: vk::Buffer,
@@ -35,9 +35,15 @@ impl GpuBuffer {
                 None,
             )?;
             let req = ctx.device.get_buffer_memory_requirements(buf);
-            let mt = ctx.find_memory_type(req.memory_type_bits, must_have, must_not_have)
-                .ok_or_else(|| anyhow!("no memory type matches {:?}/!{:?}",
-                    must_have, must_not_have))?;
+            let mt = ctx
+                .find_memory_type(req.memory_type_bits, must_have, must_not_have)
+                .ok_or_else(|| {
+                    anyhow!(
+                        "no memory type matches {:?}/!{:?}",
+                        must_have,
+                        must_not_have
+                    )
+                })?;
             let mem = ctx.device.allocate_memory(
                 &vk::MemoryAllocateInfo::default()
                     .allocation_size(req.size)
@@ -46,27 +52,43 @@ impl GpuBuffer {
             )?;
             ctx.device.bind_buffer_memory(buf, mem, 0)?;
             let mapped = if map {
-                ctx.device.map_memory(mem, 0, req.size, vk::MemoryMapFlags::empty())? as *mut u8
-            } else { std::ptr::null_mut() };
-            Ok(Self { buf, mem, size: req.size, mapped })
+                ctx.device
+                    .map_memory(mem, 0, req.size, vk::MemoryMapFlags::empty())?
+                    as *mut u8
+            } else {
+                std::ptr::null_mut()
+            };
+            Ok(Self {
+                buf,
+                mem,
+                size: req.size,
+                mapped,
+            })
         }
     }
 
     /// HOST_VISIBLE | HOST_COHERENT staging buffer (plain RAM, mapped).
     pub fn new_staging(ctx: &VulkanContext, size: u64) -> Result<Self> {
-        Self::new(ctx, size,
+        Self::new(
+            ctx,
+            size,
             vk::BufferUsageFlags::TRANSFER_SRC,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
             vk::MemoryPropertyFlags::DEVICE_LOCAL, // exclude rebar (write performance bad)
-            true)
+            true,
+        )
     }
 
     /// DEVICE_LOCAL only buffer (pure VRAM).
     pub fn new_vram(ctx: &VulkanContext, size: u64, usage: vk::BufferUsageFlags) -> Result<Self> {
-        Self::new(ctx, size, usage,
+        Self::new(
+            ctx,
+            size,
+            usage,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
             vk::MemoryPropertyFlags::HOST_VISIBLE,
-            false)
+            false,
+        )
     }
 
     /// DEVICE_LOCAL buffer with CONCURRENT sharing across multiple queue families.
@@ -86,11 +108,13 @@ impl GpuBuffer {
                 None,
             )?;
             let req = ctx.device.get_buffer_memory_requirements(buf);
-            let mt = ctx.find_memory_type(
-                req.memory_type_bits,
-                vk::MemoryPropertyFlags::DEVICE_LOCAL,
-                vk::MemoryPropertyFlags::HOST_VISIBLE,
-            ).ok_or_else(|| anyhow!("no DEVICE_LOCAL memory type"))?;
+            let mt = ctx
+                .find_memory_type(
+                    req.memory_type_bits,
+                    vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                    vk::MemoryPropertyFlags::HOST_VISIBLE,
+                )
+                .ok_or_else(|| anyhow!("no DEVICE_LOCAL memory type"))?;
             let mem = ctx.device.allocate_memory(
                 &vk::MemoryAllocateInfo::default()
                     .allocation_size(req.size)
@@ -98,18 +122,32 @@ impl GpuBuffer {
                 None,
             )?;
             ctx.device.bind_buffer_memory(buf, mem, 0)?;
-            Ok(Self { buf, mem, size: req.size, mapped: std::ptr::null_mut() })
+            Ok(Self {
+                buf,
+                mem,
+                size: req.size,
+                mapped: std::ptr::null_mut(),
+            })
         }
     }
 
-    pub fn handle(&self) -> vk::Buffer { self.buf }
-    pub fn size(&self) -> u64 { self.size }
-    pub fn mapped(&self) -> *mut u8 { self.mapped }
+    pub fn handle(&self) -> vk::Buffer {
+        self.buf
+    }
+    pub fn size(&self) -> u64 {
+        self.size
+    }
+    pub fn mapped(&self) -> *mut u8 {
+        self.mapped
+    }
 
     /// Copy bytes from a host slice into a mapped staging buffer at given offset.
     /// SAFETY: caller guarantees the buffer is HOST_VISIBLE (created with `map=true`).
     pub unsafe fn write_at(&self, offset: usize, src: &[u8]) {
-        debug_assert!(!self.mapped.is_null(), "write_at called on non-mapped buffer");
+        debug_assert!(
+            !self.mapped.is_null(),
+            "write_at called on non-mapped buffer"
+        );
         debug_assert!(offset + src.len() <= self.size as usize);
         std::ptr::copy_nonoverlapping(src.as_ptr(), self.mapped.add(offset), src.len());
     }

@@ -4,7 +4,7 @@
 //! This is deliberately not a native DeepSeek executor. It only adapts an
 //! already-produced official route to the existing fenced VRAM page pool.
 
-use crate::compute::{ComputePipeline, DescriptorBinder};
+use crate::compute::{ComputePipeline, DescriptorBinder, ExternalStorageBuffer};
 use crate::vram_pool::{LoadingReservation, SlotBinding, SlotLease};
 use crate::{ExpertKey, GpuBuffer, VramPool, VulkanContext};
 use anyhow::{anyhow, bail, Result};
@@ -59,6 +59,15 @@ pub const S14_GROUPED_FP8_BF16_MATVEC_EXACT_SPV: &[u8] = include_bytes!(concat!(
 /// reuse the same persistent-pipeline ABI.
 pub const S14_BF16_MATVEC_SPV: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/s14_bf16_matvec.spv"));
+pub const S14_F32_MATVEC_SPV: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/s14_f32_matvec.spv"));
+
+/// Native DeepSeek-V4 mHC pre: BF16 four-stream input normalization, followed
+/// by the split/Sinkhorn/reduce/RMSNorm stage around the generic BF16 matvec.
+pub const S14_HC_NORMALIZE_INPUT_SPV: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/s14_hc_normalize_input.spv"));
+pub const S14_HC_SPLIT_REDUCE_NORM_SPV: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/s14_hc_split_reduce_norm.spv"));
 
 pub const S14_SWIGLU_LIMIT_SPV: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/s14_swiglu_limit.spv"));
@@ -220,6 +229,101 @@ impl S14Bf16MatvecShape {
     pub fn fp32_output_bytes(self) -> Result<u64> {
         let elements = checked_product(self.batch, self.n, "S14 BF16 output")?;
         checked_bytes(elements, 4, "S14 BF16 output")
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct S14F32MatvecShape {
+    pub n: u32,
+    pub k: u32,
+    pub batch: u32,
+}
+
+impl S14F32MatvecShape {
+    pub fn new(n: u32, k: u32, batch: u32) -> Result<Self> {
+        if n == 0 || k == 0 || batch == 0 || batch > 8 {
+            bail!("S14 F32 matvec requires non-zero N/K and batch in 1..=8");
+        }
+        let shape = Self { n, k, batch };
+        for (elements, name) in [
+            (checked_product(n, k, "S14 F32 weight")?, "weight"),
+            (checked_product(batch, k, "S14 F32 input")?, "input"),
+            (checked_product(batch, n, "S14 F32 output")?, "output"),
+        ] {
+            if elements > u32::MAX as u64 {
+                bail!("S14 F32 matvec {name} shader index exceeds u32");
+            }
+        }
+        shape.weight_bytes()?;
+        shape.input_bytes()?;
+        shape.output_bytes()?;
+        Ok(shape)
+    }
+
+    pub fn weight_bytes(self) -> Result<u64> {
+        checked_bytes(
+            checked_product(self.n, self.k, "S14 F32 weight")?,
+            4,
+            "S14 F32 weight",
+        )
+    }
+
+    pub fn input_bytes(self) -> Result<u64> {
+        checked_bytes(
+            checked_product(self.batch, self.k, "S14 F32 input")?,
+            4,
+            "S14 F32 input",
+        )
+    }
+
+    pub fn output_bytes(self) -> Result<u64> {
+        checked_bytes(
+            checked_product(self.batch, self.n, "S14 F32 output")?,
+            4,
+            "S14 F32 output",
+        )
+    }
+}
+
+/// Fixed four-stream Hyper-Connection shape. The second native shader keeps
+/// one reduced branch in shared memory, so the production upper bound is the
+/// checkpoint width 4096.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct S14HcPreShape {
+    pub hidden: u32,
+}
+
+impl S14HcPreShape {
+    pub fn new(hidden: u32) -> Result<Self> {
+        if hidden == 0 || hidden > S14_BLOCK_HIDDEN || hidden % 2 != 0 {
+            bail!("S14 HC hidden must be even and in 1..={S14_BLOCK_HIDDEN}");
+        }
+        let shape = Self { hidden };
+        shape.hidden_bf16_bytes()?;
+        shape.normalized_input_bytes()?;
+        shape.output_bf16_bytes()?;
+        shape.output_f32_bytes()?;
+        Ok(shape)
+    }
+
+    pub fn hidden_bf16_bytes(self) -> Result<u64> {
+        checked_bytes(self.hidden as u64 * 4, 2, "S14 HC hidden")
+    }
+
+    pub fn normalized_input_bytes(self) -> Result<u64> {
+        checked_bytes(self.hidden as u64 * 4, 4, "S14 HC normalized input")
+    }
+
+    pub fn norm_weight_bytes(self) -> Result<u64> {
+        checked_bytes(self.hidden as u64, 2, "S14 HC norm weight")
+    }
+
+    pub fn output_bf16_bytes(self) -> Result<u64> {
+        checked_bytes(self.hidden as u64, 2, "S14 HC BF16 output")
+    }
+
+    pub fn output_f32_bytes(self) -> Result<u64> {
+        checked_bytes(self.hidden as u64, 4, "S14 HC F32 output")
     }
 }
 
@@ -611,6 +715,40 @@ fn require_storage_offset_alignment(ctx: &VulkanContext, offset: u64, label: &st
     Ok(())
 }
 
+fn byte_ranges_overlap(
+    left_offset: u64,
+    left_bytes: u64,
+    right_offset: u64,
+    right_bytes: u64,
+) -> Result<bool> {
+    let left_end = left_offset
+        .checked_add(left_bytes)
+        .ok_or_else(|| anyhow!("left descriptor range overflow"))?;
+    let right_end = right_offset
+        .checked_add(right_bytes)
+        .ok_or_else(|| anyhow!("right descriptor range overflow"))?;
+    Ok(left_offset < right_end && right_offset < left_end)
+}
+
+fn require_non_overlapping_binding_ranges(ranges: &[(&GpuBuffer, u64, u64, &str)]) -> Result<()> {
+    for left in 0..ranges.len() {
+        for right in left + 1..ranges.len() {
+            let (left_buffer, left_offset, left_bytes, left_label) = ranges[left];
+            let (right_buffer, right_offset, right_bytes, right_label) = ranges[right];
+            if left_buffer.handle() == right_buffer.handle()
+                && byte_ranges_overlap(left_offset, left_bytes, right_offset, right_bytes)?
+            {
+                bail!(
+                    "S14 descriptor ranges overlap: {left_label}=[{left_offset}, {}) {right_label}=[{right_offset}, {})",
+                    left_offset + left_bytes,
+                    right_offset + right_bytes
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Reject the UE8M0 NaN encoding before bytes are uploaded to Vulkan.
 pub fn validate_ue8m0_codes(codes: &[u8]) -> Result<()> {
     if let Some(index) = codes.iter().position(|&code| code == 0xff) {
@@ -657,6 +795,11 @@ pub struct S14Bf16MatvecDispatch {
     pub shape: S14Bf16MatvecShape,
 }
 
+pub struct S14F32MatvecDispatch {
+    pub binder: DescriptorBinder,
+    pub shape: S14F32MatvecShape,
+}
+
 pub struct S14SwigluLimitDispatch {
     pub binder: DescriptorBinder,
     pub n: u32,
@@ -685,6 +828,18 @@ pub struct S14Bf16AccumulateDispatch {
     pub n: u32,
 }
 
+pub struct S14HcNormalizeInputDispatch {
+    pub binder: DescriptorBinder,
+    pub shape: S14HcPreShape,
+    pub norm_eps: f32,
+}
+
+pub struct S14HcSplitReduceNormDispatch {
+    pub binder: DescriptorBinder,
+    pub shape: S14HcPreShape,
+    pub norm_eps: f32,
+}
+
 pub struct S14BatchedOfficialExpertPrepareDispatch {
     pub binder: DescriptorBinder,
     pub branches: u32,
@@ -705,6 +860,9 @@ pub struct S14NumericPipelines {
     ragged_fp8_matvec: ComputePipeline,
     grouped_fp8_bf16_matvec: ComputePipeline,
     bf16_matvec: ComputePipeline,
+    f32_matvec: ComputePipeline,
+    hc_normalize_input: ComputePipeline,
+    hc_split_reduce_norm: ComputePipeline,
     swiglu_limit: ComputePipeline,
     route_mix: ComputePipeline,
     moe_accumulate: ComputePipeline,
@@ -754,6 +912,9 @@ impl S14NumericPipelines {
             ragged_fp8_matvec: ComputePipeline::new(ctx, ragged_fp8_matvec_spv, 4, 16)?,
             grouped_fp8_bf16_matvec: ComputePipeline::new(ctx, grouped_fp8_bf16_matvec_spv, 4, 12)?,
             bf16_matvec: ComputePipeline::new(ctx, S14_BF16_MATVEC_SPV, 3, 16)?,
+            f32_matvec: ComputePipeline::new(ctx, S14_F32_MATVEC_SPV, 3, 16)?,
+            hc_normalize_input: ComputePipeline::new(ctx, S14_HC_NORMALIZE_INPUT_SPV, 3, 8)?,
+            hc_split_reduce_norm: ComputePipeline::new(ctx, S14_HC_SPLIT_REDUCE_NORM_SPV, 9, 8)?,
             swiglu_limit: ComputePipeline::new(ctx, S14_SWIGLU_LIMIT_SPV, 3, 4)?,
             route_mix: ComputePipeline::new(ctx, S14_ROUTE_MIX_SPV, 2, 8)?,
             moe_accumulate: ComputePipeline::new(ctx, S14_MOE_ACCUMULATE_SPV, 2, 8)?,
@@ -861,6 +1022,72 @@ impl S14NumericPipelines {
         Ok(S14Mxfp4Dispatch { binder, shape })
     }
 
+    /// Fully arena-backed MXFP4 projection for routed expert execution.
+    #[allow(clippy::too_many_arguments)]
+    pub fn bind_mxfp4_arenas(
+        &self,
+        ctx: &VulkanContext,
+        shape: S14MatvecShape,
+        weight_arena: &GpuBuffer,
+        weight_arena_logical_bytes: u64,
+        packed_weight_offset: u64,
+        weight_scale_offset: u64,
+        workspace: &GpuBuffer,
+        workspace_logical_bytes: u64,
+        input_offset: u64,
+        output_offset: u64,
+    ) -> Result<S14Mxfp4Dispatch> {
+        let shape = shape.validate_mxfp4()?;
+        let input_bytes = shape.fp32_input_bytes()?;
+        let weight_bytes = storage_bytes(shape.mxfp4_weight_bytes()?);
+        let scale_bytes = storage_bytes(shape.mxfp4_scale_bytes()?);
+        let output_bytes = shape.fp32_output_bytes()?;
+        for (buffer, logical, offset, bytes, name) in [
+            (
+                weight_arena,
+                weight_arena_logical_bytes,
+                packed_weight_offset,
+                weight_bytes,
+                "S14 MXFP4 arena weight",
+            ),
+            (
+                weight_arena,
+                weight_arena_logical_bytes,
+                weight_scale_offset,
+                scale_bytes,
+                "S14 MXFP4 arena scale",
+            ),
+            (
+                workspace,
+                workspace_logical_bytes,
+                input_offset,
+                input_bytes,
+                "S14 MXFP4 workspace input",
+            ),
+            (
+                workspace,
+                workspace_logical_bytes,
+                output_offset,
+                output_bytes,
+                "S14 MXFP4 workspace output",
+            ),
+        ] {
+            require_subrange_capacity(buffer, logical, offset, bytes, name)?;
+            require_storage_offset_alignment(ctx, offset, name)?;
+        }
+        let binder = DescriptorBinder::new_with_offsets(
+            ctx,
+            &self.mxfp4_matvec,
+            &[
+                (workspace, input_offset, input_bytes),
+                (weight_arena, packed_weight_offset, weight_bytes),
+                (weight_arena, weight_scale_offset, scale_bytes),
+                (workspace, output_offset, output_bytes),
+            ],
+        )?;
+        Ok(S14Mxfp4Dispatch { binder, shape })
+    }
+
     pub fn bind_fp8(
         &self,
         ctx: &VulkanContext,
@@ -940,6 +1167,72 @@ impl S14NumericPipelines {
         Ok(S14Fp8Dispatch { binder, shape })
     }
 
+    /// Fully arena-backed FP8 projection used by the position0 whole-token graph.
+    #[allow(clippy::too_many_arguments)]
+    pub fn bind_fp8_arenas(
+        &self,
+        ctx: &VulkanContext,
+        shape: S14MatvecShape,
+        weight_arena: &GpuBuffer,
+        weight_arena_logical_bytes: u64,
+        weight_offset: u64,
+        weight_scale_offset: u64,
+        workspace: &GpuBuffer,
+        workspace_logical_bytes: u64,
+        input_offset: u64,
+        output_offset: u64,
+    ) -> Result<S14Fp8Dispatch> {
+        let shape = shape.validate_fp8()?;
+        let input_bytes = shape.fp32_input_bytes()?;
+        let weight_bytes = storage_bytes(shape.fp8_weight_bytes()?);
+        let scale_bytes = storage_bytes(shape.fp8_scale_bytes()?);
+        let output_bytes = shape.fp32_output_bytes()?;
+        for (buffer, logical, offset, bytes, name) in [
+            (
+                weight_arena,
+                weight_arena_logical_bytes,
+                weight_offset,
+                weight_bytes,
+                "S14 FP8 arena weight",
+            ),
+            (
+                weight_arena,
+                weight_arena_logical_bytes,
+                weight_scale_offset,
+                scale_bytes,
+                "S14 FP8 arena scale",
+            ),
+            (
+                workspace,
+                workspace_logical_bytes,
+                input_offset,
+                input_bytes,
+                "S14 FP8 workspace input",
+            ),
+            (
+                workspace,
+                workspace_logical_bytes,
+                output_offset,
+                output_bytes,
+                "S14 FP8 workspace output",
+            ),
+        ] {
+            require_subrange_capacity(buffer, logical, offset, bytes, name)?;
+            require_storage_offset_alignment(ctx, offset, name)?;
+        }
+        let binder = DescriptorBinder::new_with_offsets(
+            ctx,
+            &self.fp8_matvec,
+            &[
+                (workspace, input_offset, input_bytes),
+                (weight_arena, weight_offset, weight_bytes),
+                (weight_arena, weight_scale_offset, scale_bytes),
+                (workspace, output_offset, output_bytes),
+            ],
+        )?;
+        Ok(S14Fp8Dispatch { binder, shape })
+    }
+
     /// Bind a multi-branch MXFP4 dispatch over one shared arena. `metadata`
     /// is the CPU mirror of `metadata_buffer`; validating it here prevents a
     /// malformed GPU offset from escaping the logical arena. The caller must
@@ -971,6 +1264,221 @@ impl S14NumericPipelines {
                 (arena, arena_logical_bytes),
                 (metadata_buffer, metadata_bytes),
                 (y, y_bytes),
+            ],
+        )?;
+        Ok(S14RaggedMxfp4Dispatch { binder, shape })
+    }
+
+    /// Fully arena-backed ragged MXFP4 projection. Weight offsets in
+    /// `metadata` remain relative to binding 1 (the start of `weight_arena`).
+    /// Metadata may live in a separate arena, while activation input/output
+    /// are required to be disjoint views of the same workspace.
+    #[allow(clippy::too_many_arguments)]
+    pub fn bind_ragged_mxfp4_arenas(
+        &self,
+        ctx: &VulkanContext,
+        shape: S14RaggedMatvecShape,
+        weight_arena: &GpuBuffer,
+        weight_arena_logical_bytes: u64,
+        metadata_arena: &GpuBuffer,
+        metadata_arena_logical_bytes: u64,
+        metadata_offset: u64,
+        metadata: &[S14RaggedBranchOffsets],
+        workspace: &GpuBuffer,
+        workspace_logical_bytes: u64,
+        input_offset: u64,
+        output_offset: u64,
+    ) -> Result<S14RaggedMxfp4Dispatch> {
+        let shape = shape.validate_mxfp4(weight_arena_logical_bytes, metadata)?;
+        let input_bytes = shape.fp32_input_bytes()?;
+        let metadata_bytes = shape.metadata_bytes()?;
+        let output_bytes = shape.fp32_output_bytes()?;
+        require_capacity(
+            weight_arena,
+            weight_arena_logical_bytes,
+            "S14 ragged MXFP4 weight arena",
+        )?;
+        for (buffer, logical, offset, bytes, label) in [
+            (
+                metadata_arena,
+                metadata_arena_logical_bytes,
+                metadata_offset,
+                metadata_bytes,
+                "S14 ragged MXFP4 metadata arena",
+            ),
+            (
+                workspace,
+                workspace_logical_bytes,
+                input_offset,
+                input_bytes,
+                "S14 ragged MXFP4 workspace input",
+            ),
+            (
+                workspace,
+                workspace_logical_bytes,
+                output_offset,
+                output_bytes,
+                "S14 ragged MXFP4 workspace output",
+            ),
+        ] {
+            require_subrange_capacity(buffer, logical, offset, bytes, label)?;
+            require_storage_offset_alignment(ctx, offset, label)?;
+        }
+        let ranges = [
+            (
+                workspace,
+                input_offset,
+                input_bytes,
+                "S14 ragged MXFP4 workspace input",
+            ),
+            (
+                weight_arena,
+                0,
+                weight_arena_logical_bytes,
+                "S14 ragged MXFP4 weight arena",
+            ),
+            (
+                metadata_arena,
+                metadata_offset,
+                metadata_bytes,
+                "S14 ragged MXFP4 metadata arena",
+            ),
+            (
+                workspace,
+                output_offset,
+                output_bytes,
+                "S14 ragged MXFP4 workspace output",
+            ),
+        ];
+        require_non_overlapping_binding_ranges(&ranges)?;
+        let binder = DescriptorBinder::new_with_offsets(
+            ctx,
+            &self.ragged_mxfp4_matvec,
+            &[
+                (workspace, input_offset, input_bytes),
+                (weight_arena, 0, weight_arena_logical_bytes),
+                (metadata_arena, metadata_offset, metadata_bytes),
+                (workspace, output_offset, output_bytes),
+            ],
+        )?;
+        Ok(S14RaggedMxfp4Dispatch { binder, shape })
+    }
+
+    /// Causal-block production variant: binding 1 is a non-owning union bank
+    /// whose lifetime is held by the runtime. The other bindings remain owned
+    /// by the recorder. Metadata offsets are relative to the start of the
+    /// external union binding and are validated against the logical used bytes.
+    #[allow(clippy::too_many_arguments)]
+    pub fn bind_ragged_mxfp4_external_weight_arena(
+        &self,
+        ctx: &VulkanContext,
+        shape: S14RaggedMatvecShape,
+        weight_arena: vk::Buffer,
+        weight_arena_allocated_bytes: u64,
+        weight_arena_logical_bytes: u64,
+        metadata_arena: &GpuBuffer,
+        metadata_arena_logical_bytes: u64,
+        metadata_offset: u64,
+        metadata: &[S14RaggedBranchOffsets],
+        workspace: &GpuBuffer,
+        workspace_logical_bytes: u64,
+        input_offset: u64,
+        output_offset: u64,
+    ) -> Result<S14RaggedMxfp4Dispatch> {
+        let shape = shape.validate_mxfp4(weight_arena_logical_bytes, metadata)?;
+        if weight_arena == vk::Buffer::null()
+            || weight_arena_logical_bytes == 0
+            || weight_arena_logical_bytes > weight_arena_allocated_bytes
+            || weight_arena == metadata_arena.handle()
+            || weight_arena == workspace.handle()
+        {
+            bail!("S14 external ragged MXFP4 union handle/capacity/alias 非法");
+        }
+        let input_bytes = shape.fp32_input_bytes()?;
+        let metadata_bytes = shape.metadata_bytes()?;
+        let output_bytes = shape.fp32_output_bytes()?;
+        for (buffer, logical, offset, bytes, label) in [
+            (
+                metadata_arena,
+                metadata_arena_logical_bytes,
+                metadata_offset,
+                metadata_bytes,
+                "S14 external ragged MXFP4 metadata",
+            ),
+            (
+                workspace,
+                workspace_logical_bytes,
+                input_offset,
+                input_bytes,
+                "S14 external ragged MXFP4 input",
+            ),
+            (
+                workspace,
+                workspace_logical_bytes,
+                output_offset,
+                output_bytes,
+                "S14 external ragged MXFP4 output",
+            ),
+        ] {
+            require_subrange_capacity(buffer, logical, offset, bytes, label)?;
+            require_storage_offset_alignment(ctx, offset, label)?;
+        }
+        require_non_overlapping_binding_ranges(&[
+            (
+                metadata_arena,
+                metadata_offset,
+                metadata_bytes,
+                "S14 external ragged MXFP4 metadata",
+            ),
+            (
+                workspace,
+                input_offset,
+                input_bytes,
+                "S14 external ragged MXFP4 input",
+            ),
+            (
+                workspace,
+                output_offset,
+                output_bytes,
+                "S14 external ragged MXFP4 output",
+            ),
+        ])?;
+        let binder = DescriptorBinder::new_with_external_offsets(
+            ctx,
+            &self.ragged_mxfp4_matvec,
+            &[
+                (
+                    ExternalStorageBuffer {
+                        buffer: workspace.handle(),
+                        capacity: workspace.size(),
+                    },
+                    input_offset,
+                    input_bytes,
+                ),
+                (
+                    ExternalStorageBuffer {
+                        buffer: weight_arena,
+                        capacity: weight_arena_allocated_bytes,
+                    },
+                    0,
+                    weight_arena_logical_bytes,
+                ),
+                (
+                    ExternalStorageBuffer {
+                        buffer: metadata_arena.handle(),
+                        capacity: metadata_arena.size(),
+                    },
+                    metadata_offset,
+                    metadata_bytes,
+                ),
+                (
+                    ExternalStorageBuffer {
+                        buffer: workspace.handle(),
+                        capacity: workspace.size(),
+                    },
+                    output_offset,
+                    output_bytes,
+                ),
             ],
         )?;
         Ok(S14RaggedMxfp4Dispatch { binder, shape })
@@ -1009,6 +1517,99 @@ impl S14NumericPipelines {
         Ok(S14RaggedFp8Dispatch { binder, shape })
     }
 
+    /// Fully arena-backed ragged FP8 projection used to execute one shared
+    /// expert for every causal-block position in the same command submit.
+    #[allow(clippy::too_many_arguments)]
+    pub fn bind_ragged_fp8_arenas(
+        &self,
+        ctx: &VulkanContext,
+        shape: S14RaggedMatvecShape,
+        weight_arena: &GpuBuffer,
+        weight_arena_logical_bytes: u64,
+        metadata_arena: &GpuBuffer,
+        metadata_arena_logical_bytes: u64,
+        metadata_offset: u64,
+        metadata: &[S14RaggedBranchOffsets],
+        workspace: &GpuBuffer,
+        workspace_logical_bytes: u64,
+        input_offset: u64,
+        output_offset: u64,
+    ) -> Result<S14RaggedFp8Dispatch> {
+        let shape = shape.validate_fp8(weight_arena_logical_bytes, metadata)?;
+        let input_bytes = shape.fp32_input_bytes()?;
+        let metadata_bytes = shape.metadata_bytes()?;
+        let output_bytes = shape.fp32_output_bytes()?;
+        require_capacity(
+            weight_arena,
+            weight_arena_logical_bytes,
+            "S14 ragged FP8 weight arena",
+        )?;
+        for (buffer, logical, offset, bytes, label) in [
+            (
+                metadata_arena,
+                metadata_arena_logical_bytes,
+                metadata_offset,
+                metadata_bytes,
+                "S14 ragged FP8 metadata arena",
+            ),
+            (
+                workspace,
+                workspace_logical_bytes,
+                input_offset,
+                input_bytes,
+                "S14 ragged FP8 workspace input",
+            ),
+            (
+                workspace,
+                workspace_logical_bytes,
+                output_offset,
+                output_bytes,
+                "S14 ragged FP8 workspace output",
+            ),
+        ] {
+            require_subrange_capacity(buffer, logical, offset, bytes, label)?;
+            require_storage_offset_alignment(ctx, offset, label)?;
+        }
+        let ranges = [
+            (
+                workspace,
+                input_offset,
+                input_bytes,
+                "S14 ragged FP8 workspace input",
+            ),
+            (
+                weight_arena,
+                0,
+                weight_arena_logical_bytes,
+                "S14 ragged FP8 weight arena",
+            ),
+            (
+                metadata_arena,
+                metadata_offset,
+                metadata_bytes,
+                "S14 ragged FP8 metadata arena",
+            ),
+            (
+                workspace,
+                output_offset,
+                output_bytes,
+                "S14 ragged FP8 workspace output",
+            ),
+        ];
+        require_non_overlapping_binding_ranges(&ranges)?;
+        let binder = DescriptorBinder::new_with_offsets(
+            ctx,
+            &self.ragged_fp8_matvec,
+            &[
+                (workspace, input_offset, input_bytes),
+                (weight_arena, 0, weight_arena_logical_bytes),
+                (metadata_arena, metadata_offset, metadata_bytes),
+                (workspace, output_offset, output_bytes),
+            ],
+        )?;
+        Ok(S14RaggedFp8Dispatch { binder, shape })
+    }
+
     pub fn bind_grouped_fp8_bf16_weight(
         &self,
         ctx: &VulkanContext,
@@ -1035,6 +1636,71 @@ impl S14NumericPipelines {
                 (weight, weight_bytes),
                 (weight_scale, scale_bytes),
                 (y, y_bytes),
+            ],
+        )?;
+        Ok(S14GroupedFp8Bf16Dispatch { binder, shape })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn bind_grouped_fp8_bf16_weight_arenas(
+        &self,
+        ctx: &VulkanContext,
+        shape: S14GroupedMatvecShape,
+        weight_arena: &GpuBuffer,
+        weight_arena_logical_bytes: u64,
+        weight_offset: u64,
+        weight_scale_offset: u64,
+        workspace: &GpuBuffer,
+        workspace_logical_bytes: u64,
+        input_offset: u64,
+        output_offset: u64,
+    ) -> Result<S14GroupedFp8Bf16Dispatch> {
+        let shape = shape.validate_fp8_bf16_weight()?;
+        let input_bytes = shape.fp32_input_bytes()?;
+        let weight_bytes = storage_bytes(shape.fp8_weight_bytes()?);
+        let scale_bytes = storage_bytes(shape.fp8_scale_bytes()?);
+        let output_bytes = shape.fp32_output_bytes()?;
+        for (buffer, logical, offset, bytes, name) in [
+            (
+                weight_arena,
+                weight_arena_logical_bytes,
+                weight_offset,
+                weight_bytes,
+                "S14 grouped FP8 arena weight",
+            ),
+            (
+                weight_arena,
+                weight_arena_logical_bytes,
+                weight_scale_offset,
+                scale_bytes,
+                "S14 grouped FP8 arena scale",
+            ),
+            (
+                workspace,
+                workspace_logical_bytes,
+                input_offset,
+                input_bytes,
+                "S14 grouped FP8 workspace input",
+            ),
+            (
+                workspace,
+                workspace_logical_bytes,
+                output_offset,
+                output_bytes,
+                "S14 grouped FP8 workspace output",
+            ),
+        ] {
+            require_subrange_capacity(buffer, logical, offset, bytes, name)?;
+            require_storage_offset_alignment(ctx, offset, name)?;
+        }
+        let binder = DescriptorBinder::new_with_offsets(
+            ctx,
+            &self.grouped_fp8_bf16_matvec,
+            &[
+                (workspace, input_offset, input_bytes),
+                (weight_arena, weight_offset, weight_bytes),
+                (weight_arena, weight_scale_offset, scale_bytes),
+                (workspace, output_offset, output_bytes),
             ],
         )?;
         Ok(S14GroupedFp8Bf16Dispatch { binder, shape })
@@ -1160,6 +1826,322 @@ impl S14NumericPipelines {
         Ok(S14Bf16MatvecDispatch { binder, shape })
     }
 
+    pub fn bind_f32_matvec(
+        &self,
+        ctx: &VulkanContext,
+        shape: S14F32MatvecShape,
+        weight: &GpuBuffer,
+        x: &GpuBuffer,
+        y: &GpuBuffer,
+    ) -> Result<S14F32MatvecDispatch> {
+        let shape = S14F32MatvecShape::new(shape.n, shape.k, shape.batch)?;
+        let weight_bytes = shape.weight_bytes()?;
+        let input_bytes = shape.input_bytes()?;
+        let output_bytes = shape.output_bytes()?;
+        require_capacity(weight, weight_bytes, "S14 F32 matvec weight")?;
+        require_capacity(x, input_bytes, "S14 F32 matvec input")?;
+        require_capacity(y, output_bytes, "S14 F32 matvec output")?;
+        let binder = DescriptorBinder::new(
+            ctx,
+            &self.f32_matvec,
+            &[(weight, weight_bytes), (x, input_bytes), (y, output_bytes)],
+        )?;
+        Ok(S14F32MatvecDispatch { binder, shape })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn bind_f32_matvec_arenas(
+        &self,
+        ctx: &VulkanContext,
+        shape: S14F32MatvecShape,
+        weight_arena: &GpuBuffer,
+        weight_arena_logical_bytes: u64,
+        weight_offset: u64,
+        input_arena: &GpuBuffer,
+        input_arena_logical_bytes: u64,
+        input_offset: u64,
+        output_arena: &GpuBuffer,
+        output_arena_logical_bytes: u64,
+        output_offset: u64,
+    ) -> Result<S14F32MatvecDispatch> {
+        let shape = S14F32MatvecShape::new(shape.n, shape.k, shape.batch)?;
+        let weight_bytes = shape.weight_bytes()?;
+        let input_bytes = shape.input_bytes()?;
+        let output_bytes = shape.output_bytes()?;
+        for (buffer, logical, offset, bytes, name) in [
+            (
+                weight_arena,
+                weight_arena_logical_bytes,
+                weight_offset,
+                weight_bytes,
+                "S14 F32 weight arena",
+            ),
+            (
+                input_arena,
+                input_arena_logical_bytes,
+                input_offset,
+                input_bytes,
+                "S14 F32 input arena",
+            ),
+            (
+                output_arena,
+                output_arena_logical_bytes,
+                output_offset,
+                output_bytes,
+                "S14 F32 output arena",
+            ),
+        ] {
+            require_subrange_capacity(buffer, logical, offset, bytes, name)?;
+            require_storage_offset_alignment(ctx, offset, name)?;
+        }
+        let binder = DescriptorBinder::new_with_offsets(
+            ctx,
+            &self.f32_matvec,
+            &[
+                (weight_arena, weight_offset, weight_bytes),
+                (input_arena, input_offset, input_bytes),
+                (output_arena, output_offset, output_bytes),
+            ],
+        )?;
+        Ok(S14F32MatvecDispatch { binder, shape })
+    }
+
+    pub fn bind_hc_normalize_input(
+        &self,
+        ctx: &VulkanContext,
+        shape: S14HcPreShape,
+        norm_eps: f32,
+        hidden: &GpuBuffer,
+        expanded_input: &GpuBuffer,
+        inverse_rms: &GpuBuffer,
+    ) -> Result<S14HcNormalizeInputDispatch> {
+        let shape = S14HcPreShape::new(shape.hidden)?;
+        if !norm_eps.is_finite() || norm_eps <= 0.0 {
+            bail!("S14 HC norm epsilon must be finite and positive");
+        }
+        let hidden_bytes = storage_bytes(shape.hidden_bf16_bytes()?);
+        let expanded_bytes = shape.normalized_input_bytes()?;
+        let inverse_rms_bytes = checked_bytes(1, 4, "S14 HC inverse RMS")?;
+        require_capacity(hidden, hidden_bytes, "S14 HC hidden")?;
+        require_capacity(expanded_input, expanded_bytes, "S14 HC expanded input")?;
+        require_capacity(inverse_rms, inverse_rms_bytes, "S14 HC inverse RMS")?;
+        let binder = DescriptorBinder::new(
+            ctx,
+            &self.hc_normalize_input,
+            &[
+                (hidden, hidden_bytes),
+                (expanded_input, expanded_bytes),
+                (inverse_rms, inverse_rms_bytes),
+            ],
+        )?;
+        Ok(S14HcNormalizeInputDispatch {
+            binder,
+            shape,
+            norm_eps,
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn bind_hc_normalize_input_arena(
+        &self,
+        ctx: &VulkanContext,
+        shape: S14HcPreShape,
+        norm_eps: f32,
+        workspace: &GpuBuffer,
+        workspace_logical_bytes: u64,
+        hidden_offset: u64,
+        expanded_offset: u64,
+        inverse_rms_offset: u64,
+    ) -> Result<S14HcNormalizeInputDispatch> {
+        let shape = S14HcPreShape::new(shape.hidden)?;
+        if !norm_eps.is_finite() || norm_eps <= 0.0 {
+            bail!("S14 HC norm epsilon must be finite and positive");
+        }
+        let hidden_bytes = storage_bytes(shape.hidden_bf16_bytes()?);
+        let expanded_bytes = shape.normalized_input_bytes()?;
+        let inverse_bytes = checked_bytes(1, 4, "S14 HC inverse RMS")?;
+        for (offset, bytes, name) in [
+            (hidden_offset, hidden_bytes, "S14 HC workspace hidden"),
+            (expanded_offset, expanded_bytes, "S14 HC workspace expanded"),
+            (
+                inverse_rms_offset,
+                inverse_bytes,
+                "S14 HC workspace inverse RMS",
+            ),
+        ] {
+            require_subrange_capacity(workspace, workspace_logical_bytes, offset, bytes, name)?;
+            require_storage_offset_alignment(ctx, offset, name)?;
+        }
+        let binder = DescriptorBinder::new_with_offsets(
+            ctx,
+            &self.hc_normalize_input,
+            &[
+                (workspace, hidden_offset, hidden_bytes),
+                (workspace, expanded_offset, expanded_bytes),
+                (workspace, inverse_rms_offset, inverse_bytes),
+            ],
+        )?;
+        Ok(S14HcNormalizeInputDispatch {
+            binder,
+            shape,
+            norm_eps,
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn bind_hc_split_reduce_norm(
+        &self,
+        ctx: &VulkanContext,
+        shape: S14HcPreShape,
+        norm_eps: f32,
+        hidden: &GpuBuffer,
+        mixes: &GpuBuffer,
+        hc_scale: &GpuBuffer,
+        hc_base: &GpuBuffer,
+        norm_weight: &GpuBuffer,
+        output_bf16: &GpuBuffer,
+        output_f32: &GpuBuffer,
+        aux: &GpuBuffer,
+        inverse_rms: &GpuBuffer,
+    ) -> Result<S14HcSplitReduceNormDispatch> {
+        let shape = S14HcPreShape::new(shape.hidden)?;
+        if !norm_eps.is_finite() || norm_eps <= 0.0 {
+            bail!("S14 HC norm epsilon must be finite and positive");
+        }
+        let hidden_bytes = storage_bytes(shape.hidden_bf16_bytes()?);
+        let mixes_bytes = checked_bytes(24, 4, "S14 HC mixes")?;
+        let scale_bytes = checked_bytes(3, 4, "S14 HC scale")?;
+        let base_bytes = checked_bytes(24, 4, "S14 HC base")?;
+        let norm_weight_bytes = storage_bytes(shape.norm_weight_bytes()?);
+        let output_bf16_bytes = storage_bytes(shape.output_bf16_bytes()?);
+        let output_f32_bytes = shape.output_f32_bytes()?;
+        let aux_bytes = checked_bytes(20, 4, "S14 HC aux")?;
+        let inverse_rms_bytes = checked_bytes(1, 4, "S14 HC inverse RMS")?;
+        for (buffer, bytes, name) in [
+            (hidden, hidden_bytes, "S14 HC hidden"),
+            (mixes, mixes_bytes, "S14 HC mixes"),
+            (hc_scale, scale_bytes, "S14 HC scale"),
+            (hc_base, base_bytes, "S14 HC base"),
+            (norm_weight, norm_weight_bytes, "S14 HC norm weight"),
+            (output_bf16, output_bf16_bytes, "S14 HC BF16 output"),
+            (output_f32, output_f32_bytes, "S14 HC F32 output"),
+            (aux, aux_bytes, "S14 HC aux"),
+            (inverse_rms, inverse_rms_bytes, "S14 HC inverse RMS"),
+        ] {
+            require_capacity(buffer, bytes, name)?;
+        }
+        let binder = DescriptorBinder::new(
+            ctx,
+            &self.hc_split_reduce_norm,
+            &[
+                (hidden, hidden_bytes),
+                (mixes, mixes_bytes),
+                (hc_scale, scale_bytes),
+                (hc_base, base_bytes),
+                (norm_weight, norm_weight_bytes),
+                (output_bf16, output_bf16_bytes),
+                (output_f32, output_f32_bytes),
+                (aux, aux_bytes),
+                (inverse_rms, inverse_rms_bytes),
+            ],
+        )?;
+        Ok(S14HcSplitReduceNormDispatch {
+            binder,
+            shape,
+            norm_eps,
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn bind_hc_split_reduce_norm_arenas(
+        &self,
+        ctx: &VulkanContext,
+        shape: S14HcPreShape,
+        norm_eps: f32,
+        static_arena: &GpuBuffer,
+        static_logical_bytes: u64,
+        scale_offset: u64,
+        base_offset: u64,
+        norm_weight_offset: u64,
+        workspace: &GpuBuffer,
+        workspace_logical_bytes: u64,
+        hidden_offset: u64,
+        mixes_offset: u64,
+        output_bf16_offset: u64,
+        output_f32_offset: u64,
+        aux_offset: u64,
+        inverse_rms_offset: u64,
+    ) -> Result<S14HcSplitReduceNormDispatch> {
+        let shape = S14HcPreShape::new(shape.hidden)?;
+        if !norm_eps.is_finite() || norm_eps <= 0.0 {
+            bail!("S14 HC norm epsilon must be finite and positive");
+        }
+        let hidden_bytes = storage_bytes(shape.hidden_bf16_bytes()?);
+        let mixes_bytes = checked_bytes(24, 4, "S14 HC mixes")?;
+        let scale_bytes = checked_bytes(3, 4, "S14 HC scale")?;
+        let base_bytes = checked_bytes(24, 4, "S14 HC base")?;
+        let norm_weight_bytes = storage_bytes(shape.norm_weight_bytes()?);
+        let output_bf16_bytes = storage_bytes(shape.output_bf16_bytes()?);
+        let output_f32_bytes = shape.output_f32_bytes()?;
+        let aux_bytes = checked_bytes(20, 4, "S14 HC aux")?;
+        let inverse_bytes = checked_bytes(1, 4, "S14 HC inverse RMS")?;
+        for (offset, bytes, name) in [
+            (scale_offset, scale_bytes, "S14 HC static scale"),
+            (base_offset, base_bytes, "S14 HC static base"),
+            (
+                norm_weight_offset,
+                norm_weight_bytes,
+                "S14 HC static norm weight",
+            ),
+        ] {
+            require_subrange_capacity(static_arena, static_logical_bytes, offset, bytes, name)?;
+            require_storage_offset_alignment(ctx, offset, name)?;
+        }
+        for (offset, bytes, name) in [
+            (hidden_offset, hidden_bytes, "S14 HC workspace hidden"),
+            (mixes_offset, mixes_bytes, "S14 HC workspace mixes"),
+            (
+                output_bf16_offset,
+                output_bf16_bytes,
+                "S14 HC workspace BF16 output",
+            ),
+            (
+                output_f32_offset,
+                output_f32_bytes,
+                "S14 HC workspace F32 output",
+            ),
+            (aux_offset, aux_bytes, "S14 HC workspace aux"),
+            (
+                inverse_rms_offset,
+                inverse_bytes,
+                "S14 HC workspace inverse RMS",
+            ),
+        ] {
+            require_subrange_capacity(workspace, workspace_logical_bytes, offset, bytes, name)?;
+            require_storage_offset_alignment(ctx, offset, name)?;
+        }
+        let binder = DescriptorBinder::new_with_offsets(
+            ctx,
+            &self.hc_split_reduce_norm,
+            &[
+                (workspace, hidden_offset, hidden_bytes),
+                (workspace, mixes_offset, mixes_bytes),
+                (static_arena, scale_offset, scale_bytes),
+                (static_arena, base_offset, base_bytes),
+                (static_arena, norm_weight_offset, norm_weight_bytes),
+                (workspace, output_bf16_offset, output_bf16_bytes),
+                (workspace, output_f32_offset, output_f32_bytes),
+                (workspace, aux_offset, aux_bytes),
+                (workspace, inverse_rms_offset, inverse_bytes),
+            ],
+        )?;
+        Ok(S14HcSplitReduceNormDispatch {
+            binder,
+            shape,
+            norm_eps,
+        })
+    }
+
     pub fn bind_swiglu_limit(
         &self,
         ctx: &VulkanContext,
@@ -1179,6 +2161,40 @@ impl S14NumericPipelines {
             ctx,
             &self.swiglu_limit,
             &[(gate, bytes), (up, bytes), (y, bytes)],
+        )?;
+        Ok(S14SwigluLimitDispatch { binder, n })
+    }
+
+    pub fn bind_swiglu_limit_arena(
+        &self,
+        ctx: &VulkanContext,
+        n: u32,
+        workspace: &GpuBuffer,
+        workspace_logical_bytes: u64,
+        gate_offset: u64,
+        up_offset: u64,
+        output_offset: u64,
+    ) -> Result<S14SwigluLimitDispatch> {
+        if n == 0 {
+            bail!("S14 SwiGLU requires non-zero length");
+        }
+        let bytes = checked_bytes(n as u64, 4, "S14 SwiGLU")?;
+        for (offset, name) in [
+            (gate_offset, "S14 SwiGLU workspace gate"),
+            (up_offset, "S14 SwiGLU workspace up"),
+            (output_offset, "S14 SwiGLU workspace output"),
+        ] {
+            require_subrange_capacity(workspace, workspace_logical_bytes, offset, bytes, name)?;
+            require_storage_offset_alignment(ctx, offset, name)?;
+        }
+        let binder = DescriptorBinder::new_with_offsets(
+            ctx,
+            &self.swiglu_limit,
+            &[
+                (workspace, gate_offset, bytes),
+                (workspace, up_offset, bytes),
+                (workspace, output_offset, bytes),
+            ],
         )?;
         Ok(S14SwigluLimitDispatch { binder, n })
     }
@@ -1228,6 +2244,38 @@ impl S14NumericPipelines {
         Ok(S14MoeAccumulateDispatch { binder, n, weight })
     }
 
+    pub fn bind_moe_accumulate_arena(
+        &self,
+        ctx: &VulkanContext,
+        n: u32,
+        weight: f32,
+        workspace: &GpuBuffer,
+        workspace_logical_bytes: u64,
+        expert_offset: u64,
+        accumulator_offset: u64,
+    ) -> Result<S14MoeAccumulateDispatch> {
+        if n == 0 || !weight.is_finite() || weight < 0.0 {
+            bail!("S14 MoE accumulate requires non-zero length and finite non-negative weight");
+        }
+        let bytes = checked_bytes(n as u64, 4, "S14 MoE accumulate")?;
+        for (offset, name) in [
+            (expert_offset, "S14 MoE workspace expert"),
+            (accumulator_offset, "S14 MoE workspace accumulator"),
+        ] {
+            require_subrange_capacity(workspace, workspace_logical_bytes, offset, bytes, name)?;
+            require_storage_offset_alignment(ctx, offset, name)?;
+        }
+        let binder = DescriptorBinder::new_with_offsets(
+            ctx,
+            &self.moe_accumulate,
+            &[
+                (workspace, expert_offset, bytes),
+                (workspace, accumulator_offset, bytes),
+            ],
+        )?;
+        Ok(S14MoeAccumulateDispatch { binder, n, weight })
+    }
+
     pub fn bind_official_expert_prepare(
         &self,
         ctx: &VulkanContext,
@@ -1258,6 +2306,48 @@ impl S14NumericPipelines {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub fn bind_official_expert_prepare_arena(
+        &self,
+        ctx: &VulkanContext,
+        n: u32,
+        route_weight: f32,
+        workspace: &GpuBuffer,
+        workspace_logical_bytes: u64,
+        gate_offset: u64,
+        up_offset: u64,
+        hidden_offset: u64,
+    ) -> Result<S14OfficialExpertPrepareDispatch> {
+        if n == 0 || n % 128 != 0 || !route_weight.is_finite() || route_weight < 0.0 {
+            bail!(
+                "S14 official expert prepare requires positive 128-aligned length and finite non-negative route weight"
+            );
+        }
+        let bytes = checked_bytes(n as u64, 4, "S14 official expert prepare")?;
+        for (offset, name) in [
+            (gate_offset, "S14 expert workspace gate"),
+            (up_offset, "S14 expert workspace up"),
+            (hidden_offset, "S14 expert workspace hidden"),
+        ] {
+            require_subrange_capacity(workspace, workspace_logical_bytes, offset, bytes, name)?;
+            require_storage_offset_alignment(ctx, offset, name)?;
+        }
+        let binder = DescriptorBinder::new_with_offsets(
+            ctx,
+            &self.official_expert_prepare,
+            &[
+                (workspace, gate_offset, bytes),
+                (workspace, up_offset, bytes),
+                (workspace, hidden_offset, bytes),
+            ],
+        )?;
+        Ok(S14OfficialExpertPrepareDispatch {
+            binder,
+            n,
+            route_weight,
+        })
+    }
+
     pub fn bind_bf16_accumulate(
         &self,
         ctx: &VulkanContext,
@@ -1275,6 +2365,37 @@ impl S14NumericPipelines {
             ctx,
             &self.bf16_accumulate,
             &[(expert, bytes), (accumulator, bytes)],
+        )?;
+        Ok(S14Bf16AccumulateDispatch { binder, n })
+    }
+
+    pub fn bind_bf16_accumulate_arena(
+        &self,
+        ctx: &VulkanContext,
+        n: u32,
+        workspace: &GpuBuffer,
+        workspace_logical_bytes: u64,
+        expert_offset: u64,
+        accumulator_offset: u64,
+    ) -> Result<S14Bf16AccumulateDispatch> {
+        if n == 0 {
+            bail!("S14 BF16 accumulate requires non-zero length");
+        }
+        let bytes = checked_bytes(n as u64, 4, "S14 BF16 accumulate")?;
+        for (offset, name) in [
+            (expert_offset, "S14 BF16 workspace expert"),
+            (accumulator_offset, "S14 BF16 workspace accumulator"),
+        ] {
+            require_subrange_capacity(workspace, workspace_logical_bytes, offset, bytes, name)?;
+            require_storage_offset_alignment(ctx, offset, name)?;
+        }
+        let binder = DescriptorBinder::new_with_offsets(
+            ctx,
+            &self.bf16_accumulate,
+            &[
+                (workspace, expert_offset, bytes),
+                (workspace, accumulator_offset, bytes),
+            ],
         )?;
         Ok(S14Bf16AccumulateDispatch { binder, n })
     }
@@ -1315,6 +2436,68 @@ impl S14NumericPipelines {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub fn bind_batched_official_expert_prepare_arena(
+        &self,
+        ctx: &VulkanContext,
+        branches: u32,
+        n: u32,
+        workspace: &GpuBuffer,
+        workspace_logical_bytes: u64,
+        gate_offset: u64,
+        up_offset: u64,
+        route_weights_offset: u64,
+        hidden_offset: u64,
+    ) -> Result<S14BatchedOfficialExpertPrepareDispatch> {
+        let (matrix_bytes, route_bytes) = s14_batched_official_prepare_buffer_bytes(branches, n)?;
+        let ranges = [
+            (
+                workspace,
+                gate_offset,
+                matrix_bytes,
+                "S14 batched official prepare arena gate",
+            ),
+            (
+                workspace,
+                up_offset,
+                matrix_bytes,
+                "S14 batched official prepare arena up",
+            ),
+            (
+                workspace,
+                route_weights_offset,
+                route_bytes,
+                "S14 batched official prepare arena route weights",
+            ),
+            (
+                workspace,
+                hidden_offset,
+                matrix_bytes,
+                "S14 batched official prepare arena hidden",
+            ),
+        ];
+        for (buffer, offset, bytes, label) in ranges {
+            require_subrange_capacity(buffer, workspace_logical_bytes, offset, bytes, label)?;
+            require_storage_offset_alignment(ctx, offset, label)?;
+        }
+        require_non_overlapping_binding_ranges(&ranges)?;
+        let binder = DescriptorBinder::new_with_offsets(
+            ctx,
+            &self.batched_official_expert_prepare,
+            &[
+                (workspace, gate_offset, matrix_bytes),
+                (workspace, up_offset, matrix_bytes),
+                (workspace, route_weights_offset, route_bytes),
+                (workspace, hidden_offset, matrix_bytes),
+            ],
+        )?;
+        Ok(S14BatchedOfficialExpertPrepareDispatch {
+            binder,
+            branches,
+            n,
+        })
+    }
+
     pub fn bind_exact_order_block_reduce(
         &self,
         ctx: &VulkanContext,
@@ -1334,6 +2517,55 @@ impl S14NumericPipelines {
                 (routed_down, routed_bytes),
                 (shared_down, output_bytes),
                 (output, output_bytes),
+            ],
+        )?;
+        Ok(S14ExactOrderBlockReduceDispatch { binder, positions })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn bind_exact_order_block_reduce_arena(
+        &self,
+        ctx: &VulkanContext,
+        positions: u32,
+        workspace: &GpuBuffer,
+        workspace_logical_bytes: u64,
+        routed_down_offset: u64,
+        shared_down_offset: u64,
+        output_offset: u64,
+    ) -> Result<S14ExactOrderBlockReduceDispatch> {
+        let (routed_bytes, output_bytes) = s14_exact_order_block_reduce_buffer_bytes(positions)?;
+        let ranges = [
+            (
+                workspace,
+                routed_down_offset,
+                routed_bytes,
+                "S14 exact-order arena routed-down",
+            ),
+            (
+                workspace,
+                shared_down_offset,
+                output_bytes,
+                "S14 exact-order arena shared-down",
+            ),
+            (
+                workspace,
+                output_offset,
+                output_bytes,
+                "S14 exact-order arena output",
+            ),
+        ];
+        for (buffer, offset, bytes, label) in ranges {
+            require_subrange_capacity(buffer, workspace_logical_bytes, offset, bytes, label)?;
+            require_storage_offset_alignment(ctx, offset, label)?;
+        }
+        require_non_overlapping_binding_ranges(&ranges)?;
+        let binder = DescriptorBinder::new_with_offsets(
+            ctx,
+            &self.exact_order_block_reduce,
+            &[
+                (workspace, routed_down_offset, routed_bytes),
+                (workspace, shared_down_offset, output_bytes),
+                (workspace, output_offset, output_bytes),
             ],
         )?;
         Ok(S14ExactOrderBlockReduceDispatch { binder, positions })
@@ -1430,6 +2662,53 @@ impl S14NumericPipelines {
             &self.bf16_matvec,
             dispatch.binder.set,
             dispatch.shape,
+        );
+    }
+
+    pub unsafe fn cmd_f32_matvec(
+        &self,
+        ctx: &VulkanContext,
+        command_buffer: vk::CommandBuffer,
+        dispatch: &S14F32MatvecDispatch,
+    ) {
+        record_f32_matvec(
+            ctx,
+            command_buffer,
+            &self.f32_matvec,
+            dispatch.binder.set,
+            dispatch.shape,
+        );
+    }
+
+    pub unsafe fn cmd_hc_normalize_input(
+        &self,
+        ctx: &VulkanContext,
+        command_buffer: vk::CommandBuffer,
+        dispatch: &S14HcNormalizeInputDispatch,
+    ) {
+        record_hc_single_group(
+            ctx,
+            command_buffer,
+            &self.hc_normalize_input,
+            dispatch.binder.set,
+            dispatch.shape,
+            dispatch.norm_eps,
+        );
+    }
+
+    pub unsafe fn cmd_hc_split_reduce_norm(
+        &self,
+        ctx: &VulkanContext,
+        command_buffer: vk::CommandBuffer,
+        dispatch: &S14HcSplitReduceNormDispatch,
+    ) {
+        record_hc_single_group(
+            ctx,
+            command_buffer,
+            &self.hc_split_reduce_norm,
+            dispatch.binder.set,
+            dispatch.shape,
+            dispatch.norm_eps,
         );
     }
 
@@ -1558,6 +2837,9 @@ impl S14NumericPipelines {
         self.route_mix.destroy(ctx);
         self.swiglu_limit.destroy(ctx);
         self.bf16_matvec.destroy(ctx);
+        self.f32_matvec.destroy(ctx);
+        self.hc_normalize_input.destroy(ctx);
+        self.hc_split_reduce_norm.destroy(ctx);
         self.grouped_fp8_bf16_matvec.destroy(ctx);
         self.ragged_fp8_matvec.destroy(ctx);
         self.ragged_mxfp4_matvec.destroy(ctx);
@@ -1646,6 +2928,79 @@ unsafe fn record_bf16_matvec(
     pipeline: &ComputePipeline,
     set: vk::DescriptorSet,
     shape: S14Bf16MatvecShape,
+) {
+    ctx.device.cmd_bind_pipeline(
+        command_buffer,
+        vk::PipelineBindPoint::COMPUTE,
+        pipeline.pipeline,
+    );
+    ctx.device.cmd_bind_descriptor_sets(
+        command_buffer,
+        vk::PipelineBindPoint::COMPUTE,
+        pipeline.layout,
+        0,
+        &[set],
+        &[],
+    );
+    const MAX_GROUPS_X: u32 = 65_535;
+    let groups_x = shape.n.min(MAX_GROUPS_X);
+    let groups_y = shape.n.div_ceil(groups_x);
+    let mut push = [0u8; 16];
+    push[..4].copy_from_slice(&shape.n.to_le_bytes());
+    push[4..8].copy_from_slice(&shape.k.to_le_bytes());
+    push[8..12].copy_from_slice(&shape.batch.to_le_bytes());
+    push[12..].copy_from_slice(&groups_x.to_le_bytes());
+    ctx.device.cmd_push_constants(
+        command_buffer,
+        pipeline.layout,
+        vk::ShaderStageFlags::COMPUTE,
+        0,
+        &push,
+    );
+    ctx.device
+        .cmd_dispatch(command_buffer, groups_x, groups_y, 1);
+}
+
+unsafe fn record_hc_single_group(
+    ctx: &VulkanContext,
+    command_buffer: vk::CommandBuffer,
+    pipeline: &ComputePipeline,
+    set: vk::DescriptorSet,
+    shape: S14HcPreShape,
+    norm_eps: f32,
+) {
+    ctx.device.cmd_bind_pipeline(
+        command_buffer,
+        vk::PipelineBindPoint::COMPUTE,
+        pipeline.pipeline,
+    );
+    ctx.device.cmd_bind_descriptor_sets(
+        command_buffer,
+        vk::PipelineBindPoint::COMPUTE,
+        pipeline.layout,
+        0,
+        &[set],
+        &[],
+    );
+    let mut push = [0u8; 8];
+    push[..4].copy_from_slice(&shape.hidden.to_le_bytes());
+    push[4..].copy_from_slice(&norm_eps.to_bits().to_le_bytes());
+    ctx.device.cmd_push_constants(
+        command_buffer,
+        pipeline.layout,
+        vk::ShaderStageFlags::COMPUTE,
+        0,
+        &push,
+    );
+    ctx.device.cmd_dispatch(command_buffer, 1, 1, 1);
+}
+
+unsafe fn record_f32_matvec(
+    ctx: &VulkanContext,
+    command_buffer: vk::CommandBuffer,
+    pipeline: &ComputePipeline,
+    set: vk::DescriptorSet,
+    shape: S14F32MatvecShape,
 ) {
     ctx.device.cmd_bind_pipeline(
         command_buffer,
@@ -2284,6 +3639,16 @@ mod numeric_tests {
         );
         assert!(s14_exact_order_block_reduce_buffer_bytes(0).is_err());
         assert!(s14_exact_order_block_reduce_buffer_bytes(u32::MAX).is_err());
+    }
+
+    #[test]
+    fn arena_overlap_math_is_half_open_and_overflow_safe() {
+        assert!(!byte_ranges_overlap(0, 16, 16, 4).unwrap());
+        assert!(byte_ranges_overlap(0, 16, 15, 4).unwrap());
+        assert!(byte_ranges_overlap(16, 4, 0, 17).unwrap());
+        assert!(!byte_ranges_overlap(4, 0, 4, 0).unwrap());
+        assert!(byte_ranges_overlap(u64::MAX, 2, 0, 1).is_err());
+        assert!(byte_ranges_overlap(0, 1, u64::MAX, 2).is_err());
     }
 
     #[test]

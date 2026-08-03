@@ -1,0 +1,123 @@
+#version 450
+
+// Indexer compressed KV boundary: normalized Hadamard rotation over BF16[128],
+// BF16 RNE, then official per-32 E2M1 quantize/dequantize and BF16 RNE.
+
+layout(local_size_x = 128) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer Input {
+    uint packed_bf16[];
+} input_state;
+layout(set = 0, binding = 1, std430) writeonly buffer Output {
+    uint packed_bf16[];
+} output_state;
+layout(set = 0, binding = 2, std430) buffer Status {
+    uint code;
+} status;
+
+const uint STATUS_NON_FINITE_INPUT = 1u;
+const uint STATUS_INVALID_SCALE = 2u;
+const uint STATUS_NON_FINITE_OUTPUT = 4u;
+
+shared float values[128];
+shared float block_max[128];
+shared float block_scale[4];
+
+float load_bf16(uint scalar_index) {
+    uint word = input_state.packed_bf16[scalar_index >> 1u];
+    uint bits = ((scalar_index & 1u) == 0u) ? (word & 0xffffu) : (word >> 16u);
+    return uintBitsToFloat(bits << 16u);
+}
+
+bool non_finite(float value) {
+    return isnan(value) || isinf(value);
+}
+
+uint float_to_bf16_bits(float value) {
+    uint bits = floatBitsToUint(value);
+    uint exponent = bits & 0x7f800000u;
+    if (exponent == 0x7f800000u) return bits >> 16u;
+    uint rounded = bits + 0x00007fffu + ((bits >> 16u) & 1u);
+    return rounded >> 16u;
+}
+
+float round_bf16(float value) {
+    return uintBitsToFloat(float_to_bf16_bits(value) << 16u);
+}
+
+float nearest_e2m1(float value) {
+    const float levels[15] = float[15](
+        -6.0, -4.0, -3.0, -2.0, -1.5, -1.0, -0.5, 0.0,
+         0.5,  1.0,  1.5,  2.0,  3.0,  4.0,  6.0
+    );
+    uint best = 0u;
+    float distance = abs(value - levels[0]);
+    for (uint index = 1u; index < 15u; ++index) {
+        float candidate = abs(value - levels[index]);
+        // Strict comparison preserves torch.argmin's first-level tie break.
+        if (candidate < distance) {
+            best = index;
+            distance = candidate;
+        }
+    }
+    return levels[best];
+}
+
+void main() {
+    uint lane = gl_LocalInvocationID.x;
+    float value = load_bf16(lane);
+    if (non_finite(value)) {
+        atomicOr(status.code, STATUS_NON_FINITE_INPUT);
+        value = 0.0;
+    }
+    values[lane] = value;
+    barrier();
+
+    for (uint step = 1u; step < 128u; step <<= 1u) {
+        if ((lane & step) == 0u) {
+            uint right = lane | step;
+            float left_value = values[lane];
+            float right_value = values[right];
+            values[lane] = left_value + right_value;
+            values[right] = left_value - right_value;
+        }
+        barrier();
+    }
+    values[lane] = round_bf16(values[lane] * inversesqrt(128.0));
+    block_max[lane] = abs(values[lane]);
+    barrier();
+
+    uint within = lane & 31u;
+    for (uint stride = 16u; stride > 0u; stride >>= 1u) {
+        if (within < stride) {
+            block_max[lane] = max(block_max[lane], block_max[lane + stride]);
+        }
+        barrier();
+    }
+    if (within == 0u) {
+        uint block = lane >> 5u;
+        float amax = max(block_max[lane], 6.0 * exp2(-126.0));
+        float scale = exp2(ceil(log2(amax / 6.0)));
+        block_scale[block] = scale;
+        if (non_finite(scale) || scale <= 0.0) {
+            atomicOr(status.code, STATUS_INVALID_SCALE);
+            block_scale[block] = 1.0;
+        }
+    }
+    barrier();
+
+    float scale = block_scale[lane >> 5u];
+    float normalized = clamp(values[lane] / scale, -6.0, 6.0);
+    float output_value = nearest_e2m1(normalized) * scale;
+    if (non_finite(output_value)) {
+        atomicOr(status.code, STATUS_NON_FINITE_OUTPUT);
+        output_value = 0.0;
+    }
+    values[lane] = output_value;
+    barrier();
+    if (lane < 64u) {
+        uint d0 = lane * 2u;
+        output_state.packed_bf16[lane] =
+            float_to_bf16_bits(values[d0]) | (float_to_bf16_bits(values[d0 + 1u]) << 16u);
+    }
+}

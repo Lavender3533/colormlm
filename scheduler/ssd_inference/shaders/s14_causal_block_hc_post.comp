@@ -1,0 +1,74 @@
+#version 450
+
+layout(local_size_x = 256) in;
+layout(set = 0, binding = 0, std430) readonly buffer Branch { uint packed[]; } branch_state;
+layout(set = 0, binding = 1, std430) readonly buffer Residual { uint packed[]; } residual_state;
+layout(set = 0, binding = 2, std430) readonly buffer Aux { float values[]; } aux;
+layout(set = 0, binding = 3, std430) writeonly buffer Output { uint packed[]; } output_state;
+layout(set = 0, binding = 4, std430) buffer Status { uint code; } status;
+layout(push_constant) uniform Push { uint hidden; uint batch; } pc;
+shared uint invalid;
+
+float load_branch(uint index) {
+    uint word = branch_state.packed[index >> 1u];
+    uint bits = (index & 1u) == 0u ? word & 0xffffu : word >> 16u;
+    return uintBitsToFloat(bits << 16u);
+}
+float load_residual(uint index) {
+    uint word = residual_state.packed[index >> 1u];
+    uint bits = (index & 1u) == 0u ? word & 0xffffu : word >> 16u;
+    return uintBitsToFloat(bits << 16u);
+}
+uint bf16_bits(float value) {
+    uint bits = floatBitsToUint(value);
+    return (bits + 0x7fffu + ((bits >> 16u) & 1u)) >> 16u;
+}
+bool bad(float value) { return isnan(value) || isinf(value); }
+float merged(uint token, uint index) {
+    uint stream_out = index / pc.hidden;
+    uint d = index - stream_out * pc.hidden;
+    uint residual_base = token * 4u * pc.hidden;
+    uint aux_base = token * 20u;
+    precise float sum = 0.0;
+    for (uint stream_in = 0u; stream_in < 4u; ++stream_in)
+        sum += aux.values[aux_base + 4u + stream_in * 4u + stream_out]
+            * load_residual(
+                residual_base + stream_in * pc.hidden + d);
+    return aux.values[aux_base + stream_out]
+        * load_branch(token * pc.hidden + d) + sum;
+}
+void main() {
+    uint token = gl_WorkGroupID.y;
+    uint lane = gl_LocalInvocationID.x;
+    if (token >= pc.batch) return;
+    uint scalars = 4u * pc.hidden;
+    if (lane == 0u) invalid = status.code;
+    barrier();
+    for (uint i = lane; i < pc.hidden; i += 256u)
+        if (bad(load_branch(token * pc.hidden + i))) atomicOr(invalid, 1u);
+    for (uint i = lane; i < scalars; i += 256u)
+        if (bad(load_residual(token * scalars + i))) atomicOr(invalid, 1u);
+    if (lane < 20u && bad(aux.values[token * 20u + lane])) atomicOr(invalid, 1u);
+    barrier();
+    if (invalid == 0u) {
+        for (uint i = lane; i < scalars; i += 256u) {
+            float value = merged(token, i);
+            uint bits = bf16_bits(value);
+            if (bad(value)) atomicOr(invalid, 2u);
+            if ((bits & 0x7f80u) == 0x7f80u) atomicOr(invalid, 4u);
+        }
+    }
+    barrier();
+    uint pairs = scalars >> 1u;
+    uint output_base = token * pairs;
+    if (invalid != 0u) {
+        for (uint pair = lane; pair < pairs; pair += 256u) output_state.packed[output_base + pair] = 0u;
+        if (lane == 0u) atomicOr(status.code, invalid);
+        return;
+    }
+    for (uint pair = lane; pair < pairs; pair += 256u) {
+        uint i = pair * 2u;
+        output_state.packed[output_base + pair] =
+            bf16_bits(merged(token, i)) | (bf16_bits(merged(token, i + 1u)) << 16u);
+    }
+}

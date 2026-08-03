@@ -1,0 +1,57 @@
+#version 450
+
+// DeepSeek-V4 mHC pre 的第一段：把 BF16 [4,D] hidden 提升为 F32，
+// 同时按官方 FP32 顺序计算一个 inverse RMS。随后必须先对原始 F32 hidden
+// 做 hc_fn matvec，再在 split 阶段乘 inverse RMS；不能把缩放提前进 matvec。
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer Hidden {
+    uint packed_bf16[];
+} hidden_state;
+
+layout(set = 0, binding = 1, std430) writeonly buffer Normalized {
+    float values[];
+} expanded_state;
+layout(set = 0, binding = 2, std430) writeonly buffer InverseRms {
+    float value;
+} inverse_rms;
+
+layout(push_constant) uniform Push {
+    uint hidden;
+    float norm_eps;
+} pc;
+
+shared float partial[256];
+
+float load_bf16(uint scalar_index) {
+    uint word = hidden_state.packed_bf16[scalar_index >> 1u];
+    uint bits = ((scalar_index & 1u) == 0u) ? (word & 0xffffu) : (word >> 16u);
+    return uintBitsToFloat(bits << 16u);
+}
+
+void main() {
+    uint lane = gl_LocalInvocationID.x;
+    uint count = pc.hidden * 4u;
+    float sum_sq = 0.0;
+    for (uint i = lane; i < count; i += 256u) {
+        float value = load_bf16(i);
+        sum_sq += value * value;
+    }
+    partial[lane] = sum_sq;
+    barrier();
+
+    for (uint stride = 128u; stride > 0u; stride >>= 1u) {
+        if (lane < stride) {
+            partial[lane] += partial[lane + stride];
+        }
+        barrier();
+    }
+
+    if (lane == 0u) {
+        inverse_rms.value = inversesqrt(partial[0] / float(count) + pc.norm_eps);
+    }
+    for (uint i = lane; i < count; i += 256u) {
+        expanded_state.values[i] = load_bf16(i);
+    }
+}

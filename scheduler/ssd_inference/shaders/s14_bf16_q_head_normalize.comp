@@ -1,0 +1,135 @@
+#version 450
+
+// DeepSeek-V4 Q-head 专用 PyTorch-BF16 归一化。
+//
+// 参考表达式：
+//   q = q.to(torch.bfloat16)
+//   q *= torch.rsqrt(q.square().mean(-1, keepdim=True) + 1e-6)
+//
+// 与通用 RMSNorm 不同，这里的 square、mean、epsilon add、rsqrt 和最终乘法
+// 都必须经过 BF16 RNE 边界。phase=0 逐 head 计算 BF16 inverse RMS；phase=1
+// 在全局 barrier 后写回，任意 sticky status 会使整块输出归零。
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer Input {
+    uint packed_bf16[];
+} input_state;
+layout(set = 0, binding = 1, std430) buffer InverseRms {
+    float values[];
+} inverse_rms;
+layout(set = 0, binding = 2, std430) writeonly buffer Output {
+    uint packed_bf16[];
+} output_state;
+layout(set = 0, binding = 3, std430) buffer Status {
+    uint code;
+} status;
+
+layout(push_constant) uniform Push {
+    uint rows;
+    uint hidden;
+    float epsilon;
+    uint phase;
+} pc;
+
+const uint STATUS_NON_FINITE_INPUT = 1u;
+const uint STATUS_NON_FINITE_NORM = 2u;
+const uint STATUS_NON_FINITE_OUTPUT = 4u;
+const uint STATUS_NON_FINITE_BF16 = 8u;
+
+shared uint row_invalid;
+
+float load_input(uint scalar_index) {
+    uint word = input_state.packed_bf16[scalar_index >> 1u];
+    uint bits = ((scalar_index & 1u) == 0u) ? (word & 0xffffu) : (word >> 16u);
+    return uintBitsToFloat(bits << 16u);
+}
+
+bool non_finite(float value) {
+    return isnan(value) || isinf(value);
+}
+
+uint float_to_bf16_bits(float value) {
+    uint bits = floatBitsToUint(value);
+    uint rounded = bits + 0x00007fffu + ((bits >> 16u) & 1u);
+    return rounded >> 16u;
+}
+
+precise float bf16_round(float value) {
+    return uintBitsToFloat(float_to_bf16_bits(value) << 16u);
+}
+
+void prepare_row() {
+    uint lane = gl_LocalInvocationID.x;
+    uint row = gl_WorkGroupID.x;
+    uint base = row * pc.hidden;
+    if (lane == 0u) row_invalid = status.code;
+    barrier();
+
+    for (uint dimension = lane; dimension < pc.hidden; dimension += 256u) {
+        if (non_finite(load_input(base + dimension))) {
+            atomicOr(row_invalid, STATUS_NON_FINITE_INPUT);
+        }
+    }
+    barrier();
+
+    if (lane == 0u && row_invalid == 0u) {
+        // PyTorch CPU 的 BF16 square 先逐元素 RNE；mean 对这些 BF16 平方值
+        // 做 F32 累计，输出再 RNE 到 BF16。固定标量顺序使数值门可复现。
+        precise float sum_squares = 0.0;
+        for (uint dimension = 0u; dimension < pc.hidden; ++dimension) {
+            precise float value = load_input(base + dimension);
+            precise float square_bf16 = bf16_round(value * value);
+            sum_squares = sum_squares + square_bf16;
+        }
+        precise float mean_bf16 = bf16_round(sum_squares / float(pc.hidden));
+        // PyTorch 的 BF16 tensor + Python scalar 会先把 scalar 转为 BF16。
+        precise float epsilon_bf16 = bf16_round(pc.epsilon);
+        precise float norm_bf16 = bf16_round(mean_bf16 + epsilon_bf16);
+        precise float inverse_bf16 = bf16_round(1.0 / sqrt(norm_bf16));
+        inverse_rms.values[row] = inverse_bf16;
+        if (non_finite(sum_squares) || non_finite(mean_bf16)
+            || non_finite(norm_bf16) || non_finite(inverse_bf16)) {
+            atomicOr(row_invalid, STATUS_NON_FINITE_NORM);
+        }
+    }
+    barrier();
+    if (lane == 0u && row_invalid != 0u) atomicOr(status.code, row_invalid);
+}
+
+void write_output() {
+    uint pair = gl_GlobalInvocationID.x;
+    uint pairs = (pc.rows * pc.hidden) >> 1u;
+    if (pair >= pairs) return;
+    if (status.code != 0u) {
+        output_state.packed_bf16[pair] = 0u;
+        return;
+    }
+    uint index0 = pair * 2u;
+    uint index1 = index0 + 1u;
+    uint row0 = index0 / pc.hidden;
+    uint row1 = index1 / pc.hidden;
+    precise float output0 = load_input(index0) * inverse_rms.values[row0];
+    precise float output1 = load_input(index1) * inverse_rms.values[row1];
+    if (non_finite(output0) || non_finite(output1)) {
+        atomicOr(status.code, STATUS_NON_FINITE_OUTPUT);
+        output_state.packed_bf16[pair] = 0u;
+        return;
+    }
+    uint value0 = float_to_bf16_bits(output0);
+    uint value1 = float_to_bf16_bits(output1);
+    if ((value0 & 0x7f80u) == 0x7f80u || (value1 & 0x7f80u) == 0x7f80u) {
+        atomicOr(status.code, STATUS_NON_FINITE_BF16);
+        output_state.packed_bf16[pair] = 0u;
+        return;
+    }
+    output_state.packed_bf16[pair] = value0 | (value1 << 16u);
+}
+
+void main() {
+    if (pc.phase == 0u) {
+        prepare_row();
+    } else {
+        write_output();
+    }
+}

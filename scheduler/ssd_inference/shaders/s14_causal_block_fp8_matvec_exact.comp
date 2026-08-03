@@ -1,0 +1,69 @@
+#version 450
+
+// K-row variant of the frozen eight-lane FP8 reduction used by wq_b/wo_b.
+layout(local_size_x = 128) in;
+layout(set = 0, binding = 0) readonly buffer X { float x[]; };
+layout(set = 0, binding = 1) readonly buffer Weight { uint weight_words[]; };
+layout(set = 0, binding = 2) readonly buffer WeightScale { uint scale_words[]; };
+layout(set = 0, binding = 3) writeonly buffer Y { float y[]; };
+layout(push_constant) uniform Push { uint N; uint K; uint batch; } pc;
+shared float partial[128];
+
+uint weight_byte(uint index) {
+    uint word = weight_words[index >> 2u];
+    return (word >> ((index & 3u) * 8u)) & 0xffu;
+}
+uint scale_byte(uint index) {
+    uint word = scale_words[index >> 2u];
+    return (word >> ((index & 3u) * 8u)) & 0xffu;
+}
+float e4m3fn(uint code) {
+    uint exponent = (code >> 3u) & 15u;
+    uint mantissa = code & 7u;
+    float magnitude = exponent == 0u
+        ? float(mantissa) * 0.001953125
+        : (exponent == 15u && mantissa == 7u
+            ? uintBitsToFloat(0x7fc00000u)
+            : ldexp(1.0 + float(mantissa) * 0.125, int(exponent) - 7));
+    return (code & 0x80u) == 0u ? magnitude : -magnitude;
+}
+float ue8m0(uint code) { return ldexp(1.0, int(code) - 127); }
+
+void main() {
+    uint n = gl_WorkGroupID.x;
+    uint row = gl_WorkGroupID.y;
+    uint lane = gl_LocalInvocationID.x;
+    if (n >= pc.N || row >= pc.batch) return;
+    const uint active_lanes = 8u;
+    if (lane < active_lanes) {
+        uint k_tiles = (pc.K + 127u) >> 7u;
+        uint weight_base = n * pc.K;
+        uint scale_base = (n >> 7u) * k_tiles;
+        uint input_base = row * pc.K;
+        float acc = 0.0;
+        for (uint k = lane; k < pc.K; k += active_lanes) {
+            float weight = e4m3fn(weight_byte(weight_base + k))
+                * ue8m0(scale_byte(scale_base + (k >> 7u)));
+            acc = fma(weight, x[input_base + k], acc);
+        }
+        partial[lane] = acc;
+    }
+    barrier();
+    if (lane == 0u) {
+        precise float total;
+        if (pc.K == 1024u) {
+            const uint order[8] = uint[8](0u,1u,2u,3u,4u,5u,7u,6u);
+            total = partial[order[0]];
+            for (uint i = 1u; i < active_lanes; ++i) total += partial[order[i]];
+        } else if (pc.K == 8192u) {
+            const uint order[8] = uint[8](2u,4u,0u,3u,5u,7u,1u,6u);
+            total = partial[order[0]];
+            for (uint i = 1u; i < active_lanes; ++i) total += partial[order[i]];
+        } else {
+            const uint order[8] = uint[8](0u,1u,3u,4u,6u,2u,5u,7u);
+            total = partial[order[0]];
+            for (uint i = 1u; i < active_lanes; ++i) total += partial[order[i]];
+        }
+        y[row * pc.N + n] = total;
+    }
+}

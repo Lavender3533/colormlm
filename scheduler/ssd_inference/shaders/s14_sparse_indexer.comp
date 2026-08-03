@@ -1,0 +1,108 @@
+#version 450
+
+// Exact-shape ratio4 compressed indexer for positions before the ratio128
+// boundary. The official INDEX_TOP_K is 512; while compressed_count <= 512
+// every block is retained but the score-derived order is still material and
+// is therefore computed instead of replaced by a deterministic identity list.
+
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer Query {
+    uint packed_bf16[]; // [64,128]
+} query;
+layout(set = 0, binding = 1, std430) readonly buffer IndexCache {
+    uint packed_bf16[]; // [compressed_count,128]
+} cache;
+layout(set = 0, binding = 2, std430) readonly buffer HeadWeights {
+    uint packed_bf16[]; // [64], F.linear BF16 publication boundary
+} head_weights;
+layout(set = 0, binding = 3, std430) writeonly buffer Scores {
+    float values[]; // [512]
+} output_scores;
+layout(set = 0, binding = 4, std430) writeonly buffer Indices {
+    uint values[]; // [512]
+} output_indices;
+layout(set = 0, binding = 5, std430) buffer Status {
+    uint code;
+} status;
+
+layout(push_constant) uniform Push {
+    uint compressed_count;
+} pc;
+
+const uint STATUS_NON_FINITE = 8u;
+shared float scores[512];
+shared uint indices[512];
+
+float load_bf16_word(uint word, uint scalar_index) {
+    uint bits = ((scalar_index & 1u) == 0u) ? (word & 0xffffu) : (word >> 16u);
+    return uintBitsToFloat(bits << 16u);
+}
+
+float load_query(uint head, uint d) {
+    uint scalar = head * 128u + d;
+    return load_bf16_word(query.packed_bf16[scalar >> 1u], scalar);
+}
+
+float load_cache(uint block, uint d) {
+    uint scalar = block * 128u + d;
+    return load_bf16_word(cache.packed_bf16[scalar >> 1u], scalar);
+}
+
+float load_head_weight(uint head) {
+    return load_bf16_word(head_weights.packed_bf16[head >> 1u], head);
+}
+
+float round_bf16_rne(float value) {
+    uint bits = floatBitsToUint(value);
+    uint rounded = bits + 0x00007fffu + ((bits >> 16u) & 1u);
+    return uintBitsToFloat((rounded >> 16u) << 16u);
+}
+
+void main() {
+    uint lane = gl_LocalInvocationID.x;
+    for (uint block = lane; block < pc.compressed_count; block += 64u) {
+        precise float score = 0.0;
+        for (uint head = 0u; head < 64u; ++head) {
+            precise float dot_value = 0.0;
+            for (uint d = 0u; d < 128u; ++d) {
+                precise float product = load_query(head, d) * load_cache(block, d);
+                dot_value = dot_value + product;
+            }
+            float positive = max(dot_value, 0.0);
+            // PyTorch F.linear(branch BF16, weight BF16) publishes BF16, then
+            // the in-place scalar multiply publishes BF16 again before .float().
+            // Omitting either RNE boundary can flip close top-k decisions.
+            precise float scaled_weight = round_bf16_rne(
+                load_head_weight(head) * uintBitsToFloat(0x3c3504f3u));
+            precise float weighted = positive * scaled_weight;
+            score = score + weighted;
+        }
+        if (isnan(score) || isinf(score)) {
+            atomicOr(status.code, STATUS_NON_FINITE);
+            score = -uintBitsToFloat(0x7f800000u);
+        }
+        scores[block] = score;
+        indices[block] = block;
+    }
+    barrier();
+
+    // Stable descending selection. Strict > keeps the lower original block on
+    // exact ties and makes the order deterministic across drivers.
+    if (lane == 0u) {
+        for (uint out_index = 0u; out_index < pc.compressed_count; ++out_index) {
+            uint best = out_index;
+            for (uint candidate = out_index + 1u; candidate < pc.compressed_count; ++candidate) {
+                if (scores[candidate] > scores[best]) best = candidate;
+            }
+            float best_score = scores[best];
+            uint best_index = indices[best];
+            scores[best] = scores[out_index];
+            indices[best] = indices[out_index];
+            scores[out_index] = best_score;
+            indices[out_index] = best_index;
+            output_scores.values[out_index] = best_score;
+            output_indices.values[out_index] = best_index;
+        }
+    }
+}

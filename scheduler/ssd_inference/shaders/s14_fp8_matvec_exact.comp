@@ -80,6 +80,15 @@ void main() {
             total += partial[5];
             total += partial[7];
             total += partial[6];
+        } else if (push.K == 8192u) {
+            // Audit-only 候选：在 L1 row 3364 与 L2 row 2609 两个冻结
+            // midpoint 判别点上逐 bit 复现 OpenBLAS 原始 F32。它仍须通过
+            // 两层完整 BF16 门，不能据此宣称为通用或 production 顺序。
+            const uint lane_order_wide[8] = uint[8](2u, 4u, 0u, 3u, 5u, 7u, 1u, 6u);
+            total = partial[lane_order_wide[0]];
+            for (uint index = 1u; index < active_lanes; ++index) {
+                total += partial[lane_order_wide[index]];
+            }
         } else {
             const uint lane_order_wide[8] = uint[8](0u, 1u, 3u, 4u, 6u, 2u, 5u, 7u);
             total = partial[lane_order_wide[0]];

@@ -1,0 +1,207 @@
+#version 450
+
+// DeepSeek-V4 final mHC head, fixed production K=1 shape:
+//   hidden     BF16 [4,4096]
+//   hc_head_fn F32  [4,16384]
+//   scale      F32  [1]
+//   base       F32  [4]
+//   logits = linear(flatten(hidden), hc_head_fn) * rsqrt(mean(hidden^2)+1e-6)
+//   pre    = sigmoid(logits * scale + base) + 1e-6
+//   output = BF16(sum_stream(pre[stream] * hidden[stream]))
+//
+// This is not the 24-output HC-pre/Sinkhorn path. A single workgroup validates
+// every input and every derived value before publishing output. `status` is
+// sticky for the lifetime of one WholeTokenCandidate: a prior error keeps all
+// later dispatches fail-closed until the candidate is discarded.
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer Hidden {
+    uint packed_bf16[];
+} hidden_state;
+layout(set = 0, binding = 1, std430) readonly buffer HcHeadFn {
+    float values[];
+} hc_head_fn;
+layout(set = 0, binding = 2, std430) readonly buffer HcHeadScale {
+    float value;
+} hc_head_scale;
+layout(set = 0, binding = 3, std430) readonly buffer HcHeadBase {
+    float values[];
+} hc_head_base;
+layout(set = 0, binding = 4, std430) writeonly buffer Output {
+    uint packed_bf16[];
+} reduced_output;
+// [normalized_logits0..3, pre0..3]
+layout(set = 0, binding = 5, std430) writeonly buffer Aux {
+    float values[];
+} aux;
+layout(set = 0, binding = 6, std430) buffer Status {
+    uint code;
+} status;
+
+const uint STREAMS = 4u;
+const uint HIDDEN = 4096u;
+const uint FLAT = STREAMS * HIDDEN;
+const float NORM_EPS = 1.0e-6;
+const float HC_EPS = 1.0e-6;
+
+const uint STATUS_NON_FINITE_INPUT = 1u;
+const uint STATUS_NON_FINITE_PROJECTION = 2u;
+const uint STATUS_NON_FINITE_REDUCED = 4u;
+const uint STATUS_NON_FINITE_BF16 = 8u;
+
+shared precise float norm_partial[256];
+shared precise float logit_partial[STREAMS * 256u];
+shared precise float normalized_logits[STREAMS];
+shared precise float pre[STREAMS];
+shared uint invalid_code;
+
+float load_hidden(uint scalar_index) {
+    uint word = hidden_state.packed_bf16[scalar_index >> 1u];
+    uint bits = ((scalar_index & 1u) == 0u) ? (word & 0xffffu) : (word >> 16u);
+    return uintBitsToFloat(bits << 16u);
+}
+
+bool non_finite(float value) {
+    return isnan(value) || isinf(value);
+}
+
+uint float_to_bf16_bits(float value) {
+    uint bits = floatBitsToUint(value);
+    uint rounded = bits + 0x00007fffu + ((bits >> 16u) & 1u);
+    return rounded >> 16u;
+}
+
+float sigmoid_stable(float value) {
+    if (value >= 0.0) {
+        return 1.0 / (1.0 + exp(-value));
+    }
+    float exponential = exp(value);
+    return exponential / (1.0 + exponential);
+}
+
+float reduced_value(uint dimension) {
+    precise float sum = 0.0;
+    for (uint stream = 0u; stream < STREAMS; ++stream) {
+        precise float term = pre[stream] * load_hidden(stream * HIDDEN + dimension);
+        sum = sum + term;
+    }
+    return sum;
+}
+
+void main() {
+    uint lane = gl_LocalInvocationID.x;
+
+    if (lane == 0u) {
+        invalid_code = status.code;
+        if (non_finite(hc_head_scale.value)) {
+            invalid_code |= STATUS_NON_FINITE_INPUT;
+        }
+        for (uint stream = 0u; stream < STREAMS; ++stream) {
+            if (non_finite(hc_head_base.values[stream])) {
+                invalid_code |= STATUS_NON_FINITE_INPUT;
+            }
+        }
+    }
+    barrier();
+
+    precise float local_norm = 0.0;
+    precise float local_logits[STREAMS];
+    for (uint stream = 0u; stream < STREAMS; ++stream) {
+        local_logits[stream] = 0.0;
+    }
+    for (uint index = lane; index < FLAT; index += 256u) {
+        precise float hidden_value = load_hidden(index);
+        if (non_finite(hidden_value)) {
+            atomicOr(invalid_code, STATUS_NON_FINITE_INPUT);
+        }
+        precise float square = hidden_value * hidden_value;
+        local_norm = local_norm + square;
+        for (uint channel = 0u; channel < STREAMS; ++channel) {
+            precise float weight = hc_head_fn.values[channel * FLAT + index];
+            if (non_finite(weight)) {
+                atomicOr(invalid_code, STATUS_NON_FINITE_INPUT);
+            }
+            precise float product = hidden_value * weight;
+            local_logits[channel] = local_logits[channel] + product;
+        }
+    }
+    norm_partial[lane] = local_norm;
+    for (uint channel = 0u; channel < STREAMS; ++channel) {
+        logit_partial[channel * 256u + lane] = local_logits[channel];
+    }
+    barrier();
+
+    for (uint stride = 128u; stride > 0u; stride >>= 1u) {
+        if (lane < stride) {
+            norm_partial[lane] = norm_partial[lane] + norm_partial[lane + stride];
+            for (uint channel = 0u; channel < STREAMS; ++channel) {
+                uint offset = channel * 256u + lane;
+                logit_partial[offset] =
+                    logit_partial[offset] + logit_partial[offset + stride];
+            }
+        }
+        barrier();
+    }
+
+    if (lane == 0u && invalid_code == 0u) {
+        precise float mean_square = norm_partial[0] / float(FLAT);
+        precise float inverse_rms = inversesqrt(mean_square + NORM_EPS);
+        if (non_finite(mean_square) || non_finite(inverse_rms)) {
+            invalid_code |= STATUS_NON_FINITE_PROJECTION;
+        } else {
+            for (uint channel = 0u; channel < STREAMS; ++channel) {
+                precise float normalized = logit_partial[channel * 256u] * inverse_rms;
+                precise float coefficient = sigmoid_stable(
+                    normalized * hc_head_scale.value + hc_head_base.values[channel]
+                ) + HC_EPS;
+                normalized_logits[channel] = normalized;
+                pre[channel] = coefficient;
+                if (non_finite(normalized) || non_finite(coefficient)) {
+                    invalid_code |= STATUS_NON_FINITE_PROJECTION;
+                }
+            }
+        }
+    }
+    barrier();
+
+    if (invalid_code == 0u) {
+        for (uint dimension = lane; dimension < HIDDEN; dimension += 256u) {
+            float reduced = reduced_value(dimension);
+            if (non_finite(reduced)) {
+                atomicOr(invalid_code, STATUS_NON_FINITE_REDUCED);
+            } else {
+                uint bf16 = float_to_bf16_bits(reduced);
+                if ((bf16 & 0x7f80u) == 0x7f80u) {
+                    atomicOr(invalid_code, STATUS_NON_FINITE_BF16);
+                }
+            }
+        }
+    }
+    barrier();
+
+    if (invalid_code != 0u) {
+        for (uint pair = lane; pair < HIDDEN / 2u; pair += 256u) {
+            reduced_output.packed_bf16[pair] = 0u;
+        }
+        if (lane < STREAMS * 2u) {
+            aux.values[lane] = 0.0;
+        }
+        if (lane == 0u) {
+            atomicOr(status.code, invalid_code);
+        }
+        return;
+    }
+
+    for (uint pair = lane; pair < HIDDEN / 2u; pair += 256u) {
+        uint dimension0 = pair * 2u;
+        uint dimension1 = dimension0 + 1u;
+        uint value0 = float_to_bf16_bits(reduced_value(dimension0));
+        uint value1 = float_to_bf16_bits(reduced_value(dimension1));
+        reduced_output.packed_bf16[pair] = value0 | (value1 << 16u);
+    }
+    if (lane < STREAMS) {
+        aux.values[lane] = normalized_logits[lane];
+        aux.values[STREAMS + lane] = pre[lane];
+    }
+}

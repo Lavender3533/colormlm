@@ -35,8 +35,12 @@ fn main() {
 
     for entry in entries.flatten() {
         let path = entry.path();
-        let Some(ext) = path.extension().and_then(|e| e.to_str()) else { continue };
-        if !matches!(ext, "comp" | "vert" | "frag") { continue; }
+        let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+            continue;
+        };
+        if !matches!(ext, "comp" | "vert" | "frag") {
+            continue;
+        }
 
         let stem = path.file_stem().unwrap().to_str().unwrap();
         let out_path = out_dir.join(format!("{stem}.spv"));
@@ -46,10 +50,13 @@ fn main() {
         let status = Command::new("glslc")
             .args(["--target-env=vulkan1.2", "-O"])
             .arg(&path)
-            .arg("-o").arg(&out_path)
+            .arg("-o")
+            .arg(&out_path)
             .status()
             .unwrap_or_else(|_| {
-                panic!("`glslc` not found in PATH. Install Vulkan SDK (e.g. `scoop install vulkan`).");
+                panic!(
+                    "`glslc` not found in PATH. Install Vulkan SDK (e.g. `scoop install vulkan`)."
+                );
             });
 
         if !status.success() {

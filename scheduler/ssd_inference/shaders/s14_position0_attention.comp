@@ -1,0 +1,84 @@
+#version 450
+
+// DeepSeek-V4 position=0 的共享-KV attention 特化核。
+// q=[64,512] BF16，kv=[512] BF16，sink=[64] F32。
+// 唯一真实 key 的概率为 sigmoid(dot(q,kv)/sqrt(512) - sink)，
+// sink 只有 logit 没有 value。输出恢复 BF16 [64,512]。
+
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer Query {
+    uint packed_bf16[];
+} query;
+layout(set = 0, binding = 1, std430) readonly buffer KeyValue {
+    uint packed_bf16[];
+} key_value;
+layout(set = 0, binding = 2, std430) readonly buffer Sink {
+    float values[];
+} sink;
+layout(set = 0, binding = 3, std430) writeonly buffer Output {
+    uint packed_bf16[];
+} output_state;
+
+layout(push_constant) uniform Push {
+    uint heads;
+    uint head_dim;
+} pc;
+
+shared float partial[64];
+shared float probability;
+
+float load_query(uint scalar_index) {
+    uint word = query.packed_bf16[scalar_index >> 1u];
+    uint bits = ((scalar_index & 1u) == 0u) ? (word & 0xffffu) : (word >> 16u);
+    return uintBitsToFloat(bits << 16u);
+}
+
+float load_kv(uint scalar_index) {
+    uint word = key_value.packed_bf16[scalar_index >> 1u];
+    uint bits = ((scalar_index & 1u) == 0u) ? (word & 0xffffu) : (word >> 16u);
+    return uintBitsToFloat(bits << 16u);
+}
+
+uint float_to_bf16_bits(float value) {
+    uint bits = floatBitsToUint(value);
+    uint exponent = bits & 0x7f800000u;
+    if (exponent == 0x7f800000u) return bits >> 16u;
+    uint rounded = bits + 0x00007fffu + ((bits >> 16u) & 1u);
+    return rounded >> 16u;
+}
+
+float sigmoid_stable(float value) {
+    if (value >= 0.0) return 1.0 / (1.0 + exp(-value));
+    float e = exp(value);
+    return e / (1.0 + e);
+}
+
+void main() {
+    uint head = gl_WorkGroupID.x;
+    uint lane = gl_LocalInvocationID.x;
+    if (head >= pc.heads) return;
+    float dot = 0.0;
+    for (uint d = lane; d < pc.head_dim; d += 64u) {
+        dot += load_query(head * pc.head_dim + d) * load_kv(d);
+    }
+    partial[lane] = dot;
+    barrier();
+    for (uint stride = 32u; stride > 0u; stride >>= 1u) {
+        if (lane < stride) partial[lane] += partial[lane + stride];
+        barrier();
+    }
+    if (lane == 0u) {
+        probability = sigmoid_stable(partial[0] * inversesqrt(float(pc.head_dim)) - sink.values[head]);
+    }
+    barrier();
+
+    uint packed_per_head = pc.head_dim >> 1u;
+    for (uint pair = lane; pair < packed_per_head; pair += 64u) {
+        uint d0 = pair * 2u;
+        uint d1 = d0 + 1u;
+        uint y0 = float_to_bf16_bits(probability * load_kv(d0));
+        uint y1 = float_to_bf16_bits(probability * load_kv(d1));
+        output_state.packed_bf16[head * packed_per_head + pair] = y0 | (y1 << 16u);
+    }
+}

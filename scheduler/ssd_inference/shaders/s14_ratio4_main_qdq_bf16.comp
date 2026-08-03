@@ -1,0 +1,110 @@
+#version 450
+
+// Main compressed KV boundary: BF16[512] -> group64 E4M3FN QDQ for the
+// first 448 dimensions -> BF16[512].  The final 64 RoPE dimensions are copied
+// bit-for-bit, matching executor.py finish_compressed(rotate=false).
+
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer Input {
+    uint packed_bf16[];
+} input_state;
+layout(set = 0, binding = 1, std430) writeonly buffer Output {
+    uint packed_bf16[];
+} output_state;
+layout(set = 0, binding = 2, std430) buffer Status {
+    uint code;
+} status;
+
+const uint STATUS_NON_FINITE_INPUT = 1u;
+const uint STATUS_INVALID_SCALE = 2u;
+const uint STATUS_NON_FINITE_OUTPUT = 4u;
+
+shared float values[64];
+shared float maxima[64];
+shared float scale;
+
+float load_bf16(uint scalar_index) {
+    uint word = input_state.packed_bf16[scalar_index >> 1u];
+    uint bits = ((scalar_index & 1u) == 0u) ? (word & 0xffffu) : (word >> 16u);
+    return uintBitsToFloat(bits << 16u);
+}
+
+bool non_finite(float value) {
+    return isnan(value) || isinf(value);
+}
+
+uint float_to_bf16_bits(float value) {
+    uint bits = floatBitsToUint(value);
+    uint exponent = bits & 0x7f800000u;
+    if (exponent == 0x7f800000u) return bits >> 16u;
+    uint rounded = bits + 0x00007fffu + ((bits >> 16u) & 1u);
+    return rounded >> 16u;
+}
+
+float quant_dequant_e4m3fn(float value) {
+    float magnitude = abs(value);
+    if (magnitude == 0.0) return value;
+    float quantized;
+    if (magnitude < exp2(-6.0)) {
+        float step = exp2(-9.0);
+        quantized = roundEven(magnitude / step) * step;
+    } else {
+        float exponent = floor(log2(magnitude));
+        float step = exp2(exponent - 3.0);
+        quantized = roundEven(magnitude / step) * step;
+    }
+    quantized = min(quantized, 448.0);
+    return value < 0.0 ? -quantized : quantized;
+}
+
+void main() {
+    uint group = gl_WorkGroupID.x;
+    uint lane = gl_LocalInvocationID.x;
+    uint scalar = group * 64u + lane;
+    float value = load_bf16(scalar);
+    if (non_finite(value)) {
+        atomicOr(status.code, STATUS_NON_FINITE_INPUT);
+        value = 0.0;
+    }
+
+    if (group == 7u) {
+        // One invocation owns one packed pair; validate both lanes above but
+        // preserve the official RoPE tail bits exactly.
+        barrier();
+        if (lane < 32u) {
+            output_state.packed_bf16[224u + lane] = input_state.packed_bf16[224u + lane];
+        }
+        return;
+    }
+
+    values[lane] = value;
+    maxima[lane] = abs(value);
+    barrier();
+    for (uint stride = 32u; stride > 0u; stride >>= 1u) {
+        if (lane < stride) maxima[lane] = max(maxima[lane], maxima[lane + stride]);
+        barrier();
+    }
+    if (lane == 0u) {
+        float amax = max(maxima[0], 1.0e-4);
+        scale = exp2(ceil(log2(amax / 448.0)));
+        if (non_finite(scale) || scale <= 0.0) {
+            atomicOr(status.code, STATUS_INVALID_SCALE);
+            scale = 1.0;
+        }
+    }
+    barrier();
+    float normalized = clamp(values[lane] / scale, -448.0, 448.0);
+    float output_value = quant_dequant_e4m3fn(normalized) * scale;
+    if (non_finite(output_value)) {
+        atomicOr(status.code, STATUS_NON_FINITE_OUTPUT);
+        output_value = 0.0;
+    }
+    values[lane] = output_value;
+    barrier();
+    if (lane < 32u) {
+        uint d0 = lane * 2u;
+        output_state.packed_bf16[group * 32u + lane] =
+            float_to_bf16_bits(values[d0]) | (float_to_bf16_bits(values[d0 + 1u]) << 16u);
+    }
+}

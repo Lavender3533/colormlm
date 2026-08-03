@@ -1,0 +1,81 @@
+#version 450
+
+// Polaris FullDepth43 K=1/4/8 分块 BF16 lm-head。每个 workgroup 只扫描一次
+// BF16 权重行，同时在寄存器/共享内存里累加最多8个位置，避免把1.06GB head
+// 对K个位置重复读取K次。
+//
+// descriptor 0 可以绑定大 head arena 内的任意对齐子范围；row 0 始终是
+// 当前 chunk 的第一行。normalized hidden 与 chunk logits 可以位于同一个
+// workspace 的不同子范围。每个 workgroup 处理一行，wave64 对 hidden 归约。
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer HeadWeights {
+    uint packed_bf16[];
+} head;
+
+layout(set = 0, binding = 1, std430) readonly buffer NormalizedInput {
+    float values[];
+} normalized;
+
+layout(set = 0, binding = 2, std430) writeonly buffer ChunkLogits {
+    float values[];
+} logits;
+
+layout(push_constant) uniform Push {
+    uint rows;
+    uint hidden;
+    uint batch;
+    uint reserved1;
+} pc;
+
+const uint MAX_BATCH = 8u;
+shared precise float partial[8][64];
+
+float load_bf16(uint scalar_index) {
+    uint word = head.packed_bf16[scalar_index >> 1u];
+    uint bits = ((scalar_index & 1u) == 0u) ? (word & 0xffffu) : (word >> 16u);
+    return uintBitsToFloat(bits << 16u);
+}
+
+void main() {
+    uint row = gl_WorkGroupID.x;
+    if (row >= pc.rows || pc.rows == 0u || pc.hidden == 0u
+        || pc.batch == 0u || pc.batch > MAX_BATCH) {
+        return;
+    }
+
+    uint lane = gl_LocalInvocationID.x;
+    uint row_base = row * pc.hidden;
+    precise float sums[8];
+    for (uint batch_row = 0u; batch_row < MAX_BATCH; ++batch_row) {
+        sums[batch_row] = 0.0;
+    }
+    for (uint dim = lane; dim < pc.hidden; dim += 64u) {
+        precise float weight = load_bf16(row_base + dim);
+        for (uint batch_row = 0u; batch_row < pc.batch; ++batch_row) {
+            precise float term = weight * normalized.values[batch_row * pc.hidden + dim];
+            sums[batch_row] = sums[batch_row] + term;
+        }
+    }
+    for (uint batch_row = 0u; batch_row < pc.batch; ++batch_row) {
+        partial[batch_row][lane] = sums[batch_row];
+    }
+    barrier();
+
+    for (uint stride = 32u; stride > 0u; stride >>= 1u) {
+        if (lane < stride) {
+            for (uint batch_row = 0u; batch_row < pc.batch; ++batch_row) {
+                partial[batch_row][lane] = partial[batch_row][lane]
+                    + partial[batch_row][lane + stride];
+            }
+        }
+        barrier();
+    }
+
+    if (lane == 0u) {
+        for (uint batch_row = 0u; batch_row < pc.batch; ++batch_row) {
+            logits.values[batch_row * pc.rows + row] = partial[batch_row][0];
+        }
+    }
+}

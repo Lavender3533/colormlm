@@ -1,0 +1,119 @@
+#version 450
+
+// 将当前 chunk 的 logits 合并进跨 chunk top-1。
+//
+// 每个 batch lane 的 accumulator ABI（4 个 uint）：
+//   [best_token_id, floatBits(best_logit), next_expected_token, sticky_status]
+// reset 后全零。next_expected_token 同时充当 valid/progress；每个 chunk 必须
+// 从它开始，因而即使主机错误地重排 command，GPU 也会 fail-closed。
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer ChunkLogits {
+    float values[];
+} logits;
+
+layout(set = 0, binding = 1, std430) buffer Accumulator {
+    uint values[];
+} accumulator;
+
+layout(push_constant) uniform Push {
+    uint rows;
+    uint token_start;
+    uint vocab;
+    uint batch;
+} pc;
+
+const uint STATUS_NON_FINITE = 1u;
+const uint STATUS_SEQUENCE = 2u;
+const uint STATUS_TOKEN_RANGE = 4u;
+const uint STATUS_EMPTY = 8u;
+
+shared precise float best_value[256];
+shared uint best_id[256];
+shared uint invalid_code;
+shared uint prior_next;
+
+bool non_finite(float value) {
+    return isnan(value) || isinf(value);
+}
+
+bool better(float candidate_value, uint candidate_id, float current_value, uint current_id) {
+    return candidate_value > current_value
+        || (candidate_value == current_value && candidate_id < current_id);
+}
+
+void main() {
+    uint lane = gl_LocalInvocationID.x;
+    uint batch_row = gl_WorkGroupID.y;
+    if (batch_row >= pc.batch) {
+        return;
+    }
+    uint accumulator_base = batch_row * 4u;
+    uint logits_base = batch_row * pc.rows;
+    if (lane == 0u) {
+        invalid_code = accumulator.values[accumulator_base + 3u];
+        prior_next = accumulator.values[accumulator_base + 2u];
+        if (prior_next != pc.token_start) {
+            invalid_code |= STATUS_SEQUENCE;
+        }
+        uint end = pc.token_start + pc.rows;
+        if (pc.rows == 0u || end < pc.token_start || end > pc.vocab) {
+            invalid_code |= STATUS_TOKEN_RANGE;
+        }
+        if (prior_next > 0u && non_finite(uintBitsToFloat(accumulator.values[accumulator_base + 1u]))) {
+            invalid_code |= STATUS_NON_FINITE;
+        }
+    }
+    barrier();
+
+    precise float local_value = -3.402823466e+38;
+    uint local_id = 0xffffffffu;
+    for (uint token = lane; token < pc.rows; token += 256u) {
+        precise float value = logits.values[logits_base + token];
+        if (non_finite(value)) {
+            atomicOr(invalid_code, STATUS_NON_FINITE);
+        } else if (better(value, token, local_value, local_id)) {
+            local_value = value;
+            local_id = token;
+        }
+    }
+    best_value[lane] = local_value;
+    best_id[lane] = local_id;
+    barrier();
+
+    for (uint stride = 128u; stride > 0u; stride >>= 1u) {
+        if (lane < stride) {
+            precise float candidate_value = best_value[lane + stride];
+            uint candidate_id = best_id[lane + stride];
+            if (better(candidate_value, candidate_id, best_value[lane], best_id[lane])) {
+                best_value[lane] = candidate_value;
+                best_id[lane] = candidate_id;
+            }
+        }
+        barrier();
+    }
+
+    if (lane == 0u) {
+        if (best_id[0] == 0xffffffffu) {
+            invalid_code |= STATUS_EMPTY;
+        }
+        if (invalid_code != 0u) {
+            accumulator.values[accumulator_base + 3u] = invalid_code;
+            return;
+        }
+
+        uint global_id = pc.token_start + best_id[0];
+        precise float value = best_value[0];
+        if (prior_next == 0u
+            || better(
+                value,
+                global_id,
+                uintBitsToFloat(accumulator.values[accumulator_base + 1u]),
+                accumulator.values[accumulator_base])) {
+            accumulator.values[accumulator_base] = global_id;
+            accumulator.values[accumulator_base + 1u] = floatBitsToUint(value);
+        }
+        accumulator.values[accumulator_base + 2u] = pc.token_start + pc.rows;
+    }
+}

@@ -1,0 +1,138 @@
+#version 450
+
+// ratio4 global top-k -> paged main-KV -> contiguous attention workspace.
+// One workgroup gathers one selected 512-wide BF16 row. Each invocation copies
+// one packed pair of BF16 values so the data path is bit preserving.
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer SelectedIndices {
+    uint values[];
+} selected_indices;
+
+// Dense logical page table: [source_word_offset, logical_rows_in_page].
+// source_word_offset == 0xffffffff means that the page was not materialized.
+layout(set = 0, binding = 1, std430) readonly buffer PageTable {
+    uint words[];
+} page_table;
+
+layout(set = 0, binding = 2, std430) readonly buffer MainPages {
+    uint words[];
+} main_pages;
+
+layout(set = 0, binding = 3, std430) writeonly buffer PackedMain {
+    uint words[];
+} packed_main;
+
+layout(set = 0, binding = 4, std430) buffer StickyStatus {
+    uint bits;
+} status;
+
+layout(push_constant) uniform Push {
+    uint logical_count;
+    uint selected_count;
+    uint page_count;
+    uint source_word_count;
+} pc;
+
+const uint PAGE_ROWS = 512u;
+const uint ROW_WORDS = 256u;
+const uint MAX_SELECTED = 512u;
+const uint MISSING_PAGE = 0xffffffffu;
+
+const uint STATUS_SHAPE = 1u;
+const uint STATUS_INDEX_OUT_OF_RANGE = 2u;
+const uint STATUS_DUPLICATE_INDEX = 4u;
+const uint STATUS_MISSING_PAGE = 8u;
+const uint STATUS_ROW_OUT_OF_PAGE = 16u;
+const uint STATUS_SOURCE_OUT_OF_RANGE = 32u;
+const uint STATUS_BF16_NAN = 64u;
+
+shared uint row_status;
+shared uint source_row_word;
+shared uint data_status;
+
+bool bf16_is_non_finite(uint value) {
+    return (value & 0x7f80u) == 0x7f80u;
+}
+
+void main() {
+    uint lane = gl_LocalInvocationID.x;
+    uint slot = gl_WorkGroupID.x;
+    uint output_word = slot * ROW_WORDS + lane;
+
+    if (lane == 0u) {
+        uint flags = 0u;
+        source_row_word = 0u;
+        data_status = 0u;
+
+        if (pc.logical_count == 0u || pc.selected_count == 0u ||
+            pc.selected_count > MAX_SELECTED ||
+            pc.selected_count != min(pc.logical_count, MAX_SELECTED) ||
+            pc.page_count != (pc.logical_count + PAGE_ROWS - 1u) / PAGE_ROWS ||
+            slot >= pc.selected_count) {
+            flags |= STATUS_SHAPE;
+        } else {
+            uint logical_index = selected_indices.values[slot];
+            if (logical_index >= pc.logical_count) {
+                flags |= STATUS_INDEX_OUT_OF_RANGE;
+            }
+            for (uint earlier = 0u; earlier < slot; ++earlier) {
+                if (selected_indices.values[earlier] == logical_index) {
+                    flags |= STATUS_DUPLICATE_INDEX;
+                }
+            }
+
+            if ((flags & STATUS_INDEX_OUT_OF_RANGE) == 0u) {
+                uint page = logical_index / PAGE_ROWS;
+                uint row = logical_index % PAGE_ROWS;
+                if (page >= pc.page_count) {
+                    flags |= STATUS_INDEX_OUT_OF_RANGE;
+                } else {
+                    uint page_word = page * 2u;
+                    uint base = page_table.words[page_word];
+                    uint rows = page_table.words[page_word + 1u];
+                    if (base == MISSING_PAGE) {
+                        flags |= STATUS_MISSING_PAGE;
+                    } else if (row >= rows || rows == 0u || rows > PAGE_ROWS) {
+                        flags |= STATUS_ROW_OUT_OF_PAGE;
+                    } else {
+                        uint row_delta = row * ROW_WORDS;
+                        if (base > pc.source_word_count ||
+                            row_delta > pc.source_word_count - base ||
+                            ROW_WORDS > pc.source_word_count - base - row_delta) {
+                            flags |= STATUS_SOURCE_OUT_OF_RANGE;
+                        } else {
+                            source_row_word = base + row_delta;
+                        }
+                    }
+                }
+            }
+        }
+        row_status = flags;
+        if (flags != 0u) {
+            atomicOr(status.bits, flags);
+        }
+    }
+    barrier();
+
+    if (row_status != 0u) {
+        packed_main.words[output_word] = 0u;
+        return;
+    }
+
+    uint packed = main_pages.words[source_row_word + lane];
+    uint low = packed & 0xffffu;
+    uint high = packed >> 16u;
+    if (bf16_is_non_finite(low) || bf16_is_non_finite(high)) {
+        atomicOr(data_status, STATUS_BF16_NAN);
+    }
+    barrier();
+    if (data_status != 0u) {
+        if (lane == 0u) {
+            atomicOr(status.bits, data_status);
+        }
+        packed_main.words[output_word] = 0u;
+        return;
+    }
+    packed_main.words[output_word] = packed;
+}

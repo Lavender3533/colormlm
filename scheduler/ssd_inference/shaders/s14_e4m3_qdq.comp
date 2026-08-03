@@ -1,0 +1,120 @@
+#version 450
+
+// BF16 activation -> per-group E4M3FN quantize/dequantize -> F32。
+// 支持官方 group64 KV 前缀及 group128 标准 FP8 投影边界。
+
+layout(local_size_x = 128) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer Input {
+    uint packed_bf16[];
+} input_state;
+layout(set = 0, binding = 1, std430) buffer Scales {
+    float values[];
+} scales;
+layout(set = 0, binding = 2, std430) writeonly buffer Output {
+    float values[];
+} output_state;
+layout(set = 0, binding = 3, std430) buffer Status {
+    uint code;
+} status;
+
+layout(push_constant) uniform Push {
+    uint rows;
+    uint hidden;
+    uint group_size;
+    uint phase;
+} pc;
+
+const uint STATUS_NON_FINITE_INPUT = 1u;
+const uint STATUS_INVALID_SCALE = 2u;
+const uint STATUS_NON_FINITE_OUTPUT = 4u;
+
+shared float group_max[128];
+shared uint group_invalid;
+
+float load_input(uint scalar_index) {
+    uint word = input_state.packed_bf16[scalar_index >> 1u];
+    uint bits = ((scalar_index & 1u) == 0u) ? (word & 0xffffu) : (word >> 16u);
+    return uintBitsToFloat(bits << 16u);
+}
+
+bool non_finite(float value) {
+    return isnan(value) || isinf(value);
+}
+
+float quant_dequant_e4m3fn(float value) {
+    float magnitude = abs(value);
+    if (magnitude == 0.0) return value;
+    float quantized;
+    if (magnitude < exp2(-6.0)) {
+        float step = exp2(-9.0);
+        quantized = roundEven(magnitude / step) * step;
+    } else {
+        float exponent = floor(log2(magnitude));
+        float step = exp2(exponent - 3.0);
+        quantized = roundEven(magnitude / step) * step;
+    }
+    quantized = min(quantized, 448.0);
+    return value < 0.0 ? -quantized : quantized;
+}
+
+void validate_group() {
+    uint lane = gl_LocalInvocationID.x;
+    uint group_index = gl_WorkGroupID.x;
+    uint base = group_index * pc.group_size;
+    if (lane == 0u) group_invalid = status.code;
+    barrier();
+
+    float value = 0.0;
+    if (lane < pc.group_size) {
+        value = load_input(base + lane);
+        if (non_finite(value)) {
+            atomicOr(group_invalid, STATUS_NON_FINITE_INPUT);
+            value = 0.0;
+        }
+    }
+    group_max[lane] = abs(value);
+    barrier();
+    for (uint stride = 64u; stride > 0u; stride >>= 1u) {
+        if (lane < stride) group_max[lane] = max(group_max[lane], group_max[lane + stride]);
+        barrier();
+    }
+
+    if (lane == 0u && group_invalid == 0u) {
+        float amax = max(group_max[0], 1.0e-4);
+        float scale = exp2(ceil(log2(amax / 448.0)));
+        scales.values[group_index] = scale;
+        if (non_finite(scale) || scale <= 0.0) {
+            atomicOr(group_invalid, STATUS_INVALID_SCALE);
+        }
+    }
+    barrier();
+
+    if (lane < pc.group_size && group_invalid == 0u) {
+        float scale = scales.values[group_index];
+        float normalized = clamp(value / scale, -448.0, 448.0);
+        float output_value = quant_dequant_e4m3fn(normalized) * scale;
+        if (non_finite(output_value)) atomicOr(group_invalid, STATUS_NON_FINITE_OUTPUT);
+    }
+    barrier();
+    if (lane == 0u && group_invalid != 0u) atomicOr(status.code, group_invalid);
+}
+
+void write_output() {
+    uint index = gl_GlobalInvocationID.x;
+    uint scalars = pc.rows * pc.hidden;
+    if (index >= scalars) return;
+    if (status.code != 0u) {
+        output_state.values[index] = 0.0;
+        return;
+    }
+    uint group_index = index / pc.group_size;
+    float scale = scales.values[group_index];
+    float normalized = clamp(load_input(index) / scale, -448.0, 448.0);
+    output_state.values[index] = quant_dequant_e4m3fn(normalized) * scale;
+}
+
+void main() {
+    if (pc.phase == 0u) validate_group();
+    else write_output();
+}

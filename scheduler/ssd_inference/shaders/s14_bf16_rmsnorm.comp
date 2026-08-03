@@ -1,0 +1,142 @@
+#version 450
+
+// 通用 DeepSeek-V4 BF16 RMSNorm 边界。
+// phase=0: 每行一个 workgroup，并行预检、标量顺序求 inverse RMS、验证输出。
+// phase=1: 在 phase=0 的全局 barrier 后统一 BF16 写回；status 非零则整块清零。
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer Input {
+    uint packed_bf16[];
+} input_state;
+layout(set = 0, binding = 1, std430) readonly buffer Weight {
+    uint packed_bf16[];
+} norm_weight;
+layout(set = 0, binding = 2, std430) buffer InverseRms {
+    float values[];
+} inverse_rms;
+layout(set = 0, binding = 3, std430) writeonly buffer Output {
+    uint packed_bf16[];
+} output_state;
+layout(set = 0, binding = 4, std430) buffer Status {
+    uint code;
+} status;
+
+layout(push_constant) uniform Push {
+    uint rows;
+    uint hidden;
+    float epsilon;
+    uint phase;
+} pc;
+
+const uint STATUS_NON_FINITE_INPUT = 1u;
+const uint STATUS_NON_FINITE_NORM = 2u;
+const uint STATUS_NON_FINITE_OUTPUT = 4u;
+const uint STATUS_NON_FINITE_BF16 = 8u;
+
+shared uint row_invalid;
+
+float load_input(uint scalar_index) {
+    uint word = input_state.packed_bf16[scalar_index >> 1u];
+    uint bits = ((scalar_index & 1u) == 0u) ? (word & 0xffffu) : (word >> 16u);
+    return uintBitsToFloat(bits << 16u);
+}
+
+float load_weight(uint scalar_index) {
+    uint word = norm_weight.packed_bf16[scalar_index >> 1u];
+    uint bits = ((scalar_index & 1u) == 0u) ? (word & 0xffffu) : (word >> 16u);
+    return uintBitsToFloat(bits << 16u);
+}
+
+bool non_finite(float value) {
+    return isnan(value) || isinf(value);
+}
+
+uint float_to_bf16_bits(float value) {
+    uint bits = floatBitsToUint(value);
+    uint rounded = bits + 0x00007fffu + ((bits >> 16u) & 1u);
+    return rounded >> 16u;
+}
+
+precise float normalized_output(uint scalar_index) {
+    uint row = scalar_index / pc.hidden;
+    uint dimension = scalar_index - row * pc.hidden;
+    precise float normalized = load_input(scalar_index) * inverse_rms.values[row];
+    precise float output_value = load_weight(dimension) * normalized;
+    return output_value;
+}
+
+void validate_row() {
+    uint lane = gl_LocalInvocationID.x;
+    uint row = gl_WorkGroupID.x;
+    uint base = row * pc.hidden;
+    if (lane == 0u) row_invalid = status.code;
+    barrier();
+
+    for (uint dimension = lane; dimension < pc.hidden; dimension += 256u) {
+        if (non_finite(load_input(base + dimension))
+            || non_finite(load_weight(dimension))) {
+            atomicOr(row_invalid, STATUS_NON_FINITE_INPUT);
+        }
+    }
+    barrier();
+
+    if (lane == 0u && row_invalid == 0u) {
+        // 与 native_primitives::official_rms_norm 保持逐元素标量累加顺序。
+        precise float sum_squares = 0.0;
+        for (uint dimension = 0u; dimension < pc.hidden; ++dimension) {
+            precise float value = load_input(base + dimension);
+            precise float square = value * value;
+            sum_squares = sum_squares + square;
+        }
+        precise float mean_square = sum_squares / float(pc.hidden);
+        precise float norm_value = mean_square + pc.epsilon;
+        precise float root = sqrt(norm_value);
+        precise float inverse = 1.0 / root;
+        inverse_rms.values[row] = inverse;
+        if (non_finite(sum_squares) || non_finite(mean_square)
+            || non_finite(root) || non_finite(inverse)) {
+            atomicOr(row_invalid, STATUS_NON_FINITE_NORM);
+        }
+    }
+    barrier();
+
+    if (row_invalid == 0u) {
+        for (uint dimension = lane; dimension < pc.hidden; dimension += 256u) {
+            float value = normalized_output(base + dimension);
+            if (non_finite(value)) {
+                atomicOr(row_invalid, STATUS_NON_FINITE_OUTPUT);
+            } else {
+                uint bf16 = float_to_bf16_bits(value);
+                if ((bf16 & 0x7f80u) == 0x7f80u) {
+                    atomicOr(row_invalid, STATUS_NON_FINITE_BF16);
+                }
+            }
+        }
+    }
+    barrier();
+    if (lane == 0u && row_invalid != 0u) atomicOr(status.code, row_invalid);
+}
+
+void write_output() {
+    uint pair = gl_GlobalInvocationID.x;
+    uint pairs = (pc.rows * pc.hidden) >> 1u;
+    if (pair >= pairs) return;
+    if (status.code != 0u) {
+        output_state.packed_bf16[pair] = 0u;
+        return;
+    }
+    uint index0 = pair * 2u;
+    uint index1 = index0 + 1u;
+    uint value0 = float_to_bf16_bits(normalized_output(index0));
+    uint value1 = float_to_bf16_bits(normalized_output(index1));
+    output_state.packed_bf16[pair] = value0 | (value1 << 16u);
+}
+
+void main() {
+    if (pc.phase == 0u) {
+        validate_row();
+    } else {
+        write_output();
+    }
+}

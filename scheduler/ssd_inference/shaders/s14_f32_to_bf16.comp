@@ -1,0 +1,67 @@
+#version 450
+
+// Official projection boundary used throughout DeepSeek-V4:
+// finite F32 scalars -> RNE BF16 packed two-per-u32.
+// A single workgroup validates the complete tensor before publishing output.
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer Input {
+    float values[];
+} input_state;
+layout(set = 0, binding = 1, std430) writeonly buffer Output {
+    uint packed_bf16[];
+} output_state;
+layout(set = 0, binding = 2, std430) buffer Status {
+    uint code;
+} status;
+
+layout(push_constant) uniform Push {
+    uint scalars;
+} pc;
+
+const uint STATUS_NON_FINITE_INPUT = 1u;
+const uint STATUS_NON_FINITE_BF16 = 2u;
+
+shared uint invalid_code;
+
+bool non_finite(float value) {
+    return isnan(value) || isinf(value);
+}
+
+uint float_to_bf16_bits(float value) {
+    uint bits = floatBitsToUint(value);
+    uint rounded = bits + 0x00007fffu + ((bits >> 16u) & 1u);
+    return rounded >> 16u;
+}
+
+void main() {
+    uint lane = gl_LocalInvocationID.x;
+    uint pairs = pc.scalars >> 1u;
+    if (lane == 0u) invalid_code = status.code;
+    barrier();
+
+    for (uint index = lane; index < pc.scalars; index += 256u) {
+        float value = input_state.values[index];
+        if (non_finite(value)) {
+            atomicOr(invalid_code, STATUS_NON_FINITE_INPUT);
+        } else if ((float_to_bf16_bits(value) & 0x7f80u) == 0x7f80u) {
+            atomicOr(invalid_code, STATUS_NON_FINITE_BF16);
+        }
+    }
+    barrier();
+
+    if (invalid_code != 0u) {
+        for (uint pair = lane; pair < pairs; pair += 256u) {
+            output_state.packed_bf16[pair] = 0u;
+        }
+        if (lane == 0u) atomicOr(status.code, invalid_code);
+        return;
+    }
+
+    for (uint pair = lane; pair < pairs; pair += 256u) {
+        uint low = float_to_bf16_bits(input_state.values[pair * 2u]);
+        uint high = float_to_bf16_bits(input_state.values[pair * 2u + 1u]);
+        output_state.packed_bf16[pair] = low | (high << 16u);
+    }
+}

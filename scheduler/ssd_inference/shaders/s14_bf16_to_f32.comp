@@ -1,0 +1,53 @@
+#version 450
+
+// Exact BF16 unpack boundary. This is intentionally not activation QDQ:
+// grouped wo_a consumes the position0 attention BF16 result as plain F32.
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer Input {
+    uint packed_bf16[];
+} input_state;
+layout(set = 0, binding = 1, std430) writeonly buffer Output {
+    float values[];
+} output_state;
+layout(set = 0, binding = 2, std430) buffer Status {
+    uint code;
+} status;
+
+layout(push_constant) uniform Push {
+    uint scalars;
+} pc;
+
+const uint STATUS_NON_FINITE_INPUT = 1u;
+shared uint invalid_code;
+
+uint load_bits(uint scalar_index) {
+    uint word = input_state.packed_bf16[scalar_index >> 1u];
+    return ((scalar_index & 1u) == 0u) ? (word & 0xffffu) : (word >> 16u);
+}
+
+void main() {
+    uint lane = gl_LocalInvocationID.x;
+    if (lane == 0u) invalid_code = status.code;
+    barrier();
+
+    for (uint index = lane; index < pc.scalars; index += 256u) {
+        if ((load_bits(index) & 0x7f80u) == 0x7f80u) {
+            atomicOr(invalid_code, STATUS_NON_FINITE_INPUT);
+        }
+    }
+    barrier();
+
+    if (invalid_code != 0u) {
+        for (uint index = lane; index < pc.scalars; index += 256u) {
+            output_state.values[index] = 0.0;
+        }
+        if (lane == 0u) atomicOr(status.code, invalid_code);
+        return;
+    }
+
+    for (uint index = lane; index < pc.scalars; index += 256u) {
+        output_state.values[index] = uintBitsToFloat(load_bits(index) << 16u);
+    }
+}

@@ -1,0 +1,59 @@
+#version 450
+
+// Polaris 通用 F32 权重矩阵向量乘。
+//
+// weight: [N,K] F32 row-major
+// x:      [B,K] F32
+// y:      [B,N] F32
+//
+// 首个正式消费者是 DeepSeek-V4 的 hc_attn_fn / hc_ffn_fn：
+// [24,16384] x [1,16384]。batch ABI 与 BF16 matvec 一致，便于后续 K=4/8。
+
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer Weights {
+    float values[];
+} weights;
+layout(set = 0, binding = 1, std430) readonly buffer Input {
+    float values[];
+} input_state;
+layout(set = 0, binding = 2, std430) writeonly buffer Output {
+    float values[];
+} output_state;
+
+layout(push_constant) uniform Push {
+    uint n;
+    uint k;
+    uint batch;
+    uint groups_x;
+} pc;
+
+shared float partial[8][64];
+
+void main() {
+    uint row = gl_WorkGroupID.x + gl_WorkGroupID.y * pc.groups_x;
+    if (row >= pc.n || pc.batch == 0u || pc.batch > 8u) return;
+    uint lane = gl_LocalInvocationID.x;
+    uint row_base = row * pc.k;
+    float acc[8];
+    for (uint b = 0u; b < 8u; ++b) acc[b] = 0.0;
+    for (uint dim = lane; dim < pc.k; dim += 64u) {
+        float weight = weights.values[row_base + dim];
+        for (uint b = 0u; b < pc.batch; ++b) {
+            acc[b] += weight * input_state.values[b * pc.k + dim];
+        }
+    }
+    for (uint b = 0u; b < pc.batch; ++b) partial[b][lane] = acc[b];
+    barrier();
+    for (uint stride = 32u; stride > 0u; stride >>= 1u) {
+        if (lane < stride) {
+            for (uint b = 0u; b < pc.batch; ++b) partial[b][lane] += partial[b][lane + stride];
+        }
+        barrier();
+    }
+    if (lane == 0u) {
+        for (uint b = 0u; b < pc.batch; ++b) {
+            output_state.values[b * pc.n + row] = partial[b][0];
+        }
+    }
+}

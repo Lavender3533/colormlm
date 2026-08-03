@@ -1,0 +1,102 @@
+#version 450
+
+// Ratio4 overlap compressor boundary pooling.
+// State rows are F32 [8, 2*W].  Official overlap selects prefix rows 0..3
+// from the first half and active rows 4..7 from the second half, producing
+// one BF16 [W] compressed row.  W is 512 (main) or 128 (indexer).
+
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer KvState {
+    float values[];
+} kv_state;
+layout(set = 0, binding = 1, std430) readonly buffer ScoreState {
+    float values[];
+} score_state;
+layout(set = 0, binding = 2, std430) writeonly buffer Output {
+    uint packed_bf16[];
+} output_state;
+layout(set = 0, binding = 3, std430) buffer Status {
+    uint code;
+} status;
+
+layout(push_constant) uniform Push {
+    uint width;
+} pc;
+
+const uint STATUS_NON_FINITE_INPUT = 1u;
+const uint STATUS_INVALID_POOL = 2u;
+const uint STATUS_NON_FINITE_OUTPUT = 4u;
+
+bool non_finite(float value) {
+    return isnan(value) || isinf(value);
+}
+
+uint source_index(uint row, uint d) {
+    uint projected = pc.width * 2u;
+    uint half_offset = row < 4u ? 0u : pc.width;
+    return row * projected + half_offset + d;
+}
+
+float pool_dimension(uint d) {
+    float maximum = -1.0 / 0.0;
+    uint valid = 0u;
+    for (uint row = 0u; row < 8u; ++row) {
+        uint index = source_index(row, d);
+        float score = score_state.values[index];
+        if (isnan(score) || (isinf(score) && score > 0.0)) {
+            atomicOr(status.code, STATUS_NON_FINITE_INPUT);
+            continue;
+        }
+        if (isinf(score)) continue; // official -inf remainder sentinel
+        float value = kv_state.values[index];
+        if (non_finite(value)) {
+            atomicOr(status.code, STATUS_NON_FINITE_INPUT);
+            continue;
+        }
+        maximum = max(maximum, score);
+        valid += 1u;
+    }
+    if (valid == 0u) return 0.0;
+
+    float denominator = 0.0;
+    for (uint row = 0u; row < 8u; ++row) {
+        float score = score_state.values[source_index(row, d)];
+        if (!non_finite(score)) denominator += exp(score - maximum);
+    }
+    if (non_finite(denominator) || denominator <= 0.0) {
+        atomicOr(status.code, STATUS_INVALID_POOL);
+        return 0.0;
+    }
+
+    float pooled = 0.0;
+    for (uint row = 0u; row < 8u; ++row) {
+        uint index = source_index(row, d);
+        float score = score_state.values[index];
+        if (!non_finite(score)) {
+            pooled += kv_state.values[index] * (exp(score - maximum) / denominator);
+        }
+    }
+    if (non_finite(pooled)) {
+        atomicOr(status.code, STATUS_NON_FINITE_OUTPUT);
+        return 0.0;
+    }
+    return pooled;
+}
+
+uint float_to_bf16_bits(float value) {
+    uint bits = floatBitsToUint(value);
+    uint exponent = bits & 0x7f800000u;
+    if (exponent == 0x7f800000u) return bits >> 16u;
+    uint rounded = bits + 0x00007fffu + ((bits >> 16u) & 1u);
+    return rounded >> 16u;
+}
+
+void main() {
+    uint pair = gl_GlobalInvocationID.x;
+    if (pair >= pc.width / 2u) return;
+    float value0 = pool_dimension(pair * 2u);
+    float value1 = pool_dimension(pair * 2u + 1u);
+    output_state.packed_bf16[pair] =
+        float_to_bf16_bits(value0) | (float_to_bf16_bits(value1) << 16u);
+}

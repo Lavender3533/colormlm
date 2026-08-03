@@ -1,0 +1,63 @@
+#version 450
+
+// 将在线 top-6 的权重按已经换入 routed page 的专家槽位重新排列。
+// top-k 的集合必须完全一致；排序差异不改变 MoE 数学，但若不重排会把
+// 某个专家的权重错误地乘到另一个专家的参数上。
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer ActualIds {
+    uint actual_ids[];
+};
+
+layout(set = 0, binding = 1, std430) readonly buffer ActualWeights {
+    float actual_weights[];
+};
+
+layout(set = 0, binding = 2, std430) readonly buffer ExpectedIds {
+    uint expected_ids[];
+};
+
+layout(set = 0, binding = 3, std430) writeonly buffer AlignedWeights {
+    float aligned_weights[];
+};
+
+layout(set = 0, binding = 4, std430) buffer Status {
+    uint status_code;
+};
+
+const uint TOP_K = 6u;
+const uint STATUS_ROUTE_SET_MISMATCH = 32u;
+const uint STATUS_NON_FINITE_WEIGHT = 64u;
+
+void main() {
+    if (status_code != 0u) {
+        return;
+    }
+
+    bool used[6];
+    for (uint slot = 0u; slot < TOP_K; ++slot) {
+        used[slot] = false;
+        aligned_weights[slot] = 0.0;
+    }
+
+    for (uint expected_slot = 0u; expected_slot < TOP_K; ++expected_slot) {
+        bool found = false;
+        for (uint actual_slot = 0u; actual_slot < TOP_K; ++actual_slot) {
+            if (!used[actual_slot] && actual_ids[actual_slot] == expected_ids[expected_slot]) {
+                float weight = actual_weights[actual_slot];
+                if (isnan(weight) || isinf(weight)) {
+                    atomicOr(status_code, STATUS_NON_FINITE_WEIGHT);
+                    return;
+                }
+                used[actual_slot] = true;
+                aligned_weights[expected_slot] = weight;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            atomicOr(status_code, STATUS_ROUTE_SET_MISMATCH);
+            return;
+        }
+    }
+}

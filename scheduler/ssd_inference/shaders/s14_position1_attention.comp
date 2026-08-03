@@ -1,0 +1,264 @@
+#version 450
+
+// DeepSeek-V4 pre-compression window attention。
+// q=[64,512] BF16，previous_kv=[previous_count,512] BF16，
+// current_kv=[512] BF16，sink=[64] F32，rope=[32,2] F32(cos,sin)。
+// position1/2 分别消费 row0 / row0..1，并把当前 KV 作为最后一个窗口元素。
+
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer Query {
+    uint packed_bf16[];
+} query;
+layout(set = 0, binding = 1, std430) readonly buffer PreviousKeyValue {
+    uint packed_bf16[];
+} previous_kv;
+layout(set = 0, binding = 2, std430) readonly buffer CurrentKeyValue {
+    uint packed_bf16[];
+} current_kv;
+layout(set = 0, binding = 3, std430) readonly buffer Sink {
+    float values[];
+} sink;
+layout(set = 0, binding = 4, std430) readonly buffer Rope {
+    vec2 values[];
+} rope;
+layout(set = 0, binding = 5, std430) writeonly buffer Output {
+    uint packed_bf16[];
+} output_state;
+
+layout(push_constant) uniform Push {
+    uint heads;
+    uint head_dim;
+    uint previous_count;
+} pc;
+
+shared float partial[64];
+shared float scores[128];
+shared float probabilities[128];
+
+float load_bf16_word(const uint word, uint scalar_index) {
+    uint bits = ((scalar_index & 1u) == 0u) ? (word & 0xffffu) : (word >> 16u);
+    return uintBitsToFloat(bits << 16u);
+}
+
+float load_query_raw(uint scalar_index) {
+    return load_bf16_word(query.packed_bf16[scalar_index >> 1u], scalar_index);
+}
+
+float load_previous(uint token, uint d) {
+    uint scalar_index = token * pc.head_dim + d;
+    return load_bf16_word(previous_kv.packed_bf16[scalar_index >> 1u], scalar_index);
+}
+
+float load_current_raw(uint d) {
+    return load_bf16_word(current_kv.packed_bf16[d >> 1u], d);
+}
+
+uint float_to_bf16_bits(float value) {
+    uint bits = floatBitsToUint(value);
+    uint exponent = bits & 0x7f800000u;
+    if (exponent == 0x7f800000u) return bits >> 16u;
+    uint rounded = bits + 0x00007fffu + ((bits >> 16u) & 1u);
+    return rounded >> 16u;
+}
+
+float round_bf16(float value) {
+    return uintBitsToFloat(float_to_bf16_bits(value) << 16u);
+}
+
+// Vulkan 浮点除法允许实现相关近似；生产驱动的某些倒数会偏高 1 ULP，
+// 足以翻转后续 BF16 中点。softmax denominator 恒为正 normal F32。
+// 若输入的 24-bit significand 为 M，则非二次幂倒数的 normalized
+// significand 是 round_even(2^47 / M)。这里用 32-bit 整数长除法精确计算，
+// 不要求可选的 shaderInt64/Float64 device feature。
+float reciprocal_rte_positive_normal(float value) {
+    uint bits = floatBitsToUint(value);
+    uint exponent = (bits >> 23u) & 0xffu;
+    uint fraction = bits & 0x007fffffu;
+
+    if (fraction == 0u) {
+        return uintBitsToFloat((254u - exponent) << 23u);
+    }
+
+    uint divisor = 0x00800000u | fraction;
+    uint quotient = 0u;
+    uint remainder = 0u;
+    for (int bit_index = 47; bit_index >= 0; --bit_index) {
+        remainder = (remainder << 1u) | ((bit_index == 47) ? 1u : 0u);
+        if (remainder >= divisor) {
+            remainder -= divisor;
+            if (bit_index < 32) quotient |= 1u << uint(bit_index);
+        }
+    }
+    uint twice_remainder = remainder << 1u;
+    if (twice_remainder > divisor ||
+        (twice_remainder == divisor && (quotient & 1u) != 0u)) {
+        quotient += 1u;
+    }
+
+    uint reciprocal_exponent = 253u - exponent;
+    if (quotient == 0x01000000u) {
+        quotient >>= 1u;
+        reciprocal_exponent += 1u;
+    }
+    return uintBitsToFloat((reciprocal_exponent << 23u) |
+                           (quotient & 0x007fffffu));
+}
+
+// 正 normal value 的精确 2^exponent_delta 缩放，包括 subnormal RNE。
+float scale_pow2_rte_positive_normal(float value, int exponent_delta) {
+    uint bits = floatBitsToUint(value);
+    int target_exponent = int((bits >> 23u) & 0xffu) + exponent_delta;
+    uint fraction = bits & 0x007fffffu;
+    if (target_exponent >= 255) return uintBitsToFloat(0x7f800000u);
+    if (target_exponent > 0) {
+        return uintBitsToFloat((uint(target_exponent) << 23u) | fraction);
+    }
+
+    int shift = 1 - target_exponent;
+    if (shift >= 32) return 0.0;
+    uint significand = 0x00800000u | fraction;
+    uint truncated = significand >> uint(shift);
+    uint remainder = significand & ((1u << uint(shift)) - 1u);
+    uint halfway = 1u << uint(shift - 1);
+    if (remainder > halfway ||
+        (remainder == halfway && (truncated & 1u) != 0u)) {
+        truncated += 1u;
+    }
+    return uintBitsToFloat(truncated);
+}
+
+// GLSL.std.450 Exp 允许驱动使用实现相关近似；RX 5700 XT 在冻结门的
+// head58 上会偏高 1 F32 ULP。这里采用固定的 Cody-Waite range reduction
+// 与 Cephes minimax 多项式，且用 `precise` 固定逐步 F32 舍入。softmax
+// 输入已经减去 maximum，因此只需覆盖 (-inf, 0]。缩放步骤也显式处理
+// F32 subnormal，避免把仍可表示的 BF16 subnormal 概率提前清零。
+float exp_rte_softmax(float value) {
+    uint magnitude_bits = floatBitsToUint(value) & 0x7fffffffu;
+    if (magnitude_bits >= 0x42cff1b5u) return 0.0;
+
+    precise float scaled = value * uintBitsToFloat(0x3fb8aa3bu) + 0.5;
+    int exponent = int(floor(scaled));
+    precise float exponent_f32 = float(exponent);
+    precise float reduced = value - exponent_f32 * uintBitsToFloat(0x3f318000u);
+    reduced = reduced - exponent_f32 * uintBitsToFloat(0xb95e8083u);
+    precise float squared = reduced * reduced;
+
+    precise float polynomial = uintBitsToFloat(0x39506967u);
+    polynomial = polynomial * reduced + uintBitsToFloat(0x3ab743ceu);
+    polynomial = polynomial * reduced + uintBitsToFloat(0x3c088908u);
+    polynomial = polynomial * reduced + uintBitsToFloat(0x3d2aa9c1u);
+    polynomial = polynomial * reduced + uintBitsToFloat(0x3e2aaaaau);
+    polynomial = polynomial * reduced + uintBitsToFloat(0x3f000000u);
+    polynomial = polynomial * squared + reduced;
+    polynomial = polynomial + 1.0;
+
+    return scale_pow2_rte_positive_normal(polynomial, exponent);
+}
+
+vec2 rotate_forward(vec2 value, uint pair) {
+    vec2 cs = rope.values[pair];
+    return vec2(value.x * cs.x - value.y * cs.y,
+                value.x * cs.y + value.y * cs.x);
+}
+
+vec2 rotate_inverse(vec2 value, uint pair) {
+    vec2 cs = rope.values[pair];
+    return vec2(value.x * cs.x + value.y * cs.y,
+               -value.x * cs.y + value.y * cs.x);
+}
+
+float load_query_current_position(uint head, uint d) {
+    uint base = head * pc.head_dim;
+    if (d < pc.head_dim - 64u) return load_query_raw(base + d);
+    uint local = d - (pc.head_dim - 64u);
+    uint pair = local >> 1u;
+    uint d0 = pc.head_dim - 64u + pair * 2u;
+    vec2 rotated = rotate_forward(
+        vec2(load_query_raw(base + d0), load_query_raw(base + d0 + 1u)),
+        pair
+    );
+    return round_bf16(((local & 1u) == 0u) ? rotated.x : rotated.y);
+}
+
+float load_current_position(uint d) {
+    if (d < pc.head_dim - 64u) return load_current_raw(d);
+    uint local = d - (pc.head_dim - 64u);
+    uint pair = local >> 1u;
+    uint d0 = pc.head_dim - 64u + pair * 2u;
+    vec2 rotated = rotate_forward(
+        vec2(load_current_raw(d0), load_current_raw(d0 + 1u)),
+        pair
+    );
+    return round_bf16(((local & 1u) == 0u) ? rotated.x : rotated.y);
+}
+
+float load_window(uint token, uint d) {
+    return token < pc.previous_count
+        ? load_previous(token, d)
+        : load_current_position(d);
+}
+
+void main() {
+    uint head = gl_WorkGroupID.x;
+    uint lane = gl_LocalInvocationID.x;
+    if (head >= pc.heads || pc.previous_count == 0u || pc.previous_count >= 128u) return;
+    uint token_count = pc.previous_count + 1u;
+
+    // 每个历史窗口行与当前行都使用相同的固定归约树。
+    for (uint token = 0u; token < token_count; ++token) {
+        float dot_value = 0.0;
+        for (uint d = lane; d < pc.head_dim; d += 64u) {
+            dot_value += load_query_current_position(head, d) * load_window(token, d);
+        }
+        partial[lane] = dot_value;
+        barrier();
+        for (uint stride = 32u; stride > 0u; stride >>= 1u) {
+            if (lane < stride) partial[lane] += partial[lane + stride];
+            barrier();
+        }
+        // 固定 revision 的 head_dim 恒为512。冻结 PyTorch F32 缩放位模式，
+        // 避免驱动的近似 InverseSqrt 在 position2/YARN 的 BF16 中点翻转。
+        if (lane == 0u) scores[token] = partial[0] * uintBitsToFloat(0x3d3504f3u);
+        barrier();
+    }
+
+    if (lane == 0u) {
+        float maximum = sink.values[head];
+        for (uint token = 0u; token < token_count; ++token) maximum = max(maximum, scores[token]);
+        float denominator = exp_rte_softmax(sink.values[head] - maximum);
+        for (uint token = 0u; token < token_count; ++token) {
+            probabilities[token] = exp_rte_softmax(scores[token] - maximum);
+            denominator += probabilities[token];
+        }
+        float reciprocal = reciprocal_rte_positive_normal(denominator);
+        for (uint token = 0u; token < token_count; ++token) probabilities[token] *= reciprocal;
+    }
+    barrier();
+
+    uint packed_per_head = pc.head_dim >> 1u;
+    for (uint pair = lane; pair < packed_per_head; pair += 64u) {
+        uint d0 = pair * 2u;
+        uint d1 = d0 + 1u;
+        // `precise` 禁止把逐token的 mul+add 收缩成FMA。PyTorch sparse_attention
+        // 的 BF16 输出边界要求先做F32乘法、再按token顺序相加；position2/YARN
+        // 的冻结门会在收缩时真实翻转一个元素。
+        precise float value0 = 0.0;
+        precise float value1 = 0.0;
+        for (uint token = 0u; token < token_count; ++token) {
+            precise float product0 = probabilities[token] * load_window(token, d0);
+            precise float product1 = probabilities[token] * load_window(token, d1);
+            value0 = value0 + product0;
+            value1 = value1 + product1;
+        }
+        vec2 value = vec2(value0, value1);
+        if (d0 >= pc.head_dim - 64u) {
+            // Python 先把 attention F32 结果转 BF16，再 inverse RoPE 并二次转 BF16。
+            value = vec2(round_bf16(value.x), round_bf16(value.y));
+            value = rotate_inverse(value, (d0 - (pc.head_dim - 64u)) >> 1u);
+        }
+        uint y0 = float_to_bf16_bits(value.x);
+        uint y1 = float_to_bf16_bits(value.y);
+        output_state.packed_bf16[head * packed_per_head + pair] = y0 | (y1 << 16u);
+    }
+}

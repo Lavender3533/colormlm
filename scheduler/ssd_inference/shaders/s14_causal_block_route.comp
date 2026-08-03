@@ -1,0 +1,152 @@
+#version 450
+
+// K=4/8 在线 route 后处理。每个 workgroup 顺序处理一个 device row，
+// 保持单 token top-k 的稳定 tie-break；所有 K 行在一次 dispatch 中完成。
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer LogitsBuffer {
+    float logits[];
+};
+layout(set = 0, binding = 1, std430) readonly buffer AuxBuffer {
+    uint aux[];
+};
+layout(set = 0, binding = 2, std430) writeonly buffer ExpertIdBuffer {
+    uint expert_ids[];
+};
+layout(set = 0, binding = 3, std430) writeonly buffer WeightBuffer {
+    float weights[];
+};
+layout(set = 0, binding = 4, std430) buffer StatusBuffer {
+    uint status_code;
+};
+
+layout(push_constant) uniform Push {
+    uint mode;
+    uint block_size;
+} pc;
+
+const uint EXPERTS = 256u;
+const uint TOP_K = 6u;
+const float ROUTE_SCALE = 1.5;
+const float SOFTPLUS_THRESHOLD = 20.0;
+
+const uint STATUS_NON_FINITE_LOGIT_OR_SCORE = 1u << 8u;
+const uint STATUS_NON_FINITE_BIAS = 1u << 9u;
+const uint STATUS_INVALID_PHYSICAL_ID = 1u << 10u;
+const uint STATUS_INVALID_NORMALIZATION = 1u << 11u;
+const uint STATUS_INVALID_MODE = 1u << 12u;
+
+bool finite_f32(float value) {
+    return !isnan(value) && !isinf(value);
+}
+
+void zero_outputs(uint row) {
+    uint output_base = row * TOP_K;
+    for (uint slot = 0u; slot < TOP_K; ++slot) {
+        expert_ids[output_base + slot] = 0u;
+        weights[output_base + slot] = 0.0;
+    }
+}
+
+void fail_closed(uint row, uint bit) {
+    atomicOr(status_code, bit);
+    zero_outputs(row);
+}
+
+void main() {
+    uint row = gl_WorkGroupID.x;
+    if (row >= pc.block_size) return;
+    zero_outputs(row);
+    if (status_code != 0u) return;
+    if (pc.block_size != 4u && pc.block_size != 8u) {
+        fail_closed(row, STATUS_INVALID_MODE);
+        return;
+    }
+    if (pc.mode > 1u) {
+        fail_closed(row, STATUS_INVALID_MODE);
+        return;
+    }
+
+    float scores[256];
+    bool used[256];
+    uint logits_base = row * EXPERTS;
+    for (uint expert = 0u; expert < EXPERTS; ++expert) {
+        float logit = logits[logits_base + expert];
+        if (!finite_f32(logit)) {
+            fail_closed(row, STATUS_NON_FINITE_LOGIT_OR_SCORE);
+            return;
+        }
+        float softplus = logit > SOFTPLUS_THRESHOLD ? logit : log(1.0 + exp(logit));
+        float score = sqrt(softplus);
+        if (!finite_f32(score)) {
+            fail_closed(row, STATUS_NON_FINITE_LOGIT_OR_SCORE);
+            return;
+        }
+        scores[expert] = score;
+        used[expert] = false;
+    }
+
+    uint ids[6];
+    float selected[6];
+    if (pc.mode == 0u) {
+        for (uint slot = 0u; slot < TOP_K; ++slot) {
+            uint best_id = 0u;
+            float best = -3.402823466e+38;
+            bool found = false;
+            for (uint expert = 0u; expert < EXPERTS; ++expert) {
+                float bias = uintBitsToFloat(aux[expert]);
+                if (!finite_f32(bias)) {
+                    fail_closed(row, STATUS_NON_FINITE_BIAS);
+                    return;
+                }
+                float candidate = scores[expert] + bias;
+                if (!finite_f32(candidate)) {
+                    fail_closed(row, STATUS_NON_FINITE_BIAS);
+                    return;
+                }
+                if (!used[expert] &&
+                    (!found || candidate > best || (candidate == best && expert < best_id))) {
+                    found = true;
+                    best = candidate;
+                    best_id = expert;
+                }
+            }
+            if (!found) {
+                fail_closed(row, STATUS_INVALID_NORMALIZATION);
+                return;
+            }
+            used[best_id] = true;
+            ids[slot] = best_id;
+            selected[slot] = scores[best_id];
+        }
+    } else {
+        uint aux_base = row * TOP_K;
+        for (uint slot = 0u; slot < TOP_K; ++slot) {
+            uint id = aux[aux_base + slot];
+            if (id >= EXPERTS || used[id]) {
+                fail_closed(row, STATUS_INVALID_PHYSICAL_ID);
+                return;
+            }
+            used[id] = true;
+            ids[slot] = id;
+            selected[slot] = scores[id];
+        }
+    }
+
+    float sum = 0.0;
+    for (uint slot = 0u; slot < TOP_K; ++slot) sum += selected[slot];
+    if (!finite_f32(sum) || sum <= 0.0) {
+        fail_closed(row, STATUS_INVALID_NORMALIZATION);
+        return;
+    }
+    uint output_base = row * TOP_K;
+    for (uint slot = 0u; slot < TOP_K; ++slot) {
+        float weight = selected[slot] / sum * ROUTE_SCALE;
+        if (!finite_f32(weight)) {
+            fail_closed(row, STATUS_INVALID_NORMALIZATION);
+            return;
+        }
+        expert_ids[output_base + slot] = ids[slot];
+        weights[output_base + slot] = weight;
+    }
+}

@@ -10,10 +10,15 @@ mod causal_batch;
 mod contract;
 mod executor_bridge;
 mod expert_batch;
+mod long_context;
 mod memory;
 mod metrics;
+mod native_primitives;
+mod position0_manifest;
+mod position0_state;
 mod range_bridge;
 mod runner;
+mod speculative_whole_token;
 mod state;
 mod whole_token;
 
@@ -49,16 +54,39 @@ pub use expert_batch::{
     ExpertPageProvider, ExpertPageShape, InMemoryDenseExpertProvider, LayerBatchReadiness,
     MaterializedLayerBatch, MaterializedTokenSource, SwiGluExpertBatchKernel,
 };
+pub use long_context::{LongContextMemoryPlan, POLARIS_TARGET_CONTEXT_TOKENS};
 pub use memory::{
     BudgetKind, MemoryLedger, MemoryLine, EXPERT_PAGE_BYTES, FULL_DEPTH_NATIVE_STATE_4096_BYTES,
     FULL_DEPTH_NATIVE_TOP6_ACTIVE_BYTES_LOWER_BOUND,
 };
 pub use metrics::{CounterReport, RuntimeCounters, TransferObservation};
+pub use native_primitives::{
+    bf16_round_trip, bf16_round_trip_slice, hc_post, hc_pre_from_projection, hc_split_sinkhorn,
+    official_rms_norm, HcPreOutput, HcSplitOutput, NativePrimitiveError, NATIVE_HC_EPS,
+    NATIVE_HC_MIX_WIDTH, NATIVE_HC_STREAMS, NATIVE_NORM_EPS, NATIVE_SINKHORN_ITERS,
+};
+pub use position0_manifest::{
+    Position0Asset, Position0Capture, Position0Catalog, Position0Final, Position0Layer,
+    Position0LayerAssets, Position0ManifestError, Position0Reference, Position0SourceReport,
+    Position0Summary, Position0VerificationPolicy, Position0WholeTokenManifest,
+    POSITION0_CAPTURE_CHAIN_SHA256, POSITION0_CATALOG_SHA256, POSITION0_MANIFEST_FORMAT,
+    POSITION0_PROFILE, POSITION0_SOURCE_REPORT_SHA256, POSITION0_SOURCE_RUN,
+};
+pub use position0_state::{
+    NativeStateArena, Position0CompressorInput, Position0StateError, Position0StateTxn,
+    TokenStateTxn, POSITION0_KV_ELEMENTS,
+};
 pub use range_bridge::{RangeBridgeConfig, SubprocessRangeProvider, RANGE_JSONL_PROTOCOL};
 pub use runner::{
     BaseLoadTicket, GreedyToken, LayerEvent, LayerEventKind, LayerLifecycle, LayerPhase,
     LocalS14Runner, NativeS14Executor, ProviderError, RangeArtifact, ReadyBaseLease,
     ReadyRoutedLease, RouteDecision, RouteFirstProvider, RoutedLoadTicket, RunnerError, RunnerMode,
+};
+pub use speculative_whole_token::{
+    decide_longest_prefix, BatchedWholeTokenOutput, BatchedWholeTokenPosition,
+    LongestPrefixDecision, SpeculativeWholeTokenError, WholeTokenBlockCommit,
+    WholeTokenBlockRollback, WholeTokenFutureBlock, BATCHED_CAUSAL_WHOLE_TOKEN_MODE,
+    SPECULATIVE_WHOLE_TOKEN_BLOCK_SIZES,
 };
 pub use state::{
     BufferSlice, CompressorState, DType, HcState, IndexerState, KvState, NativeState,

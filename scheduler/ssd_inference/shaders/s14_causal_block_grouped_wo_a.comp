@@ -1,0 +1,61 @@
+#version 450
+
+// K-row grouped wo_a: x[batch,groups,K], shared weight[groups*N,K].
+layout(local_size_x = 128) in;
+layout(set = 0, binding = 0) readonly buffer X { float x[]; };
+layout(set = 0, binding = 1) readonly buffer Weight { uint weight_words[]; };
+layout(set = 0, binding = 2) readonly buffer WeightScale { uint scale_words[]; };
+layout(set = 0, binding = 3) writeonly buffer Y { float y[]; };
+layout(push_constant) uniform Push { uint groups; uint n_per_group; uint K; uint batch; } pc;
+shared float partial[128];
+
+uint weight_byte(uint index) {
+    uint word = weight_words[index >> 2u];
+    return (word >> ((index & 3u) * 8u)) & 0xffu;
+}
+uint scale_byte(uint index) {
+    uint word = scale_words[index >> 2u];
+    return (word >> ((index & 3u) * 8u)) & 0xffu;
+}
+float e4m3fn(uint code) {
+    uint exponent = (code >> 3u) & 15u;
+    uint mantissa = code & 7u;
+    float magnitude = exponent == 0u
+        ? float(mantissa) * 0.001953125
+        : (exponent == 15u && mantissa == 7u
+            ? uintBitsToFloat(0x7fc00000u)
+            : ldexp(1.0 + float(mantissa) * 0.125, int(exponent) - 7));
+    return (code & 0x80u) == 0u ? magnitude : -magnitude;
+}
+float ue8m0(uint code) { return ldexp(1.0, int(code) - 127); }
+float bf16(float value) {
+    uint bits = floatBitsToUint(value);
+    uint rounded = bits + 0x7fffu + ((bits >> 16u) & 1u);
+    return uintBitsToFloat(rounded & 0xffff0000u);
+}
+
+void main() {
+    uint output_row = gl_WorkGroupID.x;
+    uint token = gl_WorkGroupID.y;
+    uint lane = gl_LocalInvocationID.x;
+    uint flat_n = pc.groups * pc.n_per_group;
+    if (output_row >= flat_n || token >= pc.batch) return;
+    uint group = output_row / pc.n_per_group;
+    uint input_base = (token * pc.groups + group) * pc.K;
+    uint weight_base = output_row * pc.K;
+    uint k_tiles = (pc.K + 127u) >> 7u;
+    uint scale_base = (output_row >> 7u) * k_tiles;
+    float acc = 0.0;
+    for (uint k = lane; k < pc.K; k += 128u) {
+        float weight = bf16(e4m3fn(weight_byte(weight_base + k))
+            * ue8m0(scale_byte(scale_base + (k >> 7u))));
+        acc += x[input_base + k] * weight;
+    }
+    partial[lane] = acc;
+    barrier();
+    for (uint stride = 64u; stride > 0u; stride >>= 1u) {
+        if (lane < stride) partial[lane] += partial[lane + stride];
+        barrier();
+    }
+    if (lane == 0u) y[token * flat_n + output_row] = partial[0];
+}

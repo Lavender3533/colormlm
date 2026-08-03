@@ -1,0 +1,62 @@
+#version 450
+
+// DeepSeek-V4 position0/token input boundary:
+//   verified BF16 embedding row [hidden] -> BF16 mHC state [4, hidden].
+//
+// A single workgroup validates the complete row before publishing any value.
+// The status word is sticky for the enclosing whole-token candidate.
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer EmbeddingRow {
+    uint packed_bf16[];
+} embedding_row;
+layout(set = 0, binding = 1, std430) writeonly buffer FourStreamState {
+    uint packed_bf16[];
+} four_stream_state;
+layout(set = 0, binding = 2, std430) buffer Status {
+    uint code;
+} status;
+
+layout(push_constant) uniform Push {
+    uint hidden;
+} pc;
+
+const uint STREAMS = 4u;
+const uint STATUS_NON_FINITE_INPUT = 1u;
+
+shared uint invalid_code;
+
+bool invalid_bf16(uint bits) {
+    return (bits & 0x7f80u) == 0x7f80u;
+}
+
+void main() {
+    uint lane = gl_LocalInvocationID.x;
+    uint row_words = pc.hidden >> 1u;
+    uint output_words = row_words * STREAMS;
+
+    if (lane == 0u) invalid_code = status.code;
+    barrier();
+
+    for (uint word_index = lane; word_index < row_words; word_index += 256u) {
+        uint word = embedding_row.packed_bf16[word_index];
+        if (invalid_bf16(word & 0xffffu) || invalid_bf16(word >> 16u)) {
+            atomicOr(invalid_code, STATUS_NON_FINITE_INPUT);
+        }
+    }
+    barrier();
+
+    if (invalid_code != 0u) {
+        for (uint word_index = lane; word_index < output_words; word_index += 256u) {
+            four_stream_state.packed_bf16[word_index] = 0u;
+        }
+        if (lane == 0u) atomicOr(status.code, invalid_code);
+        return;
+    }
+
+    for (uint word_index = lane; word_index < output_words; word_index += 256u) {
+        four_stream_state.packed_bf16[word_index] =
+            embedding_row.packed_bf16[word_index % row_words];
+    }
+}

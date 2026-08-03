@@ -1,0 +1,94 @@
+#version 450
+
+// KV norm [batch,512] -> QDQ first448/group64, preserve tail64, and publish
+// both raw current KV for block attention and RoPE-rotated KV for checkpoint state.
+layout(local_size_x = 128) in;
+layout(set = 0, binding = 0, std430) readonly buffer Input { uint packed[]; } input_state;
+layout(set = 0, binding = 1, std430) buffer Scales { float values[]; } scales;
+layout(set = 0, binding = 2, std430) readonly buffer Rope { vec2 values[]; } rope;
+layout(set = 0, binding = 3, std430) writeonly buffer Raw { uint packed[]; } raw_output;
+layout(set = 0, binding = 4, std430) writeonly buffer Rotated { uint packed[]; } rotated_output;
+layout(set = 0, binding = 5, std430) buffer Status { uint code; } status;
+layout(push_constant) uniform Push { uint batch; uint phase; } pc;
+shared float maxima[128];
+shared uint invalid;
+
+float load_bf16(uint index) {
+    uint word = input_state.packed[index >> 1u];
+    uint bits = (index & 1u) == 0u ? word & 0xffffu : word >> 16u;
+    return uintBitsToFloat(bits << 16u);
+}
+uint bf16_bits(float value) {
+    uint bits = floatBitsToUint(value);
+    return (bits + 0x7fffu + ((bits >> 16u) & 1u)) >> 16u;
+}
+float bf16(float value) { return uintBitsToFloat(bf16_bits(value) << 16u); }
+bool bad(float value) { return isnan(value) || isinf(value); }
+float qdq(float value, float scale) {
+    float magnitude = abs(value / scale);
+    float quantized;
+    if (magnitude == 0.0) quantized = 0.0;
+    else if (magnitude < exp2(-6.0)) quantized = roundEven(magnitude / exp2(-9.0)) * exp2(-9.0);
+    else {
+        float exponent = floor(log2(magnitude));
+        quantized = roundEven(magnitude / exp2(exponent - 3.0)) * exp2(exponent - 3.0);
+    }
+    quantized = min(quantized, 448.0);
+    return (value < 0.0 ? -quantized : quantized) * scale;
+}
+void prepare_group() {
+    uint group = gl_WorkGroupID.x;
+    uint lane = gl_LocalInvocationID.x;
+    uint groups = pc.batch * 7u;
+    if (group >= groups) return;
+    uint token = group / 7u;
+    uint local_group = group - token * 7u;
+    uint base = token * 512u + local_group * 64u;
+    if (lane == 0u) invalid = status.code;
+    barrier();
+    float value = lane < 64u ? load_bf16(base + lane) : 0.0;
+    if (lane < 64u && bad(value)) atomicOr(invalid, 1u);
+    maxima[lane] = abs(value);
+    barrier();
+    for (uint stride = 64u; stride > 0u; stride >>= 1u) {
+        if (lane < stride) maxima[lane] = max(maxima[lane], maxima[lane + stride]);
+        barrier();
+    }
+    if (lane == 0u && invalid == 0u) {
+        float scale = exp2(ceil(log2(max(maxima[0], 1.0e-4) / 448.0)));
+        scales.values[group] = scale;
+        if (bad(scale) || scale <= 0.0) atomicOr(invalid, 2u);
+    }
+    barrier();
+    if (lane == 0u && invalid != 0u) atomicOr(status.code, invalid);
+}
+void write_pairs() {
+    uint pair = gl_GlobalInvocationID.x;
+    uint pairs = pc.batch * 256u;
+    if (pair >= pairs) return;
+    uint token = pair / 256u;
+    uint local_pair = pair - token * 256u;
+    uint d0 = local_pair * 2u;
+    uint d1 = d0 + 1u;
+    float v0 = load_bf16(token * 512u + d0);
+    float v1 = load_bf16(token * 512u + d1);
+    if (d0 < 448u) {
+        v0 = qdq(v0, scales.values[token * 7u + d0 / 64u]);
+        v1 = qdq(v1, scales.values[token * 7u + d1 / 64u]);
+    }
+    v0 = bf16(v0);
+    v1 = bf16(v1);
+    raw_output.packed[pair] = bf16_bits(v0) | (bf16_bits(v1) << 16u);
+    if (d0 >= 448u) {
+        vec2 cs = rope.values[token * 32u + (d0 - 448u) / 2u];
+        float r0 = bf16(v0 * cs.x - v1 * cs.y);
+        float r1 = bf16(v0 * cs.y + v1 * cs.x);
+        rotated_output.packed[pair] = bf16_bits(r0) | (bf16_bits(r1) << 16u);
+    } else {
+        rotated_output.packed[pair] = bf16_bits(v0) | (bf16_bits(v1) << 16u);
+    }
+}
+void main() {
+    if (pc.phase == 0u) prepare_group();
+    else write_pairs();
+}

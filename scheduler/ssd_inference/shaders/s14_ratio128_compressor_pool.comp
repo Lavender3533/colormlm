@@ -1,0 +1,155 @@
+#version 450
+
+// Ratio128 non-overlap compressor boundary pooling. State rows are
+// F32 [128,512]. Each output dimension has its own score vector and produces
+// one BF16[512] row. The status word is sticky and the caller must reject any
+// non-zero value before publishing candidate state.
+
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer KvState {
+    float values[];
+} kv_state;
+layout(set = 0, binding = 1, std430) readonly buffer ScoreState {
+    float values[];
+} score_state;
+layout(set = 0, binding = 2, std430) writeonly buffer Output {
+    uint packed_bf16[];
+} output_state;
+layout(set = 0, binding = 3, std430) buffer Status {
+    uint code;
+} status;
+
+const uint ROWS = 128u;
+const uint WIDTH = 512u;
+const uint STATUS_NON_FINITE_INPUT = 1u;
+const uint STATUS_INVALID_POOL = 2u;
+const uint STATUS_NON_FINITE_OUTPUT = 4u;
+
+bool non_finite(float value) {
+    return isnan(value) || isinf(value);
+}
+
+uint float_to_bf16_bits(float value) {
+    uint bits = floatBitsToUint(value);
+    uint exponent = bits & 0x7f800000u;
+    if (exponent == 0x7f800000u) return bits >> 16u;
+    uint rounded = bits + 0x00007fffu + ((bits >> 16u) & 1u);
+    return rounded >> 16u;
+}
+
+float scale_pow2_rte_positive_normal(float value, int exponent_delta) {
+    uint bits = floatBitsToUint(value);
+    int target_exponent = int((bits >> 23u) & 0xffu) + exponent_delta;
+    uint fraction = bits & 0x007fffffu;
+    if (target_exponent >= 255) return uintBitsToFloat(0x7f800000u);
+    if (target_exponent > 0) {
+        return uintBitsToFloat((uint(target_exponent) << 23u) | fraction);
+    }
+    int shift = 1 - target_exponent;
+    if (shift >= 32) return 0.0;
+    uint significand = 0x00800000u | fraction;
+    uint truncated = significand >> uint(shift);
+    uint remainder = significand & ((1u << uint(shift)) - 1u);
+    uint halfway = 1u << uint(shift - 1);
+    if (remainder > halfway ||
+        (remainder == halfway && (truncated & 1u) != 0u)) {
+        truncated += 1u;
+    }
+    return uintBitsToFloat(truncated);
+}
+
+float reciprocal_rte_positive_normal(float value) {
+    uint bits = floatBitsToUint(value);
+    uint exponent = (bits >> 23u) & 0xffu;
+    uint fraction = bits & 0x007fffffu;
+    if (fraction == 0u) return uintBitsToFloat((254u - exponent) << 23u);
+
+    uint divisor = 0x00800000u | fraction;
+    uint quotient = 0u;
+    uint remainder = 0u;
+    for (int bit_index = 47; bit_index >= 0; --bit_index) {
+        remainder = (remainder << 1u) | ((bit_index == 47) ? 1u : 0u);
+        if (remainder >= divisor) {
+            remainder -= divisor;
+            if (bit_index < 32) quotient |= 1u << uint(bit_index);
+        }
+    }
+    uint twice_remainder = remainder << 1u;
+    if (twice_remainder > divisor ||
+        (twice_remainder == divisor && (quotient & 1u) != 0u)) {
+        quotient += 1u;
+    }
+    uint reciprocal_exponent = 253u - exponent;
+    if (quotient == 0x01000000u) {
+        quotient >>= 1u;
+        reciprocal_exponent += 1u;
+    }
+    return uintBitsToFloat((reciprocal_exponent << 23u) |
+                           (quotient & 0x007fffffu));
+}
+
+float exp_rte_softmax(float value) {
+    uint magnitude_bits = floatBitsToUint(value) & 0x7fffffffu;
+    if (magnitude_bits >= 0x42cff1b5u) return 0.0;
+    precise float scaled = value * uintBitsToFloat(0x3fb8aa3bu) + 0.5;
+    int exponent = int(floor(scaled));
+    precise float exponent_f32 = float(exponent);
+    precise float reduced = value - exponent_f32 * uintBitsToFloat(0x3f318000u);
+    reduced = reduced - exponent_f32 * uintBitsToFloat(0xb95e8083u);
+    precise float squared = reduced * reduced;
+    precise float polynomial = uintBitsToFloat(0x39506967u);
+    polynomial = polynomial * reduced + uintBitsToFloat(0x3ab743ceu);
+    polynomial = polynomial * reduced + uintBitsToFloat(0x3c088908u);
+    polynomial = polynomial * reduced + uintBitsToFloat(0x3d2aa9c1u);
+    polynomial = polynomial * reduced + uintBitsToFloat(0x3e2aaaaau);
+    polynomial = polynomial * reduced + uintBitsToFloat(0x3f000000u);
+    polynomial = polynomial * squared + reduced;
+    polynomial = polynomial + 1.0;
+    return scale_pow2_rte_positive_normal(polynomial, exponent);
+}
+
+float pool_dimension(uint d) {
+    float maximum = -1.0 / 0.0;
+    for (uint row = 0u; row < ROWS; ++row) {
+        uint index = row * WIDTH + d;
+        float score = score_state.values[index];
+        float value = kv_state.values[index];
+        if (non_finite(score) || non_finite(value)) {
+            atomicOr(status.code, STATUS_NON_FINITE_INPUT);
+            return 0.0;
+        }
+        maximum = max(maximum, score);
+    }
+
+    precise float denominator = 0.0;
+    for (uint row = 0u; row < ROWS; ++row) {
+        denominator += exp_rte_softmax(score_state.values[row * WIDTH + d] - maximum);
+    }
+    if (non_finite(denominator) || denominator <= 0.0) {
+        atomicOr(status.code, STATUS_INVALID_POOL);
+        return 0.0;
+    }
+
+    precise float reciprocal = reciprocal_rte_positive_normal(denominator);
+    precise float pooled = 0.0;
+    for (uint row = 0u; row < ROWS; ++row) {
+        uint index = row * WIDTH + d;
+        pooled += kv_state.values[index] *
+            (exp_rte_softmax(score_state.values[index] - maximum) * reciprocal);
+    }
+    if (non_finite(pooled)) {
+        atomicOr(status.code, STATUS_NON_FINITE_OUTPUT);
+        return 0.0;
+    }
+    return pooled;
+}
+
+void main() {
+    uint pair = gl_GlobalInvocationID.x;
+    if (pair >= WIDTH / 2u) return;
+    float value0 = pool_dimension(pair * 2u);
+    float value1 = pool_dimension(pair * 2u + 1u);
+    output_state.packed_bf16[pair] =
+        float_to_bf16_bits(value0) | (float_to_bf16_bits(value1) << 16u);
+}

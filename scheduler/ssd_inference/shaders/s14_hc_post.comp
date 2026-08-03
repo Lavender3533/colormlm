@@ -1,0 +1,143 @@
+#version 450
+
+// DeepSeek-V4 mHC-post，单 token 正式路径：
+//   BF16 branch[hidden] + BF16 residual[4,hidden]
+//   + F32 post[4] + F32 comb[input_stream,output_stream]
+//   -> BF16 output[4,hidden]
+//
+// 单 workgroup 先验证所有输入，再验证全部 F32 合并值及 BF16 边界，最后才
+// 写回。任何 NaN/Inf/溢出都会把整块输出清零并设置 status，禁止部分状态泄漏。
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer Branch {
+    uint packed_bf16[];
+} branch_state;
+layout(set = 0, binding = 1, std430) readonly buffer Residual {
+    uint packed_bf16[];
+} residual_state;
+layout(set = 0, binding = 2, std430) readonly buffer Post {
+    float values[];
+} post;
+layout(set = 0, binding = 3, std430) readonly buffer Comb {
+    float values[];
+} comb;
+layout(set = 0, binding = 4, std430) writeonly buffer Output {
+    uint packed_bf16[];
+} output_state;
+// sticky 状态：调用方在 WholeTokenCandidate 开始时清零一次；任一 HC-post
+// 失败后，同一候选内后续 dispatch 继续拒绝，直到整个候选被丢弃。
+layout(set = 0, binding = 5, std430) buffer Status {
+    uint code;
+} status;
+
+layout(push_constant) uniform Push {
+    uint hidden;
+} pc;
+
+const uint STREAMS = 4u;
+const uint STATUS_NON_FINITE_INPUT = 1u;
+const uint STATUS_NON_FINITE_MERGED = 2u;
+const uint STATUS_NON_FINITE_BF16 = 4u;
+
+shared uint invalid_code;
+
+float load_branch(uint scalar_index) {
+    uint word = branch_state.packed_bf16[scalar_index >> 1u];
+    uint bits = ((scalar_index & 1u) == 0u) ? (word & 0xffffu) : (word >> 16u);
+    return uintBitsToFloat(bits << 16u);
+}
+
+float load_residual(uint scalar_index) {
+    uint word = residual_state.packed_bf16[scalar_index >> 1u];
+    uint bits = ((scalar_index & 1u) == 0u) ? (word & 0xffffu) : (word >> 16u);
+    return uintBitsToFloat(bits << 16u);
+}
+
+bool non_finite(float value) {
+    return isnan(value) || isinf(value);
+}
+
+uint float_to_bf16_bits(float value) {
+    uint bits = floatBitsToUint(value);
+    uint rounded = bits + 0x00007fffu + ((bits >> 16u) & 1u);
+    return rounded >> 16u;
+}
+
+float merged_value(uint scalar_index) {
+    uint output_stream = scalar_index / pc.hidden;
+    uint dimension = scalar_index - output_stream * pc.hidden;
+    precise float residual_sum = 0.0;
+    for (uint input_stream = 0u; input_stream < STREAMS; ++input_stream) {
+        precise float coefficient = comb.values[input_stream * STREAMS + output_stream];
+        precise float value = load_residual(input_stream * pc.hidden + dimension);
+        precise float term = coefficient * value;
+        residual_sum = residual_sum + term;
+    }
+    precise float branch_value = post.values[output_stream]
+        * load_branch(dimension);
+    precise float merged = branch_value + residual_sum;
+    return merged;
+}
+
+void main() {
+    uint lane = gl_LocalInvocationID.x;
+    uint output_scalars = STREAMS * pc.hidden;
+    uint output_pairs = output_scalars >> 1u;
+
+    if (lane == 0u) invalid_code = status.code;
+    barrier();
+
+    for (uint index = lane; index < pc.hidden; index += 256u) {
+        if (non_finite(load_branch(index))) {
+            atomicOr(invalid_code, STATUS_NON_FINITE_INPUT);
+        }
+    }
+    for (uint index = lane; index < output_scalars; index += 256u) {
+        if (non_finite(load_residual(index))) {
+            atomicOr(invalid_code, STATUS_NON_FINITE_INPUT);
+        }
+    }
+    for (uint index = lane; index < STREAMS; index += 256u) {
+        if (non_finite(post.values[index])) {
+            atomicOr(invalid_code, STATUS_NON_FINITE_INPUT);
+        }
+    }
+    for (uint index = lane; index < STREAMS * STREAMS; index += 256u) {
+        if (non_finite(comb.values[index])) {
+            atomicOr(invalid_code, STATUS_NON_FINITE_INPUT);
+        }
+    }
+    barrier();
+
+    if (invalid_code == 0u) {
+        for (uint index = lane; index < output_scalars; index += 256u) {
+            float merged = merged_value(index);
+            if (non_finite(merged)) {
+                atomicOr(invalid_code, STATUS_NON_FINITE_MERGED);
+            } else {
+                uint bf16 = float_to_bf16_bits(merged);
+                if ((bf16 & 0x7f80u) == 0x7f80u) {
+                    atomicOr(invalid_code, STATUS_NON_FINITE_BF16);
+                }
+            }
+        }
+    }
+    barrier();
+
+    if (invalid_code != 0u) {
+        for (uint pair = lane; pair < output_pairs; pair += 256u) {
+            output_state.packed_bf16[pair] = 0u;
+        }
+        if (lane == 0u) atomicOr(status.code, invalid_code);
+        return;
+    }
+
+    for (uint pair = lane; pair < output_pairs; pair += 256u) {
+        uint index0 = pair * 2u;
+        uint index1 = index0 + 1u;
+        uint value0 = float_to_bf16_bits(merged_value(index0));
+        uint value1 = float_to_bf16_bits(merged_value(index1));
+        output_state.packed_bf16[pair] = value0 | (value1 << 16u);
+    }
+}

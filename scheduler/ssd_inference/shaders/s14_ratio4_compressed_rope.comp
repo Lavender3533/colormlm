@@ -1,0 +1,81 @@
+#version 450
+
+// Forward compressed RoPE over the final 64 dimensions of one BF16 row.
+// The first W-64 dimensions are copied bit-for-bit.  W is 512 or 128.
+
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer Input {
+    uint packed_bf16[];
+} input_state;
+layout(set = 0, binding = 1, std430) readonly buffer Rope {
+    vec2 values[];
+} rope;
+layout(set = 0, binding = 2, std430) writeonly buffer Output {
+    uint packed_bf16[];
+} output_state;
+layout(set = 0, binding = 3, std430) buffer Status {
+    uint code;
+} status;
+
+layout(push_constant) uniform Push {
+    uint width;
+} pc;
+
+const uint STATUS_NON_FINITE_INPUT = 1u;
+const uint STATUS_INVALID_ROPE = 2u;
+const uint STATUS_NON_FINITE_OUTPUT = 4u;
+
+float load_bf16(uint scalar_index) {
+    uint word = input_state.packed_bf16[scalar_index >> 1u];
+    uint bits = ((scalar_index & 1u) == 0u) ? (word & 0xffffu) : (word >> 16u);
+    return uintBitsToFloat(bits << 16u);
+}
+
+bool non_finite(float value) {
+    return isnan(value) || isinf(value);
+}
+
+uint float_to_bf16_bits(float value) {
+    uint bits = floatBitsToUint(value);
+    uint exponent = bits & 0x7f800000u;
+    if (exponent == 0x7f800000u) return bits >> 16u;
+    uint rounded = bits + 0x00007fffu + ((bits >> 16u) & 1u);
+    return rounded >> 16u;
+}
+
+void main() {
+    uint pair = gl_GlobalInvocationID.x;
+    uint pairs = pc.width / 2u;
+    if (pair >= pairs) return;
+    if (pair < pairs - 32u) {
+        vec2 value = vec2(load_bf16(pair * 2u), load_bf16(pair * 2u + 1u));
+        if (non_finite(value.x) || non_finite(value.y)) {
+            atomicOr(status.code, STATUS_NON_FINITE_INPUT);
+        }
+        output_state.packed_bf16[pair] = input_state.packed_bf16[pair];
+        return;
+    }
+
+    uint rope_pair = pair - (pairs - 32u);
+    vec2 value = vec2(load_bf16(pair * 2u), load_bf16(pair * 2u + 1u));
+    vec2 cs = rope.values[rope_pair];
+    if (non_finite(value.x) || non_finite(value.y)) {
+        atomicOr(status.code, STATUS_NON_FINITE_INPUT);
+        value = vec2(0.0);
+    }
+    if (non_finite(cs.x) || non_finite(cs.y)) {
+        atomicOr(status.code, STATUS_INVALID_ROPE);
+        cs = vec2(1.0, 0.0);
+    }
+    vec2 rotated = vec2(
+        value.x * cs.x - value.y * cs.y,
+        value.x * cs.y + value.y * cs.x
+    );
+    if (non_finite(rotated.x) || non_finite(rotated.y)) {
+        atomicOr(status.code, STATUS_NON_FINITE_OUTPUT);
+        rotated = vec2(0.0);
+    }
+    output_state.packed_bf16[pair] =
+        float_to_bf16_bits(rotated.x) | (float_to_bf16_bits(rotated.y) << 16u);
+}

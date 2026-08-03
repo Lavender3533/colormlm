@@ -1,7 +1,8 @@
 use polaris_s14_runner::{
-    CapabilityManifest, GateError, MemoryLedger, CURRENT_FULL_DEPTH_CAPABILITIES_JSON,
-    CURRENT_VULKAN_CAPABILITIES_JSON, DEPRECATED_FULL_DEPTH_TOP1_NEGATIVE_CONTRACT_JSON,
-    EXACT_CASCADE_CONTRACT_JSON, INTEROP_CONTRACT_JSON,
+    CapabilityManifest, GateError, LongContextMemoryPlan, MemoryLedger,
+    CURRENT_FULL_DEPTH_CAPABILITIES_JSON, CURRENT_VULKAN_CAPABILITIES_JSON,
+    DEPRECATED_FULL_DEPTH_TOP1_NEGATIVE_CONTRACT_JSON, EXACT_CASCADE_CONTRACT_JSON,
+    INTEROP_CONTRACT_JSON,
 };
 use serde_json::json;
 use std::path::Path;
@@ -47,6 +48,16 @@ fn main() {
             println!("{}", serde_json::to_string_pretty(&ledgers).unwrap());
             0
         }
+        "long-context" => match LongContextMemoryPlan::target_200k() {
+            Ok(plan) => {
+                println!("{}", serde_json::to_string_pretty(&plan).unwrap());
+                0
+            }
+            Err(error) => {
+                print_json(&json!({"ok": false, "error": error.to_string()}));
+                2
+            }
+        },
         "audit" | "gate" | "audit-full" | "gate-full" => {
             let full_depth = command.ends_with("-full");
             match read_manifest(args.get(1), full_depth) {
@@ -76,7 +87,7 @@ fn main() {
         }
         _ => {
             let error = GateError::Parse(format!(
-                "usage: s14-local [contract|cascade-contract|deprecated-top1|memory|audit|gate|audit-full|gate-full] [manifest]; got {command}"
+                "usage: s14-local [contract|cascade-contract|deprecated-top1|memory|long-context|audit|gate|audit-full|gate-full] [manifest]; got {command}"
             ));
             eprintln!("{error}");
             2
