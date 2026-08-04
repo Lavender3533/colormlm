@@ -296,12 +296,10 @@ impl EngineError {
     }
 
     fn request_deadline() -> Self {
-        let mut error = Self::new(
+        Self::new(
             EngineErrorKind::RequestDeadline,
             "Polaris S14 请求截止时间已到；当前不可中断 block 完成后不会启动下一 FullDepth43 block",
-        );
-        error.retryable = true;
-        error
+        )
     }
 }
 

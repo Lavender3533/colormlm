@@ -695,6 +695,12 @@ impl<C: S14ChatCodec, D: S14ResidentK4Decoder> S14ResidentK4ChatBackend<C, D> {
             ));
         }
 
+        // resource/codec 验收发生在请求排队之后；在创建有状态 session 前再次取得租约
+        // 许可，避免已经到期的请求仍占用 KV/checkpoint owner。
+        if lease.should_stop() || events.is_closed() {
+            return Ok(());
+        }
+
         let mut resident = self.decoder.begin_request(&prompt, self.max_seq_len)?;
         let result = self.run_blocks(
             &mut resident,
