@@ -1,0 +1,644 @@
+{
+  "format": "polaris-embryo-v38-v47-reuse-v0",
+  "status": "pass",
+  "mode": "frozen_reuse_replay",
+  "elapsed_seconds": 0.1257,
+  "definition": "v47 合同约束历史 Design IR 的结构，v38 Transformer 历史产物负责表达；Helix 复验后只提交夹具；v47 Genome Head 保持条件器官，失败才请求临时能力岛。",
+  "assertions": {
+    "v47_release_assets_sha_verified": true,
+    "v47_head_registered_as_conditional_only": true,
+    "historical_design_ir_lineage_is_honest": true,
+    "v38_existing_artifact_is_consumed": true,
+    "helix_static_gate_recomputed": true,
+    "frozen_browser_receipt_consumed": true,
+    "failed_baseline_superseded": true,
+    "candidate_committed_without_island": true,
+    "fixture_commit_is_not_capability_promotion": true,
+    "no_s14_dependency": true
+  },
+  "proposal": {
+    "proposal_id": "proposal.frontend.001",
+    "organ_id": "organ.v38.shared_sequence_policy",
+    "input_packets": [
+      "goal.frontend.001",
+      "design.ir.v47.001"
+    ],
+    "output_packet": "candidate.html.v2",
+    "status": "validated"
+  },
+  "commit": {
+    "commit_id": "commit.frontend.001",
+    "accepted": true,
+    "proposal_id": "proposal.frontend.001",
+    "validation_packet": "validation.html.v2.helix",
+    "superseded_packet": "artifact.html.v1",
+    "committed_packet": "artifact.html.v2",
+    "preserved_packets": [
+      "goal.frontend.001",
+      "organ.v47.genome.001",
+      "design.ir.v47.001"
+    ],
+    "digest": "55e2dedca44371269dc64ce6f7dd30e609adc5a3f50270dfbc30ecb73ee2e8b4"
+  },
+  "packets": {
+    "goal.frontend.001": {
+      "packet_id": "goal.frontend.001",
+      "packet_type": "goal.frontend",
+      "payload": {
+        "task_id": "pf47-train-01",
+        "prompt": "生成单文件 HTML：边缘节点运维台，必须有状态筛选、可排序表格、节点详情抽屉和告警确认；在 375px 改为卡片列表，键盘可操作并支持减少运动。不要只做三张功能卡片。"
+      },
+      "source": "user_fixture",
+      "epoch": 1,
+      "version": 1,
+      "parents": [],
+      "status": "active",
+      "payload_sha256": "3d89397e7becf8e7261c338ee378b452e7f984e17ae505d08788f49e1beb1a08"
+    },
+    "organ.v47.genome.001": {
+      "packet_id": "organ.v47.genome.001",
+      "packet_type": "organ.lifecycle.v47_genome_head",
+      "payload": {
+        "version": "v47-parallel-genome-head-preview",
+        "parameter_count": 278911,
+        "organ": {
+          "organ_id": "organ.polaris.v47.parallel_genome_head.preview",
+          "architecture": "terminal_hidden[2048]->parallel_design_genome[20_fields]",
+          "input_ports": [
+            "hidden.terminal.2048",
+            "copy.slots",
+            "goal.frontend"
+          ],
+          "output_port": "design.genome.v47",
+          "manifest_sha256": "29f79f9c7cdbc4ad039231c64a40e39d0866dac9debbb6f65b9cec15a09b56a0",
+          "lifecycle": "conditional_research_preview_no_spawn"
+        },
+        "state": "eligible_for_compiler_ab_only",
+        "activation_requires": [
+          "fresh genome output lineage",
+          "frozen validation static pass",
+          "375/768/1024/1440 browser action trace",
+          "blind pass"
+        ],
+        "hard_bypass": true,
+        "manifest_sha256": "29f79f9c7cdbc4ad039231c64a40e39d0866dac9debbb6f65b9cec15a09b56a0",
+        "verified_files": {
+          "dataset.jsonl": {
+            "exists": true,
+            "verified": true,
+            "expected": "1f47dae1e686effff458a45e78c4558abca60759cad8fa4529e4f25a1e134e79",
+            "actual": "1f47dae1e686effff458a45e78c4558abca60759cad8fa4529e4f25a1e134e79",
+            "bytes": 378051
+          },
+          "fit_report.json": {
+            "exists": true,
+            "verified": true,
+            "expected": "0a8f917a345f26ccd8719487083f2851a26dad7164f51d6e9c5671d3b0eb64b5",
+            "actual": "0a8f917a345f26ccd8719487083f2851a26dad7164f51d6e9c5671d3b0eb64b5",
+            "bytes": 29360
+          },
+          "genome_head_ontology.json": {
+            "exists": true,
+            "verified": true,
+            "expected": "b14ae08ab0b338aa79ff6ef26c4abab907bc3c2b6ee72f80209d95f8d8f0ed6a",
+            "actual": "b14ae08ab0b338aa79ff6ef26c4abab907bc3c2b6ee72f80209d95f8d8f0ed6a",
+            "bytes": 3033
+          },
+          "genome_head.npz": {
+            "exists": true,
+            "verified": true,
+            "expected": "ed7cc08be7877befa6f346e69479e6cc06dde4e06fb7d04b05b289a580c04a2d",
+            "actual": "ed7cc08be7877befa6f346e69479e6cc06dde4e06fb7d04b05b289a580c04a2d",
+            "bytes": 1129500
+          },
+          "initial_states_hidden_only.cnob": {
+            "exists": true,
+            "verified": true,
+            "expected": "0128763e06189cc53764acbd6841989dcbd23fb33ae9881e088867773e5a33c9",
+            "actual": "0128763e06189cc53764acbd6841989dcbd23fb33ae9881e088867773e5a33c9",
+            "bytes": 1188864
+          },
+          "initial_states_hidden_only.manifest.json": {
+            "exists": true,
+            "verified": true,
+            "expected": "db22a925a5ac85f0a1afb4d6385709cd36f75f15d8af0265091b08ea8439e747",
+            "actual": "db22a925a5ac85f0a1afb4d6385709cd36f75f15d8af0265091b08ea8439e747",
+            "bytes": 707
+          },
+          "negative_contract.json": {
+            "exists": true,
+            "verified": true,
+            "expected": "f88055e94dc4e8acd6c0d712d3c6057bea69dd2606c41b7eb4580bdac53a7243",
+            "actual": "f88055e94dc4e8acd6c0d712d3c6057bea69dd2606c41b7eb4580bdac53a7243",
+            "bytes": 7414
+          },
+          "train_polaris_design_donor.py": {
+            "exists": true,
+            "verified": true,
+            "expected": "59c50dedf08737612a001762f4b84b93fe8d4408c09aee9a85ef49f502ff94d2",
+            "actual": "59c50dedf08737612a001762f4b84b93fe8d4408c09aee9a85ef49f502ff94d2",
+            "bytes": 16407
+          }
+        },
+        "core_parameter_count": 278911,
+        "claim_limit": "内部Genome字段准确不等于最终网页或通用能力；冻结validation与blind尚未完成。"
+      },
+      "source": "polaris-v47-genome-head-preview",
+      "epoch": 2,
+      "version": 1,
+      "parents": [
+        "goal.frontend.001"
+      ],
+      "status": "active",
+      "payload_sha256": "c7825d241739a84b9f2d944512177d0f49030365c3e58b83563f7a1d4212b916"
+    },
+    "design.ir.v47.001": {
+      "packet_id": "design.ir.v47.001",
+      "packet_type": "design.ir.frontend.v47_compat",
+      "payload": {
+        "ir": {
+          "identity": "边缘节点运维台",
+          "audience": "运维工程师",
+          "content_hierarchy": [
+            "全局状态筛选",
+            "可排序节点表格",
+            "节点详情抽屉",
+            "告警确认操作"
+          ],
+          "layout_intent": {
+            "composition": "顶部筛选栏，中部表格区，底部操作栏",
+            "anti_template_rule": "拒绝渐变Hero加三张卡片模板"
+          },
+          "visual_tokens": {
+            "palette": [
+              "深空蓝",
+              "警示红",
+              "安全绿",
+              "中性灰"
+            ],
+            "typography": "系统默认无衬线",
+            "spacing": "紧凑",
+            "surface": "深灰背景"
+          },
+          "components": [
+            "状态筛选器",
+            "排序表格",
+            "详情抽屉",
+            "告警确认弹窗"
+          ],
+          "interactions": [
+            "点击行展开详情",
+            "点击表头排序",
+            "键盘Tab切换焦点"
+          ],
+          "responsive_rules": [
+            "375px转为卡片列表",
+            "大屏保留表格",
+            "小屏隐藏非关键列"
+          ],
+          "accessibility": [
+            "支持键盘操作",
+            "减少运动模式",
+            "高对比度文本",
+            "焦点可见"
+          ],
+          "asset_policy": {
+            "allow_remote_random": false,
+            "fallback": "本地SVG图标"
+          }
+        },
+        "raw_path": "fast16\\research\\v47_dual_tempo_bus\\frontend_ir_ab_train01_retry1\\design_ir_raw.txt",
+        "raw_sha256": "c277bbacd9b395b8001afe29d66b244cc7fb08a1f998aad145e49352f297fc65",
+        "provenance": "historical.v38.planning_fixture",
+        "v47_compatibility_only": true
+      },
+      "source": "historical.v38.planning_fixture",
+      "epoch": 3,
+      "version": 1,
+      "parents": [
+        "goal.frontend.001"
+      ],
+      "status": "active",
+      "payload_sha256": "a222326708185a96c25774cccf1f65acdf0645c8341de59933b6e2cffbfb6976"
+    },
+    "organ.v38.001": {
+      "packet_id": "organ.v38.001",
+      "packet_type": "organ.transformer.v38",
+      "payload": {
+        "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+        "organ": {
+          "organ_id": "organ.v38.shared_sequence_policy",
+          "architecture": "Qwen3.6 shared backbone + ColorLM Neural Bus",
+          "input_ports": [
+            "goal.frontend",
+            "design.ir.frontend.v47_compat"
+          ],
+          "output_port": "candidate.artifact.html",
+          "manifest_sha256": "1005c53a5b53f12ddd3d6bd8677153cf9e16bc3afa1927c116812381acfcbbdf",
+          "lifecycle": "existing_local_runtime_replayed"
+        }
+      },
+      "source": "existing_project_runtime",
+      "epoch": 4,
+      "version": 1,
+      "parents": [
+        "design.ir.v47.001"
+      ],
+      "status": "active",
+      "payload_sha256": "a457699f14e6dfc8b3f945dee3a0918d699c40a2ab733bbc419171f6b566c445"
+    },
+    "artifact.html.v1": {
+      "packet_id": "artifact.html.v1",
+      "packet_type": "artifact.html",
+      "payload": {
+        "path": "fast16\\research\\parallel_frontend_v47\\fixtures\\ordinary_three_cards.html",
+        "sha256": "36385b64610b8a79e02d19c158c45f3e10e0c09a6f7af3809aea41a8f695e1a3",
+        "bytes": 1129
+      },
+      "source": "frozen_baseline",
+      "epoch": 5,
+      "version": 1,
+      "parents": [
+        "goal.frontend.001"
+      ],
+      "status": "superseded",
+      "payload_sha256": "0b962aa0ef43e502822a592a6c9b20a907d010a9ff72689359b6ecf43ef93b25"
+    },
+    "validation.html.v1": {
+      "packet_id": "validation.html.v1",
+      "packet_type": "validation.frontend.static",
+      "payload": {
+        "passed": false,
+        "final_score": 42.85,
+        "critical": {
+          "valid_utf8": true,
+          "no_bom": true,
+          "single_html": true,
+          "task_signals": false,
+          "no_forbidden": true
+        }
+      },
+      "source": "parallel_frontend_v47.validate_gates",
+      "epoch": 6,
+      "version": 1,
+      "parents": [
+        "artifact.html.v1"
+      ],
+      "status": "active",
+      "payload_sha256": "e75850384f975510a3eb7a1041c44222a034bc4c750ccce63ef3822e40bb9747"
+    },
+    "candidate.html.v2": {
+      "packet_id": "candidate.html.v2",
+      "packet_type": "candidate.artifact.html",
+      "payload": {
+        "path": "fast16\\research\\v47_dual_tempo_bus\\frontend_ir_ab_train01_retry1\\candidate.html",
+        "sha256": "992051c7378c9bc171b0336e880ab2f1c00120aeff426b54f25ba5e513a01e95",
+        "bytes": 16802,
+        "historical_generator": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+        "source": "historical.v38.expression+deterministic_tail",
+        "compile_report_sha256": "252887ef45a0e734e968229790b931d8a27636324c2447952c55fa8d34839630",
+        "pure_model_claim_allowed": false
+      },
+      "source": "organ.v38.shared_sequence_policy",
+      "epoch": 7,
+      "version": 1,
+      "parents": [
+        "goal.frontend.001",
+        "design.ir.v47.001",
+        "organ.v38.001",
+        "validation.html.v1"
+      ],
+      "status": "committed",
+      "payload_sha256": "b7173db7ea27c96b827cc47c844db01423f91f2e6fbf695bfececa4afe8c4c1d"
+    },
+    "validation.html.v2.static": {
+      "packet_id": "validation.html.v2.static",
+      "packet_type": "validation.frontend.static",
+      "payload": {
+        "passed": true,
+        "subject_packet": "candidate.html.v2",
+        "subject_sha256": "992051c7378c9bc171b0336e880ab2f1c00120aeff426b54f25ba5e513a01e95",
+        "final_score": 80.55,
+        "template_penalty": 6.0,
+        "critical": {
+          "valid_utf8": true,
+          "no_bom": true,
+          "single_html": true,
+          "task_signals": true,
+          "no_forbidden": true
+        },
+        "score_checks": {
+          "final": true,
+          "structure": true,
+          "responsive": true,
+          "interaction": true,
+          "visual_complexity": true,
+          "dependency_safety": true,
+          "accessibility": true,
+          "max_template_penalty": true
+        },
+        "evidence_mode": "deterministic_recompute_on_historical_fixture",
+        "general_claim_allowed": false
+      },
+      "source": "parallel_frontend_v47.validate_gates",
+      "epoch": 8,
+      "version": 1,
+      "parents": [
+        "candidate.html.v2"
+      ],
+      "status": "active",
+      "payload_sha256": "d0c66303085819391dec0a5514d1fd12c45c31754bd9ec3284afe33702476e7d"
+    },
+    "validation.html.v2.browser": {
+      "packet_id": "validation.html.v2.browser",
+      "packet_type": "validation.frontend.browser_receipt",
+      "payload": {
+        "passed": true,
+        "subject_packet": "candidate.html.v2",
+        "subject_sha256": "992051c7378c9bc171b0336e880ab2f1c00120aeff426b54f25ba5e513a01e95",
+        "report_path": "fast16\\research\\v47_dual_tempo_bus\\frontend_ir_ab_train01_retry1\\browser_visual_report.json",
+        "receipt_sha256": "65489cbfaa5e4d305a832a399a5a76bb47fd27226d9c44f759280c86503212e0",
+        "desktop": {
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "rendered": true,
+          "visual_summary": "深色边缘节点运维台；筛选栏、密集数据表、状态徽标和右侧详情抽屉层级清楚，不是Hero加三卡片。",
+          "status_filter": {
+            "selected": "warning",
+            "visible_rows": 10,
+            "all_visible_rows_warning": true,
+            "live_announcement": "已显示 10 个节点"
+          },
+          "detail_drawer": {
+            "opened": true,
+            "title": "节点详情",
+            "body_scroll_locked": true
+          },
+          "alert_modal": {
+            "opened": true,
+            "node_id": "node-0001",
+            "cancelled": true
+          }
+        },
+        "mobile": {
+          "requested_viewport": {
+            "width": 375,
+            "height": 812
+          },
+          "document_viewport_width": 360,
+          "body_scroll_width": 360,
+          "horizontal_overflow": false,
+          "desktop_table_display": "none",
+          "card_list_display": "flex",
+          "card_count": 50,
+          "visual_findings": [
+            "功能性响应式切换成立",
+            "部分卡片文本在窄屏换行拥挤，视觉精修仍不足",
+            "状态徽标与详情按钮可见，但信息密度偏高"
+          ]
+        },
+        "evidence_mode": "historical_replay",
+        "general_claim_allowed": false
+      },
+      "source": "frozen_browser_action_trace",
+      "epoch": 9,
+      "version": 1,
+      "parents": [
+        "candidate.html.v2"
+      ],
+      "status": "active",
+      "payload_sha256": "1bdfe1eed1a8dbdc2cf2f42da8fdd08c0b05df595eea88e89ecaec947d42df3d"
+    },
+    "validation.html.v2.helix": {
+      "packet_id": "validation.html.v2.helix",
+      "packet_type": "validation.frontend.helix",
+      "payload": {
+        "passed": true,
+        "subject_packet": "candidate.html.v2",
+        "subject_sha256": "992051c7378c9bc171b0336e880ab2f1c00120aeff426b54f25ba5e513a01e95",
+        "scope": "single_train_hybrid_fixture_commit_only",
+        "capability_promotion_allowed": false,
+        "missing_gates": [
+          "768px browser",
+          "1024px browser",
+          "contrast",
+          "full focus trace",
+          "frozen validation",
+          "blind"
+        ]
+      },
+      "source": "polaris.helix",
+      "epoch": 10,
+      "version": 1,
+      "parents": [
+        "validation.html.v2.static",
+        "validation.html.v2.browser"
+      ],
+      "status": "active",
+      "payload_sha256": "1cecf2969235f026454a637e919dbd170d335eb4af5525a886eecb148e113e89"
+    },
+    "genesis.decision.001": {
+      "packet_id": "genesis.decision.001",
+      "packet_type": "organ.genesis.decision",
+      "payload": {
+        "accepted_without_new_island": true,
+        "ephemeral_island_spawned": false,
+        "on_failure": "emit_spawn_request_then_stop_short_gate"
+      },
+      "source": "polaris.genesis",
+      "epoch": 11,
+      "version": 1,
+      "parents": [
+        "validation.html.v2.helix"
+      ],
+      "status": "active",
+      "payload_sha256": "629f137678441fc6fcd2cd8ca6773ca5d0fc1e2aa0d114bd704f395f88d0c238"
+    },
+    "artifact.html.v2": {
+      "packet_id": "artifact.html.v2",
+      "packet_type": "artifact.html",
+      "payload": {
+        "path": "fast16\\research\\v47_dual_tempo_bus\\frontend_ir_ab_train01_retry1\\candidate.html",
+        "sha256": "992051c7378c9bc171b0336e880ab2f1c00120aeff426b54f25ba5e513a01e95",
+        "bytes": 16802,
+        "historical_generator": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+        "source": "historical.v38.expression+deterministic_tail",
+        "compile_report_sha256": "252887ef45a0e734e968229790b931d8a27636324c2447952c55fa8d34839630",
+        "pure_model_claim_allowed": false
+      },
+      "source": "polaris.commit",
+      "epoch": 12,
+      "version": 2,
+      "parents": [
+        "candidate.html.v2",
+        "validation.html.v2.helix"
+      ],
+      "status": "active",
+      "payload_sha256": "b7173db7ea27c96b827cc47c844db01423f91f2e6fbf695bfececa4afe8c4c1d"
+    },
+    "commit.frontend.001": {
+      "packet_id": "commit.frontend.001",
+      "packet_type": "commit.receipt",
+      "payload": {
+        "commit_id": "commit.frontend.001",
+        "accepted": true,
+        "proposal_id": "proposal.frontend.001",
+        "validation_packet": "validation.html.v2.helix",
+        "superseded_packet": "artifact.html.v1",
+        "committed_packet": "artifact.html.v2",
+        "preserved_packets": [
+          "goal.frontend.001",
+          "organ.v47.genome.001",
+          "design.ir.v47.001"
+        ],
+        "digest": "55e2dedca44371269dc64ce6f7dd30e609adc5a3f50270dfbc30ecb73ee2e8b4"
+      },
+      "source": "polaris.commit",
+      "epoch": 13,
+      "version": 1,
+      "parents": [
+        "artifact.html.v2",
+        "validation.html.v2.helix"
+      ],
+      "status": "active",
+      "payload_sha256": "b94436f4c1d0488dd13f383eca14851c68bbc295293b20e2f03c79132db884cd"
+    }
+  },
+  "events": [
+    {
+      "epoch": 1,
+      "event": "packet.add",
+      "packet_id": "goal.frontend.001",
+      "packet_type": "goal.frontend",
+      "parents": []
+    },
+    {
+      "epoch": 2,
+      "event": "packet.add",
+      "packet_id": "organ.v47.genome.001",
+      "packet_type": "organ.lifecycle.v47_genome_head",
+      "parents": [
+        "goal.frontend.001"
+      ]
+    },
+    {
+      "epoch": 3,
+      "event": "packet.add",
+      "packet_id": "design.ir.v47.001",
+      "packet_type": "design.ir.frontend.v47_compat",
+      "parents": [
+        "goal.frontend.001"
+      ]
+    },
+    {
+      "epoch": 4,
+      "event": "packet.add",
+      "packet_id": "organ.v38.001",
+      "packet_type": "organ.transformer.v38",
+      "parents": [
+        "design.ir.v47.001"
+      ]
+    },
+    {
+      "epoch": 5,
+      "event": "packet.add",
+      "packet_id": "artifact.html.v1",
+      "packet_type": "artifact.html",
+      "parents": [
+        "goal.frontend.001"
+      ]
+    },
+    {
+      "epoch": 6,
+      "event": "packet.add",
+      "packet_id": "validation.html.v1",
+      "packet_type": "validation.frontend.static",
+      "parents": [
+        "artifact.html.v1"
+      ]
+    },
+    {
+      "epoch": 7,
+      "event": "packet.add",
+      "packet_id": "candidate.html.v2",
+      "packet_type": "candidate.artifact.html",
+      "parents": [
+        "goal.frontend.001",
+        "design.ir.v47.001",
+        "organ.v38.001",
+        "validation.html.v1"
+      ]
+    },
+    {
+      "epoch": 8,
+      "event": "packet.add",
+      "packet_id": "validation.html.v2.static",
+      "packet_type": "validation.frontend.static",
+      "parents": [
+        "candidate.html.v2"
+      ]
+    },
+    {
+      "epoch": 9,
+      "event": "packet.add",
+      "packet_id": "validation.html.v2.browser",
+      "packet_type": "validation.frontend.browser_receipt",
+      "parents": [
+        "candidate.html.v2"
+      ]
+    },
+    {
+      "epoch": 10,
+      "event": "packet.add",
+      "packet_id": "validation.html.v2.helix",
+      "packet_type": "validation.frontend.helix",
+      "parents": [
+        "validation.html.v2.static",
+        "validation.html.v2.browser"
+      ]
+    },
+    {
+      "epoch": 11,
+      "event": "packet.add",
+      "packet_id": "genesis.decision.001",
+      "packet_type": "organ.genesis.decision",
+      "parents": [
+        "validation.html.v2.helix"
+      ]
+    },
+    {
+      "epoch": 12,
+      "event": "packet.add",
+      "packet_id": "artifact.html.v2",
+      "packet_type": "artifact.html",
+      "parents": [
+        "candidate.html.v2",
+        "validation.html.v2.helix"
+      ]
+    },
+    {
+      "epoch": 13,
+      "event": "packet.add",
+      "packet_id": "commit.frontend.001",
+      "packet_type": "commit.receipt",
+      "parents": [
+        "artifact.html.v2",
+        "validation.html.v2.helix"
+      ]
+    },
+    {
+      "epoch": 14,
+      "event": "packet.supersede",
+      "packet_id": "artifact.html.v1",
+      "successor_id": "artifact.html.v2"
+    }
+  ],
+  "limitations": [
+    "本门重放现有 v38/v47 冻结产物，不等于任意新任务的在线生成。",
+    "浏览器动作使用既有冻结回执，本次只重新执行确定性静态门。",
+    "v47 Genome Head 仍是研究预览且不是本候选父血缘；本门不宣称能力晋级。",
+    "能力岛失败回退只形成出生决策，刻意不在两分钟短门内执行。"
+  ]
+}
