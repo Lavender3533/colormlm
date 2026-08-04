@@ -192,7 +192,8 @@ struct PackedShard {
 }
 
 /// 单 runtime 持有的懒分配 packed L2。production session 已串行独占 runtime，
-/// 因此这里不引入 mutex；proof 内的 mmap lease 仍由进程级 cache 负责并发生命周期。
+/// 因此这里不引入 mutex；packed entry 只保留独立 payload 与已验证身份快照，不钉住
+/// 原始 mmap lease。
 #[derive(Debug)]
 pub struct S14StarfoldPackedL2Cache {
     capacity_bytes: u64,

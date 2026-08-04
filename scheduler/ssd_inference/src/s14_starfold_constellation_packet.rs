@@ -284,6 +284,49 @@ pub fn build_starfold_constellation_packets(
     Ok(packets)
 }
 
+/// production 流水的单包 builder。它只验收本包内 expert/lane 唯一性；完整投影的24条
+/// route 覆盖仍由 routed executor 在所有 packet 提交后一次性验收。
+pub(crate) fn build_starfold_constellation_packet_group(
+    layer: u16,
+    base_position: u64,
+    projection: S14StarfoldExpertProjection,
+    packet_ordinal: u16,
+    window_capacity_bytes: u32,
+    descriptor_alignment: u64,
+    candidates: Vec<S14StarfoldConstellationCandidate>,
+) -> Result<Arc<S14StarfoldConstellationPacket>> {
+    validate_packet_contract(
+        window_capacity_bytes,
+        descriptor_alignment,
+        u64::from(window_capacity_bytes),
+    )?;
+    if candidates.is_empty() {
+        bail!("S14 StarFold constellation stream packet 候选不能为空");
+    }
+    let mut experts = BTreeSet::new();
+    let mut routes = BTreeSet::new();
+    for candidate in &candidates {
+        validate_candidate(candidate, layer, projection, window_capacity_bytes)?;
+        if !experts.insert(candidate.expert_id) {
+            bail!("S14 StarFold constellation stream packet 专家重复");
+        }
+        for lane in &candidate.lanes {
+            if !routes.insert((lane.lane, lane.route_rank)) {
+                bail!("S14 StarFold constellation stream packet lane/rank 重复");
+            }
+        }
+    }
+    Ok(Arc::new(build_packet(
+        layer,
+        base_position,
+        projection,
+        packet_ordinal,
+        window_capacity_bytes,
+        descriptor_alignment,
+        candidates,
+    )?))
+}
+
 #[derive(Debug)]
 pub struct S14StarfoldConstellationReadyPacket {
     binding: S14StarfoldReadyBinding<S14StarfoldResidentWindowKey>,
@@ -582,13 +625,19 @@ fn packet_identity(
             .proof
             .packed_mxfp4()
             .context("S14 StarFold 星座 identity 缺少 packed MXFP4 proof")?;
-        for proof in [packed.weight_proof(), packed.scale_proof()] {
-            update_identity_bytes(&mut sha, proof.asset().sha256.as_bytes())?;
-            update_identity_bytes(&mut sha, proof.asset().proof_sha256.as_bytes())?;
-            update_identity_bytes(&mut sha, proof.asset().range_key.as_bytes())?;
-            update_identity_bytes(&mut sha, proof.source().planned.tensor.as_bytes())?;
-            sha.update(proof.source().span.source_segment_offset.to_le_bytes());
-            sha.update(proof.source().span.byte_len.to_le_bytes());
+        for identity in [packed.weight_identity(), packed.scale_identity()] {
+            update_identity_bytes(&mut sha, identity.asset().sha256.as_bytes())?;
+            update_identity_bytes(&mut sha, identity.asset().proof_sha256.as_bytes())?;
+            update_identity_bytes(&mut sha, identity.asset().range_key.as_bytes())?;
+            update_identity_bytes(&mut sha, identity.source().planned.tensor.as_bytes())?;
+            sha.update(
+                identity
+                    .source()
+                    .span
+                    .source_segment_offset
+                    .to_le_bytes(),
+            );
+            sha.update(identity.source().span.byte_len.to_le_bytes());
         }
         sha.update(
             u32::try_from(member.lanes.len())

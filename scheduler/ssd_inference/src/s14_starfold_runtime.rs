@@ -25,8 +25,8 @@ use crate::{
         S14StarfoldPackedL2Stats,
     },
     s14_starfold_routed_executor::constellation_packet::{
-        S14StarfoldConstellationReadyPacket, S14StarfoldConstellationRuntimeHook,
-        S14StarfoldConstellationPacket, S14StarfoldResidentWindowKey,
+        S14StarfoldConstellationPacket, S14StarfoldConstellationReadyPacket,
+        S14StarfoldConstellationRuntimeHook, S14StarfoldResidentWindowKey,
     },
     s14_starfold_transfer_executor::S14StarfoldTransferExecutor,
     s14_starfold_vulkan_windows::{
@@ -763,19 +763,40 @@ pub struct S14StarfoldPackedMxfp4Layout {
     pub total_bytes: u64,
 }
 
-/// 复合 MXFP4 payload lease。packed bytes 只构造一次；原始 weight/scale proof 同时保活，
-/// 因而上传、计算或回执持有本对象时，不会丢失任一 SHA/proof/mmap 身份。
+/// 已通过原始 Range proof/SHA 门的不可变身份快照。
+///
+/// Packed payload 已经拥有独立字节副本，因此后续只需要保留能够重建 packet identity 的
+/// 权威元数据，不应继续钉住原始 mmap lease。这样 RAM L2 淘汰和 L3 文件回收不会被每个
+/// packed entry 隐式阻塞；数值字节和 source proof 身份仍完整绑定。
+#[derive(Clone, Debug)]
+pub struct S14StarfoldPackedMxfp4SourceIdentity {
+    source: S14StarfoldMicrotileSource,
+    asset: Position0Asset,
+}
+
+impl S14StarfoldPackedMxfp4SourceIdentity {
+    pub fn source(&self) -> &S14StarfoldMicrotileSource {
+        &self.source
+    }
+
+    pub fn asset(&self) -> &Position0Asset {
+        &self.asset
+    }
+}
+
+/// 复合 MXFP4 payload lease。packed bytes 只构造一次；weight/scale 保存已经通过验证的
+/// 身份快照，而不是继续强持有原始 mmap proof。
 #[derive(Debug)]
 pub struct S14StarfoldPackedMxfp4ProofLease {
     bytes: Arc<[u8]>,
-    weight: Arc<S14StarfoldVerifiedMicrotile>,
-    scale: Arc<S14StarfoldVerifiedMicrotile>,
+    weight: S14StarfoldPackedMxfp4SourceIdentity,
+    scale: S14StarfoldPackedMxfp4SourceIdentity,
     layout: S14StarfoldPackedMxfp4Layout,
 }
 
 /// 已通过 cache proof、payload SHA-256 的上传 payload。
 ///
-/// `Single` 不复制 mmap；`PackedMxfp4` 固定拼接 weight/scale，并强持有两份原始 proof。
+/// `Single` 不复制 mmap；`PackedMxfp4` 固定拼接 weight/scale，并保存两份已验证身份快照。
 #[derive(Debug)]
 pub enum S14StarfoldVerifiedMicrotile {
     Single(S14StarfoldSingleProofLease),
@@ -861,11 +882,11 @@ impl S14StarfoldPackedMxfp4ProofLease {
         self.layout
     }
 
-    pub fn weight_proof(&self) -> &Arc<S14StarfoldVerifiedMicrotile> {
+    pub fn weight_identity(&self) -> &S14StarfoldPackedMxfp4SourceIdentity {
         &self.weight
     }
 
-    pub fn scale_proof(&self) -> &Arc<S14StarfoldVerifiedMicrotile> {
+    pub fn scale_identity(&self) -> &S14StarfoldPackedMxfp4SourceIdentity {
         &self.scale
     }
 }
@@ -940,7 +961,8 @@ impl S14StarfoldComputeMicrotile {
     }
 }
 
-/// compute 已提交后的 proof/SHA lease；调用方至少保留到 `receipt.completion` 完成。
+/// compute 已提交后的 verified payload/identity lease；调用方至少保留到
+/// `receipt.completion` 完成。
 #[derive(Debug)]
 pub struct S14StarfoldComputeSubmissionReceipt {
     receipt: VulkanComputeReceipt<S14StarfoldResidentWindowKey>,
@@ -1241,11 +1263,19 @@ impl S14StarfoldRuntime {
             bail!("S14 StarFold packed MXFP4 payload 长度漂移");
         }
         let bytes: Arc<[u8]> = Arc::from(packed.into_boxed_slice());
+        let weight_identity = S14StarfoldPackedMxfp4SourceIdentity {
+            source: weight_single.source().clone(),
+            asset: weight_single.asset().clone(),
+        };
+        let scale_identity = S14StarfoldPackedMxfp4SourceIdentity {
+            source: scale_single.source().clone(),
+            asset: scale_single.asset().clone(),
+        };
         let packed = Arc::new(S14StarfoldVerifiedMicrotile::PackedMxfp4(
             S14StarfoldPackedMxfp4ProofLease {
                 bytes,
-                weight,
-                scale,
+                weight: weight_identity,
+                scale: scale_identity,
                 layout: S14StarfoldPackedMxfp4Layout {
                     weight_offset: 0,
                     weight_bytes,
@@ -1558,7 +1588,7 @@ impl S14StarfoldRuntime {
     }
 
     /// 提交一条同时消费 weight/scale 两窗口的 compute command；只 signal 一次
-    /// compute timeline，proof/SHA lease 保留至回执释放。
+    /// compute timeline，verified payload/identity lease 保留至回执释放。
     ///
     /// # Safety
     /// command_buffer 必须按 `compute.recording()` 录制两个窗口的 acquire/release。

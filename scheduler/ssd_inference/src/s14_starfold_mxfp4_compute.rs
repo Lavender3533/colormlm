@@ -8,9 +8,8 @@ use crate::{
     },
     s14_starfold_routed_executor::constellation_packet::{
         S14StarfoldConstellationMemberReceipt, S14StarfoldConstellationPacket,
-        S14StarfoldConstellationPacketReceipt,
-        S14StarfoldConstellationReadyPacket, S14StarfoldResidentWindowKey,
-        S14_STARFOLD_CONSTELLATION_CONTRACT_VERSION,
+        S14StarfoldConstellationPacketReceipt, S14StarfoldConstellationReadyPacket,
+        S14StarfoldResidentWindowKey, S14_STARFOLD_CONSTELLATION_CONTRACT_VERSION,
     },
     s14_starfold_runtime::S14StarfoldVerifiedMicrotile,
     s14_starfold_vulkan_windows::{
@@ -78,10 +77,7 @@ impl S14StarfoldMxfp4ComputeSubmissionReceipt {
         let expected_release = if self.compute.residency_retired { 1 } else { 0 };
         if self.owner_id == 0
             || self.submission_serial == 0
-            || !matches!(
-                self.compute.key,
-                S14StarfoldResidentWindowKey::Microtile(_)
-            )
+            || !matches!(self.compute.key, S14StarfoldResidentWindowKey::Microtile(_))
             || self.window != self.compute.window
             || self.window_generation != self.compute.window_generation
             || self.consumer_id != self.compute.consumer_id
@@ -470,7 +466,8 @@ impl S14StarfoldMxfp4ComputeOwner {
     }
 
     /// 一个 resident 星座包只预留一次 window consumer，并在同一 command buffer 内依次
-    /// dispatch 包中所有专家及其命中 lane。packet 本身持有每个专家的 proof/SHA lease，
+    /// dispatch 包中所有专家及其命中 lane。packet 本身持有每个专家的 verified
+    /// payload/identity lease，
     /// 直到对应 A/B fence 完成才会从 slot 释放。
     pub fn submit_ready_constellation_batch(
         &mut self,
