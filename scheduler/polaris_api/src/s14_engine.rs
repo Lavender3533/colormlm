@@ -1,6 +1,6 @@
 use crate::{
     EngineChatRequest, EngineDelta, EngineDone, EngineError, EngineErrorKind, EngineEvent,
-    EngineEventSender, FinishReason, ResidentChatBackend,
+    EngineEventSender, EngineRequestLease, FinishReason, ResidentChatBackend,
 };
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -658,7 +658,13 @@ impl<C: S14ChatCodec, D: S14ResidentK4Decoder> S14ResidentK4ChatBackend<C, D> {
         &mut self,
         request: EngineChatRequest,
         events: &EngineEventSender,
+        lease: &EngineRequestLease,
     ) -> Result<(), EngineError> {
+        // queue wait 也计入 handler 签发的 lease；过期/已取消请求不得创建 production
+        // session，更不能启动它的首个 FullDepth43 block。
+        if lease.should_stop() || events.is_closed() {
+            return Ok(());
+        }
         self.decoder.resources().validate()?;
         if self.decoder.resources().contract_sha256() != self.resource_contract_sha256 {
             return Err(EngineError::runtime_unavailable(
@@ -696,6 +702,7 @@ impl<C: S14ChatCodec, D: S14ResidentK4Decoder> S14ResidentK4ChatBackend<C, D> {
             max_tokens,
             &request.stop,
             events,
+            lease,
         );
         let cleanup = resident.close();
         let done = match (result, cleanup) {
@@ -725,12 +732,19 @@ impl<C: S14ChatCodec, D: S14ResidentK4Decoder> S14ResidentK4ChatBackend<C, D> {
         max_tokens: u32,
         stops: &[String],
         events: &EngineEventSender,
+        lease: &EngineRequestLease,
     ) -> Result<Option<EngineDone>, EngineError> {
         let mut completion_ids = Vec::with_capacity(max_tokens as usize);
         let mut emitted = String::new();
         let mut last_block_sequence = None;
         let mut request_block_ordinal = 0u64;
         while completion_ids.len() < max_tokens as usize {
+            // receiver 关闭能覆盖 streaming body 被丢弃、协议 adapter 主动截止及上层
+            // future 被取消；显式 lease deadline 还覆盖 Axum 非流式 handler 继续存活的
+            // 情况。两者都只在事务边界生效，不中断正在执行的 Vulkan block。
+            if lease.should_stop() || events.is_closed() {
+                return Ok(None);
+            }
             let expected = resident.checkpoint().clone();
             let remaining = max_tokens - completion_ids.len() as u32;
             let block = resident.execute_next_block(remaining)?;
@@ -804,6 +818,12 @@ impl<C: S14ChatCodec, D: S14ResidentK4Decoder> S14ResidentK4ChatBackend<C, D> {
             );
             last_block_sequence = Some(block.block_sequence);
 
+            // 在不可中断 GPU/IO 区间发生的取消/截止，只能等原子 commit 验收完成后
+            // 才生效；此处保证不会继续解码/启动下一块。
+            if lease.should_stop() || events.is_closed() {
+                return Ok(None);
+            }
+
             for token_id in block.token_ids {
                 completion_ids.push(token_id);
                 let decoded = self.codec.decode_completion(&completion_ids)?;
@@ -873,7 +893,16 @@ where
         request: EngineChatRequest,
         events: &EngineEventSender,
     ) -> Result<(), EngineError> {
-        self.run_request(request, events)
+        self.run_request(request, events, &EngineRequestLease::unbounded())
+    }
+
+    fn run_chat_with_lease(
+        &mut self,
+        request: EngineChatRequest,
+        events: &EngineEventSender,
+        lease: &EngineRequestLease,
+    ) -> Result<(), EngineError> {
+        self.run_request(request, events, lease)
     }
 }
 

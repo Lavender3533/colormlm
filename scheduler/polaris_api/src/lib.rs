@@ -58,21 +58,100 @@ use std::{
     future::Future,
     pin::Pin,
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
     },
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
 pub const POLARIS_MODEL_ID: &str = "Polaris-S14";
+pub const DEFAULT_REQUEST_DEADLINE: Duration = Duration::from_secs(90 * 60);
 
 /// 引擎产生的事件流。`Done` 是唯一成功结束标志；channel 提前关闭视为失败。
 pub type EngineEventReceiver = mpsc::Receiver<Result<EngineEvent, EngineError>>;
 pub type EngineEventSender = mpsc::Sender<Result<EngineEvent, EngineError>>;
 pub type EngineStartFuture<'a> =
     Pin<Box<dyn Future<Output = Result<EngineEventReceiver, EngineError>> + Send + 'a>>;
+
+/// 一次 HTTP 请求在 resident worker 中持有的 block-boundary 租约。
+///
+/// deadline 从协议 handler 接受请求时开始计时并包含排队时间。它不尝试强杀正在执行的
+/// Vulkan/FullDepth43 block；同步后端只在创建 session 前及每个已提交 block 的边界检查。
+/// `cancel()` 只代表协议消费者明确放弃（例如 streaming body 已关闭），并不声称能够观察
+/// Axum/Hyper 的全部非流式 TCP 断连。
+#[derive(Clone, Debug)]
+pub struct EngineRequestLease {
+    deadline: Option<Instant>,
+    cancelled: Arc<AtomicBool>,
+}
+
+impl EngineRequestLease {
+    pub fn with_timeout(timeout: Duration) -> Self {
+        let now = Instant::now();
+        let deadline = Some(now.checked_add(timeout).unwrap_or(now));
+        Self {
+            deadline,
+            cancelled: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    pub fn unbounded() -> Self {
+        Self {
+            deadline: None,
+            cancelled: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Release);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Acquire)
+    }
+
+    pub fn is_expired(&self) -> bool {
+        self.deadline
+            .is_some_and(|deadline| Instant::now() >= deadline)
+    }
+
+    pub fn should_stop(&self) -> bool {
+        self.is_cancelled() || self.is_expired()
+    }
+
+    fn deadline(&self) -> Option<Instant> {
+        self.deadline
+    }
+}
+
+struct EngineRequestLeaseOwner {
+    lease: EngineRequestLease,
+    armed: bool,
+}
+
+impl EngineRequestLeaseOwner {
+    fn new(lease: EngineRequestLease) -> Self {
+        Self { lease, armed: true }
+    }
+
+    fn lease(&self) -> &EngineRequestLease {
+        &self.lease
+    }
+
+    fn finish(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for EngineRequestLeaseOwner {
+    fn drop(&mut self) {
+        if self.armed {
+            self.lease.cancel();
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EngineChatMessage {
@@ -146,6 +225,7 @@ pub enum EngineErrorKind {
     RuntimeUnavailable,
     QueueFull,
     UnsupportedPosition,
+    RequestDeadline,
     Internal,
     StreamIncomplete,
 }
@@ -158,6 +238,7 @@ impl EngineErrorKind {
             Self::RuntimeUnavailable => "runtime_unavailable",
             Self::QueueFull => "queue_full",
             Self::UnsupportedPosition => "unsupported_position",
+            Self::RequestDeadline => "request_deadline_exceeded",
             Self::Internal => "engine_internal_error",
             Self::StreamIncomplete => "engine_stream_incomplete",
         }
@@ -170,6 +251,7 @@ impl EngineErrorKind {
             Self::RuntimeUnavailable => StatusCode::SERVICE_UNAVAILABLE,
             Self::QueueFull => StatusCode::TOO_MANY_REQUESTS,
             Self::UnsupportedPosition => StatusCode::NOT_IMPLEMENTED,
+            Self::RequestDeadline => StatusCode::GATEWAY_TIMEOUT,
             Self::Internal | Self::StreamIncomplete => StatusCode::BAD_GATEWAY,
         }
     }
@@ -212,6 +294,15 @@ impl EngineError {
             "模型事件流在 Done 之前关闭；本次生成未完成",
         )
     }
+
+    fn request_deadline() -> Self {
+        let mut error = Self::new(
+            EngineErrorKind::RequestDeadline,
+            "Polaris S14 请求截止时间已到；当前不可中断 block 完成后不会启动下一 FullDepth43 block",
+        );
+        error.retryable = true;
+        error
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -227,6 +318,17 @@ pub struct EngineHealth {
 /// `EngineError`，不能伪装成 `Done`。
 pub trait ChatEngine: Send + Sync + 'static {
     fn start_chat(&self, request: EngineChatRequest) -> EngineStartFuture<'_>;
+
+    /// production resident 引擎应覆盖此入口，把同一租约传到模型 owner 线程。
+    /// 默认实现只用于保持外部/测试引擎兼容；协议层仍会在 deadline 丢弃 receiver。
+    fn start_chat_with_lease(
+        &self,
+        request: EngineChatRequest,
+        _lease: EngineRequestLease,
+    ) -> EngineStartFuture<'_> {
+        self.start_chat(request)
+    }
+
     fn health(&self) -> EngineHealth;
 }
 
@@ -260,6 +362,7 @@ impl ChatEngine for UnavailableEngine {
 #[derive(Clone)]
 struct AppState {
     engine: Arc<dyn ChatEngine>,
+    request_deadline: Duration,
 }
 
 #[derive(Debug, Deserialize)]
@@ -324,13 +427,28 @@ struct OllamaChatRequest {
 
 /// 构建可嵌入测试或常驻进程的路由。
 pub fn router(engine: Arc<dyn ChatEngine>) -> Router {
+    router_with_request_deadline(engine, DEFAULT_REQUEST_DEADLINE)
+}
+
+pub fn router_with_request_deadline(
+    engine: Arc<dyn ChatEngine>,
+    request_deadline: Duration,
+) -> Router {
+    let request_deadline = if request_deadline.is_zero() {
+        DEFAULT_REQUEST_DEADLINE
+    } else {
+        request_deadline
+    };
     Router::new()
         .route("/healthz", get(health))
         .route("/v1/models", get(openai_models))
         .route("/v1/chat/completions", post(openai_chat))
         .route("/api/tags", get(ollama_tags))
         .route("/api/chat", post(ollama_chat))
-        .with_state(AppState { engine })
+        .with_state(AppState {
+            engine,
+            request_deadline,
+        })
 }
 
 fn readiness_error(health: EngineHealth) -> Option<EngineError> {
@@ -344,6 +462,18 @@ pub async fn serve(
     engine: Arc<dyn ChatEngine>,
 ) -> std::io::Result<()> {
     axum::serve(listener, router(engine)).await
+}
+
+pub async fn serve_with_request_deadline(
+    listener: tokio::net::TcpListener,
+    engine: Arc<dyn ChatEngine>,
+    request_deadline: Duration,
+) -> std::io::Result<()> {
+    axum::serve(
+        listener,
+        router_with_request_deadline(engine, request_deadline),
+    )
+    .await
 }
 
 async fn health(State(state): State<AppState>) -> Response {
@@ -408,15 +538,21 @@ async fn openai_chat(
     }
     let model = engine_request.model.clone();
     let request_id = next_request_id("chatcmpl-polaris");
-    let receiver = match state.engine.start_chat(engine_request).await {
+    let lease = EngineRequestLease::with_timeout(state.request_deadline);
+    let owner = EngineRequestLeaseOwner::new(lease.clone());
+    let receiver = match state
+        .engine
+        .start_chat_with_lease(engine_request, lease)
+        .await
+    {
         Ok(receiver) => receiver,
         Err(error) => return openai_error_response(error),
     };
 
     if stream {
-        openai_stream_response(receiver, request_id, model)
+        openai_stream_response(receiver, request_id, model, owner)
     } else {
-        match collect_completion(receiver).await {
+        match collect_completion(receiver, owner).await {
             Ok((content, done)) => {
                 let mut body = json!({
                     "id": request_id,
@@ -450,15 +586,21 @@ async fn ollama_chat(
         return ollama_error_response(error);
     }
     let model = engine_request.model.clone();
-    let receiver = match state.engine.start_chat(engine_request).await {
+    let lease = EngineRequestLease::with_timeout(state.request_deadline);
+    let owner = EngineRequestLeaseOwner::new(lease.clone());
+    let receiver = match state
+        .engine
+        .start_chat_with_lease(engine_request, lease)
+        .await
+    {
         Ok(receiver) => receiver,
         Err(error) => return ollama_error_response(error),
     };
 
     if stream {
-        ollama_stream_response(receiver, model)
+        ollama_stream_response(receiver, model, owner)
     } else {
-        match collect_completion(receiver).await {
+        match collect_completion(receiver, owner).await {
             Ok((content, done)) => {
                 let mut body = json!({
                     "model": model,
@@ -688,27 +830,68 @@ fn parse_stop(stop: Option<Value>) -> Result<Vec<String>, EngineError> {
 
 async fn collect_completion(
     mut receiver: EngineEventReceiver,
+    mut owner: EngineRequestLeaseOwner,
 ) -> Result<(String, EngineDone), EngineError> {
     let mut content = String::new();
-    while let Some(event) = receiver.recv().await {
-        match event? {
-            EngineEvent::Delta(delta) => content.push_str(&delta.text),
-            EngineEvent::Done(done) => return Ok((content, done)),
+    loop {
+        let event = tokio::select! {
+            _ = wait_request_deadline(owner.lease()) => {
+                owner.lease().cancel();
+                return Err(EngineError::request_deadline());
+            }
+            event = receiver.recv() => event,
+        };
+        let Some(event) = event else {
+            owner.finish();
+            return Err(EngineError::incomplete());
+        };
+        match event {
+            Ok(EngineEvent::Delta(delta)) => content.push_str(&delta.text),
+            Ok(EngineEvent::Done(done)) => {
+                owner.finish();
+                return Ok((content, done));
+            }
+            Err(error) => {
+                owner.finish();
+                return Err(error);
+            }
         }
     }
-    Err(EngineError::incomplete())
 }
 
 fn openai_stream_response(
     mut receiver: EngineEventReceiver,
     request_id: String,
     model: String,
+    mut owner: EngineRequestLeaseOwner,
 ) -> Response {
     let (sender, output) = mpsc::channel::<Result<Event, Infallible>>(16);
     tokio::spawn(async move {
         let telemetry = stream_telemetry_enabled();
         let mut sequence = 0u64;
-        while let Some(event) = receiver.recv().await {
+        loop {
+            let event = tokio::select! {
+                _ = wait_request_deadline(owner.lease()) => {
+                    owner.lease().cancel();
+                    let error = EngineError::request_deadline();
+                    trace_stream_error(telemetry, "openai", &request_id, sequence, &error);
+                    let _ = sender.try_send(Ok(
+                        Event::default().data(openai_stream_error_json(&error).to_string())
+                    ));
+                    return;
+                }
+                _ = sender.closed() => return,
+                event = receiver.recv() => event,
+            };
+            let Some(event) = event else {
+                owner.finish();
+                let error = EngineError::incomplete();
+                trace_stream_error(telemetry, "openai", &request_id, sequence, &error);
+                let _ = sender.try_send(Ok(
+                    Event::default().data(openai_stream_error_json(&error).to_string())
+                ));
+                return;
+            };
             let event = match event {
                 Ok(EngineEvent::Delta(delta)) => {
                     trace_stream_delta(telemetry, "openai", &request_id, sequence, &delta);
@@ -738,40 +921,45 @@ fn openai_stream_response(
                             "finish_reason": done.finish_reason.openai_name(),
                         }],
                     });
-                    if sender
-                        .send(Ok(Event::default().data(final_chunk.to_string())))
-                        .await
-                        .is_ok()
+                    if send_stream_item(
+                        &sender,
+                        Ok(Event::default().data(final_chunk.to_string())),
+                        owner.lease(),
+                    )
+                    .await
                     {
-                        let _ = sender.send(Ok(Event::default().data("[DONE]"))).await;
+                        let _ = send_stream_item(
+                            &sender,
+                            Ok(Event::default().data("[DONE]")),
+                            owner.lease(),
+                        )
+                        .await;
                     }
+                    owner.finish();
                     return;
                 }
                 Err(error) => {
                     trace_stream_error(telemetry, "openai", &request_id, sequence, &error);
-                    let _ = sender
-                        .send(Ok(
-                            Event::default().data(openai_stream_error_json(&error).to_string())
-                        ))
-                        .await;
+                    let _ = send_stream_item(
+                        &sender,
+                        Ok(Event::default().data(openai_stream_error_json(&error).to_string())),
+                        owner.lease(),
+                    )
+                    .await;
+                    owner.finish();
                     return;
                 }
             };
-            if sender
-                .send(Ok(Event::default().data(event.to_string())))
-                .await
-                .is_err()
+            if !send_stream_item(
+                &sender,
+                Ok(Event::default().data(event.to_string())),
+                owner.lease(),
+            )
+            .await
             {
                 return;
             }
         }
-        let error = EngineError::incomplete();
-        trace_stream_error(telemetry, "openai", &request_id, sequence, &error);
-        let _ = sender
-            .send(Ok(
-                Event::default().data(openai_stream_error_json(&error).to_string())
-            ))
-            .await;
     });
 
     Sse::new(ReceiverStream::new(output))
@@ -779,13 +967,43 @@ fn openai_stream_response(
         .into_response()
 }
 
-fn ollama_stream_response(mut receiver: EngineEventReceiver, model: String) -> Response {
+fn ollama_stream_response(
+    mut receiver: EngineEventReceiver,
+    model: String,
+    mut owner: EngineRequestLeaseOwner,
+) -> Response {
     let (sender, output) = mpsc::channel::<Result<Bytes, Infallible>>(16);
     let request_id = next_request_id("ollama-polaris");
     tokio::spawn(async move {
         let telemetry = stream_telemetry_enabled();
         let mut sequence = 0u64;
-        while let Some(event) = receiver.recv().await {
+        loop {
+            let event = tokio::select! {
+                _ = wait_request_deadline(owner.lease()) => {
+                    owner.lease().cancel();
+                    let error = EngineError::request_deadline();
+                    trace_stream_error(telemetry, "ollama", &request_id, sequence, &error);
+                    let mut value = error_json(&error);
+                    if let Some(object) = value.as_object_mut() {
+                        object.insert("done".to_owned(), Value::Bool(false));
+                    }
+                    let _ = sender.try_send(Ok(Bytes::from(format!("{value}\n"))));
+                    return;
+                }
+                _ = sender.closed() => return,
+                event = receiver.recv() => event,
+            };
+            let Some(event) = event else {
+                owner.finish();
+                let error = EngineError::incomplete();
+                trace_stream_error(telemetry, "ollama", &request_id, sequence, &error);
+                let mut value = error_json(&error);
+                if let Some(object) = value.as_object_mut() {
+                    object.insert("done".to_owned(), Value::Bool(false));
+                }
+                let _ = sender.try_send(Ok(Bytes::from(format!("{value}\n"))));
+                return;
+            };
             let line = match event {
                 Ok(EngineEvent::Delta(delta)) => {
                     trace_stream_delta(telemetry, "ollama", &request_id, sequence, &delta);
@@ -807,7 +1025,13 @@ fn ollama_stream_response(mut receiver: EngineEventReceiver, model: String) -> R
                         "done_reason": done.finish_reason.ollama_name(),
                     });
                     insert_ollama_usage(&mut value, &done);
-                    let _ = sender.send(Ok(Bytes::from(format!("{value}\n")))).await;
+                    let _ = send_stream_item(
+                        &sender,
+                        Ok(Bytes::from(format!("{value}\n"))),
+                        owner.lease(),
+                    )
+                    .await;
+                    owner.finish();
                     return;
                 }
                 Err(error) => {
@@ -816,25 +1040,21 @@ fn ollama_stream_response(mut receiver: EngineEventReceiver, model: String) -> R
                     if let Some(object) = value.as_object_mut() {
                         object.insert("done".to_owned(), Value::Bool(false));
                     }
-                    let _ = sender.send(Ok(Bytes::from(format!("{value}\n")))).await;
+                    let _ = send_stream_item(
+                        &sender,
+                        Ok(Bytes::from(format!("{value}\n"))),
+                        owner.lease(),
+                    )
+                    .await;
+                    owner.finish();
                     return;
                 }
             };
-            if sender
-                .send(Ok(Bytes::from(format!("{line}\n"))))
-                .await
-                .is_err()
+            if !send_stream_item(&sender, Ok(Bytes::from(format!("{line}\n"))), owner.lease()).await
             {
                 return;
             }
         }
-        let error = EngineError::incomplete();
-        trace_stream_error(telemetry, "ollama", &request_id, sequence, &error);
-        let mut value = error_json(&error);
-        if let Some(object) = value.as_object_mut() {
-            object.insert("done".to_owned(), Value::Bool(false));
-        }
-        let _ = sender.send(Ok(Bytes::from(format!("{value}\n")))).await;
     });
 
     Response::builder()
@@ -842,6 +1062,28 @@ fn ollama_stream_response(mut receiver: EngineEventReceiver, model: String) -> R
         .header(header::CONTENT_TYPE, "application/x-ndjson")
         .body(Body::from_stream(ReceiverStream::new(output)))
         .expect("静态 Ollama streaming response 必须可构造")
+}
+
+async fn wait_request_deadline(lease: &EngineRequestLease) {
+    if let Some(deadline) = lease.deadline() {
+        tokio::time::sleep_until(tokio::time::Instant::from_std(deadline)).await;
+    } else {
+        std::future::pending::<()>().await;
+    }
+}
+
+async fn send_stream_item<T>(
+    sender: &mpsc::Sender<T>,
+    item: T,
+    lease: &EngineRequestLease,
+) -> bool {
+    tokio::select! {
+        _ = wait_request_deadline(lease) => {
+            lease.cancel();
+            false
+        }
+        result = sender.send(item) => result.is_ok(),
+    }
 }
 
 /// 只记录流事件的形状和计数，绝不记录 prompt、正文或 stop 文本。

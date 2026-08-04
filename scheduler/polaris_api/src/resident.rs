@@ -1,6 +1,6 @@
 use crate::{
     ChatEngine, EngineChatRequest, EngineError, EngineErrorKind, EngineEventReceiver,
-    EngineEventSender, EngineHealth, EngineStartFuture,
+    EngineEventSender, EngineHealth, EngineRequestLease, EngineStartFuture,
 };
 use std::{
     panic::{catch_unwind, AssertUnwindSafe},
@@ -18,11 +18,26 @@ pub trait ResidentChatBackend: 'static {
         request: EngineChatRequest,
         events: &EngineEventSender,
     ) -> Result<(), EngineError>;
+
+    /// deadline/cancellation 只在同步 backend 的安全边界观察；默认入口只在开始前拒绝
+    /// 已失效租约。S14 K4 production backend 会进一步在每个 block commit 后检查。
+    fn run_chat_with_lease(
+        &mut self,
+        request: EngineChatRequest,
+        events: &EngineEventSender,
+        lease: &EngineRequestLease,
+    ) -> Result<(), EngineError> {
+        if lease.should_stop() || events.is_closed() {
+            return Ok(());
+        }
+        self.run_chat(request, events)
+    }
 }
 
 struct WorkerCommand {
     request: EngineChatRequest,
     events: EngineEventSender,
+    lease: EngineRequestLease,
 }
 
 /// 一个有界队列、一个模型所有者线程、一次只执行一个请求的最薄常驻引擎。
@@ -85,6 +100,14 @@ impl ResidentChatEngine {
 
 impl ChatEngine for ResidentChatEngine {
     fn start_chat(&self, request: EngineChatRequest) -> EngineStartFuture<'_> {
+        self.start_chat_with_lease(request, EngineRequestLease::unbounded())
+    }
+
+    fn start_chat_with_lease(
+        &self,
+        request: EngineChatRequest,
+        lease: EngineRequestLease,
+    ) -> EngineStartFuture<'_> {
         let health = self.current_health();
         let commands = self.commands.clone();
         Box::pin(async move {
@@ -95,7 +118,11 @@ impl ChatEngine for ResidentChatEngine {
                 return Err(EngineError::runtime_unavailable(health.detail));
             };
             let (events, receiver): (_, EngineEventReceiver) = mpsc::channel(16);
-            match commands.try_send(WorkerCommand { request, events }) {
+            match commands.try_send(WorkerCommand {
+                request,
+                events,
+                lease,
+            }) {
                 Ok(()) => Ok(receiver),
                 Err(mpsc::error::TrySendError::Full(_)) => {
                     let mut error = EngineError::new(
@@ -152,7 +179,9 @@ fn run_worker<F>(
             "Polaris S14 resident backend 已加载并通过调用方数值门",
         );
         while let Some(command) = commands.blocking_recv() {
-            if let Err(error) = backend.run_chat(command.request, &command.events) {
+            if let Err(error) =
+                backend.run_chat_with_lease(command.request, &command.events, &command.lease)
+            {
                 let _ = command.events.blocking_send(Err(error));
             }
         }

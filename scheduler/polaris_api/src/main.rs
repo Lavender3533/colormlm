@@ -1,12 +1,12 @@
 use polaris_api::{
-    serve, spawn_s14_starfold_ssd_root_worker, ChatEngine, DeepSeekV4ChatCodec,
-    S14StarfoldSsdAdapterError, S14StarfoldSsdAdapterErrorKind, S14StarfoldSsdAdapterStage,
-    DEFAULT_S14_TOKENIZER_PATH,
+    serve_with_request_deadline, spawn_s14_starfold_ssd_root_worker, ChatEngine,
+    DeepSeekV4ChatCodec, S14StarfoldSsdAdapterError, S14StarfoldSsdAdapterErrorKind,
+    S14StarfoldSsdAdapterStage, DEFAULT_REQUEST_DEADLINE, DEFAULT_S14_TOKENIZER_PATH,
 };
 use ssd_inference::{
     s14_runtime::S14RuntimeConfig, s14_starfold_concrete_factory::S14StarfoldConcreteFactory,
 };
-use std::{env, io, net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{env, io, net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 
 const DEFAULT_STARFOLD_MICROTILE_MIB: u32 = 16;
 
@@ -21,6 +21,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let max_seq_len = env_u32("POLARIS_S14_MAX_SEQ_LEN", 4096)?;
     let default_max_tokens = env_u32("POLARIS_S14_DEFAULT_MAX_TOKENS", 16)?;
     let queue_capacity = env_usize("POLARIS_S14_QUEUE_CAPACITY", 1)?;
+    let request_deadline_secs = env_u32(
+        "POLARIS_S14_REQUEST_DEADLINE_SECS",
+        DEFAULT_REQUEST_DEADLINE.as_secs() as u32,
+    )?;
     let explicit_page_fetch = env_bool("POLARIS_S14_EXPLICIT_PAGE_FETCH", false)?;
     let starfold_microtile_mib = env_u32(
         "POLARIS_S14_STARFOLD_MICROTILE_MIB",
@@ -33,6 +37,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "POLARIS_S14_DEFAULT_MAX_TOKENS 必须位于 [1, MAX_SEQ_LEN]",
+        )
+        .into());
+    }
+    if request_deadline_secs == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "POLARIS_S14_REQUEST_DEADLINE_SECS 必须大于 0",
         )
         .into());
     }
@@ -88,7 +99,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!(
         "resident worker 正在加载官方 codec 与唯一 S14 StarFold root；ready 前 health/模型发现/生成均返回 HTTP 503。"
     );
-    serve(listener, engine).await?;
+    eprintln!(
+        "request deadline={}s；到期后等待当前不可中断 block 原子提交，但不再启动下一 FullDepth43 block。",
+        request_deadline_secs
+    );
+    serve_with_request_deadline(
+        listener,
+        engine,
+        Duration::from_secs(u64::from(request_deadline_secs)),
+    )
+    .await?;
     Ok(())
 }
 
