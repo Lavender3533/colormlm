@@ -846,8 +846,13 @@ impl WholeTokenDeviceState {
     ) -> Result<WholeTokenPreparedBlockCommit> {
         prefix_arena.validate_host_readback_ready()?;
         let layout = prefix_arena.layout();
-        if !std::ptr::eq(ctx, prefix_arena.context().as_ref()) || layout.block_size != 4 {
-            bail!("StarFold after-drain prefill prefix arena/context/K identity 非法");
+        if !std::ptr::eq(ctx, prefix_arena.context().as_ref())
+            || !matches!(layout.block_size, 4 | 8)
+        {
+            bail!(
+                "StarFold after-drain prefill prefix arena/context/K identity 非法: block_size={}",
+                layout.block_size
+            );
         }
         let source = WholeTokenBlockPrefixSource {
             base_position: prefix_arena.base_position(),
