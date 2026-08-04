@@ -109,6 +109,7 @@ pub mod s14_starfold_mxfp4_compute;
 pub mod s14_starfold_mxfp4_stream;
 pub mod s14_starfold_mxfp4_tile;
 pub mod s14_starfold_packed_l2;
+pub mod s14_starfold_prefetch_pipeline;
 pub mod s14_starfold_prepare_owner;
 pub mod s14_starfold_production_resources;
 pub mod s14_starfold_production_session;

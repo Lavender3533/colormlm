@@ -32,6 +32,11 @@ use crate::{
     s14_starfold_cache::{STARFOLD_B4_LANES, STARFOLD_TOP_K},
     s14_starfold_hc_bridge::{S14StarfoldHcBridgeOwner, S14StarfoldHcPrepareReceipt},
     s14_starfold_mxfp4_tile::S14StarfoldMxfp4ExternalSlice,
+    s14_starfold_prefetch_pipeline::{
+        S14StarfoldActiveComputeIdentity, S14StarfoldPrefetchFailurePhase,
+        S14StarfoldPrefetchLayerIdentity, S14StarfoldPrefetchLease, S14StarfoldRoutedExpertSet,
+        S14StarfoldStaticMaterializeReceipt, S14StarfoldStaticSsdIntent,
+    },
     s14_starfold_runtime::{
         S14StarfoldCommitBoundary, S14StarfoldRuntime, S14_STARFOLD_DEFAULT_MICROTILE_BYTES,
     },
@@ -154,6 +159,20 @@ pub trait S14StarfoldK4ProductionStage: fmt::Debug {
         &mut self,
         input: S14StarfoldK4AttentionInput<'_>,
     ) -> std::result::Result<S14StarfoldK4AttentionCheckpointOutput, String>;
+
+    fn plan_static_l2_prefetch(
+        &self,
+        _layer: S14StarfoldPrefetchLayerIdentity,
+    ) -> std::result::Result<Option<S14StarfoldStaticSsdIntent>, String> {
+        Ok(None)
+    }
+
+    fn materialize_static_l2_prefetch(
+        &mut self,
+        _intent: &S14StarfoldStaticSsdIntent,
+    ) -> std::result::Result<S14StarfoldStaticMaterializeReceipt, String> {
+        Err("S14 StarFold stage 未实现 static L+2 materialize".into())
+    }
 
     fn commit_routed_down_to_next_hidden(
         &mut self,
@@ -528,6 +547,55 @@ impl<S: S14StarfoldK4ProductionStage> S14StarfoldK4ProductionAdapter<S> {
             .first()
             .context("S14 StarFold K4 layer plan 缺少唯一 B4 block")?
             .clone();
+        let layer_ordinal = FULL_DEPTH_LAYERS
+            .iter()
+            .position(|&layer| layer == input.layer)
+            .context("S14 StarFold K4 prefetch layer 不属于 FullDepth43")?;
+        let block_sequence = self
+            .validated_blocks
+            .checked_add(1)
+            .context("S14 StarFold K4 prefetch block sequence overflow")?;
+        let generation = u64::from(input.base_position)
+            .checked_add(1)
+            .context("S14 StarFold K4 prefetch generation overflow")?;
+        let prefetch_layer =
+            S14StarfoldPrefetchLayerIdentity::new(block_sequence, generation, layer_ordinal)?;
+        let current_compute = S14StarfoldActiveComputeIdentity::new(
+            prefetch_layer,
+            S14StarfoldRoutedExpertSet::from_route_experts(
+                attention
+                    .routes
+                    .iter()
+                    .flat_map(|route| route.expert_ids.iter().copied()),
+            )?,
+        );
+        let static_l2 = if layer_ordinal + 2 < FULL_DEPTH_LAYERS.len() {
+            let target = S14StarfoldPrefetchLayerIdentity::new(
+                block_sequence,
+                generation,
+                layer_ordinal + 2,
+            )?;
+            // L+2 static 只是一条性能优化支线。规划失败必须退回目标层原有的
+            // authoritative synchronous prepare，不能把原本可成功的数值请求打断。
+            self.stage_ref()?
+                .plan_static_l2_prefetch(target)
+                .unwrap_or(None)
+        } else {
+            None
+        };
+        let static_l2 = match static_l2 {
+            Some(intent) => {
+                let lease = self
+                    .b4_owner
+                    .as_ref()
+                    .context("S14 StarFold B4 owner 已销毁")?
+                    .issue_static_l2_prefetch(current_compute.clone(), intent.clone());
+                // 预算不足或 planner 暂不可用时同样只跳过预取；目标层仍由原
+                // production uploader 唯一准备和上传。
+                lease.ok().map(|lease| (intent, lease))
+            }
+            None => None,
+        };
         let (expert, down) = {
             let runtime = self
                 .runtime
@@ -537,9 +605,14 @@ impl<S: S14StarfoldK4ProductionStage> S14StarfoldK4ProductionAdapter<S> {
                 .b4_owner
                 .as_mut()
                 .context("S14 StarFold B4 owner 已销毁")?;
-            owner.execute(runtime, &b4_plan, attention.moe_input_f32)?
+            owner.execute(runtime, &b4_plan, attention.moe_input_f32, current_compute)?
         };
         validate_expert_receipt(input, &attention.routes, &expert, down)?;
+        if let Some((intent, lease)) = static_l2 {
+            // 预取失败只回收优化租约；目标层仍走原 authoritative synchronous prepare，
+            // 因而这里不能把 cache warmup 失败升级为数值路径失败。
+            let _ = complete_static_l2_prefetch(self.stage_mut()?, &intent, lease);
+        }
 
         let hidden_commit = self
             .stage_mut()?
@@ -882,6 +955,12 @@ impl<S: S14StarfoldK4ProductionStage> S14StarfoldK4ProductionAdapter<S> {
 
     fn runtime(&self) -> Result<&S14StarfoldRuntime> {
         self.runtime.as_ref().context("S14 StarFold runtime 已销毁")
+    }
+
+    fn stage_ref(&self) -> Result<&S> {
+        self.stage
+            .as_ref()
+            .context("S14 StarFold K4 production stage 已销毁")
     }
 
     fn stage_mut(&mut self) -> Result<&mut S> {
@@ -1329,6 +1408,20 @@ impl<H: S14CausalBlockVulkanHcQkvAdapter> S14StarfoldK4ProductionStage
         })
     }
 
+    fn plan_static_l2_prefetch(
+        &self,
+        layer: S14StarfoldPrefetchLayerIdentity,
+    ) -> std::result::Result<Option<S14StarfoldStaticSsdIntent>, String> {
+        self.hc_qkv.plan_starfold_static_prefetch(layer)
+    }
+
+    fn materialize_static_l2_prefetch(
+        &mut self,
+        intent: &S14StarfoldStaticSsdIntent,
+    ) -> std::result::Result<S14StarfoldStaticMaterializeReceipt, String> {
+        self.hc_qkv.materialize_starfold_static_prefetch(intent)
+    }
+
     fn commit_routed_down_to_next_hidden(
         &mut self,
         input: S14StarfoldK4AttentionInput<'_>,
@@ -1483,6 +1576,38 @@ impl<S: S14StarfoldK4ProductionStage> Drop for S14StarfoldK4ProductionAdapter<S>
     fn drop(&mut self) {
         let _ = self.destroy();
     }
+}
+
+fn complete_static_l2_prefetch<S: S14StarfoldK4ProductionStage>(
+    stage: &mut S,
+    intent: &S14StarfoldStaticSsdIntent,
+    mut lease: S14StarfoldPrefetchLease,
+) -> Result<()> {
+    let receipt = match stage.materialize_static_l2_prefetch(intent) {
+        Ok(receipt) => receipt,
+        Err(error) => {
+            let cleanup = lease.fail(S14StarfoldPrefetchFailurePhase::ProofValidation);
+            return match cleanup {
+                Ok(_) => Err(anyhow!(error)),
+                Err(cleanup) => Err(anyhow!(
+                    "{error}; static prefetch lease cleanup={cleanup:#}"
+                )),
+            };
+        }
+    };
+    if let Err(error) = receipt
+        .validate_for(intent)
+        .and_then(|_| lease.mark_ready(receipt.bytes).map(|_| ()))
+    {
+        let cleanup = lease.fail(S14StarfoldPrefetchFailurePhase::ProofValidation);
+        return match cleanup {
+            Ok(_) => Err(error),
+            Err(cleanup) => Err(anyhow!(
+                "{error:#}; static prefetch ready cleanup={cleanup:#}"
+            )),
+        };
+    }
+    lease.consume().map(|_| ())
 }
 
 fn validate_attention_output(

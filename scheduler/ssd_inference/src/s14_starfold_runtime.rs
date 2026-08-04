@@ -6,7 +6,8 @@
 
 use crate::{
     s14_dynamic_page_cache_readiness::{
-        fetch_dynamic_page_plans_batched_only, DynamicPageFetchMode,
+        fetch_dynamic_page_plans_batched_only, fetch_planned_range_assets_batched_only,
+        DynamicPageFetchMode, DynamicPagePlannedFetchAsset,
     },
     s14_dynamic_routed_page_plan::{
         DynamicRoutedPagePlan, FullDepthExpertCatalog, OnlineTop6, RoutedProjection,
@@ -20,6 +21,7 @@ use crate::{
         StarfoldVerifiedLeaseValidationEpoch, StarfoldVerifiedMappedLease, STARFOLD_B4_LANES,
         STARFOLD_ONE_MIB, STARFOLD_TOP_K,
     },
+    s14_starfold_expert_schedule::S14StarfoldExpertProjection,
     s14_starfold_packed_l2::{
         S14StarfoldPackedL2Cache, S14StarfoldPackedL2Config, S14StarfoldPackedL2Key,
         S14StarfoldPackedL2Stats,
@@ -1106,6 +1108,63 @@ impl S14StarfoldRuntime {
         .map(|_| ())
         .map_err(anyhow::Error::new)
         .context("补齐 S14 StarFold B4 exact-route Range cache")
+    }
+
+    /// Constellation-only cold-page gate.  Unlike `fetch_b4_layer_ranges`, this
+    /// selects exactly the weight/scale Range pair for each expert carried by
+    /// the next immutable packet.  The following `verify_microtile` calls still
+    /// own proof/SHA/mmap publication; this method only makes those files ready.
+    pub fn fetch_b4_packet_ranges(
+        &self,
+        plan: &S14StarfoldB4LayerPlan,
+        projection: S14StarfoldExpertProjection,
+        expert_ids: &[u16],
+    ) -> Result<()> {
+        if expert_ids.is_empty() || expert_ids.len() > STARFOLD_B4_LANES * STARFOLD_TOP_K {
+            bail!(
+                "S14 StarFold packet expert 数量非法: actual={}, max={}",
+                expert_ids.len(),
+                STARFOLD_B4_LANES * STARFOLD_TOP_K
+            );
+        }
+        let layer = u8::try_from(plan.authoritative_routes.layer())
+            .context("S14 StarFold packet layer 超出 u8")?;
+        let position = plan.authoritative_routes.base_position();
+        let mut seen = BTreeMap::<u16, ()>::new();
+        let mut assets = Vec::with_capacity(expert_ids.len() * 2);
+        for &expert_id in expert_ids {
+            if seen.insert(expert_id, ()).is_some() {
+                bail!("S14 StarFold packet expert identity 重复: {expert_id}");
+            }
+            for segment in [projection.weight_segment(), projection.scale_segment()] {
+                let source = plan
+                    .microtile_sources()
+                    .iter()
+                    .find(|source| {
+                        source.span.key.expert_id == expert_id
+                            && source.span.key.segment == segment
+                    })
+                    .with_context(|| {
+                        format!(
+                            "S14 StarFold packet 缺少 expert={expert_id} segment={segment:?} Range source"
+                        )
+                    })?;
+                assets.push(DynamicPagePlannedFetchAsset::new(
+                    expert_id,
+                    source.planned.clone(),
+                ));
+            }
+        }
+        fetch_planned_range_assets_batched_only(
+            layer,
+            position,
+            &assets,
+            &self.cache_root,
+            self.page_fetch_mode,
+        )
+        .map(|_| ())
+        .map_err(anyhow::Error::new)
+        .context("补齐 S14 StarFold constellation packet Range cache")
     }
 
     /// StarFold compute owner 的唯一窗口入口。窗口仍由 runtime/resource owner 独占，

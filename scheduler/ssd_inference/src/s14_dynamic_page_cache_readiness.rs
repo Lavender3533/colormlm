@@ -25,14 +25,11 @@ use std::{
     fs::{self, OpenOptions},
     io::{BufRead, BufReader, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
-    process::{Child, ChildStdin, ChildStdout, Command, Stdio},
+    process::{Child, ChildStdin, Command, Stdio},
     sync::{mpsc, Mutex, OnceLock},
     thread,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
-
-#[cfg(test)]
-use std::time::Instant;
 
 pub const S14_DYNAMIC_PAGE_CACHE_READINESS_FORMAT: &str =
     "polaris-s14-dynamic-page-cache-readiness-v1";
@@ -51,6 +48,12 @@ const MAX_DYNAMIC_PAGE_FETCH_TIMEOUT_SECONDS: u64 = 86_400;
 const DYNAMIC_PAGE_FETCH_POLL_INTERVAL: Duration = Duration::from_millis(200);
 const DYNAMIC_PAGE_FETCH_LOG_TAIL_BYTES: u64 = 16 * 1024;
 const DYNAMIC_PAGE_FETCH_PROTOCOL_PREFIX_BYTES: usize = 64;
+const DYNAMIC_PAGE_FETCH_PROGRESS_SNAPSHOT_CHARS: usize = 2 * 1024;
+const DYNAMIC_PAGE_FETCH_PROGRESS_FORMAT: &str = "polaris-s14-dynamic-page-fetch-progress-v1";
+const DYNAMIC_PAGE_FETCH_HEARTBEAT_IDLE_TIMEOUT: Duration = Duration::from_secs(15);
+const DYNAMIC_PAGE_FETCH_LOCAL_STAGE_TIMEOUT: Duration = Duration::from_secs(90);
+const DYNAMIC_PAGE_FETCH_FAST_STAGE_TIMEOUT: Duration = Duration::from_secs(30);
+const DYNAMIC_PAGE_FETCH_WORKER_CLEANUP_GUARD: Duration = Duration::from_secs(20);
 
 /// Network access is denied by default. Callers must construct
 /// `ExplicitFetch` from an explicit user/runtime authorization boundary.
@@ -205,6 +208,22 @@ pub struct DynamicPageFetchOnlyReceipt {
     pub downloaded_bytes: u64,
     pub request_wall_ms: f64,
     pub transport_invocations: u32,
+}
+
+/// Packet-scoped Range fetch input.  It deliberately carries the already
+/// derived [`S14PlannedRangeAsset`] rather than rebuilding a whole routed-page
+/// plan: constellation execution can therefore fetch only the weight/scale
+/// pairs needed by the next immutable packet.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DynamicPagePlannedFetchAsset {
+    pub expert_id: u16,
+    pub planned: S14PlannedRangeAsset,
+}
+
+impl DynamicPagePlannedFetchAsset {
+    pub fn new(expert_id: u16, planned: S14PlannedRangeAsset) -> Self {
+        Self { expert_id, planned }
+    }
 }
 
 #[derive(Debug)]
@@ -739,6 +758,159 @@ pub fn fetch_dynamic_page_plans_batched_only(
     Ok(receipt)
 }
 
+/// Fetch only the canonical Range assets required by one constellation
+/// packet.  Hot assets return without entering the Python worker; cold assets
+/// preserve the same persistent HTTPS 206/Content-Range/length/SHA transport
+/// contract as the full-layer route warmup.  This function does not mmap or
+/// publish a model lease: `verify_microtile` remains the authoritative gate.
+pub fn fetch_planned_range_assets_batched_only(
+    layer: u8,
+    position: u64,
+    assets: &[DynamicPagePlannedFetchAsset],
+    cache_root: &Path,
+    fetch_mode: DynamicPageFetchMode,
+) -> std::result::Result<DynamicPageFetchOnlyReceipt, DynamicPageMaterializeError> {
+    const MAX_PACKET_RANGE_ASSETS: usize = 48;
+
+    if assets.is_empty() || assets.len() > MAX_PACKET_RANGE_ASSETS {
+        return Err(DynamicPageMaterializeError::Failed(anyhow::anyhow!(
+            "packet fetch planned assets 数量必须在1..={MAX_PACKET_RANGE_ASSETS}，actual={}",
+            assets.len()
+        )));
+    }
+
+    // Canonical cache identity, not the display range key, owns deduplication.
+    // This keeps different repo/revision/header identities from aliasing merely
+    // because they happen to use the same source-file byte interval.
+    let mut merged = BTreeMap::<String, DynamicPageFetchEntry>::new();
+    let mut committed_paths = BTreeMap::<String, (PathBuf, PathBuf, PathBuf)>::new();
+    for asset in assets {
+        let planned = &asset.planned;
+        let identity = &planned.identity;
+        let expected_bytes = identity
+            .end
+            .checked_sub(identity.start)
+            .and_then(|delta| delta.checked_add(1))
+            .context("packet fetch planned Range 长度 overflow")?;
+        if planned.bytes == 0
+            || planned.bytes != expected_bytes
+            || planned.range_key
+                != format!(
+                    "{}:{}-{}",
+                    identity.source_file, identity.start, identity.end
+                )
+        {
+            return Err(DynamicPageMaterializeError::Failed(anyhow::anyhow!(
+                "packet fetch planned Range identity/bytes 漂移: tensor={}, cache_key={}",
+                planned.tensor,
+                planned.cache_key
+            )));
+        }
+        let entry = DynamicPageFetchEntry {
+            tensor: planned.tensor.clone(),
+            kind: planned.kind.clone(),
+            layer,
+            expert_id: asset.expert_id,
+            file: identity.source_file.clone(),
+            file_bytes: identity.source_file_bytes,
+            header_tensor_table_sha256: identity.header_tensor_table_sha256.clone(),
+            start: identity.start,
+            end: identity.end,
+            bytes: planned.bytes,
+            dtype: planned.dtype.clone(),
+            shape: planned.shape.clone(),
+            range_key: planned.range_key.clone(),
+        };
+        let canonical_paths = (
+            planned.payload_path.clone(),
+            planned.proof_path.clone(),
+            cache_root.join(format!("{}.bin.part", planned.cache_key)),
+        );
+        match merged.entry(planned.cache_key.clone()) {
+            std::collections::btree_map::Entry::Vacant(slot) => {
+                committed_paths.insert(planned.cache_key.clone(), canonical_paths);
+                slot.insert(entry);
+            }
+            std::collections::btree_map::Entry::Occupied(slot) => {
+                if slot.get() != &entry || committed_paths.get(slot.key()) != Some(&canonical_paths)
+                {
+                    return Err(DynamicPageMaterializeError::Failed(anyhow::anyhow!(
+                        "packet fetch canonical cache identity 漂移: {}",
+                        slot.key()
+                    )));
+                }
+            }
+        }
+    }
+
+    let requested_bytes = merged.values().try_fold(0u64, |sum, entry| {
+        sum.checked_add(entry.bytes)
+            .context("packet fetch planned Range budget overflow")
+    })?;
+    let mut receipt = DynamicPageFetchOnlyReceipt {
+        layer,
+        position,
+        physical_ranges: merged.len(),
+        requested_bytes,
+        ..DynamicPageFetchOnlyReceipt::default()
+    };
+    if !fetch_mode.is_authorized() {
+        return Ok(receipt);
+    }
+    if requested_bytes == 0 {
+        return Err(DynamicPageMaterializeError::Failed(anyhow::anyhow!(
+            "packet fetch planned Range manifest/budget 为空"
+        )));
+    }
+
+    let all_committed_locally = merged.iter().all(|(cache_key, entry)| {
+        let Some((payload, proof, partial)) = committed_paths.get(cache_key) else {
+            return false;
+        };
+        !partial.exists()
+            && proof.is_file()
+            && fs::metadata(payload)
+                .is_ok_and(|metadata| metadata.is_file() && metadata.len() == entry.bytes)
+    });
+    if all_committed_locally {
+        receipt.cache_hits = u64::try_from(merged.len()).map_err(|_| {
+            DynamicPageMaterializeError::Failed(anyhow::anyhow!(
+                "packet fetch 本地热缓存 range 数量超过 u64"
+            ))
+        })?;
+        return Ok(receipt);
+    }
+
+    let manifest = DynamicPageFetchManifest {
+        format: S14_DYNAMIC_PAGE_FETCH_MANIFEST_FORMAT,
+        layer,
+        position,
+        entries: merged.into_values().collect(),
+    };
+    let transport = DynamicPageRangeTransport::default();
+    if !transport.driver.is_file() {
+        return Err(DynamicPageMaterializeError::Failed(anyhow::anyhow!(
+            "dynamic Range transport driver 不存在: {}",
+            transport.driver.display()
+        )));
+    }
+    let timeout = dynamic_page_fetch_timeout()
+        .map(|configured| configured.min(EXACT_ROUTE_PREFETCH_TIMEOUT))?;
+    let transport_receipt = invoke_persistent_range_transport(
+        &transport,
+        &manifest,
+        cache_root,
+        requested_bytes,
+        timeout,
+    )?;
+    receipt.cache_hits = transport_receipt.cache_hits;
+    receipt.cache_misses = transport_receipt.cache_misses;
+    receipt.downloaded_bytes = transport_receipt.downloaded_bytes;
+    receipt.request_wall_ms = transport_receipt.request_wall_ms;
+    receipt.transport_invocations = 1;
+    Ok(receipt)
+}
+
 pub fn materialize_dynamic_page_plan_with_transport(
     plan: &DynamicRoutedPagePlan,
     cache_root: &Path,
@@ -965,7 +1137,8 @@ struct PersistentDynamicFetchWorker {
     transport: DynamicPageRangeTransport,
     child: Child,
     stdin: ChildStdin,
-    stdout: Option<BufReader<ChildStdout>>,
+    stdout_receiver: mpsc::Receiver<(std::io::Result<usize>, Vec<u8>)>,
+    stdout_thread: Option<thread::JoinHandle<()>>,
     stderr_log: PathBuf,
     next_request_id: u64,
 }
@@ -1023,11 +1196,23 @@ impl PersistentDynamicFetchWorker {
             .stdin
             .take()
             .context("persistent fetch worker 缺少stdin")?;
-        let stdout = child
+        let mut stdout = child
             .stdout
             .take()
             .map(BufReader::new)
             .context("persistent fetch worker 缺少stdout")?;
+        let (stdout_sender, stdout_receiver) = mpsc::channel();
+        let stdout_thread = thread::spawn(move || loop {
+            let mut line = Vec::new();
+            let read = stdout.read_until(b'\n', &mut line);
+            let terminal = match &read {
+                Ok(bytes) => *bytes == 0,
+                Err(_) => true,
+            };
+            if stdout_sender.send((read, line)).is_err() || terminal {
+                return;
+            }
+        });
         eprintln!(
             "persistent dynamic Range worker started pid={} stderr={}",
             child.id(),
@@ -1037,7 +1222,8 @@ impl PersistentDynamicFetchWorker {
             transport: transport.clone(),
             child,
             stdin,
-            stdout: Some(stdout),
+            stdout_receiver,
+            stdout_thread: Some(stdout_thread),
             stderr_log,
             next_request_id: 0,
         })
@@ -1046,7 +1232,9 @@ impl PersistentDynamicFetchWorker {
     fn stop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
-        self.stdout.take();
+        if let Some(stdout_thread) = self.stdout_thread.take() {
+            let _ = stdout_thread.join();
+        }
     }
 
     fn request(
@@ -1079,6 +1267,9 @@ impl PersistentDynamicFetchWorker {
         let cache_root_utf8 = cache_root
             .to_str()
             .context("persistent fetch cache root 必须为UTF-8")?;
+        let worker_deadline = timeout
+            .saturating_sub(DYNAMIC_PAGE_FETCH_WORKER_CLEANUP_GUARD)
+            .max(Duration::from_secs(1));
         serde_json::to_writer(
             &mut self.stdin,
             &serde_json::json!({
@@ -1090,6 +1281,8 @@ impl PersistentDynamicFetchWorker {
                 "manifest": manifest,
                 "cache_root": cache_root_utf8,
                 "download_budget_bytes": download_budget_bytes,
+                "progress_format": DYNAMIC_PAGE_FETCH_PROGRESS_FORMAT,
+                "worker_deadline_seconds": worker_deadline.as_secs_f64(),
             }),
         )
         .context("encode persistent dynamic fetch request")?;
@@ -1100,81 +1293,124 @@ impl PersistentDynamicFetchWorker {
             .flush()
             .context("flush persistent dynamic fetch request")?;
 
-        let mut reader = self
-            .stdout
-            .take()
-            .context("persistent fetch stdout 已被占用")?;
-        let (sender, receiver) = mpsc::sync_channel(1);
-        let reader_thread = thread::spawn(move || {
-            let mut line = Vec::new();
-            let read = reader.read_until(b'\n', &mut line);
-            let _ = sender.send((reader, read, line));
-        });
-        let (reader, read, line) = match receiver.recv_timeout(timeout) {
-            Ok(result) => result,
-            Err(mpsc::RecvTimeoutError::Timeout) => {
+        let request_started = Instant::now();
+        let mut last_heartbeat = request_started;
+        let mut last_heartbeat_sequence = 0u64;
+        let mut last_progress_revision = 0u64;
+        let mut last_progress_snapshot = String::from("none");
+        let response = loop {
+            let hard_remaining = timeout.saturating_sub(request_started.elapsed());
+            let heartbeat_remaining =
+                DYNAMIC_PAGE_FETCH_HEARTBEAT_IDLE_TIMEOUT.saturating_sub(last_heartbeat.elapsed());
+            let read_timeout = hard_remaining.min(heartbeat_remaining);
+            if read_timeout.is_zero() {
                 self.stop();
-                let _ = reader_thread.join();
+                let hard_expired = hard_remaining.is_zero();
                 bail!(
-                    "persistent dynamic Range worker 请求超时并已回收: request_id={} timeout_seconds={} stderr_log={} stderr_tail={}",
+                    "persistent dynamic Range worker {}并已回收: request_id={} hard_timeout_seconds={} heartbeat_idle_seconds={} last_progress={} stderr_log={} stderr_tail={}",
+                    if hard_expired {
+                        "请求硬截止耗尽"
+                    } else {
+                        "progress heartbeat 停滞"
+                    },
                     request_id,
                     timeout.as_secs(),
+                    DYNAMIC_PAGE_FETCH_HEARTBEAT_IDLE_TIMEOUT.as_secs(),
+                    last_progress_snapshot,
                     self.stderr_log.display(),
                     read_log_tail(&self.stderr_log)
                 );
             }
-            Err(mpsc::RecvTimeoutError::Disconnected) => {
-                self.stop();
-                let _ = reader_thread.join();
+
+            let (read, line) = match self.stdout_receiver.recv_timeout(read_timeout) {
+                Ok(result) => result,
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    self.stop();
+                    let hard_expired = request_started.elapsed() >= timeout;
+                    bail!(
+                        "persistent dynamic Range worker {}并已回收: request_id={} hard_timeout_seconds={} heartbeat_idle_seconds={} last_progress={} stderr_log={} stderr_tail={}",
+                        if hard_expired {
+                            "请求硬截止耗尽"
+                        } else {
+                            "progress heartbeat 停滞"
+                        },
+                        request_id,
+                        timeout.as_secs(),
+                        DYNAMIC_PAGE_FETCH_HEARTBEAT_IDLE_TIMEOUT.as_secs(),
+                        last_progress_snapshot,
+                        self.stderr_log.display(),
+                        read_log_tail(&self.stderr_log)
+                    );
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    self.stop();
+                    bail!(
+                        "persistent dynamic Range worker stdout reader 断开并已回收: request_id={} last_progress={} stderr_log={} stderr_tail={}",
+                        request_id,
+                        last_progress_snapshot,
+                        self.stderr_log.display(),
+                        read_log_tail(&self.stderr_log)
+                    );
+                }
+            };
+            let read = read.context("read persistent dynamic fetch response")?;
+            if read == 0 {
+                let status = self.child.wait().ok();
                 bail!(
-                    "persistent dynamic Range worker stdout reader 断开并已回收: request_id={} stderr_log={} stderr_tail={}",
+                    "persistent dynamic Range worker stdout EOF: request_id={} status={:?} last_progress={} stderr_log={} stderr_tail={}",
                     request_id,
+                    status,
+                    last_progress_snapshot,
                     self.stderr_log.display(),
                     read_log_tail(&self.stderr_log)
                 );
+            }
+            let line = match std::str::from_utf8(&line) {
+                Ok(line) => line,
+                Err(error) => {
+                    let prefix = protocol_hex_prefix(&line);
+                    self.stop();
+                    bail!(
+                        "persistent dynamic Range worker 返回非 UTF-8 JSONL 并已回收: request_id={} error={} bytes={} prefix_hex={} last_progress={} stderr_log={} stderr_tail={}",
+                        request_id,
+                        error,
+                        line.len(),
+                        prefix,
+                        last_progress_snapshot,
+                        self.stderr_log.display(),
+                        read_log_tail(&self.stderr_log)
+                    );
+                }
+            };
+            let frame: serde_json::Value = serde_json::from_str(line)
+                .context("decode persistent dynamic fetch response JSON")?;
+            if frame.get("request_id").and_then(serde_json::Value::as_u64) != Some(request_id) {
+                bail!("persistent dynamic fetch response request_id 漂移");
+            }
+            match frame.get("event").and_then(serde_json::Value::as_str) {
+                Some("progress") => {
+                    let snapshot = validate_persistent_progress(
+                        &frame,
+                        manifest.entries.len(),
+                        download_budget_bytes,
+                        timeout,
+                        last_heartbeat_sequence,
+                        last_progress_revision,
+                    )?;
+                    last_heartbeat = Instant::now();
+                    last_heartbeat_sequence = snapshot.heartbeat_sequence;
+                    last_progress_revision = snapshot.progress_revision;
+                    last_progress_snapshot = snapshot.compact;
+                }
+                Some(event) => bail!(
+                    "persistent dynamic fetch response event 未知: event={event} last_progress={last_progress_snapshot}"
+                ),
+                None => break frame,
             }
         };
-        let _ = reader_thread.join();
-        self.stdout = Some(reader);
-        let read = read.context("read persistent dynamic fetch response")?;
-        if read == 0 {
-            let status = self.child.wait().ok();
-            bail!(
-                "persistent dynamic Range worker stdout EOF: request_id={} status={:?} stderr_log={} stderr_tail={}",
-                request_id,
-                status,
-                self.stderr_log.display(),
-                read_log_tail(&self.stderr_log)
-            );
-        }
-        let line = match std::str::from_utf8(&line) {
-            Ok(line) => line,
-            Err(error) => {
-                let prefix = protocol_hex_prefix(&line);
-                self.stop();
-                bail!(
-                    "persistent dynamic Range worker 返回非 UTF-8 JSONL 并已回收: request_id={} error={} bytes={} prefix_hex={} stderr_log={} stderr_tail={}",
-                    request_id,
-                    error,
-                    line.len(),
-                    prefix,
-                    self.stderr_log.display(),
-                    read_log_tail(&self.stderr_log)
-                );
-            }
-        };
-        let response: serde_json::Value =
-            serde_json::from_str(line).context("decode persistent dynamic fetch response JSON")?;
-        if response
-            .get("request_id")
-            .and_then(serde_json::Value::as_u64)
-            != Some(request_id)
-        {
-            bail!("persistent dynamic fetch response request_id 漂移");
-        }
         if response.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
             bail!(
-                "persistent dynamic fetch 请求失败: type={} error={} stderr_log={} stderr_tail={}",
+                "persistent dynamic fetch 请求失败: type={} error={} progress={} transport={} last_heartbeat={} stderr_log={} stderr_tail={}",
                 response
                     .get("error_type")
                     .and_then(serde_json::Value::as_str)
@@ -1183,6 +1419,15 @@ impl PersistentDynamicFetchWorker {
                     .get("error")
                     .and_then(serde_json::Value::as_str)
                     .unwrap_or("unknown"),
+                response
+                    .get("progress")
+                    .map(compact_protocol_value)
+                    .unwrap_or_else(|| String::from("none")),
+                response
+                    .get("transport")
+                    .map(compact_protocol_value)
+                    .unwrap_or_else(|| String::from("none")),
+                last_progress_snapshot,
                 self.stderr_log.display(),
                 read_log_tail(&self.stderr_log)
             );
@@ -1239,6 +1484,146 @@ impl PersistentDynamicFetchWorker {
             request_wall_ms,
         })
     }
+}
+
+#[derive(Debug)]
+struct PersistentProgressSnapshot {
+    heartbeat_sequence: u64,
+    progress_revision: u64,
+    compact: String,
+}
+
+fn validate_persistent_progress(
+    frame: &serde_json::Value,
+    expected_ranges: usize,
+    expected_bytes: u64,
+    hard_timeout: Duration,
+    previous_heartbeat_sequence: u64,
+    previous_progress_revision: u64,
+) -> Result<PersistentProgressSnapshot> {
+    let progress = frame
+        .get("progress")
+        .context("persistent dynamic fetch progress frame 缺少 progress")?;
+    if progress.get("format").and_then(serde_json::Value::as_str)
+        != Some(DYNAMIC_PAGE_FETCH_PROGRESS_FORMAT)
+    {
+        bail!("persistent dynamic fetch progress format 漂移");
+    }
+    let heartbeat_sequence = progress
+        .get("heartbeat_sequence")
+        .and_then(serde_json::Value::as_u64)
+        .context("persistent dynamic fetch progress 缺少 heartbeat_sequence")?;
+    let progress_revision = progress
+        .get("progress_revision")
+        .and_then(serde_json::Value::as_u64)
+        .context("persistent dynamic fetch progress 缺少 progress_revision")?;
+    if heartbeat_sequence <= previous_heartbeat_sequence
+        || progress_revision < previous_progress_revision
+    {
+        bail!("persistent dynamic fetch progress sequence/revision 非单调");
+    }
+
+    let ranges_total = progress
+        .get("ranges_total")
+        .and_then(serde_json::Value::as_u64)
+        .context("persistent dynamic fetch progress 缺少 ranges_total")?;
+    let ranges_started = progress
+        .get("ranges_started")
+        .and_then(serde_json::Value::as_u64)
+        .context("persistent dynamic fetch progress 缺少 ranges_started")?;
+    let ranges_completed = progress
+        .get("ranges_completed")
+        .and_then(serde_json::Value::as_u64)
+        .context("persistent dynamic fetch progress 缺少 ranges_completed")?;
+    let ranges_failed = progress
+        .get("ranges_failed")
+        .and_then(serde_json::Value::as_u64)
+        .context("persistent dynamic fetch progress 缺少 ranges_failed")?;
+    let active_ranges = progress
+        .get("active_ranges")
+        .and_then(serde_json::Value::as_u64)
+        .context("persistent dynamic fetch progress 缺少 active_ranges")?;
+    let expected_ranges = u64::try_from(expected_ranges)
+        .context("persistent dynamic fetch expected ranges overflow")?;
+    let settled_ranges = ranges_completed
+        .checked_add(ranges_failed)
+        .context("persistent dynamic fetch settled ranges overflow")?;
+    if ranges_total != expected_ranges
+        || progress
+            .get("requested_bytes")
+            .and_then(serde_json::Value::as_u64)
+            != Some(expected_bytes)
+        || ranges_started > ranges_total
+        || settled_ranges > ranges_started
+        || settled_ranges.checked_add(active_ranges) != Some(ranges_started)
+    {
+        bail!("persistent dynamic fetch progress range/budget 状态漂移");
+    }
+
+    let stage = progress
+        .get("stage")
+        .and_then(serde_json::Value::as_str)
+        .context("persistent dynamic fetch progress 缺少 stage")?;
+    let stage_elapsed_ms = progress
+        .get("stage_elapsed_ms")
+        .and_then(serde_json::Value::as_f64)
+        .context("persistent dynamic fetch progress 缺少 stage_elapsed_ms")?;
+    let request_elapsed_ms = progress
+        .get("request_elapsed_ms")
+        .and_then(serde_json::Value::as_f64)
+        .context("persistent dynamic fetch progress 缺少 request_elapsed_ms")?;
+    let origin_deadline_seconds = progress
+        .get("origin_deadline_seconds")
+        .and_then(serde_json::Value::as_f64)
+        .context("persistent dynamic fetch progress 缺少 origin_deadline_seconds")?;
+    let worker_deadline_seconds = progress
+        .get("worker_deadline_seconds")
+        .and_then(serde_json::Value::as_f64)
+        .context("persistent dynamic fetch progress 缺少 worker_deadline_seconds")?;
+    if !stage_elapsed_ms.is_finite()
+        || !request_elapsed_ms.is_finite()
+        || !origin_deadline_seconds.is_finite()
+        || !worker_deadline_seconds.is_finite()
+        || stage_elapsed_ms < 0.0
+        || request_elapsed_ms < stage_elapsed_ms
+        || !(5.0..=240.0).contains(&origin_deadline_seconds)
+        || worker_deadline_seconds < 1.0
+        || worker_deadline_seconds > hard_timeout.as_secs_f64()
+    {
+        bail!("persistent dynamic fetch progress timing 非法");
+    }
+    let stage_timeout = match stage {
+        "manifest_validated" | "predownload_check" | "cache_finalize" | "complete" => {
+            DYNAMIC_PAGE_FETCH_FAST_STAGE_TIMEOUT
+        }
+        "cache_prepare" | "root_budget_lock" | "startup_trim" | "predownload_trim" => {
+            DYNAMIC_PAGE_FETCH_LOCAL_STAGE_TIMEOUT
+        }
+        "fetch_ranges" => hard_timeout,
+        _ => bail!("persistent dynamic fetch progress stage 未知: {stage}"),
+    };
+    if stage_elapsed_ms > stage_timeout.as_secs_f64() * 1000.0 {
+        bail!(
+            "persistent dynamic fetch stage 截止耗尽: stage={} stage_elapsed_ms={} stage_timeout_seconds={} snapshot={}",
+            stage,
+            stage_elapsed_ms,
+            stage_timeout.as_secs(),
+            compact_protocol_value(progress)
+        );
+    }
+    Ok(PersistentProgressSnapshot {
+        heartbeat_sequence,
+        progress_revision,
+        compact: compact_protocol_value(progress),
+    })
+}
+
+fn compact_protocol_value(value: &serde_json::Value) -> String {
+    value
+        .to_string()
+        .chars()
+        .take(DYNAMIC_PAGE_FETCH_PROGRESS_SNAPSHOT_CHARS)
+        .collect()
 }
 
 fn protocol_hex_prefix(bytes: &[u8]) -> String {

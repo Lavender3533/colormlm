@@ -45,6 +45,10 @@ use crate::{
         S14_POSITION0_STATIC_STREAM_BANKS,
     },
     s14_position0_weight_plan::{S14Position0HybridWeightPlan, S14_POSITION0_ROLLING_BANKS},
+    s14_starfold_prefetch_pipeline::{
+        S14StarfoldPrefetchLayerIdentity, S14StarfoldStaticMaterializeReceipt,
+        S14StarfoldStaticSsdIntent,
+    },
     VulkanContext,
 };
 use anyhow::{anyhow, bail, Context, Result};
@@ -143,6 +147,22 @@ pub trait S14CausalBlockProductionHcQkvResourceProvider:
         input_token_ids: &[u32],
         checkpoint_state_bytes: u64,
     ) -> Result<(), String>;
+
+    /// 只规划/热化不依赖动态专家路由的 static 页。默认实现保持兼容但不声称预取；
+    /// production base1/K4 provider 必须覆写并绑定同一 manifest/store。
+    fn plan_starfold_static_prefetch(
+        &self,
+        _layer: S14StarfoldPrefetchLayerIdentity,
+    ) -> Result<Option<S14StarfoldStaticSsdIntent>, String> {
+        Ok(None)
+    }
+
+    fn materialize_starfold_static_prefetch(
+        &mut self,
+        _intent: &S14StarfoldStaticSsdIntent,
+    ) -> Result<S14StarfoldStaticMaterializeReceipt, String> {
+        Err("production HC/QKV provider 未实现 static prefetch materialize".into())
+    }
 
     /// 只能在本 block 的43层 static upload 全部完成后导出。禁止 mock/default 或重新创建
     /// uploader；terminal 必须继续消费 provider 当前持有的同一个 Arc owner。

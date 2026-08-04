@@ -23,6 +23,10 @@ use crate::{
         S14_CAUSAL_BLOCK_HC_ELEMENTS_PER_LANE,
     },
     s14_causal_block_production_bundle::S14CausalBlockProductionHcQkvResourceProvider,
+    s14_starfold_prefetch_pipeline::{
+        S14StarfoldPrefetchLayerIdentity, S14StarfoldStaticMaterializeReceipt,
+        S14StarfoldStaticSsdIntent,
+    },
     s14_starwave_draft::{
         validate_s14_starwave_generation_origin, S14StarwavePosition0CommittedOrigin,
     },
@@ -186,6 +190,20 @@ pub trait S14CausalBlockVulkanHcQkvAdapter: fmt::Debug {
         input: &S14CausalBlockLayerInput<'_>,
     ) -> Result<S14CausalBlockHcQkvRecordedLayer, String>;
 
+    fn plan_starfold_static_prefetch(
+        &self,
+        _layer: S14StarfoldPrefetchLayerIdentity,
+    ) -> Result<Option<S14StarfoldStaticSsdIntent>, String> {
+        Ok(None)
+    }
+
+    fn materialize_starfold_static_prefetch(
+        &mut self,
+        _intent: &S14StarfoldStaticSsdIntent,
+    ) -> Result<S14StarfoldStaticMaterializeReceipt, String> {
+        Err("HC/QKV adapter 未实现 static prefetch materialize".into())
+    }
+
     /// grouped-MoE 已真实返回后，由 backend 回接其 output binding。这一步使下一层 input
     /// identity 可被逐字节验证，而不是只检查 generation。
     fn capture_grouped_moe_output(
@@ -224,6 +242,20 @@ pub trait S14CausalBlockHcQkvLayerRecorder: fmt::Debug {
         _block_size: usize,
     ) -> Result<(), String> {
         Err("HC/QKV recorder 未实现 ForcedPrefill begin".into())
+    }
+
+    fn plan_starfold_static_prefetch(
+        &self,
+        _layer: S14StarfoldPrefetchLayerIdentity,
+    ) -> Result<Option<S14StarfoldStaticSsdIntent>, String> {
+        Ok(None)
+    }
+
+    fn materialize_starfold_static_prefetch(
+        &mut self,
+        _intent: &S14StarfoldStaticSsdIntent,
+    ) -> Result<S14StarfoldStaticMaterializeReceipt, String> {
+        Err("HC/QKV recorder 未实现 static prefetch materialize".into())
     }
 
     fn record_k_lane_hc_qkv_attention_router(
@@ -636,6 +668,20 @@ impl<R: S14CausalBlockHcQkvLayerRecorder> S14CausalBlockVulkanHcQkvAdapter
             Ok(recorded) => Ok(recorded),
             Err(error) => Err(self.poison(error)),
         }
+    }
+
+    fn plan_starfold_static_prefetch(
+        &self,
+        layer: S14StarfoldPrefetchLayerIdentity,
+    ) -> Result<Option<S14StarfoldStaticSsdIntent>, String> {
+        self.recorder.plan_starfold_static_prefetch(layer)
+    }
+
+    fn materialize_starfold_static_prefetch(
+        &mut self,
+        intent: &S14StarfoldStaticSsdIntent,
+    ) -> Result<S14StarfoldStaticMaterializeReceipt, String> {
+        self.recorder.materialize_starfold_static_prefetch(intent)
     }
 
     fn capture_grouped_moe_output(

@@ -19,18 +19,24 @@ use crate::{
     },
     s14_starfold_mxfp4_stream::materialize_packed_mxfp4_tile,
     s14_starfold_mxfp4_tile::S14StarfoldMxfp4ExternalSlice,
+    s14_starfold_prefetch_pipeline::{
+        S14StarfoldActiveComputeIdentity, S14StarfoldPacketProjection,
+        S14StarfoldPrefetchFailurePhase, S14StarfoldPrefetchLease, S14StarfoldPrefetchPlanner,
+        S14StarfoldPrefetchTarget, S14StarfoldRoutedExpertSet, S14StarfoldSameLayerPacketIntent,
+    },
     s14_starfold_runtime::{S14StarfoldB4LayerPlan, S14StarfoldRuntime},
     s14_starfold_vulkan_windows::S14StarfoldTimelinePoint,
     VulkanContext,
 };
 use anyhow::{bail, Context, Result};
 use ash::vk;
-use std::{collections::BTreeSet, sync::Arc};
+use std::{collections::BTreeSet, ops::Range, sync::Arc};
 
 use constellation_packet::{
-    build_starfold_constellation_packets, S14StarfoldConstellationCandidate,
-    S14StarfoldConstellationLane, S14StarfoldConstellationPacket,
-    S14StarfoldConstellationRuntimeHook, S14StarfoldResidentWindowKey,
+    build_starfold_constellation_packet_group, build_starfold_constellation_packets,
+    S14StarfoldConstellationCandidate, S14StarfoldConstellationLane,
+    S14StarfoldConstellationPacket, S14StarfoldConstellationRuntimeHook,
+    S14StarfoldResidentWindowKey,
 };
 
 const F32_BYTES: u64 = 4;
@@ -140,6 +146,207 @@ pub struct S14StarfoldConstellationLayerEpoch {
     closed: bool,
 }
 
+#[derive(Debug)]
+pub struct S14StarfoldPrefetchedConstellationPacket {
+    packet: Arc<S14StarfoldConstellationPacket>,
+    lease: S14StarfoldPrefetchLease,
+}
+
+impl S14StarfoldPrefetchedConstellationPacket {
+    fn into_parts(
+        self,
+    ) -> (
+        Arc<S14StarfoldConstellationPacket>,
+        S14StarfoldPrefetchLease,
+    ) {
+        (self.packet, self.lease)
+    }
+}
+
+/// 只持有 immutable plan/schedule；每次 `materialize_next` 最多构造一个 window packet。
+/// 上一个 packet 已提交 GPU 后，host 在这里准备下一个，从而由固定 A/B window 提供背压。
+pub struct S14StarfoldConstellationPacketProducer<'a> {
+    planner: S14StarfoldPrefetchPlanner,
+    current_compute: S14StarfoldActiveComputeIdentity,
+    layer_plan: &'a S14StarfoldB4LayerPlan,
+    schedule: &'a S14StarfoldB4ExpertSchedule,
+    projection: S14StarfoldExpertProjection,
+    buffers: S14StarfoldRoutedBuffers,
+    layout: S14StarfoldRoutedWorkspaceLayout,
+    descriptor_alignment: u64,
+    groups: Vec<Range<usize>>,
+    group_bytes: Vec<u64>,
+    next_group: usize,
+}
+
+impl<'a> S14StarfoldConstellationPacketProducer<'a> {
+    pub fn new(
+        planner: S14StarfoldPrefetchPlanner,
+        current_compute: S14StarfoldActiveComputeIdentity,
+        layer_plan: &'a S14StarfoldB4LayerPlan,
+        schedule: &'a S14StarfoldB4ExpertSchedule,
+        projection: S14StarfoldExpertProjection,
+        buffers: S14StarfoldRoutedBuffers,
+        layout: S14StarfoldRoutedWorkspaceLayout,
+        descriptor_alignment: u64,
+    ) -> Result<Self> {
+        validate_buffers(buffers, layout)?;
+        if current_compute.layer().layer() != schedule.layer
+            || schedule.layer != layer_plan.authoritative_routes.layer()
+            || schedule.base_position != layer_plan.authoritative_routes.base_position()
+            || schedule.window_capacity_bytes < 16 * 1024 * 1024
+            || descriptor_alignment == 0
+            || !descriptor_alignment.is_power_of_two()
+        {
+            bail!("S14 StarFold constellation producer plan/schedule/identity 漂移");
+        }
+        let scheduled = S14StarfoldRoutedExpertSet::from_route_experts(
+            schedule.experts.iter().map(|expert| expert.expert_id),
+        )?;
+        if &scheduled != current_compute.routed_experts() {
+            bail!("S14 StarFold constellation producer expert set 与权威 route 漂移");
+        }
+        let (groups, group_bytes) =
+            plan_constellation_packet_groups(schedule, projection, descriptor_alignment)?;
+        Ok(Self {
+            planner,
+            current_compute,
+            layer_plan,
+            schedule,
+            projection,
+            buffers,
+            layout,
+            descriptor_alignment,
+            groups,
+            group_bytes,
+            next_group: 0,
+        })
+    }
+
+    pub const fn projection(&self) -> S14StarfoldExpertProjection {
+        self.projection
+    }
+
+    pub fn materialize_next(
+        &mut self,
+        runtime: &mut S14StarfoldRuntime,
+    ) -> Result<Option<S14StarfoldPrefetchedConstellationPacket>> {
+        let Some(group) = self.groups.get(self.next_group).cloned() else {
+            return Ok(None);
+        };
+        let packet_ordinal = u16::try_from(self.next_group)
+            .context("S14 StarFold constellation producer ordinal 超出 u16")?;
+        let expert_ids = self.schedule.experts[group.clone()]
+            .iter()
+            .map(|expert| expert.expert_id)
+            .collect::<Vec<_>>();
+        let expert_set =
+            S14StarfoldRoutedExpertSet::from_route_experts(expert_ids.iter().copied())?;
+        let intent = S14StarfoldSameLayerPacketIntent::new(
+            self.current_compute.layer(),
+            packet_projection(self.projection),
+            packet_ordinal,
+            expert_set,
+            self.group_bytes[self.next_group],
+        )?;
+        let mut lease = self.planner.issue_same_layer_packet(intent)?;
+        if let Err(error) =
+            runtime.fetch_b4_packet_ranges(self.layer_plan, self.projection, &expert_ids)
+        {
+            let cleanup = lease.fail(S14StarfoldPrefetchFailurePhase::SsdFetch);
+            return match cleanup {
+                Ok(_) => Err(error),
+                Err(cleanup) => Err(anyhow::anyhow!(
+                    "{error:#}; constellation packet Range lease cleanup={cleanup:#}"
+                )),
+            };
+        }
+        let materialized = self.materialize_group(runtime, group, packet_ordinal);
+        let packet = match materialized {
+            Ok(packet) => packet,
+            Err(error) => {
+                let cleanup = lease.fail(S14StarfoldPrefetchFailurePhase::RamMaterialize);
+                return match cleanup {
+                    Ok(_) => Err(error),
+                    Err(cleanup) => Err(anyhow::anyhow!(
+                        "{error:#}; constellation prefetch lease cleanup={cleanup:#}"
+                    )),
+                };
+            }
+        };
+        if let Err(error) = lease.mark_ready(packet.payload_bytes) {
+            let cleanup = lease.fail(S14StarfoldPrefetchFailurePhase::RamMaterialize);
+            return match cleanup {
+                Ok(_) => Err(error),
+                Err(cleanup) => Err(anyhow::anyhow!(
+                    "{error:#}; constellation ready lease cleanup={cleanup:#}"
+                )),
+            };
+        }
+        self.next_group += 1;
+        Ok(Some(S14StarfoldPrefetchedConstellationPacket {
+            packet,
+            lease,
+        }))
+    }
+
+    fn materialize_group(
+        &self,
+        runtime: &mut S14StarfoldRuntime,
+        group: Range<usize>,
+        packet_ordinal: u16,
+    ) -> Result<Arc<S14StarfoldConstellationPacket>> {
+        let mut candidates = Vec::with_capacity(group.len());
+        for expert in &self.schedule.experts[group] {
+            let mut works = expert.tiles_for(self.projection);
+            let work = works
+                .next()
+                .context("S14 StarFold constellation producer 缺少 projection tile")?;
+            if works.next().is_some() {
+                bail!("S14 StarFold constellation producer 要求每专家单 tile");
+            }
+            let packed =
+                materialize_packed_mxfp4_tile(runtime, self.layer_plan, expert.expert_id, work)?;
+            let mut lanes = Vec::with_capacity(expert.lane_uses.len());
+            for lane_use in &expert.lane_uses {
+                let branch = branch_index(lane_use.lane, lane_use.route_rank)?;
+                let (input_f32, output_f32) = projection_io(
+                    self.projection,
+                    branch,
+                    lane_use.lane,
+                    self.buffers,
+                    self.layout,
+                )?;
+                lanes.push(S14StarfoldConstellationLane {
+                    lane: lane_use.lane,
+                    route_rank: lane_use.route_rank,
+                    route_weight_bits: lane_use.route_weight.to_bits(),
+                    input_f32,
+                    output_f32,
+                });
+            }
+            candidates.push(S14StarfoldConstellationCandidate {
+                expert_id: expert.expert_id,
+                projection: self.projection,
+                shape: packed.shape,
+                tile_index: packed.tile_index,
+                scale_audit: packed.scale_audit(),
+                proof: Arc::clone(packed.proof()),
+                lanes,
+            });
+        }
+        build_starfold_constellation_packet_group(
+            self.schedule.layer,
+            self.schedule.base_position,
+            self.projection,
+            packet_ordinal,
+            self.schedule.window_capacity_bytes,
+            self.descriptor_alignment,
+            candidates,
+        )
+    }
+}
+
 impl S14StarfoldRoutedExecutor {
     pub fn new(context: Arc<VulkanContext>) -> Result<Self> {
         Ok(Self {
@@ -148,6 +355,28 @@ impl S14StarfoldRoutedExecutor {
             next_transfer_epoch: 1,
             active_constellation_layer: None,
         })
+    }
+
+    pub fn constellation_packet_producer<'a>(
+        &self,
+        planner: S14StarfoldPrefetchPlanner,
+        current_compute: S14StarfoldActiveComputeIdentity,
+        layer_plan: &'a S14StarfoldB4LayerPlan,
+        schedule: &'a S14StarfoldB4ExpertSchedule,
+        projection: S14StarfoldExpertProjection,
+        buffers: S14StarfoldRoutedBuffers,
+        layout: S14StarfoldRoutedWorkspaceLayout,
+    ) -> Result<S14StarfoldConstellationPacketProducer<'a>> {
+        S14StarfoldConstellationPacketProducer::new(
+            planner,
+            current_compute,
+            layer_plan,
+            schedule,
+            projection,
+            buffers,
+            layout,
+            self.compute.descriptor_offset_alignment(),
+        )
     }
 
     pub fn execute_projection(
@@ -436,6 +665,51 @@ impl S14StarfoldRoutedExecutor {
         }
     }
 
+    /// production packet producer/consumer 流水：提交 packet N 后立即在 host 物化 N+1；
+    /// compute fence 只在固定 A/B window 真正复用时产生背压，不先物化整投影。
+    pub fn execute_constellation_projection_stream_in_layer_epoch(
+        &mut self,
+        runtime: &mut S14StarfoldRuntime,
+        owner: &mut S14StarfoldConstellationLayerEpoch,
+        producer: &mut S14StarfoldConstellationPacketProducer<'_>,
+    ) -> Result<S14StarfoldProjectionExecutionReceipt> {
+        let projection = producer.projection();
+        let active = self.validate_layer_epoch(owner)?;
+        let expected_phase = match projection {
+            S14StarfoldExpertProjection::W1 => S14StarfoldConstellationLayerPhase::W1,
+            S14StarfoldExpertProjection::W3 => S14StarfoldConstellationLayerPhase::W3,
+            S14StarfoldExpertProjection::W2 => S14StarfoldConstellationLayerPhase::W2,
+        };
+        if active.phase != expected_phase
+            || producer.schedule.layer != active.layer
+            || producer.schedule.base_position != active.base_position
+        {
+            bail!("S14 StarFold constellation stream layer/projection phase 漂移");
+        }
+        let execution =
+            self.execute_constellation_packet_stream_in_epoch(runtime, owner.epoch, producer);
+        match execution {
+            Ok(receipt) => {
+                let next = match projection {
+                    S14StarfoldExpertProjection::W1 => S14StarfoldConstellationLayerPhase::W3,
+                    S14StarfoldExpertProjection::W3 => S14StarfoldConstellationLayerPhase::Prepare,
+                    S14StarfoldExpertProjection::W2 => S14StarfoldConstellationLayerPhase::Complete,
+                };
+                self.active_constellation_layer
+                    .as_mut()
+                    .context("S14 StarFold constellation stream active state 丢失")?
+                    .phase = next;
+                Ok(receipt)
+            }
+            Err(error) => {
+                if let Some(active) = self.active_constellation_layer.as_mut() {
+                    active.phase = S14StarfoldConstellationLayerPhase::Poisoned;
+                }
+                Err(error)
+            }
+        }
+    }
+
     pub fn mark_constellation_layer_prepare_submitted(
         &mut self,
         owner: &mut S14StarfoldConstellationLayerEpoch,
@@ -593,6 +867,114 @@ impl S14StarfoldRoutedExecutor {
         })
     }
 
+    fn execute_constellation_packet_stream_in_epoch(
+        &mut self,
+        runtime: &mut S14StarfoldRuntime,
+        transfer_epoch: u64,
+        producer: &mut S14StarfoldConstellationPacketProducer<'_>,
+    ) -> Result<S14StarfoldProjectionExecutionReceipt> {
+        let projection = producer.projection();
+        let mut experts = BTreeSet::new();
+        let mut routes = BTreeSet::new();
+        let mut packed_uploads = 0u32;
+        let mut packed_upload_bytes = 0u64;
+        let mut lane_dispatches = 0u32;
+        let mut queue_submit_calls = 0u32;
+        let mut completion = None;
+        let mut packet_ordinal = 0u16;
+
+        while let Some(prefetched) = producer.materialize_next(runtime)? {
+            let (packet, lease) = prefetched.into_parts();
+            packet.validate()?;
+            let key = packet.key();
+            let packet_experts = S14StarfoldRoutedExpertSet::from_route_experts(
+                packet.members().iter().map(|member| member.expert_id),
+            )?;
+            let target_matches = matches!(
+                lease.target(),
+                S14StarfoldPrefetchTarget::ConstellationPacket {
+                    projection: planned_projection,
+                    packet_ordinal: planned_ordinal,
+                    routed_experts,
+                } if *planned_projection == packet_projection(projection)
+                    && *planned_ordinal == packet_ordinal
+                    && routed_experts == &packet_experts
+            );
+            if key.layer != producer.schedule.layer
+                || key.base_position != producer.schedule.base_position
+                || key.projection != projection_code(projection)
+                || key.packet_ordinal != packet_ordinal
+                || lease.identity() != producer.current_compute.layer()
+                || !target_matches
+            {
+                bail!("S14 StarFold constellation stream packet/prefetch identity 漂移");
+            }
+            for member in packet.members() {
+                if !experts.insert(member.expert_id) {
+                    bail!("S14 StarFold constellation stream 跨 packet 专家重复");
+                }
+                for lane in member.lanes() {
+                    if !routes.insert((lane.lane, lane.route_rank)) {
+                        bail!("S14 StarFold constellation stream 跨 packet route 重复");
+                    }
+                }
+            }
+
+            let packet_bytes = packet.payload_bytes;
+            let ready = runtime.upload_constellation_packet_in_epoch(transfer_epoch, packet)?;
+            let consumer_id = self.next_consumer_id;
+            self.next_consumer_id = self
+                .next_consumer_id
+                .checked_add(1)
+                .context("S14 StarFold constellation stream consumer id overflow")?;
+            let receipt = self.compute.submit_ready_constellation_batch(
+                runtime.vulkan_windows_mut()?,
+                ready,
+                consumer_id,
+            )?;
+            lease
+                .consume()
+                .context("S14 StarFold constellation packet 提交后释放 producer lease")?;
+            packed_uploads = packed_uploads
+                .checked_add(receipt.packet.transfer_submit_calls)
+                .context("S14 StarFold constellation stream upload count overflow")?;
+            packed_upload_bytes = packed_upload_bytes
+                .checked_add(packet_bytes)
+                .context("S14 StarFold constellation stream upload bytes overflow")?;
+            lane_dispatches = lane_dispatches
+                .checked_add(receipt.lane_dispatches)
+                .context("S14 StarFold constellation stream lane dispatch overflow")?;
+            queue_submit_calls = queue_submit_calls
+                .checked_add(receipt.queue_submit_calls)
+                .context("S14 StarFold constellation stream queue submit overflow")?;
+            completion = Some(receipt.signal_compute);
+            packet_ordinal = packet_ordinal
+                .checked_add(1)
+                .context("S14 StarFold constellation stream packet ordinal overflow")?;
+        }
+        if packet_ordinal == 0
+            || packed_uploads != u32::from(packet_ordinal)
+            || lane_dispatches != (STARFOLD_B4_LANES * STARFOLD_TOP_K) as u32
+            || routes.len() != STARFOLD_B4_LANES * STARFOLD_TOP_K
+            || packed_uploads != queue_submit_calls
+        {
+            bail!("S14 StarFold constellation stream 未形成精确24 route与一包一提交");
+        }
+        Ok(S14StarfoldProjectionExecutionReceipt {
+            layer: producer.schedule.layer,
+            base_position: producer.schedule.base_position,
+            projection,
+            unique_experts: u32::try_from(experts.len())
+                .context("S14 StarFold constellation stream unique experts 超出 u32")?,
+            packed_uploads,
+            packed_upload_bytes,
+            lane_dispatches,
+            queue_submit_calls,
+            completion: completion.context("S14 StarFold constellation stream 缺少 completion")?,
+            serial_token_forward_calls: 0,
+        })
+    }
+
     fn allocate_transfer_epoch(&mut self) -> Result<u64> {
         let epoch = self.next_transfer_epoch;
         self.next_transfer_epoch = self
@@ -636,6 +1018,77 @@ fn projection_from_code(code: u8) -> Result<S14StarfoldExpertProjection> {
         2 => Ok(S14StarfoldExpertProjection::W2),
         _ => bail!("S14 StarFold 星座 packet projection code 非法"),
     }
+}
+
+const fn projection_code(projection: S14StarfoldExpertProjection) -> u8 {
+    match projection {
+        S14StarfoldExpertProjection::W1 => 0,
+        S14StarfoldExpertProjection::W3 => 1,
+        S14StarfoldExpertProjection::W2 => 2,
+    }
+}
+
+const fn packet_projection(projection: S14StarfoldExpertProjection) -> S14StarfoldPacketProjection {
+    match projection {
+        S14StarfoldExpertProjection::W1 => S14StarfoldPacketProjection::W1,
+        S14StarfoldExpertProjection::W3 => S14StarfoldPacketProjection::W3,
+        S14StarfoldExpertProjection::W2 => S14StarfoldPacketProjection::W2,
+    }
+}
+
+fn plan_constellation_packet_groups(
+    schedule: &S14StarfoldB4ExpertSchedule,
+    projection: S14StarfoldExpertProjection,
+    descriptor_alignment: u64,
+) -> Result<(Vec<Range<usize>>, Vec<u64>)> {
+    let mut groups = Vec::new();
+    let mut group_bytes = Vec::new();
+    let mut start = 0usize;
+    let mut cursor = 0u64;
+    for (index, expert) in schedule.experts.iter().enumerate() {
+        let mut works = expert.tiles_for(projection);
+        let work = works
+            .next()
+            .context("S14 StarFold constellation group plan 缺少 projection tile")?;
+        if works.next().is_some() {
+            bail!("S14 StarFold constellation group plan 要求每专家单 tile");
+        }
+        let offset = align_up_to(cursor, descriptor_alignment)?;
+        let mut end = offset
+            .checked_add(work.tile.payload_bytes)
+            .context("S14 StarFold constellation group end overflow")?;
+        if end > u64::from(schedule.window_capacity_bytes) && index > start {
+            groups.push(start..index);
+            group_bytes.push(cursor);
+            start = index;
+            end = work.tile.payload_bytes;
+        }
+        if end > u64::from(schedule.window_capacity_bytes) {
+            bail!("S14 StarFold constellation 单专家 payload 越出 window");
+        }
+        cursor = end;
+    }
+    if start < schedule.experts.len() {
+        groups.push(start..schedule.experts.len());
+        group_bytes.push(cursor);
+    }
+    if groups.is_empty()
+        || groups.len() != group_bytes.len()
+        || groups.iter().any(|group| group.is_empty())
+    {
+        bail!("S14 StarFold constellation group plan 为空或不完整");
+    }
+    Ok((groups, group_bytes))
+}
+
+fn align_up_to(value: u64, alignment: u64) -> Result<u64> {
+    if alignment == 0 || !alignment.is_power_of_two() {
+        bail!("S14 StarFold constellation descriptor alignment 非法");
+    }
+    value
+        .checked_add(alignment - 1)
+        .map(|sum| sum & !(alignment - 1))
+        .context("S14 StarFold constellation alignment overflow")
 }
 
 fn projection_io(

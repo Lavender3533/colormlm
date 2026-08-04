@@ -6,6 +6,10 @@ use crate::{
         S14StarfoldB4ExpertSchedule, S14StarfoldExpertProjection, S14_STARFOLD_HIDDEN,
     },
     s14_starfold_mxfp4_tile::S14StarfoldMxfp4ExternalSlice,
+    s14_starfold_prefetch_pipeline::{
+        S14StarfoldActiveComputeIdentity, S14StarfoldPrefetchLease, S14StarfoldPrefetchPlanner,
+        S14StarfoldPrefetchWindowRequest, S14StarfoldStaticSsdIntent,
+    },
     s14_starfold_prepare_owner::{S14StarfoldPrepareOwner, S14StarfoldPrepareReceipt},
     s14_starfold_routed_executor::{
         S14StarfoldProjectionExecutionReceipt, S14StarfoldRoutedBuffers, S14StarfoldRoutedExecutor,
@@ -42,6 +46,7 @@ pub struct S14StarfoldB4RoutedLayerReceipt {
 pub struct S14StarfoldB4RoutedLayerOwner {
     routed: S14StarfoldRoutedExecutor,
     prepare: S14StarfoldPrepareOwner,
+    prefetch: S14StarfoldPrefetchPlanner,
 }
 
 impl S14StarfoldB4RoutedLayerOwner {
@@ -49,6 +54,7 @@ impl S14StarfoldB4RoutedLayerOwner {
         Ok(Self {
             routed: S14StarfoldRoutedExecutor::new(Arc::clone(&context))?,
             prepare: S14StarfoldPrepareOwner::new(context)?,
+            prefetch: S14StarfoldPrefetchPlanner::production_defaults()?,
         })
     }
 
@@ -57,13 +63,11 @@ impl S14StarfoldB4RoutedLayerOwner {
         runtime: &mut S14StarfoldRuntime,
         layer_plan: &S14StarfoldB4LayerPlan,
         input_f32: S14StarfoldMxfp4ExternalSlice,
+        current_compute: S14StarfoldActiveComputeIdentity,
     ) -> Result<(
         S14StarfoldB4RoutedLayerReceipt,
         S14StarfoldRoutedDownBinding,
     )> {
-        runtime
-            .fetch_b4_layer_ranges(layer_plan)
-            .context("S14 StarFold B4 exact-route cache warmup")?;
         let schedule =
             S14StarfoldB4ExpertSchedule::build(layer_plan, runtime.contract().microtile_bytes)?;
         let buffers = self.prepare.routed_buffers(input_f32)?;
@@ -71,6 +75,12 @@ impl S14StarfoldB4RoutedLayerOwner {
         let window_bytes = runtime.contract().microtile_bytes;
         let mib = crate::s14_starfold_cache::STARFOLD_ONE_MIB;
         let (w1, w3, prepare, w2) = if [mib, 2 * mib, 4 * mib, 8 * mib].contains(&window_bytes) {
+            // Legacy microtile execution still consumes the complete layer
+            // synchronously.  Constellation windows below intentionally skip
+            // this barrier and fetch only the next packet's Range pairs.
+            runtime
+                .fetch_b4_layer_ranges(layer_plan)
+                .context("S14 StarFold B4 microtile exact-route cache warmup")?;
             let w1 = self.routed.execute_projection(
                 runtime,
                 layer_plan,
@@ -98,7 +108,14 @@ impl S14StarfoldB4RoutedLayerOwner {
             )?;
             (w1, w3, prepare, w2)
         } else if [16 * mib, 32 * mib, 64 * mib].contains(&window_bytes) {
-            self.execute_constellation_layer(runtime, layer_plan, &schedule, buffers, layout)?
+            self.execute_constellation_layer(
+                runtime,
+                layer_plan,
+                &schedule,
+                buffers,
+                layout,
+                current_compute,
+            )?
         } else {
             bail!(
                 "S14 StarFold production window {window_bytes} bytes 不属于 1/2/4/8 microtile 或 16/32/64 constellation 合同"
@@ -176,6 +193,7 @@ impl S14StarfoldB4RoutedLayerOwner {
         schedule: &S14StarfoldB4ExpertSchedule,
         buffers: S14StarfoldRoutedBuffers,
         layout: S14StarfoldRoutedWorkspaceLayout,
+        current_compute: S14StarfoldActiveComputeIdentity,
     ) -> Result<(
         S14StarfoldProjectionExecutionReceipt,
         S14StarfoldProjectionExecutionReceipt,
@@ -188,8 +206,9 @@ impl S14StarfoldB4RoutedLayerOwner {
             schedule.base_position,
         )?;
         let execution = (|| -> Result<_> {
-            let w1_packets = self.routed.materialize_projection_constellations(
-                runtime,
+            let mut w1_packets = self.routed.constellation_packet_producer(
+                self.prefetch.clone(),
+                current_compute.clone(),
                 layer_plan,
                 schedule,
                 S14StarfoldExpertProjection::W1,
@@ -198,9 +217,14 @@ impl S14StarfoldB4RoutedLayerOwner {
             )?;
             let w1 = self
                 .routed
-                .execute_constellation_projection_in_layer_epoch(runtime, &mut epoch, w1_packets)?;
-            let w3_packets = self.routed.materialize_projection_constellations(
-                runtime,
+                .execute_constellation_projection_stream_in_layer_epoch(
+                    runtime,
+                    &mut epoch,
+                    &mut w1_packets,
+                )?;
+            let mut w3_packets = self.routed.constellation_packet_producer(
+                self.prefetch.clone(),
+                current_compute.clone(),
                 layer_plan,
                 schedule,
                 S14StarfoldExpertProjection::W3,
@@ -209,12 +233,17 @@ impl S14StarfoldB4RoutedLayerOwner {
             )?;
             let w3 = self
                 .routed
-                .execute_constellation_projection_in_layer_epoch(runtime, &mut epoch, w3_packets)?;
+                .execute_constellation_projection_stream_in_layer_epoch(
+                    runtime,
+                    &mut epoch,
+                    &mut w3_packets,
+                )?;
             let prepare = self.prepare.submit_prepare(schedule)?;
             self.routed
                 .mark_constellation_layer_prepare_submitted(&mut epoch)?;
-            let w2_packets = self.routed.materialize_projection_constellations(
-                runtime,
+            let mut w2_packets = self.routed.constellation_packet_producer(
+                self.prefetch.clone(),
+                current_compute,
                 layer_plan,
                 schedule,
                 S14StarfoldExpertProjection::W2,
@@ -223,7 +252,11 @@ impl S14StarfoldB4RoutedLayerOwner {
             )?;
             let w2 = self
                 .routed
-                .execute_constellation_projection_in_layer_epoch(runtime, &mut epoch, w2_packets)?;
+                .execute_constellation_projection_stream_in_layer_epoch(
+                    runtime,
+                    &mut epoch,
+                    &mut w2_packets,
+                )?;
             Ok((w1, w3, prepare, w2))
         })();
         let drain = if execution.is_ok() {
@@ -240,6 +273,27 @@ impl S14StarfoldB4RoutedLayerOwner {
                 "{error:#}; constellation layer epoch drain={drain:#}"
             )),
         }
+    }
+
+    pub fn issue_static_l2_prefetch(
+        &self,
+        current_compute: S14StarfoldActiveComputeIdentity,
+        intent: S14StarfoldStaticSsdIntent,
+    ) -> Result<S14StarfoldPrefetchLease> {
+        let mut leases = self
+            .prefetch
+            .issue_window(S14StarfoldPrefetchWindowRequest::new(
+                current_compute,
+                None,
+                Some(intent),
+            )?)?;
+        if leases.routed_l1.is_some() {
+            bail!("S14 StarFold static L+2 window 意外签发 routed lease");
+        }
+        leases
+            .static_l2
+            .take()
+            .context("S14 StarFold static L+2 window 缺少 lease")
     }
 
     pub fn try_destroy(&mut self) -> Result<()> {

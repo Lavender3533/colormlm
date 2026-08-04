@@ -43,6 +43,10 @@ use crate::{
         S14Position0PagedWeightArena, S14Position0StaticLayerBinding,
     },
     s14_route_postprocess_gpu::S14RoutePostprocessGpuMode,
+    s14_starfold_prefetch_pipeline::{
+        S14StarfoldPrefetchLayerIdentity, S14StarfoldStaticMaterializeReceipt,
+        S14StarfoldStaticSsdIntent,
+    },
     s14_starfold_vulkan_windows::S14StarfoldTimelinePoint,
     s14_vulkan::{S14F32MatvecShape, S14NumericPipelines},
     GpuBuffer, VulkanContext,
@@ -2212,6 +2216,20 @@ impl<P: S14CausalBlockProductionHcQkvResourceProvider> S14CausalBlockHcQkvLayerR
             None,
         )
         .map_err(|error| format!("{error:#}"))
+    }
+
+    fn plan_starfold_static_prefetch(
+        &self,
+        layer: S14StarfoldPrefetchLayerIdentity,
+    ) -> std::result::Result<Option<S14StarfoldStaticSsdIntent>, String> {
+        self.provider.plan_starfold_static_prefetch(layer)
+    }
+
+    fn materialize_starfold_static_prefetch(
+        &mut self,
+        intent: &S14StarfoldStaticSsdIntent,
+    ) -> std::result::Result<S14StarfoldStaticMaterializeReceipt, String> {
+        self.provider.materialize_starfold_static_prefetch(intent)
     }
 
     fn record_k_lane_hc_qkv_attention_router(

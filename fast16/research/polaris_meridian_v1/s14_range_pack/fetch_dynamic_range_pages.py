@@ -40,6 +40,224 @@ _CACHE_PAIR_NAME_RE = re.compile(r"([0-9a-f]{64})\.(bin|json)")
 _L3_BUDGET_LOCK_KEY = "_s14_dynamic_page_l3_budget"
 _STARTUP_TRIM_GUARD = threading.Lock()
 _STARTUP_TRIMMED_ROOTS: set[str] = set()
+_STDOUT_PROTOCOL_LOCK = threading.Lock()
+PROGRESS_FORMAT = "polaris-s14-dynamic-page-fetch-progress-v1"
+PROGRESS_HEARTBEAT_SECONDS = 2.0
+DEFAULT_ORIGIN_DEADLINE_SECONDS = 75.0
+MIN_ORIGIN_DEADLINE_SECONDS = 5.0
+MAX_ORIGIN_DEADLINE_SECONDS = 240.0
+ORIGIN_IO_TIMEOUT_SECONDS = 15.0
+ORIGIN_PROGRESS_CHUNK_BYTES = 256 << 10
+
+
+class _OriginDeadlineExceeded(TimeoutError):
+    pass
+
+
+class _RequestDeadlineExceeded(TimeoutError):
+    pass
+
+
+class _RequestCancelled(TimeoutError):
+    pass
+
+
+class _RequestProgress:
+    """Bounded request snapshot shared by fetch threads and the JSONL heartbeat."""
+
+    def __init__(
+        self,
+        request_id: int,
+        *,
+        ranges_total: int,
+        requested_bytes: int,
+        origin_deadline_seconds: float,
+        worker_deadline_seconds: float,
+    ) -> None:
+        self.request_id = request_id
+        self.ranges_total = ranges_total
+        self.requested_bytes = requested_bytes
+        self.origin_deadline_seconds = origin_deadline_seconds
+        self.worker_deadline_seconds = worker_deadline_seconds
+        self._lock = threading.Lock()
+        self._cancelled = threading.Event()
+        self._request_started = time.monotonic()
+        self._worker_deadline = self._request_started + worker_deadline_seconds
+        self._stage_started = self._request_started
+        self._stage = "manifest_validated"
+        self._revision = 1
+        self._heartbeat_sequence = 0
+        self._ranges_started = 0
+        self._ranges_completed = 0
+        self._ranges_failed = 0
+        self._active_ranges = 0
+        self._transport_bytes_read = 0
+        self._last_action = "request_accepted"
+        self._last_range_key: str | None = None
+        self._last_origin: str | None = None
+        self._last_error: str | None = None
+
+    def set_stage(self, stage: str, action: str) -> None:
+        now = time.monotonic()
+        with self._lock:
+            if self._stage != stage:
+                self._stage = stage
+                self._stage_started = now
+            self._last_action = action
+            self._revision += 1
+
+    def range_started(self, range_key: str) -> None:
+        with self._lock:
+            self._ranges_started += 1
+            self._active_ranges += 1
+            self._last_action = "range_started"
+            self._last_range_key = range_key
+            self._revision += 1
+
+    def transport_activity(self, action: str, range_key: str, origin: str) -> None:
+        with self._lock:
+            self._last_action = action
+            self._last_range_key = range_key
+            self._last_origin = origin
+            self._revision += 1
+
+    def add_transport_bytes(self, range_key: str, origin: str, count: int) -> None:
+        if count <= 0:
+            return
+        with self._lock:
+            self._transport_bytes_read += count
+            self._last_action = "range_body_read"
+            self._last_range_key = range_key
+            self._last_origin = origin
+            self._revision += 1
+
+    def retry_backoff(self, range_key: str) -> None:
+        with self._lock:
+            self._last_action = "range_retry_backoff"
+            self._last_range_key = range_key
+            self._revision += 1
+
+    def range_completed(self, range_key: str, *, cache_hit: bool) -> None:
+        with self._lock:
+            self._ranges_completed += 1
+            self._active_ranges = max(self._active_ranges - 1, 0)
+            self._last_action = "range_cache_hit" if cache_hit else "range_committed"
+            self._last_range_key = range_key
+            self._revision += 1
+
+    def range_failed(self, range_key: str, error: BaseException) -> None:
+        with self._lock:
+            self._ranges_failed += 1
+            self._active_ranges = max(self._active_ranges - 1, 0)
+            self._last_action = "range_failed"
+            self._last_range_key = range_key
+            if not self._cancelled.is_set():
+                self._last_error = f"{type(error).__name__}: {error}"[:512]
+            self._revision += 1
+
+    def cancel(self, error: BaseException) -> None:
+        with self._lock:
+            if self._cancelled.is_set():
+                return
+            self._cancelled.set()
+            self._last_action = "request_cancelling"
+            self._last_error = f"{type(error).__name__}: {error}"[:512]
+            self._revision += 1
+
+    def enforce_worker_deadline(self) -> None:
+        if time.monotonic() >= self._worker_deadline:
+            self.cancel(
+                _RequestDeadlineExceeded(
+                    f"worker request deadline 已耗尽: seconds={self.worker_deadline_seconds}"
+                )
+            )
+
+    def raise_if_cancelled(self) -> None:
+        self.enforce_worker_deadline()
+        if self._cancelled.is_set():
+            with self._lock:
+                reason = self._last_error or "unknown"
+            raise _RequestCancelled(f"dynamic Range request 已取消: {reason}")
+
+    def wait_cancelled(self, timeout: float) -> bool:
+        return self._cancelled.wait(timeout)
+
+    def snapshot(self, *, heartbeat: bool = False) -> dict[str, Any]:
+        now = time.monotonic()
+        with self._lock:
+            if heartbeat:
+                self._heartbeat_sequence += 1
+            return {
+                "format": PROGRESS_FORMAT,
+                "stage": self._stage,
+                "request_elapsed_ms": round(
+                    (now - self._request_started) * 1000.0, 3
+                ),
+                "stage_elapsed_ms": round((now - self._stage_started) * 1000.0, 3),
+                "progress_revision": self._revision,
+                "heartbeat_sequence": self._heartbeat_sequence,
+                "ranges_total": self.ranges_total,
+                "ranges_started": self._ranges_started,
+                "ranges_completed": self._ranges_completed,
+                "ranges_failed": self._ranges_failed,
+                "active_ranges": self._active_ranges,
+                "requested_bytes": self.requested_bytes,
+                "origin_deadline_seconds": self.origin_deadline_seconds,
+                "worker_deadline_seconds": self.worker_deadline_seconds,
+                "transport_bytes_read": self._transport_bytes_read,
+                "last_action": self._last_action,
+                "last_range_key": self._last_range_key,
+                "last_origin": self._last_origin,
+                "last_error": self._last_error,
+            }
+
+
+def _emit_protocol(value: dict[str, Any]) -> None:
+    # One lock binds each JSON object and its newline into an indivisible frame;
+    # heartbeat and terminal response are otherwise produced by different threads.
+    encoded = json.dumps(value, ensure_ascii=True)
+    with _STDOUT_PROTOCOL_LOCK:
+        print(encoded, flush=True)
+
+
+class _ProgressHeartbeat:
+    def __init__(self, progress: _RequestProgress) -> None:
+        self._progress = progress
+        self._stop = threading.Event()
+        self._thread = threading.Thread(
+            target=self._run,
+            name=f"s14-range-heartbeat-{progress.request_id}",
+            daemon=True,
+        )
+
+    def start(self) -> None:
+        self._thread.start()
+        _emit_protocol(
+            {
+                "request_id": self._progress.request_id,
+                "event": "progress",
+                "progress": self._progress.snapshot(heartbeat=True),
+            }
+        )
+
+    def stop(self) -> None:
+        self._stop.set()
+        self._thread.join(timeout=PROGRESS_HEARTBEAT_SECONDS + 1.0)
+
+    def _run(self) -> None:
+        while not self._stop.wait(PROGRESS_HEARTBEAT_SECONDS):
+            try:
+                self._progress.enforce_worker_deadline()
+                _emit_protocol(
+                    {
+                        "request_id": self._progress.request_id,
+                        "event": "progress",
+                        "progress": self._progress.snapshot(heartbeat=True),
+                    }
+                )
+            except (BrokenPipeError, OSError):
+                self._stop.set()
+                return
 
 
 def _complete_cache_pair(cache_root: Path, key: str) -> dict[str, Any] | None:
@@ -409,6 +627,17 @@ def _validate_manifest(value: Any) -> list[dict[str, Any]]:
     return entries
 
 
+def _manifest_request_identity(value: Any) -> tuple[list[dict[str, Any]], int]:
+    entries = _validate_manifest(value)
+    sizes = [entry.get("bytes") for entry in entries]
+    if any(
+        isinstance(size, bool) or not isinstance(size, int) or size <= 0
+        for size in sizes
+    ):
+        raise online_range.rp.ContractError("dynamic Range fetch bytes 必须为正整数")
+    return entries, sum(sizes)
+
+
 def _load_manifest(path: Path) -> dict[str, Any]:
     value = json.loads(path.read_text(encoding="utf-8"))
     _validate_manifest(value)
@@ -418,17 +647,43 @@ def _load_manifest(path: Path) -> dict[str, Any]:
 class _RequestsResponse:
     """Expose the narrow ``online_range.ResponseLike`` contract."""
 
-    def __init__(self, response: requests.Response) -> None:
+    def __init__(
+        self,
+        response: requests.Response,
+        *,
+        progress: _RequestProgress | None,
+        range_key: str,
+        origin: str,
+        origin_deadline: float,
+    ) -> None:
         self._response = response
+        self._progress = progress
+        self._range_key = range_key
+        self._origin = origin
+        self._origin_deadline = origin_deadline
         self.status = response.status_code
         self.headers = response.headers
 
     def read(self, size: int = -1) -> bytes:
+        if self._progress is not None:
+            self._progress.raise_if_cancelled()
+        if time.monotonic() >= self._origin_deadline:
+            raise _OriginDeadlineExceeded(
+                f"Range origin deadline 已耗尽: origin={self._origin}"
+            )
         try:
-            return self._response.raw.read(size, decode_content=False)
+            bounded_size = size
+            if bounded_size < 0 or bounded_size > ORIGIN_PROGRESS_CHUNK_BYTES:
+                bounded_size = ORIGIN_PROGRESS_CHUNK_BYTES
+            chunk = self._response.raw.read(bounded_size, decode_content=False)
         except urllib3.exceptions.HTTPError as error:
             # Preserve RangeCache's resumable-prefix retry path.
             raise ConnectionError(str(error)) from error
+        if self._progress is not None:
+            self._progress.add_transport_bytes(
+                self._range_key, self._origin, len(chunk)
+            )
+        return chunk
 
     def geturl(self) -> str:
         return self._response.url
@@ -460,6 +715,20 @@ class _ThreadLocalRequestsRangeTransport:
         self._blocked_until_by_origin: dict[str, float] = {}
         self._fallback_attempts = 0
         self._fallback_successes = 0
+        self._origin_deadline_seconds = float(
+            os.environ.get(
+                "S14_DYNAMIC_PAGE_FETCH_ORIGIN_DEADLINE_SECONDS",
+                str(DEFAULT_ORIGIN_DEADLINE_SECONDS),
+            )
+        )
+        if not (
+            MIN_ORIGIN_DEADLINE_SECONDS
+            <= self._origin_deadline_seconds
+            <= MAX_ORIGIN_DEADLINE_SECONDS
+        ):
+            raise online_range.rp.ContractError(
+                "S14_DYNAMIC_PAGE_FETCH_ORIGIN_DEADLINE_SECONDS 必须在5..240"
+            )
         self._primary_endpoint = os.environ.get(
             "S14_DYNAMIC_PAGE_FETCH_ENDPOINT", "https://huggingface.co"
         ).rstrip("/")
@@ -499,6 +768,23 @@ class _ThreadLocalRequestsRangeTransport:
                 self._sessions += 1
         return session
 
+    @contextlib.contextmanager
+    def progress_scope(
+        self, progress: _RequestProgress | None, range_key: str
+    ) -> Any:
+        if getattr(self._local, "progress_scope", None) is not None:
+            raise online_range.rp.ContractError("Range transport progress scope 不允许嵌套")
+        scope = {
+            "progress": progress,
+            "range_key": range_key,
+            "origin_deadlines": {},
+        }
+        self._local.progress_scope = scope
+        try:
+            yield
+        finally:
+            self._local.progress_scope = None
+
     def open_range(
         self, url: str, start: int, end: int, timeout: float
     ) -> _RequestsResponse:
@@ -507,9 +793,17 @@ class _ThreadLocalRequestsRangeTransport:
         last_error: BaseException | None = None
         for index, candidate in enumerate(candidates):
             is_last = index + 1 == len(candidates)
+            origin = self._origin(candidate)
+            origin_deadline = self._origin_deadline(origin)
+            progress, range_key = self._active_progress()
+            if progress is not None:
+                progress.raise_if_cancelled()
+                progress.transport_activity(
+                    "origin_attempt", range_key, origin
+                )
             # 某个镜像已明确要求退避时，不让它的等待窗口阻塞健康 fallback。
             # 最后一个 origin 仍执行正常等待，避免所有 endpoint 同时被打爆。
-            if not is_last and self._origin_blocked(self._origin(candidate)):
+            if not is_last and self._origin_blocked(origin):
                 with self._stats_lock:
                     self._fallback_attempts += 1
                 continue
@@ -519,11 +813,21 @@ class _ThreadLocalRequestsRangeTransport:
                     start,
                     end,
                     timeout,
+                    origin_deadline=origin_deadline,
+                    progress=progress,
+                    range_key=range_key,
                     allow_extended_retry=is_last,
                 )
             except urllib.error.HTTPError as error:
                 last_error = error
                 if is_last or error.code not in {429, 500, 502, 503, 504}:
+                    raise
+                with self._stats_lock:
+                    self._fallback_attempts += 1
+                continue
+            except _OriginDeadlineExceeded as error:
+                last_error = error
+                if is_last:
                     raise
                 with self._stats_lock:
                     self._fallback_attempts += 1
@@ -550,6 +854,23 @@ class _ThreadLocalRequestsRangeTransport:
         suffix = url[len(self._primary_endpoint) :]
         return (url, *(f"{endpoint}{suffix}" for endpoint in self._fallback_endpoints))
 
+    def _active_progress(self) -> tuple[_RequestProgress | None, str]:
+        scope = getattr(self._local, "progress_scope", None)
+        if scope is None:
+            return None, "single-shot"
+        return scope["progress"], str(scope["range_key"])
+
+    def _origin_deadline(self, origin: str) -> float:
+        scope = getattr(self._local, "progress_scope", None)
+        if scope is None:
+            return time.monotonic() + self._origin_deadline_seconds
+        deadlines = scope["origin_deadlines"]
+        deadline = deadlines.get(origin)
+        if deadline is None:
+            deadline = time.monotonic() + self._origin_deadline_seconds
+            deadlines[origin] = deadline
+        return float(deadline)
+
     def _open_single_range(
         self,
         url: str,
@@ -557,14 +878,38 @@ class _ThreadLocalRequestsRangeTransport:
         end: int,
         timeout: float,
         *,
+        origin_deadline: float,
+        progress: _RequestProgress | None,
+        range_key: str,
         allow_extended_retry: bool,
     ) -> _RequestsResponse:
         origin = self._origin(url)
         connection_attempt = 0
         rate_limit_attempt = 0
         while True:
-            self._wait_for_origin_rate_limit(origin)
+            if progress is not None:
+                progress.raise_if_cancelled()
+            remaining = origin_deadline - time.monotonic()
+            if remaining <= 0.0:
+                raise _OriginDeadlineExceeded(
+                    f"Range origin deadline 已耗尽: origin={origin} range_key={range_key}"
+                )
+            self._wait_for_origin_rate_limit(
+                origin,
+                origin_deadline=origin_deadline,
+                progress=progress,
+                range_key=range_key,
+            )
             try:
+                request_timeout = min(
+                    float(timeout),
+                    max(origin_deadline - time.monotonic(), 0.001),
+                    ORIGIN_IO_TIMEOUT_SECONDS,
+                )
+                if progress is not None:
+                    progress.transport_activity(
+                        "https_range_open", range_key, origin
+                    )
                 response = self._session().get(
                     url,
                     headers={
@@ -573,7 +918,7 @@ class _ThreadLocalRequestsRangeTransport:
                     },
                     allow_redirects=True,
                     stream=True,
-                    timeout=timeout,
+                    timeout=(request_timeout, request_timeout),
                 )
                 with self._stats_lock:
                     self._requests += 1
@@ -603,14 +948,25 @@ class _ThreadLocalRequestsRangeTransport:
                     raise urllib.error.HTTPError(
                         final_url, status, reason, headers, None
                     )
-                return _RequestsResponse(response)
+                return _RequestsResponse(
+                    response,
+                    progress=progress,
+                    range_key=range_key,
+                    origin=origin,
+                    origin_deadline=origin_deadline,
+                )
             except urllib.error.HTTPError:
                 raise
             except (requests.ConnectionError, requests.Timeout) as error:
                 max_connection_attempts = 3 if allow_extended_retry else 0
                 if connection_attempt >= max_connection_attempts:
                     raise ConnectionError(str(error)) from error
-                time.sleep(0.5 * (2**connection_attempt))
+                retry_sleep = 0.5 * (2**connection_attempt)
+                if time.monotonic() + retry_sleep >= origin_deadline:
+                    raise _OriginDeadlineExceeded(
+                        f"Range origin deadline 不足以继续连接重试: origin={origin}"
+                    ) from error
+                time.sleep(retry_sleep)
                 connection_attempt += 1
 
     @staticmethod
@@ -642,15 +998,33 @@ class _ThreadLocalRequestsRangeTransport:
                 time.monotonic() + delay_seconds,
             )
 
-    def _wait_for_origin_rate_limit(self, origin: str) -> None:
+    def _wait_for_origin_rate_limit(
+        self,
+        origin: str,
+        *,
+        origin_deadline: float,
+        progress: _RequestProgress | None,
+        range_key: str,
+    ) -> None:
         while True:
+            if progress is not None:
+                progress.raise_if_cancelled()
             with self._stats_lock:
                 remaining = (
                     self._blocked_until_by_origin.get(origin, 0.0) - time.monotonic()
                 )
             if remaining <= 0.0:
                 return
-            slept = min(remaining, 1.0)
+            deadline_remaining = origin_deadline - time.monotonic()
+            if deadline_remaining <= 0.0:
+                raise _OriginDeadlineExceeded(
+                    f"Range origin deadline 在429退避期间耗尽: origin={origin}"
+                )
+            if progress is not None:
+                progress.transport_activity(
+                    "origin_rate_limit_wait", range_key, origin
+                )
+            slept = min(remaining, deadline_remaining, 1.0)
             time.sleep(slept)
             with self._stats_lock:
                 self._rate_limit_wait_seconds += slept
@@ -660,7 +1034,7 @@ class _ThreadLocalRequestsRangeTransport:
             return self._blocked_until_by_origin.get(origin, 0.0) > time.monotonic()
 
     @property
-    def telemetry(self) -> dict[str, int | str]:
+    def telemetry(self) -> dict[str, int | float | str]:
         with self._stats_lock:
             return {
                 "kind": "thread_local_requests_session_pool",
@@ -673,7 +1047,12 @@ class _ThreadLocalRequestsRangeTransport:
                 "fallback_endpoints": len(self._fallback_endpoints),
                 "fallback_attempts": self._fallback_attempts,
                 "fallback_successes": self._fallback_successes,
+                "origin_deadline_seconds": self._origin_deadline_seconds,
             }
+
+    @property
+    def origin_deadline_seconds(self) -> float:
+        return self._origin_deadline_seconds
 
 
 def _runtime_limits() -> tuple[int, int, int, int]:
@@ -721,20 +1100,20 @@ def _execute_request(
     retries: int,
     cache_budget_bytes: int,
     disk_free_reserve_bytes: int,
+    progress: _RequestProgress,
 ) -> dict[str, Any]:
     request_started = time.perf_counter()
-    entries = _validate_manifest(manifest)
-    sizes = [entry.get("bytes") for entry in entries]
-    if any(
-        isinstance(size, bool) or not isinstance(size, int) or size <= 0
-        for size in sizes
-    ):
-        raise online_range.rp.ContractError("dynamic Range fetch bytes 必须为正整数")
-    requested_bytes = sum(sizes)
+    entries, requested_bytes = _manifest_request_identity(manifest)
     if requested_bytes <= 0 or download_budget_bytes != requested_bytes:
         raise online_range.rp.ContractError(
             "download budget 必须精确等于 manifest 未就绪 Range 字节和"
         )
+    if (
+        progress.ranges_total != len(entries)
+        or progress.requested_bytes != requested_bytes
+    ):
+        raise online_range.rp.ContractError("dynamic Range progress identity 漂移")
+    progress.set_stage("cache_prepare", "range_cache_open")
     endpoint = os.environ.get(
         "S14_DYNAMIC_PAGE_FETCH_ENDPOINT", "https://huggingface.co"
     )
@@ -763,42 +1142,60 @@ def _execute_request(
         urllib.error.URLError,
         http.client.RemoteDisconnected,
     )
+
     def fetch_one(entry: dict[str, Any]) -> tuple[int, int, dict[str, Any]]:
-        cached = None
-        for attempt in range(retries):
-            try:
-                cached = cache.fetch(entry)
-                break
-            except urllib.error.HTTPError:
-                # An explicit remote HTTP status is not a transient transport
-                # break; do not multiply a 4xx/5xx across the outer retry loop.
-                raise
-            except retryable:
-                if attempt + 1 >= retries:
-                    raise
-                time.sleep(min(1 << attempt, 8))
-        if cached is None:
-            raise online_range.rp.ContractError("dynamic Range retry 状态未闭合")
-        proof = cached.proof
-        if (
-            proof.get("format") != online_range.CACHE_META_FORMAT
-            or proof.get("verified_transport") != "HTTPS/206/exact-Content-Range"
-            or not cached.path.is_file()
-            or cached.path.stat().st_size != int(entry["bytes"])
-        ):
-            raise online_range.rp.ContractError(
-                f"dynamic Range fetch postcondition 失败: {entry.get('range_key')}"
+        range_key = str(entry["range_key"])
+        progress.raise_if_cancelled()
+        progress.range_started(range_key)
+        try:
+            cached = None
+            with transport.progress_scope(progress, range_key):
+                for attempt in range(retries):
+                    progress.raise_if_cancelled()
+                    try:
+                        cached = cache.fetch(entry)
+                        break
+                    except urllib.error.HTTPError:
+                        # An explicit remote HTTP status is not a transient transport
+                        # break; do not multiply a 4xx/5xx across the outer retry loop.
+                        raise
+                    except _OriginDeadlineExceeded:
+                        # The deadline is cumulative across this range's retries;
+                        # starting the same origin again cannot make progress.
+                        raise
+                    except retryable:
+                        if attempt + 1 >= retries:
+                            raise
+                        retry_sleep = min(1 << attempt, 8)
+                        progress.retry_backoff(range_key)
+                        if progress.wait_cancelled(retry_sleep):
+                            progress.raise_if_cancelled()
+            if cached is None:
+                raise online_range.rp.ContractError("dynamic Range retry 状态未闭合")
+            proof = cached.proof
+            if (
+                proof.get("format") != online_range.CACHE_META_FORMAT
+                or proof.get("verified_transport") != "HTTPS/206/exact-Content-Range"
+                or not cached.path.is_file()
+                or cached.path.stat().st_size != int(entry["bytes"])
+            ):
+                raise online_range.rp.ContractError(
+                    f"dynamic Range fetch postcondition 失败: {range_key}"
+                )
+            progress.range_completed(range_key, cache_hit=bool(cached.cache_hit))
+            return (
+                int(cached.cache_hit),
+                int(not cached.cache_hit),
+                {
+                    "range_key": range_key,
+                    "cache_hit": cached.cache_hit,
+                    "path": str(cached.path),
+                    "observed_sha256": proof["observed_sha256"],
+                },
             )
-        return (
-            int(cached.cache_hit),
-            int(not cached.cache_hit),
-            {
-                "range_key": entry["range_key"],
-                "cache_hit": cached.cache_hit,
-                "path": str(cached.path),
-                "observed_sha256": proof["observed_sha256"],
-            },
-        )
+        except Exception as error:
+            progress.range_failed(range_key, error)
+            raise
 
     # 每个 manifest 至多288项；RangeCache 内部已有预算锁、proof锁与 keyed
     # file lock。受控并发只重叠 HTTPS Range I/O，仍逐项执行精确206/长度/SHA门。
@@ -809,10 +1206,12 @@ def _execute_request(
     # 根锁覆盖 trim 与本 manifest 的全部并行 fetch。这样多个 resident
     # worker/进程不能在分别通过 projected 检查后同时把磁盘写爆；锁序恒为
     # root -> 非阻塞候选 key，正式 fetch 则为 root -> 当前 key，不形成反向等待。
+    progress.set_stage("root_budget_lock", "wait_l3_root_budget_lock")
     with _l3_root_budget_lock(cache.root):
         with _STARTUP_TRIM_GUARD:
             needs_startup_trim = cache_root_identity not in _STARTUP_TRIMMED_ROOTS
         if needs_startup_trim:
+            progress.set_stage("startup_trim", "scan_complete_cache_pairs")
             startup_trim = _trim_l3_cache(
                 cache_root=cache.root,
                 cache_budget_bytes=cache_budget_bytes,
@@ -825,6 +1224,7 @@ def _execute_request(
             _sync_range_cache_storage_accounting(cache)
             with _STARTUP_TRIM_GUARD:
                 _STARTUP_TRIMMED_ROOTS.add(cache_root_identity)
+        progress.set_stage("predownload_check", "l3_budget_snapshot")
         predownload_trim = _fast_l3_budget_snapshot(
             cache,
             projected_download_bytes=download_budget_bytes,
@@ -832,6 +1232,7 @@ def _execute_request(
             disk_free_reserve_bytes=disk_free_reserve_bytes,
         )
         if not predownload_trim["constraints_satisfied"]:
+            progress.set_stage("predownload_trim", "evict_complete_cache_pairs")
             predownload_trim = _trim_l3_cache(
                 cache_root=cache.root,
                 cache_budget_bytes=cache_budget_bytes,
@@ -842,7 +1243,30 @@ def _execute_request(
                 target_cache_bytes=_l3_low_water_bytes(cache_budget_bytes),
             )
             _sync_range_cache_storage_accounting(cache)
-        results = list(executor.map(fetch_one, entries))
+        progress.set_stage("fetch_ranges", "submit_range_futures")
+        futures = [executor.submit(fetch_one, entry) for entry in entries]
+        try:
+            result_slots: list[tuple[int, int, dict[str, Any]] | None] = [
+                None
+            ] * len(futures)
+            future_indexes = {future: index for index, future in enumerate(futures)}
+            for future in concurrent.futures.as_completed(futures):
+                result_slots[future_indexes[future]] = future.result()
+            if any(result is None for result in result_slots):
+                raise online_range.rp.ContractError(
+                    "dynamic Range future result 未形成完整有序闭包"
+                )
+            results = [result for result in result_slots if result is not None]
+        except Exception as error:
+            progress.cancel(error)
+            for future in futures:
+                future.cancel()
+            # Running futures observe the cancellation event before retry/open/read.
+            # Waiting keeps the persistent worker request boundary one-shot: no task
+            # from a failed request may leak into the following JSONL request.
+            concurrent.futures.wait(futures)
+            raise
+        progress.set_stage("cache_finalize", "touch_committed_cache_pairs")
         touched_pairs = _touch_cache_pair_access(cache.root, protected_keys)
         post_request_storage = cache.cache_storage_telemetry
     hits = sum(row[0] for row in results)
@@ -854,6 +1278,7 @@ def _execute_request(
         if not bool(row["cache_hit"])
     )
     request_wall_ms = (time.perf_counter() - request_started) * 1000.0
+    progress.set_stage("complete", "terminal_result_ready")
     return {
         "format": "polaris-s14-dynamic-page-fetch-result-v1",
         "range_count": len(rows),
@@ -898,6 +1323,8 @@ def _serve() -> int:
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
         for raw in sys.stdin:
             request_id: Any = None
+            progress: _RequestProgress | None = None
+            heartbeat: _ProgressHeartbeat | None = None
             try:
                 request = json.loads(raw)
                 if not isinstance(request, dict) or request.get("op") != "fetch_manifest":
@@ -908,11 +1335,34 @@ def _serve() -> int:
                 manifest = request.get("manifest")
                 cache_root = request.get("cache_root")
                 budget = request.get("download_budget_bytes")
-                _validate_manifest(manifest)
+                progress_format = request.get("progress_format")
+                worker_deadline_seconds = request.get("worker_deadline_seconds")
+                if progress_format != PROGRESS_FORMAT:
+                    raise online_range.rp.ContractError(
+                        "worker progress_format 漂移"
+                    )
+                if (
+                    isinstance(worker_deadline_seconds, bool)
+                    or not isinstance(worker_deadline_seconds, (int, float))
+                    or not 1.0 <= float(worker_deadline_seconds) <= 86_400.0
+                ):
+                    raise online_range.rp.ContractError(
+                        "worker_deadline_seconds 必须在1..86400"
+                    )
                 if not isinstance(cache_root, str) or not cache_root:
                     raise online_range.rp.ContractError("worker cache_root 必须为非空UTF-8路径")
                 if isinstance(budget, bool) or not isinstance(budget, int) or budget <= 0:
                     raise online_range.rp.ContractError("worker download budget 必须为正整数")
+                entries, requested_bytes = _manifest_request_identity(manifest)
+                progress = _RequestProgress(
+                    request_id,
+                    ranges_total=len(entries),
+                    requested_bytes=requested_bytes,
+                    origin_deadline_seconds=transport.origin_deadline_seconds,
+                    worker_deadline_seconds=float(worker_deadline_seconds),
+                )
+                heartbeat = _ProgressHeartbeat(progress)
+                heartbeat.start()
                 result = _execute_request(
                     manifest=manifest,
                     cache_root=Path(cache_root),
@@ -923,19 +1373,31 @@ def _serve() -> int:
                     retries=retries,
                     cache_budget_bytes=cache_budget_bytes,
                     disk_free_reserve_bytes=disk_free_reserve_bytes,
+                    progress=progress,
                 )
-                response = {"request_id": request_id, "ok": True, "result": result}
+                response = {
+                    "request_id": request_id,
+                    "ok": True,
+                    "result": result,
+                    "progress": progress.snapshot(),
+                }
             except Exception as error:
                 response = {
                     "request_id": request_id,
                     "ok": False,
                     "error_type": type(error).__name__,
                     "error": str(error),
+                    "transport": transport.telemetry,
                 }
+                if progress is not None:
+                    response["progress"] = progress.snapshot()
+            finally:
+                if heartbeat is not None:
+                    heartbeat.stop()
             # JSONL stdout is a control-plane byte protocol.  ASCII escaping is
             # an independent safety belt around PYTHONUTF8/PYTHONIOENCODING so
             # localized exception text cannot depend on a Windows code page.
-            print(json.dumps(response, ensure_ascii=True), flush=True)
+            _emit_protocol(response)
     return 0
 
 
@@ -959,7 +1421,15 @@ def main() -> int:
         disk_free_reserve_bytes,
     ) = _runtime_limits()
     manifest = _load_manifest(args.manifest)
+    entries, requested_bytes = _manifest_request_identity(manifest)
     transport = _ThreadLocalRequestsRangeTransport()
+    progress = _RequestProgress(
+        0,
+        ranges_total=len(entries),
+        requested_bytes=requested_bytes,
+        origin_deadline_seconds=transport.origin_deadline_seconds,
+        worker_deadline_seconds=86_400.0,
+    )
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
         result = _execute_request(
             manifest=manifest,
@@ -971,6 +1441,7 @@ def main() -> int:
             retries=retries,
             cache_budget_bytes=cache_budget_bytes,
             disk_free_reserve_bytes=disk_free_reserve_bytes,
+            progress=progress,
         )
     print(json.dumps(result, ensure_ascii=False))
     return 0

@@ -27,6 +27,10 @@ use crate::{
     s14_position0_weight_plan::S14Position0HybridWeightPlan,
     s14_position1_attention::position_rope_cos_sin,
     s14_route_postprocess_gpu::S14RoutePostprocessGpuMode,
+    s14_starfold_prefetch_pipeline::{
+        S14StarfoldPrefetchLayerIdentity, S14StarfoldStaticMaterializeReceipt,
+        S14StarfoldStaticPageClass, S14StarfoldStaticPageIntent, S14StarfoldStaticSsdIntent,
+    },
     GpuBuffer, VulkanContext,
 };
 use anyhow::{anyhow, bail, Context, Result};
@@ -363,6 +367,23 @@ impl S14CausalBlockProductionHcQkvResourceProvider for S14Base1K4ProductionHcQkv
             .map_err(|error| error.to_string())
     }
 
+    fn plan_starfold_static_prefetch(
+        &self,
+        layer: S14StarfoldPrefetchLayerIdentity,
+    ) -> std::result::Result<Option<S14StarfoldStaticSsdIntent>, String> {
+        self.plan_static_prefetch_inner(layer)
+            .map(Some)
+            .map_err(|error| format!("{error:#}"))
+    }
+
+    fn materialize_starfold_static_prefetch(
+        &mut self,
+        intent: &S14StarfoldStaticSsdIntent,
+    ) -> std::result::Result<S14StarfoldStaticMaterializeReceipt, String> {
+        self.materialize_static_prefetch_inner(intent)
+            .map_err(|error| format!("{error:#}"))
+    }
+
     fn terminal_assets(
         &self,
     ) -> std::result::Result<S14CausalBlockProductionTerminalAssets, String> {
@@ -436,7 +457,103 @@ impl Drop for S14Base1K4ProductionHcQkvProvider {
     }
 }
 
+fn static_page_intent(
+    class: S14StarfoldStaticPageClass,
+    asset: &Position0Asset,
+) -> Result<S14StarfoldStaticPageIntent> {
+    if asset.expert_id.is_some() {
+        bail!("K4 static prefetch 禁止 routed expert asset")
+    }
+    S14StarfoldStaticPageIntent::new(
+        class,
+        format!("{}:{}:{}", asset.tensor, asset.cache_key, asset.range_key),
+        asset.bytes,
+    )
+}
+
 impl S14Base1K4ProductionHcQkvProvider {
+    fn plan_static_prefetch_inner(
+        &self,
+        layer: S14StarfoldPrefetchLayerIdentity,
+    ) -> Result<S14StarfoldStaticSsdIntent> {
+        let manifest_layer = self
+            .manifest
+            .layers
+            .get(usize::from(layer.layer_ordinal()))
+            .context("K4 static prefetch layer ordinal 越出 manifest")?;
+        if u16::from(manifest_layer.layer) != layer.layer() {
+            bail!("K4 static prefetch layer identity 与 manifest 漂移");
+        }
+        let mut pages = Vec::with_capacity(
+            manifest_layer.assets.non_expert.len()
+                + manifest_layer.assets.router.len()
+                + manifest_layer.assets.shared.len(),
+        );
+        for asset in &manifest_layer.assets.non_expert {
+            let class = if asset.tensor.contains("norm") {
+                S14StarfoldStaticPageClass::Normalization
+            } else {
+                S14StarfoldStaticPageClass::Attention
+            };
+            pages.push(static_page_intent(class, asset)?);
+        }
+        for asset in &manifest_layer.assets.router {
+            pages.push(static_page_intent(
+                S14StarfoldStaticPageClass::Router,
+                asset,
+            )?);
+        }
+        for asset in &manifest_layer.assets.shared {
+            pages.push(static_page_intent(
+                S14StarfoldStaticPageClass::SharedExpert,
+                asset,
+            )?);
+        }
+        S14StarfoldStaticSsdIntent::new(layer, pages)
+    }
+
+    fn materialize_static_prefetch_inner(
+        &mut self,
+        intent: &S14StarfoldStaticSsdIntent,
+    ) -> Result<S14StarfoldStaticMaterializeReceipt> {
+        let expected = self.plan_static_prefetch_inner(intent.layer())?;
+        if &expected != intent {
+            bail!("K4 static prefetch intent 与 provider manifest 漂移");
+        }
+        let manifest_layer = &self.manifest.layers[usize::from(intent.layer().layer_ordinal())];
+        let assets = manifest_layer
+            .assets
+            .non_expert
+            .iter()
+            .chain(&manifest_layer.assets.router)
+            .chain(&manifest_layer.assets.shared)
+            .cloned()
+            .collect::<Vec<_>>();
+        let mapped = {
+            let mut upload = self
+                .head_upload
+                .lock()
+                .map_err(|_| anyhow!("K4 static prefetch head upload/store mutex poisoned"))?;
+            upload
+                .store
+                .map_verified_batch(&assets)
+                .context("K4 static L+2 proof/SHA/mmap 热化失败")?
+        };
+        let bytes = mapped.iter().try_fold(0u64, |sum, asset| {
+            let bytes = u64::try_from(asset.bytes().len())
+                .context("K4 static prefetch mapped asset bytes 超出 u64")?;
+            sum.checked_add(bytes)
+                .context("K4 static prefetch mapped bytes overflow")
+        })?;
+        let receipt = S14StarfoldStaticMaterializeReceipt {
+            layer: intent.layer(),
+            assets: mapped.len(),
+            bytes,
+        };
+        receipt.validate_for(intent)?;
+        Ok(receipt)
+    }
+
     fn terminal_assets_inner(&self) -> Result<S14CausalBlockProductionTerminalAssets> {
         if self.phase != ProviderPhase::Complete {
             bail!(
