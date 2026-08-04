@@ -47,7 +47,11 @@ DEFAULT_ORIGIN_DEADLINE_SECONDS = 75.0
 MIN_ORIGIN_DEADLINE_SECONDS = 5.0
 MAX_ORIGIN_DEADLINE_SECONDS = 240.0
 ORIGIN_IO_TIMEOUT_SECONDS = 15.0
-ORIGIN_PROGRESS_CHUNK_BYTES = 256 << 10
+# Range bodies are multi-MiB expert pages.  A 256-KiB read loop paid the
+# progress lock and Python/requests dispatch four times as often as necessary
+# on every cold page.  One MiB still emits bounded progress frequently while
+# keeping the transport hot path coarse enough to feed the Rust/Vulkan side.
+ORIGIN_PROGRESS_CHUNK_BYTES = 1 << 20
 MODELSCOPE_LFS_SNAPSHOT_FORMAT = "polaris-deepseek-fixed-revision-lfs-v1"
 MODELSCOPE_RESOLVE_REVISION = "master"
 
@@ -587,6 +591,7 @@ def _fast_l3_budget_snapshot(
     projected_download_bytes: int,
     cache_budget_bytes: int,
     disk_free_reserve_bytes: int,
+    phase: str = "predownload",
 ) -> dict[str, Any]:
     """热路径只读 RangeCache 计数与磁盘空闲量，不枚举数万缓存文件。"""
 
@@ -599,7 +604,7 @@ def _fast_l3_budget_snapshot(
     )
     projected_disk_free_bytes = disk_free_bytes - projected_download_bytes
     return {
-        "phase": "predownload",
+        "phase": phase,
         "scan": "skipped_no_pressure",
         "cache_used_bytes": cache_used_bytes,
         "cache_reserved_bytes": cache_reserved_bytes,
@@ -1180,10 +1185,10 @@ def _runtime_limits() -> tuple[int, int, int, int]:
         raise online_range.rp.ContractError(
             "S14_DYNAMIC_PAGE_FETCH_RETRIES 必须在1..8"
         )
-    workers = int(os.environ.get("S14_DYNAMIC_PAGE_FETCH_WORKERS", "6"))
-    if workers < 1 or workers > 12:
+    workers = int(os.environ.get("S14_DYNAMIC_PAGE_FETCH_WORKERS", "12"))
+    if workers < 1 or workers > 24:
         raise online_range.rp.ContractError(
-            "S14_DYNAMIC_PAGE_FETCH_WORKERS 必须在1..12"
+            "S14_DYNAMIC_PAGE_FETCH_WORKERS 必须在1..24"
         )
     cache_budget_bytes = int(
         os.environ.get(
@@ -1330,17 +1335,33 @@ def _execute_request(
         with _STARTUP_TRIM_GUARD:
             needs_startup_trim = cache_root_identity not in _STARTUP_TRIMMED_ROOTS
         if needs_startup_trim:
-            progress.set_stage("startup_trim", "scan_complete_cache_pairs")
-            startup_trim = _trim_l3_cache(
-                cache_root=cache.root,
+            # RangeCache 构造时已经做过一次轻量 payload 字节核算。取得跨进程根锁后
+            # 再同步一次，闭合“构造后等待根锁期间其他 worker 改变缓存”的窗口；这里
+            # 只 stat payload，不解析数万份 proof JSON。
+            progress.set_stage("startup_trim", "refresh_l3_storage_accounting")
+            _sync_range_cache_storage_accounting(cache)
+            startup_trim = _fast_l3_budget_snapshot(
+                cache,
+                projected_download_bytes=0,
                 cache_budget_bytes=cache_budget_bytes,
                 disk_free_reserve_bytes=disk_free_reserve_bytes,
-                projected_download_bytes=0,
-                protected_keys=protected_keys,
                 phase="startup",
-                target_cache_bytes=_l3_low_water_bytes(cache_budget_bytes),
             )
-            _sync_range_cache_storage_accounting(cache)
+            # 启动时低于 high-water 且磁盘保留线充足就保持现有热页。旧逻辑每次新
+            # worker 都无条件削到 low-water，随后同一请求又把刚淘汰的约数 GiB
+            # exact-route 页重新下载，形成确定性的冷启动抖动。
+            if not startup_trim["constraints_satisfied"]:
+                progress.set_stage("startup_trim", "scan_complete_cache_pairs")
+                startup_trim = _trim_l3_cache(
+                    cache_root=cache.root,
+                    cache_budget_bytes=cache_budget_bytes,
+                    disk_free_reserve_bytes=disk_free_reserve_bytes,
+                    projected_download_bytes=0,
+                    protected_keys=protected_keys,
+                    phase="startup",
+                    target_cache_bytes=_l3_low_water_bytes(cache_budget_bytes),
+                )
+                _sync_range_cache_storage_accounting(cache)
             with _STARTUP_TRIM_GUARD:
                 _STARTUP_TRIMMED_ROOTS.add(cache_root_identity)
         progress.set_stage("predownload_check", "l3_budget_snapshot")
