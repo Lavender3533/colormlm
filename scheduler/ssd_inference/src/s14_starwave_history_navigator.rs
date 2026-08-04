@@ -308,8 +308,8 @@ impl S14StarwaveHistoryNavigator {
         self
     }
 
-    /// 注入由当前 block plan 的 verified leases 签出的逐 lane 成本。没有该证据时，
-    /// history/atlas 仍可提供 lane0 猜测，但 production adapter 必须退化为 commit_limit=1。
+    /// 注入由当前 block plan 的 verified leases 签出的逐 lane 成本。它只参与物理调度
+    /// 与信息增益评分；缺失时 committed history/atlas 安全证书仍可进入 target verifier。
     pub fn with_lane_physical_evidence(
         mut self,
         lane_physical_evidence: [S14StarwaveLanePhysicalEvidence; S14_STARWAVE_DRAFT_PHYSICAL_K],
@@ -398,15 +398,21 @@ impl S14StarwaveProductionNavigator for S14StarwaveHistoryNavigator {
         }
         let horizon = (candidates.tokens.len() >= 2).then_some(candidates.tokens.len());
         let mut certificates = Vec::new();
-        if let (Some(physical), Some(source)) = (self.lane_physical_evidence, candidates.source) {
+        if let Some(source) = candidates.source {
             for (lane, &token_id) in candidates.tokens.iter().enumerate() {
-                certificates.push(S14StarwaveCandidateLaneCertificate::from_verified_evidence(
-                    context,
-                    lane,
-                    token_id,
-                    source,
-                    physical[lane],
-                )?);
+                let certificate = match self.lane_physical_evidence {
+                    Some(physical) => S14StarwaveCandidateLaneCertificate::from_verified_evidence(
+                        context,
+                        lane,
+                        token_id,
+                        source,
+                        physical[lane],
+                    )?,
+                    None => S14StarwaveCandidateLaneCertificate::from_committed_evidence(
+                        context, lane, token_id, source,
+                    )?,
+                };
+                certificates.push(certificate);
             }
         }
         S14StarwaveProductionNavigatorOutput::from_certified_candidates(

@@ -25,7 +25,7 @@ use std::{cmp::Ordering, error::Error, fmt, sync::Arc};
 
 pub const S14_STARWAVE_DRAFT_PHYSICAL_K: usize = 4;
 pub const S14_STARWAVE_DRAFT_EXPECTED_MIN_COMMITTABLE_TOKENS: usize = 1;
-pub const S14_STARWAVE_BLOCK_PROPOSAL_CONTRACT_VERSION: u32 = 1;
+pub const S14_STARWAVE_BLOCK_PROPOSAL_CONTRACT_VERSION: u32 = 2;
 
 pub type S14StarwaveDraftResult<T> = Result<T, S14StarwaveDraftError>;
 
@@ -365,8 +365,9 @@ impl S14StarwaveInformationGainScore {
     }
 }
 
-/// 单个候选 lane 的 production 证书。所有字段私有，调用方只能把 committed 来源、
-/// verified lease 成本与当前 authoritative context 一次性绑定。
+/// 单个候选 lane 的 production 安全证书。committed 来源与 authoritative checkpoint
+/// 决定候选是否具备进入 target verifier 的资格；physical/score 只是可选的调度成本
+/// 证据，不能反向成为正确性提交的硬门。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct S14StarwaveCandidateLaneCertificate {
     contract_version: u32,
@@ -376,12 +377,21 @@ pub struct S14StarwaveCandidateLaneCertificate {
     token_id: u32,
     base_checkpoint: S14StarwaveBaseCheckpointIdentity,
     source: S14StarwaveCandidateEvidenceSource,
-    physical: S14StarwaveLanePhysicalEvidence,
-    score: S14StarwaveInformationGainScore,
+    physical: Option<S14StarwaveLanePhysicalEvidence>,
+    score: Option<S14StarwaveInformationGainScore>,
     certificate_sha256: S14StarwaveSha256,
 }
 
 impl S14StarwaveCandidateLaneCertificate {
+    pub(crate) fn from_committed_evidence(
+        context: S14StarwaveNavigatorContext<'_>,
+        lane: usize,
+        token_id: u32,
+        source: S14StarwaveCandidateEvidenceSource,
+    ) -> S14StarwaveDraftResult<Self> {
+        Self::from_evidence(context, lane, token_id, source, None)
+    }
+
     pub fn from_verified_evidence(
         context: S14StarwaveNavigatorContext<'_>,
         lane: usize,
@@ -389,14 +399,25 @@ impl S14StarwaveCandidateLaneCertificate {
         source: S14StarwaveCandidateEvidenceSource,
         physical: S14StarwaveLanePhysicalEvidence,
     ) -> S14StarwaveDraftResult<Self> {
+        Self::from_evidence(context, lane, token_id, source, Some(physical))
+    }
+
+    fn from_evidence(
+        context: S14StarwaveNavigatorContext<'_>,
+        lane: usize,
+        token_id: u32,
+        source: S14StarwaveCandidateEvidenceSource,
+        physical: Option<S14StarwaveLanePhysicalEvidence>,
+    ) -> S14StarwaveDraftResult<Self> {
         if lane >= S14_STARWAVE_DRAFT_PHYSICAL_K || token_id >= VOCAB_SIZE {
             return Err(S14StarwaveDraftError::new(
                 "S14 StarWave candidate certificate lane/token 越界",
             ));
         }
-        if !source.is_committed_evidence() || !physical.validate() {
+        if !source.is_committed_evidence() || physical.is_some_and(|evidence| !evidence.validate())
+        {
             return Err(S14StarwaveDraftError::new(
-                "S14 StarWave candidate certificate 缺少 committed/physical evidence",
+                "S14 StarWave candidate certificate 缺少 committed evidence 或 physical evidence 非法",
             ));
         }
         let authoritative = context.authoritative();
@@ -412,10 +433,10 @@ impl S14StarwaveCandidateLaneCertificate {
             .checked_add(lane as u64 + 1)
             .ok_or_else(|| S14StarwaveDraftError::new("S14 StarWave candidate epoch overflow"))?;
         let base_checkpoint = S14StarwaveBaseCheckpointIdentity::from_authoritative(authoritative)?;
-        let score = S14StarwaveInformationGainScore {
+        let score = physical.map(|physical| S14StarwaveInformationGainScore {
             numerator_nanobits: physical.expected_entropy_drop_nanobits,
             denominator_ns: physical.total_latency_ns,
-        };
+        });
         let mut certificate = Self {
             contract_version: S14_STARWAVE_BLOCK_PROPOSAL_CONTRACT_VERSION,
             lane: lane as u8,
@@ -446,9 +467,15 @@ impl S14StarwaveCandidateLaneCertificate {
                 .checked_add(lane as u64 + 1)
                 .is_some_and(|value| value == self.candidate_commit_epoch)
             && self.source.is_committed_evidence()
-            && self.physical.validate()
-            && self.score.numerator_nanobits == self.physical.expected_entropy_drop_nanobits
-            && self.score.denominator_ns == self.physical.total_latency_ns
+            && match (self.physical, self.score) {
+                (Some(physical), Some(score)) => {
+                    physical.validate()
+                        && score.numerator_nanobits == physical.expected_entropy_drop_nanobits
+                        && score.denominator_ns == physical.total_latency_ns
+                }
+                (None, None) => true,
+                _ => false,
+            }
             && self.certificate_sha256 != S14StarwaveSha256::ZERO
             && self.certificate_sha256 == starwave_lane_certificate_sha256(&self)
     }
@@ -477,11 +504,11 @@ impl S14StarwaveCandidateLaneCertificate {
         self.source
     }
 
-    pub const fn physical(self) -> S14StarwaveLanePhysicalEvidence {
+    pub const fn physical(self) -> Option<S14StarwaveLanePhysicalEvidence> {
         self.physical
     }
 
-    pub const fn score(self) -> S14StarwaveInformationGainScore {
+    pub const fn score(self) -> Option<S14StarwaveInformationGainScore> {
         self.score
     }
 
@@ -518,7 +545,7 @@ fn starwave_scaled_ceil_ns(
 fn starwave_lane_certificate_sha256(
     certificate: &S14StarwaveCandidateLaneCertificate,
 ) -> S14StarwaveSha256 {
-    let mut writer = S14StarwaveProofWriter::new("polaris-s14-starwave-lane-certificate-v1");
+    let mut writer = S14StarwaveProofWriter::new("polaris-s14-starwave-lane-certificate-v2");
     writer.write_u32(certificate.contract_version);
     writer.write_u8(certificate.lane);
     writer.write_u32(certificate.candidate_position);
@@ -547,21 +574,28 @@ fn starwave_lane_certificate_sha256(
             writer.write_u32(committed_support);
         }
     }
-    writer.write_u32(certificate.physical.lease_cache_contract_version);
-    writer.write_u32(certificate.physical.verified_lease_count);
-    writer.write_u64(certificate.physical.verified_physical_bytes);
-    writer.write_u64(certificate.physical.expected_transfer_bytes);
-    writer.write_u64(certificate.physical.expected_flops);
-    writer.write_u64(certificate.physical.bandwidth_bytes_per_second);
-    writer.write_u64(certificate.physical.throughput_flops_per_second);
-    writer.write_u64(certificate.physical.fixed_latency_ns);
-    writer.write_u64(certificate.physical.expected_entropy_drop_nanobits);
-    writer.write_u64(certificate.physical.transfer_latency_ns);
-    writer.write_u64(certificate.physical.compute_latency_ns);
-    writer.write_u64(certificate.physical.total_latency_ns);
-    writer.write_sha256(certificate.physical.lease_identity_sha256);
-    writer.write_u64(certificate.score.numerator_nanobits);
-    writer.write_u64(certificate.score.denominator_ns);
+    match (certificate.physical, certificate.score) {
+        (Some(physical), Some(score)) => {
+            writer.write_u8(1);
+            writer.write_u32(physical.lease_cache_contract_version);
+            writer.write_u32(physical.verified_lease_count);
+            writer.write_u64(physical.verified_physical_bytes);
+            writer.write_u64(physical.expected_transfer_bytes);
+            writer.write_u64(physical.expected_flops);
+            writer.write_u64(physical.bandwidth_bytes_per_second);
+            writer.write_u64(physical.throughput_flops_per_second);
+            writer.write_u64(physical.fixed_latency_ns);
+            writer.write_u64(physical.expected_entropy_drop_nanobits);
+            writer.write_u64(physical.transfer_latency_ns);
+            writer.write_u64(physical.compute_latency_ns);
+            writer.write_u64(physical.total_latency_ns);
+            writer.write_sha256(physical.lease_identity_sha256);
+            writer.write_u64(score.numerator_nanobits);
+            writer.write_u64(score.denominator_ns);
+        }
+        (None, None) => writer.write_u8(0),
+        _ => writer.write_u8(u8::MAX),
+    }
     writer.finish()
 }
 
@@ -890,8 +924,8 @@ pub struct S14StarwaveProductionNavigatorOutput {
 }
 
 impl S14StarwaveProductionNavigatorOutput {
-    /// 无物理成本证书的兼容入口。候选仍可供 target 执行 lane0，但即使调用方声明了
-    /// horizon，也必须 fail-closed 为 lane0-only；2..=4 只能走
+    /// 无 committed 安全证书的兼容入口。候选仍可供 target 执行 lane0，但即使调用方
+    /// 声明了 horizon，也必须 fail-closed 为 lane0-only；2..=4 只能走
     /// [`Self::from_certified_candidates`]。
     pub fn from_real_candidates(
         context: S14StarwaveNavigatorContext<'_>,
@@ -910,8 +944,9 @@ impl S14StarwaveProductionNavigatorOutput {
         )
     }
 
-    /// 带 per-lane committed/lease/cost 证书的 production 入口。证书必须从 lane0 连续排列；
-    /// 某 lane 缺失或陈旧只截断 longest reliable prefix，后续 lane 不会令整个 block 回退。
+    /// 带 per-lane committed 安全证书的 production 入口。证书可附带 lease/cost 调度证据，
+    /// 但后者不是提交门。证书必须从 lane0 连续排列；某 lane 缺失或陈旧只截断 longest
+    /// reliable prefix，后续 lane 不会令整个 block 回退。
     pub fn from_certified_candidates(
         context: S14StarwaveNavigatorContext<'_>,
         candidate_token_ids: &[u32],
@@ -980,8 +1015,9 @@ impl S14StarwaveProductionNavigatorOutput {
             reliable_prefix = lane + 1;
         }
 
-        // EOS/horizon/cost 证据共同界定 longest reliable prefix。horizon 越界或 EOS
-        // 缺失仍退化 lane0；证书中途缺失则保留此前已连续证明的2..=4，而非整块回退。
+        // committed/EOS/horizon 共同界定 longest reliable prefix。horizon 越界或 EOS
+        // 缺失仍退化 lane0；安全证书中途缺失则保留此前已连续证明的2..=4，而非整块
+        // 回退。physical/cost 若存在只参与调度评分，不改变 target verifier 的提交上限。
         let eos_token_id = eos_token_id.filter(|&token_id| token_id < VOCAB_SIZE);
         let requested_horizon = navigator_horizon.filter(|&horizon| {
             (2..=S14_STARWAVE_DRAFT_PHYSICAL_K).contains(&horizon)

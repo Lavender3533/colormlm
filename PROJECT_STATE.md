@@ -2104,3 +2104,28 @@ Claude/GPT的通用智能体能力，覆盖推理、知识、长上下文、编�
   B）完成production resident K4 decoder注入API；C）冻结S14，体验暂回v38/v47，S14只做离线内存与
   hotset/pack研究。完整回执见
   `fast16/research/polaris_meridian_v1/whole_token_runtime/S14_N26_SECOND_TURN_NO_GO_20260803.json`。
+
+## 2026-08-04：真实 S14Runtime 多块 UTF-8 门完成，转入 StarWave 速度/质量阶段
+
+- 提交 `9ab590e` 的唯一真实性门以随机 nonce 输入返回 HTTP `200`：`prompt_tokens=23`、
+  `completion_tokens=3`、输出“已收到，”，墙钟 `574.28s`。三个 generation block 均消费
+  前一真实 checkpoint 并生成新 SHA；第二块明确记录 `second_block_commit=true`。证据为
+  `scheduler/target/s14-unique-gate-9ab590e-20260804-125003.result.json` 与同 stem stderr。
+- 该门已经证明任意输入、跨 block commit 与连续 UTF-8，但仍不能称为正常聊天：三个 block
+  只各提交1 token；约 `385.18s` 花在22次 prompt 状态迁移对应的6个串行 K4 FullDepth43
+  prefill block，generation block 分别为 `38.624s/77.605s/72.870s`。
+- `effective_commit_limit` 恒为1的确定性回归已定位：history/atlas navigator 可以产生2--4
+  个 committed 候选，但 production 从未注入 current-block `lane_physical_evidence`，旧合同却
+  把物理成本证据错误用作提交安全硬门。当前未提交批次已把两种证明拆开：committed history/
+  atlas、EOS 与 authoritative checkpoint 决定可进入 target verifier 的最长前缀；verified
+  lease/信息增益只作为可选调度评分。terminal 逐位置真实 head 比较、首 mismatch fallback、
+  EOS cap 与原子 checkpoint 选择均未放宽。proposal/lane certificate schema 升级到 v2。
+- 该批次只执行一次 `cargo check --manifest-path scheduler/Cargo.toml -p polaris_api --release
+  --offline`，已通过，仅仓库既有 warning；未启动模型、GPU、benchmark、长生成或全仓测试。
+- 上述 9ab590e 真门显式启用了研发降级 `W3 <- 同专家 W1`，只能证明运行链，不能代表精确
+  donor 质量。ModelScope pinned LFS exact Range 已可用，下一次质量门必须保持该 fallback
+  关闭，按在线路由只补精确 W3 页；不得下载整模。当前 Range cache 约 `61.568GiB`，D盘
+  约余 `48.77GiB`，继续执行64GiB缓存预算与20GiB磁盘保留线。
+- 下一速度批次不再调超时：generation 使用本批次启用的2--4 token target-verified StarWave；
+  prefill 设计 K8/K16 teacher-forced superblock，使已知 prompt token 按层批处理而不是连续跑
+  6次完整43层。完整接口闭合前不再启动模型。
