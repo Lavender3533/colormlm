@@ -933,6 +933,10 @@ impl S14Position0HybridUploader {
                     self.validate_forced_prefill_causal_block_closed(plan)?;
                     self.progress.reset_token();
                 }
+                (_, S14Position0CausalBlockLeasePhase::Aborted) => {
+                    // stage/GPU drain 已由 block abort 边界证明；abort 方法也已把
+                    // static/head/pending 游标清回起点。这里只退休请求 lineage。
+                }
                 _ => bail!(
                     "请求结束时 causal-block lease 未安全闭合: snapshot={:?}",
                     self.causal_block_progress_snapshot(plan)

@@ -148,6 +148,11 @@ pub trait S14CausalBlockProductionHcQkvResourceProvider:
     /// uploader；terminal 必须继续消费 provider 当前持有的同一个 Arc owner。
     fn terminal_assets(&self) -> Result<S14CausalBlockProductionTerminalAssets, String>;
 
+    /// FullDepth43 在 terminal 前失败时，调用方必须先完成 GPU/stage drain，再通过
+    /// provider 持有的同一个 block lease 把 persistent uploader 标成 Aborted。
+    /// 禁止请求 cleanup 用通用 reset 抹掉一个仍处于 Issued 的半块。
+    fn abort_block_upload_lease_after_drain(&self) -> Result<(), String>;
+
     /// K-prefix producer 必须与HC/QKV recorder进入同一layer command；factory只允许在
     /// recorder构造完成后消费一次，不能在terminal begin前预制host checkpoint。
     fn take_prefix_state_producer(&mut self) -> Result<S14CausalBlockPrefixStateProducer, String>;

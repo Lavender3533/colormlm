@@ -2166,7 +2166,7 @@ where
     }
 }
 
-impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockHcQkvLayerRecorder
+impl<P: S14CausalBlockProductionHcQkvResourceProvider> S14CausalBlockHcQkvLayerRecorder
     for S14CausalBlockProductionHcQkvLayerRecorder<P>
 {
     fn begin_block(
@@ -2254,6 +2254,7 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockHcQkvLayerRecorder
         if let Some(producer) = &self.prefix_producer {
             producer.abort_block();
         }
+        self.provider.abort_block_upload_lease_after_drain()?;
         self.block_timeline_start = None;
         self.sealed_producer_timeline_value = None;
         self.phase = RecorderPhase::Idle;

@@ -370,6 +370,33 @@ impl S14CausalBlockProductionHcQkvResourceProvider for S14Base1K4ProductionHcQkv
             .map_err(|error| format!("{error:#}"))
     }
 
+    fn abort_block_upload_lease_after_drain(&self) -> std::result::Result<(), String> {
+        let mut lease_owner = self
+            .terminal_upload_lease
+            .lock()
+            .map_err(|_| "K4 abort upload lease mutex poisoned".to_owned())?;
+        let Some(lease) = lease_owner.as_ref().copied() else {
+            // 完整43层后的 terminal handoff 会 one-shot take lease，并由 terminal owner
+            // 自己负责 head stream abort。只有未完成 provider 丢失 lease 才是合同错误。
+            return if self.phase == ProviderPhase::Complete {
+                Ok(())
+            } else {
+                Err("K4 pre-terminal abort 时 block-scoped upload lease 已被消费".to_owned())
+            };
+        };
+        let mut upload = self
+            .head_upload
+            .lock()
+            .map_err(|_| "K4 abort terminal head upload/store mutex poisoned".to_owned())?;
+        upload
+            .uploader
+            .abort_causal_block_lease_after_drain(&self.weight_plan, &lease)
+            .map_err(|error| format!("K4 abort persistent uploader lease: {error:#}"))?;
+        drop(upload);
+        *lease_owner = None;
+        Ok(())
+    }
+
     fn take_prefix_state_producer(
         &mut self,
     ) -> std::result::Result<S14CausalBlockPrefixStateProducer, String> {

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import email.utils
 import http.client
 import json
 import os
@@ -92,6 +93,16 @@ class _ThreadLocalRequestsRangeTransport:
         self._stats_lock = threading.Lock()
         self._sessions = 0
         self._requests = 0
+        self._rate_limit_events = 0
+        self._rate_limit_wait_seconds = 0.0
+        self._blocked_until = 0.0
+        self._rate_limit_retries = int(
+            os.environ.get("S14_DYNAMIC_PAGE_FETCH_429_RETRIES", "8")
+        )
+        if not 1 <= self._rate_limit_retries <= 16:
+            raise online_range.rp.ContractError(
+                "S14_DYNAMIC_PAGE_FETCH_429_RETRIES 必须在1..16"
+            )
 
     def _session(self) -> requests.Session:
         session = getattr(self._local, "session", None)
@@ -113,7 +124,10 @@ class _ThreadLocalRequestsRangeTransport:
         self, url: str, start: int, end: int, timeout: float
     ) -> _RequestsResponse:
         online_range._require_https(url)
-        for attempt in range(4):
+        connection_attempt = 0
+        rate_limit_attempt = 0
+        while True:
+            self._wait_for_global_rate_limit()
             try:
                 response = self._session().get(
                     url,
@@ -128,6 +142,22 @@ class _ThreadLocalRequestsRangeTransport:
                 with self._stats_lock:
                     self._requests += 1
                 online_range._require_https(response.url)
+                if response.status_code == 429:
+                    retry_after = self._retry_after_seconds(
+                        response.headers.get("Retry-After"), rate_limit_attempt
+                    )
+                    status = response.status_code
+                    reason = response.reason
+                    headers = response.headers
+                    final_url = response.url
+                    response.close()
+                    if rate_limit_attempt >= self._rate_limit_retries:
+                        raise urllib.error.HTTPError(
+                            final_url, status, reason, headers, None
+                        )
+                    rate_limit_attempt += 1
+                    self._extend_global_rate_limit(retry_after)
+                    continue
                 if response.status_code >= 400:
                     status = response.status_code
                     reason = response.reason
@@ -141,10 +171,42 @@ class _ThreadLocalRequestsRangeTransport:
             except urllib.error.HTTPError:
                 raise
             except (requests.ConnectionError, requests.Timeout) as error:
-                if attempt == 3:
+                if connection_attempt >= 3:
                     raise ConnectionError(str(error)) from error
-                time.sleep(0.5 * (2**attempt))
-        raise AssertionError("unreachable")
+                time.sleep(0.5 * (2**connection_attempt))
+                connection_attempt += 1
+
+    @staticmethod
+    def _retry_after_seconds(value: str | None, attempt: int) -> float:
+        fallback = float(min(2**min(attempt, 6), 60))
+        if not value:
+            return fallback
+        stripped = value.strip()
+        if stripped.isdigit():
+            return min(max(float(stripped), 1.0), 120.0)
+        try:
+            retry_at = email.utils.parsedate_to_datetime(stripped)
+            return min(max(retry_at.timestamp() - time.time(), 1.0), 120.0)
+        except (TypeError, ValueError, OverflowError):
+            return fallback
+
+    def _extend_global_rate_limit(self, delay_seconds: float) -> None:
+        with self._stats_lock:
+            self._rate_limit_events += 1
+            self._blocked_until = max(
+                self._blocked_until, time.monotonic() + delay_seconds
+            )
+
+    def _wait_for_global_rate_limit(self) -> None:
+        while True:
+            with self._stats_lock:
+                remaining = self._blocked_until - time.monotonic()
+            if remaining <= 0.0:
+                return
+            slept = min(remaining, 1.0)
+            time.sleep(slept)
+            with self._stats_lock:
+                self._rate_limit_wait_seconds += slept
 
     @property
     def telemetry(self) -> dict[str, int | str]:
@@ -153,6 +215,10 @@ class _ThreadLocalRequestsRangeTransport:
                 "kind": "thread_local_requests_session_pool",
                 "sessions": self._sessions,
                 "requests": self._requests,
+                "rate_limit_events": self._rate_limit_events,
+                "rate_limit_wait_seconds": round(
+                    self._rate_limit_wait_seconds, 3
+                ),
             }
 
 
