@@ -49,6 +49,10 @@ $environment = @{
     # Windows into 95% physical-memory pressure.
     POLARIS_S14_PACKED_L2_MIB = '2048'
     POLARIS_S14_STARFOLD_MICROTILE_MIB = '16'
+    # K8 is throughput-oriented, but on an 8-GiB RX 5700 XT its checkpoint
+    # arena falls back to host memory and starves the GPU.  K4 keeps the active
+    # working set device-local; logical prompt semantics remain unchanged.
+    POLARIS_S14_PREFILL_MAX_K = '4'
     POLARIS_S14_DEFAULT_MAX_TOKENS = [string]$MaxTokens
     POLARIS_S14_REQUEST_DEADLINE_SECS = '7200'
     S14_DYNAMIC_PAGE_FETCH_WORKERS = [string]$RangeWorkers

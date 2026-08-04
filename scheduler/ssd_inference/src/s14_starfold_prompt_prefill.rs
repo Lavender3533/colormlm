@@ -1,7 +1,8 @@
 //! 纯 S14 StarFold K4/K8 teacher-forced prompt prefill 计划与提交门。
 //!
 //! `DecoderStateV1::position` 始终表示下一个待执行位置。给定 N 个 prompt token，本模块只
-//! 执行 N-1 个已观测输入转移；计划器优先发出物理 K8，最后不超过4个转移时发出 K4。
+//! 执行 N-1 个已观测输入转移；计划器默认优先发出物理 K8，最后不超过4个转移时发出 K4。
+//! 8-GiB 设备可通过显式环境变量把物理上限收紧为 K4，避免 K8 arena 退让到系统内存。
 //! 每块只提交逻辑前缀 r，filler lane 永不进入权威 ledger/checkpoint。这里不执行
 //! generation terminal/head，也不把 prompt 的 observed next input 描述成模型预测。
 
@@ -26,6 +27,7 @@ use std::sync::Arc;
 pub const S14_STARFOLD_PREFILL_PHYSICAL_K: usize = 4;
 pub const S14_STARFOLD_PREFILL_PHYSICAL_K4: usize = 4;
 pub const S14_STARFOLD_PREFILL_PHYSICAL_K8: usize = 8;
+pub const S14_STARFOLD_PREFILL_MAX_K_ENV: &str = "POLARIS_S14_PREFILL_MAX_K";
 
 /// teacher-forced prefill 的物理块宽度。只允许冻结的 K4/K8，禁止用裸 `usize` 把逻辑
 /// lane 数冒充为物理宽度。
@@ -282,6 +284,17 @@ pub struct S14StarfoldPromptPrefillPlan {
 
 impl S14StarfoldPromptPrefillPlan {
     pub fn build(prompt_token_ids: &[u32]) -> Result<Self> {
+        let max_physical_k = prefill_max_physical_k_from_env()?;
+        Self::build_with_max_physical_k(prompt_token_ids, max_physical_k)
+    }
+
+    /// Deterministic planner entry used by runtime policy and focused fixtures.
+    /// The logical prompt/checkpoint contract is identical for K4 and K8; only
+    /// the physical batch width changes.
+    pub fn build_with_max_physical_k(
+        prompt_token_ids: &[u32],
+        max_physical_k: S14StarfoldPrefillPhysicalK,
+    ) -> Result<Self> {
         let &first_input_token_id = prompt_token_ids
             .first()
             .context("StarFold prompt prefill 要求至少一个 token")?;
@@ -291,16 +304,22 @@ impl S14StarfoldPromptPrefillPlan {
         let transition_count = prompt_token_ids.len() - 1;
         let final_position = u32::try_from(transition_count)
             .context("StarFold prompt prefill 长度超出 u32 position")?;
+        let max_lanes = max_physical_k.lanes();
         let block_capacity = transition_count
-            .checked_add(S14_STARFOLD_PREFILL_PHYSICAL_K8 - 1)
+            .checked_add(max_lanes - 1)
             .context("StarFold prompt block count overflow")?
-            / S14_STARFOLD_PREFILL_PHYSICAL_K8;
+            / max_lanes;
         let mut blocks = Vec::with_capacity(block_capacity);
         let mut base = 0usize;
         while base < transition_count {
             let remaining = transition_count - base;
-            let physical_k = S14StarfoldPrefillPhysicalK::preferred_for_remaining(remaining)
-                .expect("loop guarantees non-empty remainder");
+            let physical_k = match max_physical_k {
+                S14StarfoldPrefillPhysicalK::K4 => S14StarfoldPrefillPhysicalK::K4,
+                S14StarfoldPrefillPhysicalK::K8 => {
+                    S14StarfoldPrefillPhysicalK::preferred_for_remaining(remaining)
+                        .expect("loop guarantees non-empty remainder")
+                }
+            };
             let logical_lanes = remaining.min(physical_k.lanes());
             let filler_token_id = prompt_token_ids[base + logical_lanes];
             let mut physical_input_token_ids =
@@ -333,7 +352,7 @@ impl S14StarfoldPromptPrefillPlan {
         Ok(plan)
     }
 
-    /// 验证 K8-first/K4-tail 规划、跨块 observed-next 连续性以及最终 checkpoint 身份。
+    /// 验证同一物理上限下的规划、跨块 observed-next 连续性以及最终 checkpoint 身份。
     pub fn validate(&self) -> Result<()> {
         if self.prompt_len == 0
             || self.first_input_token_id >= VOCAB_SIZE
@@ -343,6 +362,15 @@ impl S14StarfoldPromptPrefillPlan {
             bail!("StarFold prompt prefill plan 长度/首尾 token 合同漂移");
         }
 
+        let max_physical_k = if self
+            .blocks
+            .iter()
+            .any(|block| block.physical_k_contract() == S14StarfoldPrefillPhysicalK::K8)
+        {
+            S14StarfoldPrefillPhysicalK::K8
+        } else {
+            S14StarfoldPrefillPhysicalK::K4
+        };
         let mut expected_base = 0usize;
         let mut expected_input_token_id = self.first_input_token_id;
         for (block_index, block) in self.blocks.iter().enumerate() {
@@ -352,9 +380,13 @@ impl S14StarfoldPromptPrefillPlan {
                 .checked_sub(1)
                 .and_then(|transitions| transitions.checked_sub(expected_base))
                 .context("StarFold prompt plan block base 超出 transition count")?;
-            let expected_physical_k =
-                S14StarfoldPrefillPhysicalK::preferred_for_remaining(remaining)
-                    .context("StarFold prompt plan 含零长度尾块")?;
+            let expected_physical_k = match max_physical_k {
+                S14StarfoldPrefillPhysicalK::K4 => S14StarfoldPrefillPhysicalK::K4,
+                S14StarfoldPrefillPhysicalK::K8 => {
+                    S14StarfoldPrefillPhysicalK::preferred_for_remaining(remaining)
+                        .context("StarFold prompt plan 含零长度尾块")?
+                }
+            };
             if block.block_index != block_index
                 || usize::try_from(block.base_position).ok() != Some(expected_base)
                 || block.physical_k_contract() != expected_physical_k
@@ -391,6 +423,21 @@ impl S14StarfoldPromptPrefillPlan {
             bail!("StarFold prompt prefill 最终 position/input/N-1 ledger 未闭合");
         }
         Ok(())
+    }
+}
+
+fn prefill_max_physical_k_from_env() -> Result<S14StarfoldPrefillPhysicalK> {
+    let Some(raw) = std::env::var_os(S14_STARFOLD_PREFILL_MAX_K_ENV) else {
+        return Ok(S14StarfoldPrefillPhysicalK::K8);
+    };
+    let value = raw
+        .to_str()
+        .context("S14 prefill max K 环境变量不是 UTF-8")?
+        .trim();
+    match value {
+        "4" | "K4" | "k4" => Ok(S14StarfoldPrefillPhysicalK::K4),
+        "8" | "K8" | "k8" | "" => Ok(S14StarfoldPrefillPhysicalK::K8),
+        _ => bail!("{S14_STARFOLD_PREFILL_MAX_K_ENV} 只接受 4/K4 或 8/K8"),
     }
 }
 
