@@ -20,6 +20,8 @@ pub const S14_STARFOLD_PACKED_L2_MIB_BYTES: u64 = 1024 * 1024;
 pub const S14_STARFOLD_PACKED_L2_MAX_BYTES: u64 =
     S14_STARFOLD_PACKED_L2_MAX_MIB * S14_STARFOLD_PACKED_L2_MIB_BYTES;
 const PROJECTION_SHARDS: usize = 3;
+const SHARD_COUNT: usize = FULL_DEPTH_LAYERS.len() * PROJECTION_SHARDS;
+const RANGE_CACHE_KEY_BYTES: usize = 32;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct S14StarfoldPackedL2Config {
@@ -52,14 +54,13 @@ impl S14StarfoldPackedL2Config {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct S14StarfoldPackedL2Key {
+    shard: usize,
     weight_page: StarfoldPageKey,
-    weight_cache_key: String,
-    weight_range_key: String,
+    weight_cache_identity: [u8; RANGE_CACHE_KEY_BYTES],
     weight_offset: u64,
     weight_bytes: u32,
     scale_page: StarfoldPageKey,
-    scale_cache_key: String,
-    scale_range_key: String,
+    scale_cache_identity: [u8; RANGE_CACHE_KEY_BYTES],
     scale_offset: u64,
     scale_bytes: u32,
     window_bytes: u32,
@@ -92,33 +93,66 @@ impl S14StarfoldPackedL2Key {
         {
             bail!("StarFold packed L2 key bytes 越出物理窗口");
         }
+        let shard = projection_shard(weight.span.key.layer, weight.span.key.segment)?;
         Ok(Self {
+            shard,
             weight_page: weight.span.key,
-            weight_cache_key: weight.planned.cache_key.clone(),
-            weight_range_key: weight.planned.range_key.clone(),
+            weight_cache_identity: decode_range_cache_key("weight", &weight.planned.cache_key)?,
             weight_offset: weight.span.source_segment_offset,
             weight_bytes: weight.span.byte_len,
             scale_page: scale.span.key,
-            scale_cache_key: scale.planned.cache_key.clone(),
-            scale_range_key: scale.planned.range_key.clone(),
+            scale_cache_identity: decode_range_cache_key("scale", &scale.planned.cache_key)?,
             scale_offset: scale.span.source_segment_offset,
             scale_bytes: scale.span.byte_len,
             window_bytes,
         })
     }
 
-    fn shard(&self) -> Result<usize> {
-        let projection = match self.weight_page.segment {
-            StarfoldTensorSegment::W1Weight => 0,
-            StarfoldTensorSegment::W3Weight => 1,
-            StarfoldTensorSegment::W2Weight => 2,
-            segment => bail!("StarFold packed L2 shard segment 非法: {segment:?}"),
-        };
-        let layer = usize::from(self.weight_page.layer);
-        if layer >= FULL_DEPTH_LAYERS.len() {
-            bail!("StarFold packed L2 layer 越出 FullDepth43: {layer}");
-        }
-        Ok(layer * PROJECTION_SHARDS + projection)
+    const fn shard(&self) -> usize {
+        self.shard
+    }
+}
+
+fn projection_shard(layer: u16, segment: StarfoldTensorSegment) -> Result<usize> {
+    let projection = match segment {
+        StarfoldTensorSegment::W1Weight => 0,
+        StarfoldTensorSegment::W3Weight => 1,
+        StarfoldTensorSegment::W2Weight => 2,
+        segment => bail!("StarFold packed L2 shard segment 非法: {segment:?}"),
+    };
+    let layer = usize::from(layer);
+    if layer >= FULL_DEPTH_LAYERS.len() {
+        bail!("StarFold packed L2 layer 越出 FullDepth43: {layer}");
+    }
+    Ok(layer * PROJECTION_SHARDS + projection)
+}
+
+/// `S14PlannedRangeAsset::cache_key` 已经是 canonical Range identity 的 SHA-256。
+/// packed L2 只保留其 32-byte 二进制形式，避免每个 tile lookup 克隆并比较四个
+/// 可变长字符串；Range 的 repo/revision/file/bounds/header identity 仍被完整绑定。
+fn decode_range_cache_key(role: &str, raw: &str) -> Result<[u8; RANGE_CACHE_KEY_BYTES]> {
+    if raw.len() != RANGE_CACHE_KEY_BYTES * 2 {
+        bail!("StarFold packed L2 {role} cache key 不是 64 位 SHA-256");
+    }
+    let source = raw.as_bytes();
+    let mut decoded = [0u8; RANGE_CACHE_KEY_BYTES];
+    for (index, output) in decoded.iter_mut().enumerate() {
+        let high = decode_lower_hex(source[index * 2]).with_context(|| {
+            format!("StarFold packed L2 {role} cache key 非 canonical 小写十六进制")
+        })?;
+        let low = decode_lower_hex(source[index * 2 + 1]).with_context(|| {
+            format!("StarFold packed L2 {role} cache key 非 canonical 小写十六进制")
+        })?;
+        *output = (high << 4) | low;
+    }
+    Ok(decoded)
+}
+
+fn decode_lower_hex(byte: u8) -> Result<u8> {
+    match byte {
+        b'0'..=b'9' => Ok(byte - b'0'),
+        b'a'..=b'f' => Ok(byte - b'a' + 10),
+        _ => bail!("非小写十六进制"),
     }
 }
 
@@ -150,6 +184,13 @@ struct Observation {
     last_use: u64,
 }
 
+#[derive(Debug, Default)]
+struct PackedShard {
+    resident_bytes: u64,
+    entries: BTreeMap<S14StarfoldPackedL2Key, PackedEntry>,
+    observations: BTreeMap<S14StarfoldPackedL2Key, Observation>,
+}
+
 /// 单 runtime 持有的懒分配 packed L2。production session 已串行独占 runtime，
 /// 因此这里不引入 mutex；proof 内的 mmap lease 仍由进程级 cache 负责并发生命周期。
 #[derive(Debug)]
@@ -158,15 +199,15 @@ pub struct S14StarfoldPackedL2Cache {
     shard_capacity_bytes: u64,
     clock: u64,
     resident_bytes: u64,
-    entries: BTreeMap<S14StarfoldPackedL2Key, PackedEntry>,
-    observations: BTreeMap<S14StarfoldPackedL2Key, Observation>,
+    entry_count: usize,
+    shards: Vec<PackedShard>,
     stats: S14StarfoldPackedL2Stats,
 }
 
 impl S14StarfoldPackedL2Cache {
     pub fn new(config: S14StarfoldPackedL2Config) -> Result<Self> {
-        let shard_count = u64::try_from(FULL_DEPTH_LAYERS.len() * PROJECTION_SHARDS)
-            .context("StarFold packed L2 shard count overflow")?;
+        let shard_count =
+            u64::try_from(SHARD_COUNT).context("StarFold packed L2 shard count overflow")?;
         let shard_capacity_bytes = if config.capacity_bytes == 0 {
             0
         } else {
@@ -177,8 +218,8 @@ impl S14StarfoldPackedL2Cache {
             shard_capacity_bytes,
             clock: 0,
             resident_bytes: 0,
-            entries: BTreeMap::new(),
-            observations: BTreeMap::new(),
+            entry_count: 0,
+            shards: (0..SHARD_COUNT).map(|_| PackedShard::default()).collect(),
             stats: S14StarfoldPackedL2Stats {
                 capacity_bytes: config.capacity_bytes,
                 ..S14StarfoldPackedL2Stats::default()
@@ -192,10 +233,11 @@ impl S14StarfoldPackedL2Cache {
     ) -> Option<Arc<S14StarfoldVerifiedMicrotile>> {
         self.clock = self.clock.saturating_add(1);
         self.stats.lookups = self.stats.lookups.saturating_add(1);
-        let observation = self.observations.entry(key.clone()).or_default();
+        let shard = &mut self.shards[key.shard()];
+        let observation = shard.observations.entry(key.clone()).or_default();
         observation.frequency = observation.frequency.saturating_add(1);
         observation.last_use = self.clock;
-        if let Some(entry) = self.entries.get_mut(key) {
+        if let Some(entry) = shard.entries.get_mut(key) {
             entry.frequency = entry.frequency.saturating_add(1);
             entry.last_use = self.clock;
             self.stats.hits = self.stats.hits.saturating_add(1);
@@ -212,11 +254,12 @@ impl S14StarfoldPackedL2Cache {
         key: S14StarfoldPackedL2Key,
         proof: Arc<S14StarfoldVerifiedMicrotile>,
     ) -> Result<Arc<S14StarfoldVerifiedMicrotile>> {
-        if let Some(existing) = self.entries.get(&key) {
+        let shard_index = key.shard();
+        let shard = &mut self.shards[shard_index];
+        if let Some(existing) = shard.entries.get(&key) {
             return Ok(Arc::clone(&existing.proof));
         }
         let bytes = proof.byte_len();
-        let shard = key.shard()?;
         if self.capacity_bytes == 0
             || bytes == 0
             || bytes > self.shard_capacity_bytes
@@ -225,22 +268,15 @@ impl S14StarfoldPackedL2Cache {
             self.stats.rejections = self.stats.rejections.saturating_add(1);
             return Ok(proof);
         }
-        let candidate_frequency = self
+        let candidate_frequency = shard
             .observations
             .get(&key)
             .map_or(1, |observation| observation.frequency.max(1));
-        let mut shard_bytes = self
-            .entries
-            .iter()
-            .filter(|(entry_key, _)| entry_key.shard().ok() == Some(shard))
-            .map(|(_, entry)| entry.bytes)
-            .sum::<u64>();
 
-        while shard_bytes.saturating_add(bytes) > self.shard_capacity_bytes {
-            let victim = self
+        while shard.resident_bytes.saturating_add(bytes) > self.shard_capacity_bytes {
+            let victim = shard
                 .entries
                 .iter()
-                .filter(|(entry_key, _)| entry_key.shard().ok() == Some(shard))
                 .min_by_key(|(_, entry)| (entry.frequency, entry.last_use))
                 .map(|(entry_key, entry)| (entry_key.clone(), entry.frequency));
             let Some((victim_key, victim_frequency)) = victim else {
@@ -253,12 +289,13 @@ impl S14StarfoldPackedL2Cache {
                 self.stats.rejections = self.stats.rejections.saturating_add(1);
                 return Ok(proof);
             }
-            let removed = self
+            let removed = shard
                 .entries
                 .remove(&victim_key)
                 .context("StarFold packed L2 victim 消失")?;
-            shard_bytes = shard_bytes.saturating_sub(removed.bytes);
+            shard.resident_bytes = shard.resident_bytes.saturating_sub(removed.bytes);
             self.resident_bytes = self.resident_bytes.saturating_sub(removed.bytes);
+            self.entry_count = self.entry_count.saturating_sub(1);
             self.stats.evictions = self.stats.evictions.saturating_add(1);
         }
 
@@ -268,7 +305,7 @@ impl S14StarfoldPackedL2Cache {
             return Ok(proof);
         }
         self.clock = self.clock.saturating_add(1);
-        self.entries.insert(
+        shard.entries.insert(
             key,
             PackedEntry {
                 proof: Arc::clone(&proof),
@@ -277,7 +314,9 @@ impl S14StarfoldPackedL2Cache {
                 last_use: self.clock,
             },
         );
+        shard.resident_bytes = shard.resident_bytes.saturating_add(bytes);
         self.resident_bytes = self.resident_bytes.saturating_add(bytes);
+        self.entry_count = self.entry_count.saturating_add(1);
         self.stats.admissions = self.stats.admissions.saturating_add(1);
         self.refresh_snapshot();
         Ok(proof)
@@ -286,12 +325,12 @@ impl S14StarfoldPackedL2Cache {
     pub fn stats(&self) -> S14StarfoldPackedL2Stats {
         let mut stats = self.stats;
         stats.resident_bytes = self.resident_bytes;
-        stats.entries = self.entries.len();
+        stats.entries = self.entry_count;
         stats
     }
 
     fn refresh_snapshot(&mut self) {
         self.stats.resident_bytes = self.resident_bytes;
-        self.stats.entries = self.entries.len();
+        self.stats.entries = self.entry_count;
     }
 }
