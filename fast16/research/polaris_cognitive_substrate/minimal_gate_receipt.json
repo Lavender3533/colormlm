@@ -1,0 +1,297 @@
+{
+  "format": "polaris-cognitive-substrate-minimal-gate-v0",
+  "status": "structural_contract_only_not_intelligence_evidence",
+  "passed": true,
+  "assertions": {
+    "both_hypotheses_retained_before_evidence": true,
+    "php_committed_after_support": true,
+    "failed_php_was_rolled_back": true,
+    "unrelated_goal_and_design_preserved": true,
+    "java_committed_after_new_evidence": true,
+    "composer_failure_only_recomputed_php": true
+  },
+  "final_decision": "stack.java",
+  "nodes": {
+    "goal.website": {
+      "node_id": "goal.website",
+      "kind": "goal",
+      "value": "build_web_application",
+      "source": "user",
+      "epoch": 0,
+      "status": "active",
+      "depends_on": []
+    },
+    "design.layout": {
+      "node_id": "design.layout",
+      "kind": "design_ir",
+      "value": "dashboard_two_column",
+      "source": "visual_island",
+      "epoch": 0,
+      "status": "active",
+      "depends_on": []
+    },
+    "fact.composer_json": {
+      "node_id": "fact.composer_json",
+      "kind": "evidence",
+      "value": true,
+      "source": "filesystem",
+      "epoch": 1,
+      "status": "active",
+      "depends_on": []
+    },
+    "fact.pom_xml": {
+      "node_id": "fact.pom_xml",
+      "kind": "evidence",
+      "value": true,
+      "source": "filesystem",
+      "epoch": 2,
+      "status": "active",
+      "depends_on": []
+    },
+    "fact.php_runtime": {
+      "node_id": "fact.php_runtime",
+      "kind": "evidence",
+      "value": true,
+      "source": "runtime_probe",
+      "epoch": 3,
+      "status": "active",
+      "depends_on": []
+    },
+    "fact.jvm_runtime": {
+      "node_id": "fact.jvm_runtime",
+      "kind": "evidence",
+      "value": true,
+      "source": "environment:provisioned",
+      "epoch": 7,
+      "status": "active",
+      "depends_on": []
+    },
+    "fact.composer_install": {
+      "node_id": "fact.composer_install",
+      "kind": "evidence",
+      "value": false,
+      "source": "tool_receipt:install_failed",
+      "epoch": 6,
+      "status": "active",
+      "depends_on": []
+    },
+    "decision.stack": {
+      "node_id": "decision.stack",
+      "kind": "commit",
+      "value": "stack.java",
+      "source": "polaris.late_commit",
+      "epoch": 7,
+      "status": "active",
+      "depends_on": [
+        "stack.java",
+        "fact.pom_xml",
+        "fact.jvm_runtime"
+      ]
+    }
+  },
+  "hypotheses": {
+    "stack.php": {
+      "hypothesis_id": "stack.php",
+      "value": "PHP",
+      "requirements": [
+        {
+          "fact_id": "fact.composer_json",
+          "expected": true
+        },
+        {
+          "fact_id": "fact.php_runtime",
+          "expected": true
+        },
+        {
+          "fact_id": "fact.composer_install",
+          "expected": true
+        }
+      ],
+      "status": "contradicted",
+      "evidence": [
+        "fact.composer_json",
+        "fact.php_runtime",
+        "fact.composer_install"
+      ],
+      "contradictions": [
+        "fact.composer_install"
+      ]
+    },
+    "stack.java": {
+      "hypothesis_id": "stack.java",
+      "value": "Java",
+      "requirements": [
+        {
+          "fact_id": "fact.pom_xml",
+          "expected": true
+        },
+        {
+          "fact_id": "fact.jvm_runtime",
+          "expected": true
+        }
+      ],
+      "status": "supported",
+      "evidence": [
+        "fact.pom_xml",
+        "fact.jvm_runtime"
+      ],
+      "contradictions": []
+    }
+  },
+  "receipts": [
+    {
+      "epoch": 1,
+      "event": "evidence:fact.composer_json=True",
+      "changed_nodes": [
+        "fact.composer_json"
+      ],
+      "preserved_nodes": [
+        "design.layout",
+        "goal.website"
+      ],
+      "evaluated_hypotheses": [
+        "stack.php"
+      ],
+      "decision": null,
+      "hypothesis_status": {
+        "stack.php": "pending",
+        "stack.java": "pending"
+      }
+    },
+    {
+      "epoch": 2,
+      "event": "evidence:fact.pom_xml=True",
+      "changed_nodes": [
+        "fact.pom_xml"
+      ],
+      "preserved_nodes": [
+        "design.layout",
+        "fact.composer_json",
+        "goal.website"
+      ],
+      "evaluated_hypotheses": [
+        "stack.java"
+      ],
+      "decision": null,
+      "hypothesis_status": {
+        "stack.php": "pending",
+        "stack.java": "pending"
+      }
+    },
+    {
+      "epoch": 3,
+      "event": "evidence:fact.php_runtime=True",
+      "changed_nodes": [
+        "fact.php_runtime"
+      ],
+      "preserved_nodes": [
+        "design.layout",
+        "fact.composer_json",
+        "fact.pom_xml",
+        "goal.website"
+      ],
+      "evaluated_hypotheses": [
+        "stack.php"
+      ],
+      "decision": null,
+      "hypothesis_status": {
+        "stack.php": "pending",
+        "stack.java": "pending"
+      }
+    },
+    {
+      "epoch": 4,
+      "event": "evidence:fact.jvm_runtime=False",
+      "changed_nodes": [
+        "fact.jvm_runtime"
+      ],
+      "preserved_nodes": [
+        "design.layout",
+        "fact.composer_json",
+        "fact.php_runtime",
+        "fact.pom_xml",
+        "goal.website"
+      ],
+      "evaluated_hypotheses": [
+        "stack.java"
+      ],
+      "decision": null,
+      "hypothesis_status": {
+        "stack.php": "pending",
+        "stack.java": "contradicted"
+      }
+    },
+    {
+      "epoch": 5,
+      "event": "evidence:fact.composer_install=True",
+      "changed_nodes": [
+        "fact.composer_install",
+        "decision.stack"
+      ],
+      "preserved_nodes": [
+        "design.layout",
+        "fact.composer_json",
+        "fact.jvm_runtime",
+        "fact.php_runtime",
+        "fact.pom_xml",
+        "goal.website"
+      ],
+      "evaluated_hypotheses": [
+        "stack.php"
+      ],
+      "decision": "stack.php",
+      "hypothesis_status": {
+        "stack.php": "supported",
+        "stack.java": "contradicted"
+      }
+    },
+    {
+      "epoch": 6,
+      "event": "evidence:fact.composer_install=False",
+      "changed_nodes": [
+        "fact.composer_install",
+        "decision.stack"
+      ],
+      "preserved_nodes": [
+        "design.layout",
+        "fact.composer_json",
+        "fact.jvm_runtime",
+        "fact.php_runtime",
+        "fact.pom_xml",
+        "goal.website"
+      ],
+      "evaluated_hypotheses": [
+        "stack.php"
+      ],
+      "decision": null,
+      "hypothesis_status": {
+        "stack.php": "contradicted",
+        "stack.java": "contradicted"
+      }
+    },
+    {
+      "epoch": 7,
+      "event": "evidence:fact.jvm_runtime=True",
+      "changed_nodes": [
+        "fact.jvm_runtime",
+        "decision.stack"
+      ],
+      "preserved_nodes": [
+        "design.layout",
+        "fact.composer_install",
+        "fact.composer_json",
+        "fact.php_runtime",
+        "fact.pom_xml",
+        "goal.website"
+      ],
+      "evaluated_hypotheses": [
+        "stack.java"
+      ],
+      "decision": "stack.java",
+      "hypothesis_status": {
+        "stack.php": "contradicted",
+        "stack.java": "supported"
+      }
+    }
+  ]
+}
