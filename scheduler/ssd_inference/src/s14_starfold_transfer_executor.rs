@@ -13,8 +13,8 @@ use crate::{
     },
     s14_starfold_runtime::{S14StarfoldUploadTicket, S14StarfoldVerifiedMicrotile},
     s14_starfold_vulkan_windows::{
-        S14StarfoldBufferBarrier, S14StarfoldUploadRecording, S14StarfoldWindowId,
-        S14StarfoldUploadTicket as VulkanUploadTicket,
+        S14StarfoldBufferBarrier, S14StarfoldUploadRecording,
+        S14StarfoldUploadTicket as VulkanUploadTicket, S14StarfoldWindowId,
     },
     GpuBuffer, VulkanContext,
 };
@@ -586,31 +586,19 @@ impl S14StarfoldTransferExecutor {
     ) -> Result<S14StarfoldCommittedConstellationUpload> {
         let block_epoch = prepared.block_epoch;
         if let Err(error) = self.require_active_epoch(block_epoch) {
-            let cleanup = self.abandon_prepared_recording(
-                prepared.recorded,
-                block_epoch,
-                "constellation",
-            );
+            let cleanup =
+                self.abandon_prepared_recording(prepared.recorded, block_epoch, "constellation");
             return Err(anyhow::anyhow!(
                 "{error:#}; constellation prepared owner cleanup={cleanup:?}"
             ));
         }
         if prepared.recorded.block_epoch() != Some(block_epoch) {
-            let cleanup = self.abandon_prepared_recording(
-                prepared.recorded,
-                block_epoch,
-                "constellation",
-            );
-            bail!(
-                "S14 StarFold constellation prepared recording epoch 漂移; cleanup={cleanup:?}"
-            );
+            let cleanup =
+                self.abandon_prepared_recording(prepared.recorded, block_epoch, "constellation");
+            bail!("S14 StarFold constellation prepared recording epoch 漂移; cleanup={cleanup:?}");
         }
-        let index = match self.validate_prepared_constellation(
-            &prepared,
-            ticket,
-            recording,
-            packet,
-        ) {
+        let index = match self.validate_prepared_constellation(&prepared, ticket, recording, packet)
+        {
             Ok(index) => index,
             Err(error) => {
                 let cleanup = self.abandon_prepared_recording(
@@ -646,12 +634,7 @@ impl S14StarfoldTransferExecutor {
     ) -> Result<()> {
         let block_epoch = prepared.block_epoch;
         self.require_active_epoch(block_epoch)?;
-        let index = self.validate_prepared_constellation(
-            &prepared,
-            ticket,
-            recording,
-            packet,
-        )?;
+        let index = self.validate_prepared_constellation(&prepared, ticket, recording, packet)?;
         unsafe {
             self.context.device.reset_command_buffer(
                 self.slots[index].command_buffer,
@@ -1181,8 +1164,8 @@ fn validate_constellation_ticket(
     if ticket.key() != S14StarfoldResidentWindowKey::Constellation(packet.key()) {
         bail!("S14 StarFold constellation upload ticket 与 packet key 漂移");
     }
-    let payload_bytes =
-        u64::try_from(packet.payload().len()).context("S14 StarFold constellation payload 超出 u64")?;
+    let payload_bytes = u64::try_from(packet.payload().len())
+        .context("S14 StarFold constellation payload 超出 u64")?;
     if ticket.byte_len() != packet.payload_bytes
         || packet.payload_bytes != payload_bytes
         || recording.byte_len != ticket.byte_len()

@@ -11,7 +11,9 @@ use crate::{
     compute::{DescriptorBinder, StorageBufferSlice},
     s14_causal_block_prefix_arena::S14CausalBlockPrefixCheckpointArena,
     s14_causal_block_prefix_state::S14CausalBlockPrefixStateProgram,
-    s14_causal_block_production_evidence::S14CausalBlockProductionEvidenceSnapshot,
+    s14_causal_block_production_evidence::{
+        S14CausalBlockProductionEvidenceSnapshot, S14CausalBlockRatio4SegmentedRecordingReceipt,
+    },
     s14_position0_state_writeback::{
         S14Position0ApeAddPipeline, S14Position0StateRecordingOp, S14Position0StateRowKind,
     },
@@ -26,7 +28,8 @@ use std::{
     sync::{Arc, Mutex, MutexGuard},
 };
 
-const BLOCK_SIZE: usize = 4;
+const K4: usize = 4;
+const K8: usize = 8;
 const HIDDEN: u64 = 4096;
 const KV: u64 = 512;
 const F32_BYTES: u64 = 4;
@@ -88,6 +91,7 @@ enum ProducerPhase {
 pub struct S14CausalBlockPrefixStateProducer {
     context: Arc<VulkanContext>,
     base_position: u32,
+    block_size: usize,
     source: MaterializedTokenSource,
     arena: Arc<S14CausalBlockPrefixCheckpointArena>,
     program: S14CausalBlockSharedPrefixStateProgram,
@@ -146,11 +150,13 @@ impl S14CausalBlockPrefixStateProducer {
         source: MaterializedTokenSource,
     ) -> Result<Self> {
         let base_position = arena.base_position();
+        let block_size = arena.layout().block_size;
         if !Arc::ptr_eq(&context, arena.context())
             || (source == MaterializedTokenSource::SpeculativeDraft && base_position == 0)
-            || arena.layout().block_size != BLOCK_SIZE
+            || !matches!(block_size, K4 | K8)
+            || (source == MaterializedTokenSource::SpeculativeDraft && block_size != K4)
         {
-            bail!("K4 prefix producer context/base/K 与 arena 漂移");
+            bail!("K-block prefix producer context/base/K/source 与 arena 漂移");
         }
         let workspace_bytes = {
             let program = program
@@ -159,7 +165,7 @@ impl S14CausalBlockPrefixStateProducer {
             validate_program_identity(&program, &arena, source)?;
             let first = program.recipe(0, FULL_DEPTH_LAYERS[0])?;
             for layer in FULL_DEPTH_LAYERS {
-                for lane in 0..BLOCK_SIZE {
+                for lane in 0..block_size {
                     let recipe = program.recipe(lane, layer)?;
                     if recipe.workspace_bytes != first.workspace_bytes
                         || recipe.candidate_state_bytes != arena.layout().checkpoint_state_bytes
@@ -191,6 +197,7 @@ impl S14CausalBlockPrefixStateProducer {
         Ok(Self {
             context,
             base_position,
+            block_size,
             source,
             arena,
             program,
@@ -214,6 +221,10 @@ impl S14CausalBlockPrefixStateProducer {
 
     pub fn source(&self) -> MaterializedTokenSource {
         self.source
+    }
+
+    pub const fn block_size(&self) -> usize {
+        self.block_size
     }
 
     pub fn shared_program(&self) -> &S14CausalBlockSharedPrefixStateProgram {
@@ -263,12 +274,12 @@ impl S14CausalBlockPrefixStateProducer {
         }
         validate_slice(
             inputs.hc_branch_f32,
-            BLOCK_SIZE as u64 * HIDDEN * F32_BYTES,
+            self.block_size as u64 * HIDDEN * F32_BYTES,
             "HC branch F32",
         )?;
         validate_slice(
             inputs.rotated_current_kv_bf16,
-            BLOCK_SIZE as u64 * KV * BF16_BYTES,
+            self.block_size as u64 * KV * BF16_BYTES,
             "rotated current KV BF16",
         )?;
         if !self.pending_binders()?.is_empty() {
@@ -288,50 +299,53 @@ impl S14CausalBlockPrefixStateProducer {
         if !matches!(ratio, 0 | 4 | 128) {
             bail!("K4 prefix producer L{} 未知 ratio {ratio}", inputs.layer);
         }
-
-        // 每个连续 K4 都恰好包含一个 ratio4 boundary。boundary 及其后的 lane
-        // 不能由通用 producer 提前 rollover：它们必须等 dynamic boundary owner 先
-        // finalize/rollover，再按绝对 position 顺序继续。因此这里只闭合 boundary
-        // 之前的 lane，并把其余 application 全部显式留给 owner。
+        // ratio4 以 B4 segment 为顺序事务单位。通用 producer 只闭合首个 boundary
+        // 之前的 lanes；从首 boundary 开始的所有 application 均交给 segmented owner。
+        // owner 会依次执行 segment0 boundary/tail、segment1 pre-boundary/boundary/tail，
+        // 因而 K8 不会被错误地当成一个普通 contiguous prefix，也无需退回两次43层。
         let ratio4_boundary_lane = if ratio == 4 {
-            Some(((BLOCK_SIZE as u32 - 1) - (self.base_position % BLOCK_SIZE as u32)) as usize)
+            Some(((K4 as u32 - 1) - (self.base_position % K4 as u32)) as usize)
         } else {
             None
         };
-        let generic_lanes = ratio4_boundary_lane.unwrap_or(BLOCK_SIZE);
+        let generic_lanes = ratio4_boundary_lane.unwrap_or(self.block_size);
         let mut window_writebacks = 0usize;
         let mut completed = 0usize;
         let mut compressor_evaluations = 0usize;
 
-        for source_lane in 0..BLOCK_SIZE {
-            let targets = source_lane..BLOCK_SIZE;
+        for source_lane in 0..self.block_size {
+            let targets = source_lane..self.block_size;
             for prefix_index in targets.clone() {
-                // Window KV 仍由本 command 真实写入；但 boundary 及后续 lane 的状态
-                // application 必须在 owner 中按 finalize→rollover→tail 顺序登记。
                 let deferred_ratio4_owner_lane =
                     ratio4_boundary_lane.is_some_and(|boundary_lane| source_lane >= boundary_lane);
+                // K8 的 deferred window 也必须由 segmented owner 按 segment 顺序写入；
+                // 否则一次性提前写完8行会在128行滑窗附近把未来行暴露给 segment0。
+                // K4 保持既有物理写法，owner 只接管状态登记，避免改变已通过的单段路径。
+                let owner_records_window = self.block_size > K4 && deferred_ratio4_owner_lane;
                 if !deferred_ratio4_owner_lane {
                     program.begin_lane_application(prefix_index, inputs.layer, source_lane)?;
                 }
-                let source_offset = inputs
-                    .rotated_current_kv_bf16
-                    .offset
-                    .checked_add(source_lane as u64 * KV * BF16_BYTES)
-                    .context("K4 prefix rotated-current-KV source offset overflow")?;
-                program.state_layout(source_lane)?.record_row_writeback_at(
-                    &self.context,
-                    inputs.command,
-                    inputs.rotated_current_kv_bf16.buffer,
-                    source_offset,
-                    self.arena.buffer(),
-                    self.arena.prefix_offset(prefix_index)?,
-                    inputs.layer,
-                    S14Position0StateRowKind::WindowKv,
-                )?;
+                if !owner_records_window {
+                    let source_offset = inputs
+                        .rotated_current_kv_bf16
+                        .offset
+                        .checked_add(source_lane as u64 * KV * BF16_BYTES)
+                        .context("K-block prefix rotated-current-KV source offset overflow")?;
+                    program.state_layout(source_lane)?.record_row_writeback_at(
+                        &self.context,
+                        inputs.command,
+                        inputs.rotated_current_kv_bf16.buffer,
+                        source_offset,
+                        self.arena.buffer(),
+                        self.arena.prefix_offset(prefix_index)?,
+                        inputs.layer,
+                        S14Position0StateRowKind::WindowKv,
+                    )?;
+                    window_writebacks += 1;
+                }
                 if !deferred_ratio4_owner_lane {
                     program.mark_window_recorded(prefix_index, inputs.layer)?;
                 }
-                window_writebacks += 1;
             }
 
             if source_lane >= generic_lanes {
@@ -368,7 +382,7 @@ impl S14CausalBlockPrefixStateProducer {
                 )?;
                 self.pending_binders()?.append(&mut recorded);
                 compressor_evaluations += 1;
-                for prefix_index in source_lane + 1..BLOCK_SIZE {
+                for prefix_index in source_lane + 1..self.block_size {
                     for op in &recipe.compressor_ops {
                         if let S14Position0StateRecordingOp::Writeback {
                             target,
@@ -411,14 +425,14 @@ impl S14CausalBlockPrefixStateProducer {
         };
         Ok(S14CausalBlockPrefixLayerRecordingReceipt {
             base_position: self.base_position,
-            block_size: BLOCK_SIZE,
+            block_size: self.block_size,
             layer: inputs.layer,
             window_writebacks,
             completed_lane_applications: completed,
             deferred_ratio4_lane_applications: ratio4_boundary_lane
                 .map(|boundary_lane| {
-                    (boundary_lane..BLOCK_SIZE)
-                        .map(|lane| BLOCK_SIZE - lane)
+                    (boundary_lane..self.block_size)
+                        .map(|lane| self.block_size - lane)
                         .sum()
                 })
                 .unwrap_or(0),
@@ -436,7 +450,7 @@ impl S14CausalBlockPrefixStateProducer {
     pub(crate) fn record_completed_ratio4_layer(
         &self,
         layer: u8,
-        receipt: crate::s14_causal_block_ratio4_boundary::S14CausalBlockRatio4BoundaryRecordingReceipt,
+        receipt: S14CausalBlockRatio4SegmentedRecordingReceipt,
     ) -> Result<()> {
         self.arena.record_completed_ratio4_layer(layer, receipt)
     }
@@ -461,7 +475,7 @@ impl S14CausalBlockPrefixStateProducer {
                 .program
                 .lock()
                 .map_err(|_| anyhow!("K4 prefix state program mutex poisoned"))?;
-            for prefix in 0..BLOCK_SIZE {
+            for prefix in 0..self.block_size {
                 program.seal_prefix(prefix)?;
             }
             program.seal_block()?
@@ -545,10 +559,13 @@ fn validate_program_identity(
     source: MaterializedTokenSource,
 ) -> Result<()> {
     let base_position = arena.base_position();
+    let block_size = arena.layout().block_size;
     if (source == MaterializedTokenSource::SpeculativeDraft && base_position == 0)
         || program.base_position() != base_position
-        || program.block_size() != BLOCK_SIZE
-        || program.identities().len() != BLOCK_SIZE
+        || !matches!(block_size, K4 | K8)
+        || (source == MaterializedTokenSource::SpeculativeDraft && block_size != K4)
+        || program.block_size() != block_size
+        || program.identities().len() != block_size
         || program
             .identities()
             .iter()
@@ -560,7 +577,7 @@ fn validate_program_identity(
                     || identity.candidate_state_bytes != arena.layout().checkpoint_state_bytes
             })
     {
-        bail!("K4 prefix producer program/base/checkpoint ABI 漂移");
+        bail!("K-block prefix producer program/base/checkpoint ABI 漂移");
     }
     Ok(())
 }

@@ -125,6 +125,7 @@ impl S14StarfoldBlockResourceFactory for S14StarfoldConcreteFactory {
             bail!("concrete factory request 与启动期 runtime context/paged arena 不同源");
         }
         let authoritative = request.authoritative.clone();
+        let block_size = request.input_token_ids.len();
         let state_bytes = u64::try_from(authoritative.native_arena.len())
             .context("S14 concrete authoritative state bytes overflow")?;
         let snapshot_identity = request.committed_snapshot.identity()?;
@@ -148,6 +149,9 @@ impl S14StarfoldBlockResourceFactory for S14StarfoldConcreteFactory {
                 }
             }
             S14StarfoldK4BlockMode::SpeculativeGeneration => {
+                if block_size != S14_STARFOLD_CONCRETE_K {
+                    bail!("SpeculativeGeneration 物理块仍严格锁定 K4");
+                }
                 validate_s14_starwave_generation_origin(
                     &authoritative,
                     request.position0_committed_origin,
@@ -185,17 +189,19 @@ impl S14StarfoldBlockResourceFactory for S14StarfoldConcreteFactory {
             .context("消费 request-owned detached committed snapshot")?;
         let mut prefix_initialization = match (request.mode, authoritative.position) {
             (S14StarfoldK4BlockMode::TeacherForcedPrefill, 0) => {
-                S14CausalBlockPrefixInitializationOwner::initialize_forced_prefill(
+                S14CausalBlockPrefixInitializationOwner::initialize_forced_prefill_with_block_size(
                     Arc::clone(&context),
                     authoritative.clone(),
                     committed,
+                    block_size,
                 )
             }
             (S14StarfoldK4BlockMode::TeacherForcedPrefill, _) => {
-                S14CausalBlockPrefixInitializationOwner::initialize_forced_prefill_at(
+                S14CausalBlockPrefixInitializationOwner::initialize_forced_prefill_at_with_block_size(
                     Arc::clone(&context),
                     authoritative.clone(),
                     committed,
+                    block_size,
                 )
             }
             (S14StarfoldK4BlockMode::SpeculativeGeneration, 0) => {
@@ -438,7 +444,7 @@ impl S14StarfoldConcreteFactory {
         &mut self,
         context: Arc<VulkanContext>,
         authoritative: DecoderStateV1,
-        input_token_ids: [u32; S14_STARFOLD_CONCRETE_K],
+        input_token_ids: Vec<u32>,
         source: MaterializedTokenSource,
         upload_lease: S14Position0CausalBlockUploadLease,
         position0_generation_provenance: Option<S14Position0CommittedGenerationProvenance>,
@@ -452,11 +458,12 @@ impl S14StarfoldConcreteFactory {
         >,
     > {
         let prefix_arena = Arc::clone(prefix_initialization.prefix_arena()?);
+        let block_size = input_token_ids.len();
         let prefix_program = Arc::new(Mutex::new(S14CausalBlockPrefixStateProgram::build(
             &self.layer_program,
             paged_arena.workspace_layout(),
             &authoritative.native,
-            S14_STARFOLD_CONCRETE_K,
+            block_size,
         )?));
         let mut prefix_producer = prefix_initialization
             .build_prefix_state_producer(Arc::clone(&prefix_program))
@@ -484,12 +491,12 @@ impl S14StarfoldConcreteFactory {
                 .context("S14 concrete terminal head uploader 已退休")?,
         );
         let mut hidden_owner = {
-            match S14CausalBlockK4InputHiddenOwner::build_at_from_local_shard(
+            match S14CausalBlockK4InputHiddenOwner::build_at_from_local_shard_kblock(
                 Arc::clone(&context),
                 &self.embedding_shard,
                 authoritative.position,
                 authoritative.native.max_seq_len,
-                input_token_ids,
+                &input_token_ids,
                 hidden_generation,
             ) {
                 Ok(owner) => owner,
@@ -744,7 +751,7 @@ impl Drop for S14StarfoldConcreteFactory {
 
 fn validate_block_request(
     authoritative: &DecoderStateV1,
-    input_token_ids: &[u32; S14_STARFOLD_CONCRETE_K],
+    input_token_ids: &[u32],
     hidden_generation: u64,
 ) -> Result<()> {
     authoritative
@@ -752,9 +759,10 @@ fn validate_block_request(
         .map_err(|error| anyhow!("S14 concrete authoritative state 非法: {error}"))?;
     let end = authoritative
         .position
-        .checked_add(S14_STARFOLD_CONCRETE_K as u32)
-        .context("S14 concrete K4 position overflow")?;
-    if input_token_ids[0] != authoritative.input_token_id
+        .checked_add(u32::try_from(input_token_ids.len()).context("S14 concrete K overflow")?)
+        .context("S14 concrete K4/K8 position overflow")?;
+    if !matches!(input_token_ids.len(), 4 | 8)
+        || input_token_ids[0] != authoritative.input_token_id
         || input_token_ids.iter().any(|&token| token >= VOCAB_SIZE)
         || end > authoritative.native.max_seq_len
         || (authoritative.position == 0

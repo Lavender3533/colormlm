@@ -1,9 +1,9 @@
-//! position0 committed device bank 到 K=4 prefix checkpoint arena 的 production 初始化 owner。
+//! position0 committed device bank 到 K=4/8 prefix checkpoint arena 的 production 初始化 owner。
 //!
 //! 该 owner 是 detached single-token runtime 与 block-major producer 之间的唯一桥：它只接受
 //! 已真实提交的 host/device identity。ForcedPrefill 仍使用专用 policy；单-token
 //! prompt 的 base0 generation 必须另外消费 StarWave committed-origin 强证据。
-//! 它分配一块 K=4 device checkpoint arena，
+//! 它按调用方显式选择的 K=4/8 分配 device checkpoint arena，
 //! 在同一 graphics queue 录制并完成 authoritative baseline copy，随后才允许构造 prefix producer。
 //! 初始化失败会 abort arena；若等待失败且 queue 也无法 drain，则保留 pending Vulkan 资源直到
 //! context teardown，禁止销毁仍可能在执行的 command 或 buffer。
@@ -57,8 +57,9 @@ pub struct S14CausalBlockPrefixInitializationCompletion {
 }
 
 /// 成功构造即代表 authoritative copy 已 submit 且 fence 完成。调用方只能通过
-/// `build_prefix_state_producer` 进入 K=4 producer；owner 必须晚于 provider/producer/terminal 销毁。
-#[must_use = "K=4 bundle/provider/producer 销毁后必须显式 destroy prefix initialization owner"]
+/// `build_prefix_state_producer` 进入同 layout 的 K-block producer；owner 必须晚于
+/// provider/producer/terminal 销毁。
+#[must_use = "K-block bundle/provider/producer 销毁后必须显式 destroy prefix initialization owner"]
 pub struct S14CausalBlockPrefixInitializationOwner {
     context: Arc<VulkanContext>,
     authoritative: DecoderStateV1,
@@ -137,12 +138,29 @@ impl S14CausalBlockPrefixInitializationOwner {
         authoritative: DecoderStateV1,
         committed: WholeTokenDetachedCommittedState,
     ) -> Result<Self> {
+        Self::initialize_forced_prefill_with_block_size(
+            context,
+            authoritative,
+            committed,
+            S14_CAUSAL_BLOCK_BOOTSTRAP_BLOCK_SIZE,
+        )
+    }
+
+    /// ForcedPrefill 从 BOS/base0 启动的显式 K=4/8 initializer。旧的
+    /// [`Self::initialize_forced_prefill`] 保持 K=4 兼容；K=8 prompt block 必须调用本入口，
+    /// 不能先构造 K=4 arena 再在下游改写 layout。
+    pub fn initialize_forced_prefill_with_block_size(
+        context: Arc<VulkanContext>,
+        authoritative: DecoderStateV1,
+        committed: WholeTokenDetachedCommittedState,
+        block_size: usize,
+    ) -> Result<Self> {
         Self::initialize_at_with_policy(
             context,
             authoritative,
             committed,
             0,
-            S14_CAUSAL_BLOCK_BOOTSTRAP_BLOCK_SIZE,
+            block_size,
             S14CausalBlockPrefixBootstrapPolicy::ForcedPrefill,
         )
     }
@@ -153,13 +171,29 @@ impl S14CausalBlockPrefixInitializationOwner {
         authoritative: DecoderStateV1,
         committed: WholeTokenDetachedCommittedState,
     ) -> Result<Self> {
+        Self::initialize_forced_prefill_at_with_block_size(
+            context,
+            authoritative,
+            committed,
+            S14_CAUSAL_BLOCK_BOOTSTRAP_BLOCK_SIZE,
+        )
+    }
+
+    /// 后续 ForcedPrefill block 的显式 K=4/8 initializer。base identity 仍只能来自
+    /// 当前 authoritative committed state；block_size 仅选择物理 prompt block layout。
+    pub fn initialize_forced_prefill_at_with_block_size(
+        context: Arc<VulkanContext>,
+        authoritative: DecoderStateV1,
+        committed: WholeTokenDetachedCommittedState,
+        block_size: usize,
+    ) -> Result<Self> {
         let base_position = authoritative.position;
         Self::initialize_at_with_policy(
             context,
             authoritative,
             committed,
             base_position,
-            S14_CAUSAL_BLOCK_BOOTSTRAP_BLOCK_SIZE,
+            block_size,
             S14CausalBlockPrefixBootstrapPolicy::ForcedPrefill,
         )
     }
@@ -384,7 +418,7 @@ impl S14CausalBlockPrefixInitializationOwner {
             .context("prefix initialization arena 已销毁")
     }
 
-    /// 只有成功初始化后的 owner 才暴露 producer constructor，保证 authoritative K=4 copy
+    /// 只有成功初始化后的 owner 才暴露 producer constructor，保证 authoritative K=4/8 copy
     /// 已在同一 graphics queue 完成，不允许首层与 baseline copy 并发竞态。
     pub fn build_prefix_state_producer(
         &self,
@@ -394,21 +428,43 @@ impl S14CausalBlockPrefixInitializationOwner {
             || self.completion.queue_submit_calls != 1
             || self.completion.fence_wait_calls != 1
         {
-            bail!("prefix initialization 尚未完成 submit/wait，禁止进入 K=4 producer");
+            bail!("prefix initialization 尚未完成 submit/wait，禁止进入 K-block producer");
+        }
+        let arena = self.prefix_arena()?;
+        let layout = arena.layout();
+        let (program_base_position, program_block_size, program_identity_count) = {
+            let program = program
+                .lock()
+                .map_err(|_| anyhow!("K-block prefix state program mutex poisoned"))?;
+            (
+                program.base_position(),
+                program.block_size(),
+                program.identities().len(),
+            )
+        };
+        if arena.base_position() != self.completion.base_position
+            || layout.block_size != self.completion.block_size
+            || layout.checkpoint_state_bytes != self.completion.authoritative_state_bytes
+            || self.completion.copy_regions != layout.block_size
+            || program_base_position != self.completion.base_position
+            || program_block_size != self.completion.block_size
+            || program_identity_count != self.completion.block_size
+        {
+            bail!("prefix initialization completion/program 与 K-block arena layout/identity 漂移");
         }
         match self.bootstrap_policy {
             S14CausalBlockPrefixBootstrapPolicy::CommittedContinuation
             | S14CausalBlockPrefixBootstrapPolicy::Position0CommittedGeneration => {
                 S14CausalBlockPrefixStateProducer::new(
                     Arc::clone(&self.context),
-                    Arc::clone(self.prefix_arena()?),
+                    Arc::clone(arena),
                     program,
                 )
             }
             S14CausalBlockPrefixBootstrapPolicy::ForcedPrefill => {
                 S14CausalBlockPrefixStateProducer::new_forced_prefill(
                     Arc::clone(&self.context),
-                    Arc::clone(self.prefix_arena()?),
+                    Arc::clone(arena),
                     program,
                 )
             }

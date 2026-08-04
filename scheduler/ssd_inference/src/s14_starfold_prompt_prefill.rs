@@ -1,9 +1,9 @@
-//! 纯 S14 StarFold K4 teacher-forced prompt prefill 计划与提交门。
+//! 纯 S14 StarFold K4/K8 teacher-forced prompt prefill 计划与提交门。
 //!
 //! `DecoderStateV1::position` 始终表示下一个待执行位置。给定 N 个 prompt token，本模块只
-//! 执行 N-1 个已观测输入转移；每次物理执行固定 K4，尾块只提交逻辑前缀 r，filler lane
-//! 永不进入权威 ledger/checkpoint。这里不执行 generation terminal/head，也不把 prompt
-//! 的 observed next input 描述成模型预测。
+//! 执行 N-1 个已观测输入转移；计划器优先发出物理 K8，最后不超过4个转移时发出 K4。
+//! 每块只提交逻辑前缀 r，filler lane 永不进入权威 ledger/checkpoint。这里不执行
+//! generation terminal/head，也不把 prompt 的 observed next input 描述成模型预测。
 
 use crate::{
     s14_causal_block_hc_qkv_recorder::S14CausalBlockStarfoldPrefillPrefixProduct,
@@ -21,7 +21,98 @@ use polaris_s14_runner::{
 };
 use std::sync::Arc;
 
+/// 现有 K4 production adapter 的冻结 lane 数。保留旧符号供下游迁移期间显式验收，
+/// 新计划代码必须读取 block 自身的 [`S14StarfoldPrefillPhysicalK`]，不得再用它推断任意块。
 pub const S14_STARFOLD_PREFILL_PHYSICAL_K: usize = 4;
+pub const S14_STARFOLD_PREFILL_PHYSICAL_K4: usize = 4;
+pub const S14_STARFOLD_PREFILL_PHYSICAL_K8: usize = 8;
+
+/// teacher-forced prefill 的物理块宽度。只允许冻结的 K4/K8，禁止用裸 `usize` 把逻辑
+/// lane 数冒充为物理宽度。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum S14StarfoldPrefillPhysicalK {
+    K4 = S14_STARFOLD_PREFILL_PHYSICAL_K4 as u8,
+    K8 = S14_STARFOLD_PREFILL_PHYSICAL_K8 as u8,
+}
+
+impl S14StarfoldPrefillPhysicalK {
+    pub const fn lanes(self) -> usize {
+        self as usize
+    }
+
+    /// 规划策略：能覆盖超过4个逻辑转移时优先 K8；最后1..=4个转移使用 K4。
+    pub const fn preferred_for_remaining(remaining_logical_lanes: usize) -> Option<Self> {
+        match remaining_logical_lanes {
+            0 => None,
+            1..=S14_STARFOLD_PREFILL_PHYSICAL_K4 => Some(Self::K4),
+            _ => Some(Self::K8),
+        }
+    }
+}
+
+/// 不歧义的物理输入块。K8 不能通过隐式截断进入仅接收 `[u32; 4]` 的旧执行器；下游必须
+/// 显式匹配 variant，或改用 [`Self::as_slice`] 接入真正的 K-block runtime。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum S14StarfoldPrefillInputBlock {
+    K4([u32; S14_STARFOLD_PREFILL_PHYSICAL_K4]),
+    K8([u32; S14_STARFOLD_PREFILL_PHYSICAL_K8]),
+}
+
+impl S14StarfoldPrefillInputBlock {
+    pub const fn filled(physical_k: S14StarfoldPrefillPhysicalK, filler_token_id: u32) -> Self {
+        match physical_k {
+            S14StarfoldPrefillPhysicalK::K4 => {
+                Self::K4([filler_token_id; S14_STARFOLD_PREFILL_PHYSICAL_K4])
+            }
+            S14StarfoldPrefillPhysicalK::K8 => {
+                Self::K8([filler_token_id; S14_STARFOLD_PREFILL_PHYSICAL_K8])
+            }
+        }
+    }
+
+    pub const fn physical_k(&self) -> S14StarfoldPrefillPhysicalK {
+        match self {
+            Self::K4(_) => S14StarfoldPrefillPhysicalK::K4,
+            Self::K8(_) => S14StarfoldPrefillPhysicalK::K8,
+        }
+    }
+
+    pub const fn as_slice(&self) -> &[u32] {
+        match self {
+            Self::K4(tokens) => tokens,
+            Self::K8(tokens) => tokens,
+        }
+    }
+
+    fn as_mut_slice(&mut self) -> &mut [u32] {
+        match self {
+            Self::K4(tokens) => tokens,
+            Self::K8(tokens) => tokens,
+        }
+    }
+
+    /// 旧 K4 adapter 的显式窄入口。K8 返回 `None`，调用方不得取前四 lane 伪装成功。
+    pub const fn as_k4(&self) -> Option<&[u32; S14_STARFOLD_PREFILL_PHYSICAL_K4]> {
+        match self {
+            Self::K4(tokens) => Some(tokens),
+            Self::K8(_) => None,
+        }
+    }
+
+    pub const fn as_k8(&self) -> Option<&[u32; S14_STARFOLD_PREFILL_PHYSICAL_K8]> {
+        match self {
+            Self::K4(_) => None,
+            Self::K8(tokens) => Some(tokens),
+        }
+    }
+}
+
+impl AsRef<[u32]> for S14StarfoldPrefillInputBlock {
+    fn as_ref(&self) -> &[u32] {
+        self.as_slice()
+    }
+}
 
 /// 只能由同一个 production adapter 在 FullDepth seal、prefix arena 导出和
 /// finish/drain 连续完成后构造；session 无法把不相关的 arena 与 receipt 手工配对。
@@ -47,25 +138,34 @@ impl S14StarfoldSealedTeacherForcedPrefillProduct {
         prefix: S14CausalBlockStarfoldPrefillPrefixProduct,
     ) -> Result<Self> {
         block.validate()?;
+        let physical_k = block.physical_k();
+        let physical_inputs = block.physical_input_token_ids();
         let S14CausalBlockStarfoldPrefillPrefixProduct {
             context: prefix_context,
             prefix_checkpoint_arena: prefix_arena,
             producer_ready: producer_completion,
             source: prefix_source,
         } = prefix;
+        if full_depth.physical_input_token_ids.len() != physical_k {
+            bail!(
+                "StarFold sealed prefill receipt 仍是物理 K{}，无法消费计划的 K{}；必须接入对应 K-block adapter",
+                full_depth.physical_input_token_ids.len(),
+                physical_k
+            );
+        }
         if full_depth.source != MaterializedTokenSource::ForcedPrefill
             || prefix_source != MaterializedTokenSource::ForcedPrefill
             || full_depth.base_position != block.base_position
             || full_depth.base_position != prefix_arena.base_position()
-            || full_depth.block_size != S14_STARFOLD_PREFILL_PHYSICAL_K
-            || full_depth.physical_input_token_ids != block.physical_input_token_ids
+            || full_depth.block_size != physical_k
+            || full_depth.physical_input_token_ids.as_slice() != physical_inputs
             || full_depth.completed_layers != FULL_DEPTH_LAYERS.len()
             || full_depth.layers.len() != FULL_DEPTH_LAYERS.len()
-            || full_depth.checkpoint_seal.checkpoint_count != S14_STARFOLD_PREFILL_PHYSICAL_K
+            || full_depth.checkpoint_seal.checkpoint_count != physical_k
             || full_depth.serial_token_forward_calls != 0
             || !full_depth.terminal_ready
             || full_depth.token_committed
-            || prefix_arena.layout().block_size != S14_STARFOLD_PREFILL_PHYSICAL_K
+            || prefix_arena.layout().block_size != physical_k
             || !Arc::ptr_eq(&prefix_context, prefix_arena.context())
             || producer_completion.semaphore == vk::Semaphore::null()
             || producer_completion.generation == 0
@@ -113,7 +213,7 @@ impl S14StarfoldSealedTeacherForcedPrefillProduct {
 pub struct S14StarfoldTeacherForcedBlockPlan {
     pub block_index: usize,
     pub base_position: u32,
-    pub physical_input_token_ids: [u32; S14_STARFOLD_PREFILL_PHYSICAL_K],
+    pub physical_input_token_ids: S14StarfoldPrefillInputBlock,
     /// 只含逻辑 lane `0..r` 的 observed next input；长度就是唯一可提交前缀。
     pub observed_next_input_token_ids: Vec<u32>,
     pub logical_lanes: usize,
@@ -122,6 +222,18 @@ pub struct S14StarfoldTeacherForcedBlockPlan {
 }
 
 impl S14StarfoldTeacherForcedBlockPlan {
+    pub const fn physical_k_contract(&self) -> S14StarfoldPrefillPhysicalK {
+        self.physical_input_token_ids.physical_k()
+    }
+
+    pub const fn physical_k(&self) -> usize {
+        self.physical_k_contract().lanes()
+    }
+
+    pub const fn physical_input_token_ids(&self) -> &[u32] {
+        self.physical_input_token_ids.as_slice()
+    }
+
     pub fn checkpoint_index(&self) -> usize {
         self.logical_lanes - 1
     }
@@ -134,19 +246,21 @@ impl S14StarfoldTeacherForcedBlockPlan {
         self.observed_next_input_token_ids[self.logical_lanes - 1]
     }
 
-    fn validate(&self) -> Result<()> {
+    pub fn validate(&self) -> Result<()> {
+        let physical_k = self.physical_k();
+        let physical_input_token_ids = self.physical_input_token_ids();
         if self.source != MaterializedTokenSource::ForcedPrefill
-            || !(1..=S14_STARFOLD_PREFILL_PHYSICAL_K).contains(&self.logical_lanes)
+            || !(1..=physical_k).contains(&self.logical_lanes)
             || self.observed_next_input_token_ids.len() != self.logical_lanes
             || self.filler_token_id >= VOCAB_SIZE
-            || self
-                .physical_input_token_ids
+            || physical_input_token_ids
                 .iter()
                 .chain(&self.observed_next_input_token_ids)
                 .any(|&token| token >= VOCAB_SIZE)
-            || self.physical_input_token_ids[self.logical_lanes..]
+            || physical_input_token_ids[self.logical_lanes..]
                 .iter()
                 .any(|&token| token != self.filler_token_id)
+            || self.observed_next_input_token_ids.last() != Some(&self.filler_token_id)
         {
             bail!("StarFold teacher-forced block 的 source/K/r/token/filler 合同漂移");
         }
@@ -178,16 +292,20 @@ impl S14StarfoldPromptPrefillPlan {
         let final_position = u32::try_from(transition_count)
             .context("StarFold prompt prefill 长度超出 u32 position")?;
         let block_capacity = transition_count
-            .checked_add(S14_STARFOLD_PREFILL_PHYSICAL_K - 1)
+            .checked_add(S14_STARFOLD_PREFILL_PHYSICAL_K8 - 1)
             .context("StarFold prompt block count overflow")?
-            / S14_STARFOLD_PREFILL_PHYSICAL_K;
+            / S14_STARFOLD_PREFILL_PHYSICAL_K8;
         let mut blocks = Vec::with_capacity(block_capacity);
         let mut base = 0usize;
         while base < transition_count {
-            let logical_lanes = (transition_count - base).min(S14_STARFOLD_PREFILL_PHYSICAL_K);
+            let remaining = transition_count - base;
+            let physical_k = S14StarfoldPrefillPhysicalK::preferred_for_remaining(remaining)
+                .expect("loop guarantees non-empty remainder");
+            let logical_lanes = remaining.min(physical_k.lanes());
             let filler_token_id = prompt_token_ids[base + logical_lanes];
-            let mut physical_input_token_ids = [filler_token_id; S14_STARFOLD_PREFILL_PHYSICAL_K];
-            physical_input_token_ids[..logical_lanes]
+            let mut physical_input_token_ids =
+                S14StarfoldPrefillInputBlock::filled(physical_k, filler_token_id);
+            physical_input_token_ids.as_mut_slice()[..logical_lanes]
                 .copy_from_slice(&prompt_token_ids[base..base + logical_lanes]);
             let block = S14StarfoldTeacherForcedBlockPlan {
                 block_index: blocks.len(),
@@ -204,13 +322,62 @@ impl S14StarfoldPromptPrefillPlan {
             blocks.push(block);
             base += logical_lanes;
         }
-        Ok(Self {
+        let plan = Self {
             prompt_len: prompt_token_ids.len(),
             first_input_token_id,
             final_position,
             final_input_token_id: *prompt_token_ids.last().expect("non-empty checked above"),
             blocks,
-        })
+        };
+        plan.validate()?;
+        Ok(plan)
+    }
+
+    /// 验证 K8-first/K4-tail 规划、跨块 observed-next 连续性以及最终 checkpoint 身份。
+    pub fn validate(&self) -> Result<()> {
+        if self.prompt_len == 0
+            || self.first_input_token_id >= VOCAB_SIZE
+            || self.final_input_token_id >= VOCAB_SIZE
+            || usize::try_from(self.final_position).ok() != self.prompt_len.checked_sub(1)
+        {
+            bail!("StarFold prompt prefill plan 长度/首尾 token 合同漂移");
+        }
+
+        let mut expected_base = 0usize;
+        let mut expected_input_token_id = self.first_input_token_id;
+        for (block_index, block) in self.blocks.iter().enumerate() {
+            block.validate()?;
+            let remaining = self
+                .prompt_len
+                .checked_sub(1)
+                .and_then(|transitions| transitions.checked_sub(expected_base))
+                .context("StarFold prompt plan block base 超出 transition count")?;
+            let expected_physical_k =
+                S14StarfoldPrefillPhysicalK::preferred_for_remaining(remaining)
+                    .context("StarFold prompt plan 含零长度尾块")?;
+            if block.block_index != block_index
+                || usize::try_from(block.base_position).ok() != Some(expected_base)
+                || block.physical_k_contract() != expected_physical_k
+                || block.physical_input_token_ids()[0] != expected_input_token_id
+                || block.logical_lanes > remaining
+            {
+                bail!("StarFold prompt prefill plan block index/base/K/input 合同漂移");
+            }
+            expected_base = expected_base
+                .checked_add(block.logical_lanes)
+                .context("StarFold prompt plan logical lane 累加 overflow")?;
+            expected_input_token_id = block.committed_input_token_id();
+        }
+
+        if expected_base != self.prompt_len - 1
+            || u32::try_from(expected_base).ok() != Some(self.final_position)
+            || expected_input_token_id != self.final_input_token_id
+            || (self.prompt_len == 1 && !self.blocks.is_empty())
+            || (self.prompt_len > 1 && self.blocks.is_empty())
+        {
+            bail!("StarFold prompt prefill plan 最终 position/input/block 链未闭合");
+        }
+        Ok(())
     }
 
     pub fn validate_final_state(&self, state: &DecoderStateV1) -> Result<()> {
@@ -500,7 +667,7 @@ fn commit_starfold_teacher_forced_prefill_block_inner(
         block_index: block.block_index,
         base_position: block.base_position,
         logical_lanes: block.logical_lanes,
-        physical_lanes: S14_STARFOLD_PREFILL_PHYSICAL_K,
+        physical_lanes: block.physical_k(),
         transitions,
         committed_position,
         committed_epoch,
@@ -526,12 +693,12 @@ fn validate_base_identity(
         || authoritative.native.position != block.base_position
         || authoritative.commit_epoch != u64::from(block.base_position)
         || usize::from(authoritative.active_fixed_bank) != (block.base_position as usize & 1)
-        || authoritative.input_token_id != block.physical_input_token_ids[0]
+        || authoritative.input_token_id != block.physical_input_token_ids()[0]
         || device.epoch() != authoritative.commit_epoch
         || device.active_bank() != usize::from(authoritative.active_fixed_bank)
         || device.state_bytes() != authoritative.native_arena.len() as u64
         || arena.base_position() != block.base_position
-        || layout.block_size != S14_STARFOLD_PREFILL_PHYSICAL_K
+        || layout.block_size != block.physical_k()
         || layout.checkpoint_state_bytes != device.state_bytes()
         || producer_ready.semaphore == vk::Semaphore::null()
         || producer_ready.generation == 0
@@ -564,7 +731,7 @@ fn build_transition_receipts(
                     .base_position
                     .checked_add(lane as u32)
                     .context("teacher-forced receipt position overflow")?,
-                input_token_id: block.physical_input_token_ids[lane],
+                input_token_id: block.physical_input_token_ids()[lane],
                 observed_next_input_token_id: block.observed_next_input_token_ids[lane],
             })
         })
@@ -592,7 +759,7 @@ fn build_teacher_forced_checkpoint(
         // predicted_token_id 槽承载“已观测的下一输入”，绝不是模型预测；生成质量评估不得读取。
         ledger.push(TokenRecord {
             position: block.base_position + lane as u32,
-            input_token_id: block.physical_input_token_ids[lane],
+            input_token_id: block.physical_input_token_ids()[lane],
             predicted_token_id: block.observed_next_input_token_ids[lane],
         });
     }

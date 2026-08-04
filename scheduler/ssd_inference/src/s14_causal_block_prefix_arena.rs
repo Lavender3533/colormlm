@@ -10,6 +10,7 @@ use crate::{
     s14_causal_block_prefix_state::S14CausalBlockPrefixStateSealReceipt,
     s14_causal_block_production_evidence::{
         S14CausalBlockProductionEvidenceLedger, S14CausalBlockProductionEvidenceSnapshot,
+        S14CausalBlockRatio4SegmentedRecordingReceipt,
     },
     s14_causal_block_terminal_owner::S14CausalBlockOwnedBufferSlice,
     GpuBuffer, VulkanContext,
@@ -117,8 +118,10 @@ impl S14CausalBlockPrefixCheckpointArena {
     ) -> Result<Arc<Self>> {
         let layout =
             S14CausalBlockPrefixCheckpointLayout::build(block_size, checkpoint_state_bytes)?;
+        let block_size_u32 =
+            u32::try_from(block_size).context("prefix checkpoint block_size 无法表示为 u32")?;
         base_position
-            .checked_add(block_size as u32)
+            .checked_add(block_size_u32)
             .context("prefix checkpoint position overflow")?;
         if arena.handle() == vk::Buffer::null()
             || arena_offset % PREFIX_ALIGNMENT != 0
@@ -164,7 +167,7 @@ impl S14CausalBlockPrefixCheckpointArena {
     pub(crate) fn record_completed_ratio4_layer(
         &self,
         layer: u8,
-        receipt: crate::s14_causal_block_ratio4_boundary::S14CausalBlockRatio4BoundaryRecordingReceipt,
+        receipt: S14CausalBlockRatio4SegmentedRecordingReceipt,
     ) -> Result<()> {
         self.evidence.record_completed_ratio4_layer(layer, receipt)
     }
@@ -353,13 +356,55 @@ impl S14CausalBlockPrefixCheckpointArena {
             .collect()
     }
 
-    /// Teacher-forced prompt prefill 的非 terminal seal 门。它只验收同源 K4×43 层
+    /// Teacher-forced prompt prefill 的非 terminal seal 门。它只验收同源 K4/8×43 层
     /// prefix program/evidence 并开放指定 prefix 的 host readback；不执行 final hidden、
     /// generation head，也不导出或发布任何预测 token。
     pub(crate) fn seal_for_starfold_teacher_forced_prefill(&self) -> Result<()> {
+        self.seal_for_starfold_teacher_forced_prefill_with_identity(
+            self.base_position,
+            self.layout.block_size,
+        )
+    }
+
+    /// 同上，但 caller 必须把已 seal recorder 的真实 block identity 显式带入。这样 K=8
+    /// product 不能借用同 context 下另一块 K=4 arena，也不能只凭 phase 标志通过。
+    pub(crate) fn seal_for_starfold_teacher_forced_prefill_with_identity(
+        &self,
+        expected_base_position: u32,
+        expected_block_size: usize,
+    ) -> Result<()> {
+        self.validate_starfold_teacher_forced_prefill_layout_identity(
+            expected_base_position,
+            expected_block_size,
+        )?;
         let mut phase = self.lock_phase()?;
         validate_and_seal_phase(&mut phase, self.base_position, self.layout, &self.evidence)?;
         Ok(())
+    }
+
+    /// Prefix-only product 的 post-seal 强身份门。product 继续携带本 arena 强 owner，
+    /// 因而 base/K/layout 与 producer seal receipt 均可在下游重复校验，而不是只携带裸句柄。
+    pub(crate) fn validate_starfold_teacher_forced_prefill_identity(
+        &self,
+        expected_base_position: u32,
+        expected_block_size: usize,
+    ) -> Result<()> {
+        self.validate_starfold_teacher_forced_prefill_layout_identity(
+            expected_base_position,
+            expected_block_size,
+        )?;
+        self.validate_host_readback_ready()?;
+        let evidence = self.production_evidence_snapshot()?;
+        let receipt = evidence
+            .prefix_seal_receipt
+            .context("ForcedPrefill prefix-only product 缺少 producer seal receipt")?;
+        if evidence.base_position != expected_base_position
+            || evidence.block_size != expected_block_size
+        {
+            bail!("ForcedPrefill prefix-only evidence base/K 与 arena identity 漂移");
+        }
+        validate_prefix_seal_receipt(self.base_position, self.layout, receipt)
+            .context("ForcedPrefill prefix-only product seal receipt 非法")
     }
 
     /// 任一已录制 command 被丢弃或 producer 失败时永久关闭本 one-shot arena binding。
@@ -373,6 +418,22 @@ impl S14CausalBlockPrefixCheckpointArena {
         self.phase
             .lock()
             .map_err(|_| anyhow::anyhow!("prefix checkpoint arena lifecycle poisoned"))
+    }
+
+    fn validate_starfold_teacher_forced_prefill_layout_identity(
+        &self,
+        expected_base_position: u32,
+        expected_block_size: usize,
+    ) -> Result<()> {
+        if !matches!(expected_block_size, 4 | 8)
+            || self.base_position != expected_base_position
+            || self.layout.block_size != expected_block_size
+            || self.layout.checkpoint_state_bytes == 0
+            || self.layout.used_bytes == 0
+        {
+            bail!("ForcedPrefill prefix-only arena base/K/layout identity 漂移");
+        }
+        Ok(())
     }
 }
 

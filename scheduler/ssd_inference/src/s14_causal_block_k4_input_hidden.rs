@@ -27,6 +27,7 @@ use polaris_s14_runner::Position0Asset;
 use std::{collections::BTreeMap, fmt, sync::Arc};
 
 pub const S14_CAUSAL_BLOCK_K4_INPUT_TOKENS: usize = 4;
+pub const S14_CAUSAL_BLOCK_K8_INPUT_TOKENS: usize = 8;
 pub const S14_CAUSAL_BLOCK_K4_EMBEDDING_ROW_BYTES: u64 = S14_CAUSAL_BLOCK_STREAM_WIDTH as u64 * 2;
 pub const S14_CAUSAL_BLOCK_K4_SOURCE_BYTES: u64 =
     S14_CAUSAL_BLOCK_K4_INPUT_TOKENS as u64 * S14_CAUSAL_BLOCK_K4_EMBEDDING_ROW_BYTES;
@@ -45,7 +46,7 @@ pub struct S14CausalBlockK4InputHiddenOwner {
     hidden: Option<Arc<GpuBuffer>>,
     alternate: Option<Arc<GpuBuffer>>,
     base_position: u32,
-    token_ids: [u32; S14_CAUSAL_BLOCK_K4_INPUT_TOKENS],
+    token_ids: Vec<u32>,
     generation: u64,
 }
 
@@ -99,7 +100,7 @@ impl S14CausalBlockK4InputHiddenOwner {
         token_ids: [u32; S14_CAUSAL_BLOCK_K4_INPUT_TOKENS],
         generation: u64,
     ) -> Result<Self> {
-        validate_block_positions(base_position, max_seq_len)?;
+        validate_block_positions(base_position, max_seq_len, S14_CAUSAL_BLOCK_K4_INPUT_TOKENS)?;
         let mut assets = Vec::with_capacity(S14_CAUSAL_BLOCK_K4_INPUT_TOKENS);
         for (lane, &token_id) in token_ids.iter().enumerate() {
             let position = base_position
@@ -137,7 +138,13 @@ impl S14CausalBlockK4InputHiddenOwner {
             .iter()
             .map(|lease| lease.bytes())
             .collect::<Vec<_>>();
-        Self::build_from_rows(context, base_position, token_ids, generation, &lane_rows)
+        Self::build_from_rows(
+            context,
+            base_position,
+            token_ids.to_vec(),
+            generation,
+            &lane_rows,
+        )
     }
 
     /// Production StarFold 的本地 shard 入口。shard 已在 factory 启动期完成整文件
@@ -151,7 +158,26 @@ impl S14CausalBlockK4InputHiddenOwner {
         token_ids: [u32; S14_CAUSAL_BLOCK_K4_INPUT_TOKENS],
         generation: u64,
     ) -> Result<Self> {
-        validate_block_positions(base_position, max_seq_len)?;
+        Self::build_at_from_local_shard_kblock(
+            context,
+            shard,
+            base_position,
+            max_seq_len,
+            &token_ids,
+            generation,
+        )
+    }
+
+    /// Teacher-forced superblock 入口。物理宽度只允许 K4/K8；generation 仍由上层锁定 K4。
+    pub fn build_at_from_local_shard_kblock(
+        context: Arc<VulkanContext>,
+        shard: &S14LocalEmbeddingShard,
+        base_position: u32,
+        max_seq_len: u32,
+        token_ids: &[u32],
+        generation: u64,
+    ) -> Result<Self> {
+        validate_block_positions(base_position, max_seq_len, token_ids.len())?;
         let lane_rows = token_ids
             .iter()
             .enumerate()
@@ -161,18 +187,28 @@ impl S14CausalBlockK4InputHiddenOwner {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
-        Self::build_from_rows(context, base_position, token_ids, generation, &lane_rows)
+        Self::build_from_rows(
+            context,
+            base_position,
+            token_ids.to_vec(),
+            generation,
+            &lane_rows,
+        )
     }
 
     fn build_from_rows(
         context: Arc<VulkanContext>,
         base_position: u32,
-        token_ids: [u32; S14_CAUSAL_BLOCK_K4_INPUT_TOKENS],
+        token_ids: Vec<u32>,
         generation: u64,
         lane_rows: &[&[u8]],
     ) -> Result<Self> {
-        let hidden = upload_and_broadcast_k4(&context, lane_rows)
-            .context("upload+broadcast S14 K=4 input hidden")?;
+        validate_supported_block_size(token_ids.len())?;
+        if lane_rows.len() != token_ids.len() {
+            bail!("S14 K4/K8 embedding token/row 数量不一致");
+        }
+        let hidden = upload_and_broadcast_kblock(&context, lane_rows)
+            .context("upload+broadcast S14 K4/K8 input hidden")?;
         let alternate = match GpuBuffer::new_vram(
             &context,
             S14_CAUSAL_BLOCK_PRODUCTION_HIDDEN_BANK_BYTES,
@@ -207,8 +243,8 @@ impl S14CausalBlockK4InputHiddenOwner {
         &self.context
     }
 
-    pub fn token_ids(&self) -> &[u32; S14_CAUSAL_BLOCK_K4_INPUT_TOKENS] {
-        &self.token_ids
+    pub fn token_ids(&self) -> &[u32] {
+        self.token_ids.as_slice()
     }
 
     pub fn base_position(&self) -> u32 {
@@ -267,7 +303,7 @@ impl S14CausalBlockK4InputHiddenOwner {
     /// 导出精确 `[4,4,4096]` BF16 binding，不导出 host/mmap 指针。
     pub fn binding(&self) -> Result<S14CausalBlockHiddenBinding> {
         self.hidden_bank()?
-            .binding(S14_CAUSAL_BLOCK_K4_INPUT_TOKENS, self.generation)
+            .binding(self.token_ids.len(), self.generation)
     }
 
     /// 幂等显式销毁。若 hidden bank 仍被 recorder/bundle 强持有，则保留
@@ -333,9 +369,10 @@ fn validate_embedding_asset(asset: &Position0Asset, token_id: u32) -> Result<()>
     Ok(())
 }
 
-fn validate_block_positions(base_position: u32, max_seq_len: u32) -> Result<()> {
+fn validate_block_positions(base_position: u32, max_seq_len: u32, block_size: usize) -> Result<()> {
+    validate_supported_block_size(block_size)?;
     let block_end = base_position
-        .checked_add(S14_CAUSAL_BLOCK_K4_INPUT_TOKENS as u32)
+        .checked_add(u32::try_from(block_size).context("S14 K-block size overflow")?)
         .context("S14 K=4 input position end overflow")?;
     if max_seq_len == 0 || block_end > max_seq_len {
         bail!(
@@ -345,18 +382,23 @@ fn validate_block_positions(base_position: u32, max_seq_len: u32) -> Result<()> 
     Ok(())
 }
 
+fn validate_supported_block_size(block_size: usize) -> Result<()> {
+    if !matches!(
+        block_size,
+        S14_CAUSAL_BLOCK_K4_INPUT_TOKENS | S14_CAUSAL_BLOCK_K8_INPUT_TOKENS
+    ) {
+        bail!("S14 input hidden 只接受物理 K4/K8，actual={block_size}");
+    }
+    Ok(())
+}
+
 fn deduplicate_embedding_assets(
     assets: &[Position0Asset],
-) -> Result<(
-    Vec<Position0Asset>,
-    [usize; S14_CAUSAL_BLOCK_K4_INPUT_TOKENS],
-)> {
-    if assets.len() != S14_CAUSAL_BLOCK_K4_INPUT_TOKENS {
-        bail!("S14 K=4 embedding asset 数量必须为 4");
-    }
+) -> Result<(Vec<Position0Asset>, Vec<usize>)> {
+    validate_supported_block_size(assets.len())?;
     let mut by_cache_key = BTreeMap::<String, usize>::new();
     let mut unique = Vec::<Position0Asset>::new();
-    let mut lane_to_unique = [0usize; S14_CAUSAL_BLOCK_K4_INPUT_TOKENS];
+    let mut lane_to_unique = vec![0usize; assets.len()];
     for (lane, asset) in assets.iter().enumerate() {
         if let Some(&index) = by_cache_key.get(&asset.cache_key) {
             let existing = unique
@@ -380,8 +422,8 @@ fn deduplicate_embedding_assets(
             lane_to_unique[lane] = index;
         }
     }
-    if unique.is_empty() || unique.len() > S14_CAUSAL_BLOCK_K4_INPUT_TOKENS {
-        bail!("S14 K=4 unique embedding 数量非法");
+    if unique.is_empty() || unique.len() > assets.len() {
+        bail!("S14 K4/K8 unique embedding 数量非法");
     }
     Ok((unique, lane_to_unique))
 }
@@ -402,10 +444,9 @@ fn validate_verified_lease(
     Ok(())
 }
 
-fn upload_and_broadcast_k4(context: &VulkanContext, lane_rows: &[&[u8]]) -> Result<GpuBuffer> {
-    if lane_rows.len() != S14_CAUSAL_BLOCK_K4_INPUT_TOKENS {
-        bail!("S14 K=4 upload row 数量必须为 4");
-    }
+fn upload_and_broadcast_kblock(context: &VulkanContext, lane_rows: &[&[u8]]) -> Result<GpuBuffer> {
+    let block_size = lane_rows.len();
+    validate_supported_block_size(block_size)?;
     if S14_CAUSAL_BLOCK_HC_STREAMS != 4
         || S14_CAUSAL_BLOCK_STREAM_WIDTH != 4096
         || S14_CAUSAL_BLOCK_K4_SOURCE_BYTES != 32_768
@@ -430,14 +471,14 @@ fn upload_and_broadcast_k4(context: &VulkanContext, lane_rows: &[&[u8]]) -> Resu
     }
     let status_stride = align_up(4, storage_alignment)?;
     let status_bytes = status_stride
-        .checked_mul(S14_CAUSAL_BLOCK_K4_INPUT_TOKENS as u64)
+        .checked_mul(block_size as u64)
         .context("S14 K=4 status bytes overflow")?;
 
-    let mut scratch = K4UploadScratch::new();
+    let mut scratch = K4UploadScratch::new(block_size);
     let result = (|| -> Result<GpuBuffer> {
         scratch.source = Some(GpuBuffer::new(
             context,
-            S14_CAUSAL_BLOCK_K4_SOURCE_BYTES,
+            S14_CAUSAL_BLOCK_K4_EMBEDDING_ROW_BYTES * block_size as u64,
             vk::BufferUsageFlags::STORAGE_BUFFER,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
@@ -515,7 +556,7 @@ fn upload_and_broadcast_k4(context: &VulkanContext, lane_rows: &[&[u8]]) -> Resu
         };
 
         let shape = S14EmbeddingBroadcastShape::new(S14_CAUSAL_BLOCK_STREAM_WIDTH as u32)?;
-        for lane in 0..S14_CAUSAL_BLOCK_K4_INPUT_TOKENS {
+        for lane in 0..block_size {
             let source_offset = S14_CAUSAL_BLOCK_K4_EMBEDDING_ROW_BYTES * lane as u64;
             let output_offset = token_hidden_bytes * lane as u64;
             let status_offset = status_stride * lane as u64;
@@ -631,7 +672,7 @@ fn upload_and_broadcast_k4(context: &VulkanContext, lane_rows: &[&[u8]]) -> Resu
         let status_slice = unsafe {
             std::slice::from_raw_parts(status.mapped() as *const u8, usize::try_from(status_bytes)?)
         };
-        for lane in 0..S14_CAUSAL_BLOCK_K4_INPUT_TOKENS {
+        for lane in 0..block_size {
             let offset = usize::try_from(status_stride * lane as u64)?;
             let bytes: [u8; 4] = status_slice
                 .get(offset..offset + 4)
@@ -710,13 +751,13 @@ struct K4UploadScratch {
 }
 
 impl K4UploadScratch {
-    fn new() -> Self {
+    fn new(block_size: usize) -> Self {
         Self {
             source: None,
             status: None,
             output: None,
             pipeline: None,
-            dispatches: Vec::with_capacity(S14_CAUSAL_BLOCK_K4_INPUT_TOKENS),
+            dispatches: Vec::with_capacity(block_size),
             pool: vk::CommandPool::null(),
             command: vk::CommandBuffer::null(),
             fence: vk::Fence::null(),

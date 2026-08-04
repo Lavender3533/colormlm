@@ -22,18 +22,21 @@ use crate::{
         S14CausalBlockAttentionRouterOutput, S14CausalBlockHiddenBinding, S14CausalBlockLayerInput,
         S14_CAUSAL_BLOCK_HC_ELEMENTS_PER_LANE,
     },
-    s14_causal_block_prefix_arena::S14CausalBlockPrefixCheckpointArena,
+    s14_causal_block_prefix_arena::{
+        S14CausalBlockPrefixCheckpointArena, S14CausalBlockPrefixCheckpointLayout,
+    },
     s14_causal_block_prefix_producer::{
         S14CausalBlockPrefixLayerInputs, S14CausalBlockPrefixStateProducer,
     },
     s14_causal_block_production_bundle::{
         S14CausalBlockProductionHcQkvResourceProvider, S14CausalBlockProductionTerminalAssets,
     },
+    s14_causal_block_production_evidence::S14CausalBlockRatio4SegmentedRecordingReceipt,
     s14_causal_block_ratio4_boundary::{
         S14CausalBlockRatio4AttentionBindings, S14CausalBlockRatio4BoundaryRecorder,
         S14CausalBlockRatio4BoundaryRecording, S14CausalBlockRatio4BoundaryStateRecorder,
-        S14CausalBlockRatio4Position4IndexerBindings, S14CausalBlockRatio4StateWorkspaceBindings,
-        S14_CAUSAL_BLOCK_RATIO4_INDEX_CAPACITY_ROWS,
+        S14CausalBlockRatio4K8BoundaryRecording, S14CausalBlockRatio4Position4IndexerBindings,
+        S14CausalBlockRatio4StateWorkspaceBindings, S14_CAUSAL_BLOCK_RATIO4_INDEX_CAPACITY_ROWS,
     },
     s14_causal_block_terminal_owner::S14CausalBlockOwnedBufferSlice as S14CausalBlockTerminalOwnedBufferSlice,
     s14_e4m3_qdq::{S14E4m3QdqPipeline, S14E4m3QdqShape},
@@ -75,6 +78,49 @@ const ALIGN: u64 = 256;
 const MAX_BATCH: u32 = 8;
 const BF16_BYTES: u64 = 2;
 const F32_BYTES: u64 = 4;
+
+enum S14CausalBlockPendingRatio4Recording {
+    K4 {
+        owner_epoch: u64,
+        recording: S14CausalBlockRatio4BoundaryRecording,
+    },
+    K8(S14CausalBlockRatio4K8BoundaryRecording),
+}
+
+impl S14CausalBlockPendingRatio4Recording {
+    fn evidence_receipt(&self) -> Result<S14CausalBlockRatio4SegmentedRecordingReceipt> {
+        let (base_position, owner_epoch, segments) = match self {
+            Self::K4 {
+                owner_epoch,
+                recording,
+            } => (
+                recording.receipt.positions[0],
+                *owner_epoch,
+                vec![recording.receipt],
+            ),
+            Self::K8(recording) => {
+                recording.receipt.validate()?;
+                (
+                    recording.receipt.base_position,
+                    recording.receipt.owner_epoch,
+                    recording.receipt.segment_receipts.to_vec(),
+                )
+            }
+        };
+        S14CausalBlockRatio4SegmentedRecordingReceipt::from_segments(
+            base_position,
+            owner_epoch,
+            segments,
+        )
+    }
+
+    fn destroy(self, context: &VulkanContext) {
+        match self {
+            Self::K4 { recording, .. } => recording.destroy(context),
+            Self::K8(recording) => recording.destroy(context),
+        }
+    }
+}
 
 pub const S14_CAUSAL_BLOCK_FP8_MATVEC_SPV: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/s14_causal_block_fp8_matvec.spv"));
@@ -282,12 +328,21 @@ impl S14CausalBlockHcQkvLayerResources {
         mut self,
         state: Arc<dyn S14CausalBlockRatio4BoundaryStateRecorder>,
     ) -> Result<Self> {
-        let binding = state.candidate_state_binding();
-        binding.validate(state.candidate_state_owner())?;
-        if binding.layer != self.layer
-            || COMPRESS_RATIOS.get(usize::from(self.layer)).copied() != Some(4)
-        {
-            bail!("ratio4 candidate state binding 与 HC/QKV layer 漂移");
+        let transaction = state.transaction_identity();
+        transaction.validate()?;
+        if COMPRESS_RATIOS.get(usize::from(self.layer)).copied() != Some(4) {
+            bail!("ratio4 candidate state 绑定到了非 ratio4 HC/QKV layer");
+        }
+        for segment_index in 0..transaction.segment_count {
+            let binding = state.candidate_state_binding_for_segment(segment_index)?;
+            binding.validate(state.candidate_state_owner())?;
+            if binding.layer != self.layer
+                || binding.owner_epoch != transaction.owner_epoch
+                || binding.segment_index != segment_index
+                || binding.segment_count != transaction.segment_count
+            {
+                bail!("ratio4 segmented candidate state 与 HC/QKV layer/epoch 漂移");
+            }
         }
         self.ratio4_boundary_state = Some(state);
         Ok(self)
@@ -348,7 +403,7 @@ impl fmt::Debug for S14CausalBlockHcQkvLayerResources {
                 &self
                     .ratio4_boundary_state
                     .as_ref()
-                    .map(|state| state.candidate_state_binding()),
+                    .map(|state| state.transaction_identity()),
             )
             .field("route_mode", &self.route_mode)
             .finish_non_exhaustive()
@@ -395,6 +450,44 @@ pub struct S14CausalBlockStarfoldPrefillPrefixProduct {
     pub prefix_checkpoint_arena: Arc<S14CausalBlockPrefixCheckpointArena>,
     pub producer_ready: S14StarfoldTimelinePoint,
     pub source: MaterializedTokenSource,
+}
+
+impl S14CausalBlockStarfoldPrefillPrefixProduct {
+    /// Product 通过强 arena owner 携带真实 base/K/layout；不复制或重新合成第二份 identity。
+    pub fn base_position(&self) -> u32 {
+        self.prefix_checkpoint_arena.base_position()
+    }
+
+    pub fn block_size(&self) -> usize {
+        self.prefix_checkpoint_arena.layout().block_size
+    }
+
+    pub fn layout(&self) -> S14CausalBlockPrefixCheckpointLayout {
+        self.prefix_checkpoint_arena.layout()
+    }
+
+    pub(crate) fn validate_for_starfold_teacher_forced_prefill(
+        &self,
+        expected_base_position: u32,
+        expected_block_size: usize,
+    ) -> Result<()> {
+        if self.source != MaterializedTokenSource::ForcedPrefill
+            || !matches!(expected_block_size, 4 | 8)
+            || self.base_position() != expected_base_position
+            || self.block_size() != expected_block_size
+            || !Arc::ptr_eq(&self.context, self.prefix_checkpoint_arena.context())
+            || self.producer_ready.semaphore == vk::Semaphore::null()
+            || self.producer_ready.generation == 0
+            || self.producer_ready.value == 0
+        {
+            bail!("StarFold ForcedPrefill prefix product base/K/layout/timeline identity 漂移");
+        }
+        self.prefix_checkpoint_arena
+            .validate_starfold_teacher_forced_prefill_identity(
+                expected_base_position,
+                expected_block_size,
+            )
+    }
 }
 
 impl fmt::Debug for S14CausalBlockStarfoldTerminalBlockOwners {
@@ -532,16 +625,16 @@ impl WorkspaceLayout {
             attention_branch_f32: take(batch * HIDDEN as u64 * F32_BYTES)?,
             attention_branch_bf16: take(batch * HIDDEN as u64 * BF16_BYTES)?,
             router_logits: take(batch * S14_CAUSAL_BLOCK_ROUTER_EXPERTS as u64 * F32_BYTES)?,
-            // 每个非-boundary lane 都可能需要自己的 dynamic index query/order。
-            // 4行互不复用，保证同一 command 内的后写入不会覆盖早期 attention 输入。
-            ratio4_raw_index_query_bf16: take(K4 as u64 * 8_192 * BF16_BYTES)?,
-            ratio4_processed_index_query_bf16: take(K4 as u64 * 8_192 * BF16_BYTES)?,
-            ratio4_head_weights_bf16: take(K4 as u64 * 64 * BF16_BYTES)?,
+            // 每个物理 lane 都有独立 dynamic index query/order。K8 的第二段不能覆盖
+            // 第一段仍被同一 command graph 引用的 descriptor 区域。
+            ratio4_raw_index_query_bf16: take(batch * 8_192 * BF16_BYTES)?,
+            ratio4_processed_index_query_bf16: take(batch * 8_192 * BF16_BYTES)?,
+            ratio4_head_weights_bf16: take(batch * 64 * BF16_BYTES)?,
             ratio4_index_scores_f32: take(
-                K4 as u64 * u64::from(S14_CAUSAL_BLOCK_RATIO4_INDEX_CAPACITY_ROWS) * F32_BYTES,
+                batch * u64::from(S14_CAUSAL_BLOCK_RATIO4_INDEX_CAPACITY_ROWS) * F32_BYTES,
             )?,
             ratio4_compressed_indices_u32: take(
-                K4 as u64 * u64::from(S14_CAUSAL_BLOCK_RATIO4_INDEX_CAPACITY_ROWS) * F32_BYTES,
+                batch * u64::from(S14_CAUSAL_BLOCK_RATIO4_INDEX_CAPACITY_ROWS) * F32_BYTES,
             )?,
             bytes: 0,
         };
@@ -627,7 +720,11 @@ enum RecorderPhase {
         block_size: usize,
         source: MaterializedTokenSource,
     },
-    LayersSealed,
+    LayersSealed {
+        base_position: u32,
+        block_size: usize,
+        source: MaterializedTokenSource,
+    },
     Destroyed,
 }
 
@@ -653,7 +750,7 @@ pub struct S14CausalBlockProductionHcQkvLayerRecorder<P: S14CausalBlockHcQkvReso
     sealed_producer_timeline_value: Option<u64>,
     pending_binders: RefCell<Vec<DescriptorBinder>>,
     pending_attention: RefCell<Option<S14CausalBlockAttentionRouterRecorder>>,
-    pending_ratio4: RefCell<Option<S14CausalBlockRatio4BoundaryRecording>>,
+    pending_ratio4: RefCell<Option<S14CausalBlockPendingRatio4Recording>>,
     prefix_producer: Option<S14CausalBlockPrefixStateProducer>,
     in_flight: bool,
     phase: RecorderPhase,
@@ -814,13 +911,16 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
         };
         let source_origin_valid = match (source, base_position, position0_provenance) {
             (MaterializedTokenSource::SpeculativeDraft, 0, Some(_)) => block_size == K4,
-            (MaterializedTokenSource::SpeculativeDraft, _, None) => base_position > 0,
-            (MaterializedTokenSource::ForcedPrefill, _, None) => true,
+            (MaterializedTokenSource::SpeculativeDraft, _, None) => {
+                base_position > 0 && block_size == K4
+            }
+            (MaterializedTokenSource::ForcedPrefill, _, None) => {
+                matches!(block_size, 4 | 8)
+            }
             _ => false,
         };
         if self.phase != RecorderPhase::Idle
             || !matches!(block_size, 4 | 8)
-            || (source == MaterializedTokenSource::ForcedPrefill && block_size != K4)
             || !source_origin_valid
             || self.provider.materialized_token_source() != source
             || !prefix_identity_valid
@@ -1021,7 +1121,14 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
             .pending_ratio4
             .borrow()
             .as_ref()
-            .map(|recording| recording.receipt);
+            .map(S14CausalBlockPendingRatio4Recording::evidence_receipt)
+            .transpose()?;
+        let ratio4_attention_dispatch_calls = ratio4_receipt
+            .as_ref()
+            .map_or(0, |receipt| receipt.attention_dispatch_calls);
+        let ratio4_state_transition_calls = ratio4_receipt
+            .as_ref()
+            .map_or(0, |receipt| receipt.state_transaction_calls);
         let routes = match self.decode_routes(input.layer, block_size) {
             Ok(routes) => routes,
             Err(error) => {
@@ -1045,9 +1152,7 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
             routes,
             forward_calls: 1,
         };
-        let ratio4_boundary = is_supported_k4_ratio4_layer(input)?;
-        let ratio4_attention_dispatch_calls =
-            ratio4_receipt.map_or(0, |receipt| receipt.attention_dispatch_calls);
+        let ratio4_boundary = is_supported_ratio4_layer(input)?;
         Ok(S14CausalBlockHcQkvRecordedLayer {
             receipt: S14CausalBlockHcQkvLayerRecordingReceipt {
                 base_position,
@@ -1061,7 +1166,7 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
                 attention_recording_calls: 1,
                 contiguous_attention_dispatch_calls: u32::from(!ratio4_boundary),
                 ratio4_boundary_attention_dispatch_calls: ratio4_attention_dispatch_calls,
-                ratio4_state_transition_record_calls: u32::from(ratio4_boundary),
+                ratio4_state_transition_record_calls: ratio4_state_transition_calls,
                 attention_output_post_record_calls: 1,
                 ffn_hc_router_input_record_calls: 1,
                 router_recording_calls: 1,
@@ -1226,13 +1331,11 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
                 sticky_status_u32: StorageBufferSlice::whole(status),
             },
         )?;
-        if is_supported_k4_ratio4_layer(input)? {
+        if is_supported_ratio4_layer(input)? {
             let state = resources
                 .ratio4_boundary_state
                 .as_ref()
-                .context("dynamic-base/K4 ratio4 layer 缺少真实 candidate state owner")?;
-            let candidate_binding = state.candidate_state_binding();
-            candidate_binding.validate(state.candidate_state_owner())?;
+                .context("dynamic-base ratio4 layer 缺少真实 segmented candidate state owner")?;
             let state_workspace = S14CausalBlockRatio4StateWorkspaceBindings {
                 static_weights: StorageBufferSlice {
                     buffer: static_arena,
@@ -1241,6 +1344,7 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
                 static_logical_bytes: static_layer.logical_bytes,
                 hc_branch_bf16: self.layout.slice(workspace, self.layout.hc_branch_bf16),
                 hc_branch_f32: self.layout.slice(workspace, self.layout.hc_branch_f32),
+                rotated_current_kv_bf16: resources.rotated_current_block_kv_bf16.storage(),
                 // State owner 从完整 K4 query-low/HC 矩阵按动态 lane 取行。
                 position4_query_low_f32: self.layout.slice(workspace, self.layout.q_low_f32),
                 raw_index_query_bf16: self
@@ -1260,59 +1364,157 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
                     .context("ratio4 layer 缺少 index-query scale")?,
                 sticky_status_u32: StorageBufferSlice::whole(status),
             };
-            let recording = unsafe {
-                pipelines.ratio4_boundary.record_base1_k4(
-                    &self.ctx,
-                    self.command,
-                    state.as_ref(),
-                    state_workspace,
-                    S14CausalBlockRatio4AttentionBindings {
-                        query_bf16: self.layout.slice(workspace, self.layout.q_final_bf16),
-                        committed_window_kv_bf16: resources.committed_window_kv_bf16.storage(),
-                        current_block_kv_bf16: self
-                            .layout
-                            .slice(workspace, self.layout.kv_raw_bf16),
-                        first_compressed_kv_bf16: StorageBufferSlice {
-                            buffer: state.candidate_state_owner(),
-                            offset: candidate_binding.first_compressed_kv_offset,
-                        },
-                        position4_compressed_index_u32: self
-                            .layout
-                            .slice(workspace, self.layout.ratio4_compressed_indices_u32),
-                        sink_f32: StorageBufferSlice {
-                            buffer: static_arena,
-                            offset: static_base + weights.attention_sink,
-                        },
-                        rope_f32: resources.rope_f32.storage(),
-                        output_bf16: self.layout.slice(workspace, self.layout.attention_bf16),
-                        sticky_status_u32: StorageBufferSlice::whole(status),
-                    },
-                    S14CausalBlockRatio4Position4IndexerBindings {
-                        raw_index_query_bf16: self
-                            .layout
-                            .slice(workspace, self.layout.ratio4_raw_index_query_bf16),
-                        rope_f32: resources.rope_f32.storage(),
-                        processed_index_query_bf16: self
-                            .layout
-                            .slice(workspace, self.layout.ratio4_processed_index_query_bf16),
-                        index_cache_bf16: StorageBufferSlice {
-                            buffer: state.candidate_state_owner(),
-                            offset: candidate_binding.first_indexer_row_offset,
-                        },
-                        head_weights_bf16: self
-                            .layout
-                            .slice(workspace, self.layout.ratio4_head_weights_bf16),
-                        index_scores_f32: self
-                            .layout
-                            .slice(workspace, self.layout.ratio4_index_scores_f32),
-                        compressed_indices_u32: self
-                            .layout
-                            .slice(workspace, self.layout.ratio4_compressed_indices_u32),
-                        sticky_status_u32: StorageBufferSlice::whole(status),
-                    },
-                )?
+            let transaction = state.transaction_identity();
+            transaction.validate()?;
+            if transaction.base_position != input.base_position || transaction.block_size != batch {
+                bail!("ratio4 recorder transaction 与当前 K-row input 漂移");
+            }
+            let candidate0 = state.candidate_state_binding_for_segment(0)?;
+            candidate0.validate(state.candidate_state_owner())?;
+
+            let ratio4_query_bf16 = self.layout.slice(workspace, self.layout.q_final_bf16);
+            let ratio4_current_block_kv_bf16 =
+                self.layout.slice(workspace, self.layout.kv_raw_bf16);
+            let ratio4_compressed_indices_u32 = self
+                .layout
+                .slice(workspace, self.layout.ratio4_compressed_indices_u32);
+            let ratio4_sink_f32 = StorageBufferSlice {
+                buffer: static_arena,
+                offset: static_base + weights.attention_sink,
             };
-            *self.pending_ratio4.borrow_mut() = Some(recording);
+            let ratio4_rope_f32 = resources.rope_f32.storage();
+            let ratio4_output_bf16 = self.layout.slice(workspace, self.layout.attention_bf16);
+            let ratio4_sticky_status_u32 = StorageBufferSlice::whole(status);
+            let build_position4 = |
+                segment_index: usize,
+                candidate: crate::s14_causal_block_ratio4_boundary::S14CausalBlockRatio4CandidateStateBinding,
+            | -> Result<S14CausalBlockRatio4Position4IndexerBindings<'_>> {
+                Ok(S14CausalBlockRatio4Position4IndexerBindings {
+                    raw_index_query_bf16: b4_row_segment(
+                        self.layout
+                            .slice(workspace, self.layout.ratio4_raw_index_query_bf16),
+                        segment_index,
+                        8_192 * BF16_BYTES,
+                    )?,
+                    rope_f32: b4_row_segment(
+                        resources.rope_f32.storage(),
+                        segment_index,
+                        64 * F32_BYTES,
+                    )?,
+                    processed_index_query_bf16: b4_row_segment(
+                        self.layout
+                            .slice(workspace, self.layout.ratio4_processed_index_query_bf16),
+                        segment_index,
+                        8_192 * BF16_BYTES,
+                    )?,
+                    index_cache_bf16: StorageBufferSlice {
+                        buffer: state.candidate_state_owner(),
+                        offset: candidate.first_indexer_row_offset,
+                    },
+                    head_weights_bf16: b4_row_segment(
+                        self.layout
+                            .slice(workspace, self.layout.ratio4_head_weights_bf16),
+                        segment_index,
+                        64 * BF16_BYTES,
+                    )?,
+                    index_scores_f32: b4_row_segment(
+                        self.layout
+                            .slice(workspace, self.layout.ratio4_index_scores_f32),
+                        segment_index,
+                        u64::from(S14_CAUSAL_BLOCK_RATIO4_INDEX_CAPACITY_ROWS) * F32_BYTES,
+                    )?,
+                    compressed_indices_u32: b4_row_segment(
+                        self.layout
+                            .slice(workspace, self.layout.ratio4_compressed_indices_u32),
+                        segment_index,
+                        u64::from(S14_CAUSAL_BLOCK_RATIO4_INDEX_CAPACITY_ROWS) * 4,
+                    )?,
+                    sticky_status_u32: StorageBufferSlice::whole(status),
+                })
+            };
+            let pending = match batch as usize {
+                K4 => {
+                    let attention = build_ratio4_attention_bindings(
+                        0,
+                        candidate0,
+                        ratio4_query_bf16,
+                        resources.committed_window_kv_bf16.storage(),
+                        ratio4_current_block_kv_bf16,
+                        state.candidate_state_owner(),
+                        ratio4_compressed_indices_u32,
+                        ratio4_sink_f32,
+                        ratio4_rope_f32,
+                        ratio4_output_bf16,
+                        ratio4_sticky_status_u32,
+                    )?;
+                    let position4 = build_position4(0, candidate0)?;
+                    S14CausalBlockPendingRatio4Recording::K4 {
+                        owner_epoch: transaction.owner_epoch,
+                        recording: unsafe {
+                            pipelines.ratio4_boundary.record_aligned_k4(
+                                &self.ctx,
+                                self.command,
+                                state.as_ref(),
+                                state_workspace,
+                                attention,
+                                position4,
+                            )?
+                        },
+                    }
+                }
+                8 => {
+                    let candidate1 = state.candidate_state_binding_for_segment(1)?;
+                    candidate1.validate(state.candidate_state_owner())?;
+                    let segment1_committed = StorageBufferSlice {
+                        buffer: state.candidate_state_owner(),
+                        offset: candidate1.committed_window_kv_offset,
+                    };
+                    let attentions = [
+                        build_ratio4_attention_bindings(
+                            0,
+                            candidate0,
+                            ratio4_query_bf16,
+                            resources.committed_window_kv_bf16.storage(),
+                            ratio4_current_block_kv_bf16,
+                            state.candidate_state_owner(),
+                            ratio4_compressed_indices_u32,
+                            ratio4_sink_f32,
+                            ratio4_rope_f32,
+                            ratio4_output_bf16,
+                            ratio4_sticky_status_u32,
+                        )?,
+                        build_ratio4_attention_bindings(
+                            1,
+                            candidate1,
+                            ratio4_query_bf16,
+                            segment1_committed,
+                            ratio4_current_block_kv_bf16,
+                            state.candidate_state_owner(),
+                            ratio4_compressed_indices_u32,
+                            ratio4_sink_f32,
+                            ratio4_rope_f32,
+                            ratio4_output_bf16,
+                            ratio4_sticky_status_u32,
+                        )?,
+                    ];
+                    let position4 = [
+                        build_position4(0, candidate0)?,
+                        build_position4(1, candidate1)?,
+                    ];
+                    S14CausalBlockPendingRatio4Recording::K8(unsafe {
+                        pipelines.ratio4_boundary.record_aligned_k8(
+                            &self.ctx,
+                            self.command,
+                            state.as_ref(),
+                            state_workspace,
+                            attentions,
+                            position4,
+                        )?
+                    })
+                }
+                _ => bail!("ratio4 recorder 仅接受 K4/K8 production block"),
+            };
+            *self.pending_ratio4.borrow_mut() = Some(pending);
         } else {
             unsafe { attention.record_attention(&self.ctx, self.command)? };
         }
@@ -1837,18 +2039,30 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
         {
             bail!("causal-block HC/QKV layer/static arena identity 漂移");
         }
-        let ratio4_boundary = is_supported_k4_ratio4_layer(input)?;
+        let ratio4_boundary = is_supported_ratio4_layer(input)?;
         if ratio4_boundary != resources.ratio4_boundary_state.is_some() {
             bail!("causal-block HC/QKV ratio4 candidate state owner 缺失或误绑定");
         }
         if let Some(state) = &resources.ratio4_boundary_state {
-            let binding = state.candidate_state_binding();
-            binding.validate(state.candidate_state_owner())?;
-            if binding.layer != input.layer
-                || binding.base_position != input.base_position
-                || binding.block_size as usize != input.input_token_ids.len()
+            let transaction = state.transaction_identity();
+            transaction.validate()?;
+            if transaction.base_position != input.base_position
+                || transaction.block_size as usize != input.input_token_ids.len()
             {
-                bail!("causal-block HC/QKV ratio4 candidate state layer/base/K 漂移");
+                bail!("causal-block HC/QKV ratio4 transaction base/K 漂移");
+            }
+            for segment_index in 0..transaction.segment_count {
+                let binding = state.candidate_state_binding_for_segment(segment_index)?;
+                binding.validate(state.candidate_state_owner())?;
+                if binding.layer != input.layer
+                    || binding.owner_epoch != transaction.owner_epoch
+                    || binding.physical_base_position != input.base_position
+                    || binding.physical_block_size as usize != input.input_token_ids.len()
+                    || binding.segment_index != segment_index
+                    || binding.segment_count != transaction.segment_count
+                {
+                    bail!("causal-block HC/QKV ratio4 segment candidate identity 漂移");
+                }
             }
         }
         resources
@@ -2053,11 +2267,19 @@ where
     pub(crate) fn starfold_teacher_forced_prefill_prefix_product(
         &self,
     ) -> Result<S14CausalBlockStarfoldPrefillPrefixProduct> {
-        if self.phase != RecorderPhase::LayersSealed
-            || self.in_flight
+        let (base_position, block_size, source) = match self.phase {
+            RecorderPhase::LayersSealed {
+                base_position,
+                block_size,
+                source,
+            } => (base_position, block_size, source),
+            _ => bail!("StarFold ForcedPrefill prefix recorder 尚未 LayersSealed"),
+        };
+        if self.in_flight
             || !self.pending_binders.borrow().is_empty()
             || self.pending_attention.borrow().is_some()
             || self.pending_ratio4.borrow().is_some()
+            || source != MaterializedTokenSource::ForcedPrefill
             || self.provider.materialized_token_source() != MaterializedTokenSource::ForcedPrefill
         {
             bail!("StarFold ForcedPrefill prefix 只能从已 seal/drain 的同源 recorder 导出");
@@ -2072,7 +2294,9 @@ where
             .context("StarFold ForcedPrefill 缺少当前 block producer timeline")?;
         if prefix.source() != MaterializedTokenSource::ForcedPrefill
             || !Arc::ptr_eq(&self.ctx, arena.context())
-            || arena.layout().block_size != K4
+            || !matches!(block_size, 4 | 8)
+            || arena.base_position() != base_position
+            || arena.layout().block_size != block_size
             || self.producer_timeline == vk::Semaphore::null()
             || self.producer_timeline_generation == 0
             || timeline_value == 0
@@ -2080,10 +2304,9 @@ where
             bail!("StarFold ForcedPrefill prefix source/arena/timeline identity 漂移");
         }
         arena
-            .seal_for_starfold_teacher_forced_prefill()
+            .seal_for_starfold_teacher_forced_prefill_with_identity(base_position, block_size)
             .context("seal StarFold ForcedPrefill prefix arena")?;
-        arena.validate_host_readback_ready()?;
-        Ok(S14CausalBlockStarfoldPrefillPrefixProduct {
+        let product = S14CausalBlockStarfoldPrefillPrefixProduct {
             context: Arc::clone(&self.ctx),
             prefix_checkpoint_arena: arena,
             producer_ready: S14StarfoldTimelinePoint {
@@ -2092,7 +2315,9 @@ where
                 value: timeline_value,
             },
             source: MaterializedTokenSource::ForcedPrefill,
-        })
+        };
+        product.validate_for_starfold_teacher_forced_prefill(base_position, block_size)?;
+        Ok(product)
     }
 
     /// 只在 FullDepth43 已 seal/drain 时解析 terminal owner。传入 binding 必须精确且唯一
@@ -2101,12 +2326,17 @@ where
         &self,
         final_hidden: S14CausalBlockHiddenBinding,
     ) -> Result<S14CausalBlockStarfoldTerminalBlockOwners> {
-        if self.phase != RecorderPhase::LayersSealed {
-            bail!(
+        let (base_position, block_size, sealed_source) = match self.phase {
+            RecorderPhase::LayersSealed {
+                base_position,
+                block_size,
+                source,
+            } => (base_position, block_size, source),
+            _ => bail!(
                 "StarFold terminal recorder 尚未 LayersSealed: actual={:?}",
                 self.phase
-            );
-        }
+            ),
+        };
         if self.in_flight
             || !self.pending_binders.borrow().is_empty()
             || self.pending_attention.borrow().is_some()
@@ -2121,11 +2351,14 @@ where
             );
         }
         let source = self.provider.materialized_token_source();
-        if source != MaterializedTokenSource::SpeculativeDraft {
+        if source != MaterializedTokenSource::SpeculativeDraft
+            || sealed_source != MaterializedTokenSource::SpeculativeDraft
+            || block_size != K4
+        {
             bail!("StarFold terminal provider source 非 SpeculativeDraft: actual={source:?}");
         }
         let expected_bytes = hidden_bytes(final_hidden.block_size)?;
-        if !matches!(final_hidden.block_size, 4 | 8) || final_hidden.bytes != expected_bytes {
+        if final_hidden.block_size != K4 || final_hidden.bytes != expected_bytes {
             bail!("StarFold terminal final hidden K/bytes 非法");
         }
         let matching = self
@@ -2145,6 +2378,8 @@ where
             .context("StarFold terminal 缺少同 command prefix producer")?;
         let prefix_checkpoint_arena = Arc::clone(prefix.arena());
         if !Arc::ptr_eq(&self.ctx, prefix_checkpoint_arena.context())
+            || prefix_checkpoint_arena.base_position() != base_position
+            || prefix_checkpoint_arena.layout().block_size != block_size
             || prefix_checkpoint_arena.layout().block_size != final_hidden.block_size
         {
             bail!("StarFold terminal prefix arena context/K 漂移");
@@ -2241,16 +2476,19 @@ impl<P: S14CausalBlockProductionHcQkvResourceProvider> S14CausalBlockHcQkvLayerR
     }
 
     fn seal_and_drain(&mut self, completed_layers: usize) -> std::result::Result<(), String> {
-        if !matches!(self.phase, RecorderPhase::Active { .. })
-            || completed_layers != FULL_DEPTH_LAYERS.len()
-        {
-            return Err("causal-block HC/QKV concrete recorder seal phase/layers 非法".into());
-        }
+        let (base_position, block_size, source) = match self.phase {
+            RecorderPhase::Active {
+                base_position,
+                block_size,
+                source,
+            } if completed_layers == FULL_DEPTH_LAYERS.len() => (base_position, block_size, source),
+            _ => return Err("causal-block HC/QKV concrete recorder seal phase/layers 非法".into()),
+        };
         self.drain_pending().map_err(|error| format!("{error:#}"))?;
         if let Some(producer) = &self.prefix_producer {
             producer
                 .seal_and_publish()
-                .map_err(|error| format!("K4 prefix producer seal 失败: {error:#}"))?;
+                .map_err(|error| format!("K-block prefix producer seal 失败: {error:#}"))?;
         }
         let expected_timeline = self
             .block_timeline_start
@@ -2263,7 +2501,11 @@ impl<P: S14CausalBlockProductionHcQkvResourceProvider> S14CausalBlockHcQkvLayerR
             return Err("HC/QKV prefix producer 未对当前43层 block 完整 signal".into());
         }
         self.sealed_producer_timeline_value = Some(expected_timeline);
-        self.phase = RecorderPhase::LayersSealed;
+        self.phase = RecorderPhase::LayersSealed {
+            base_position,
+            block_size,
+            source,
+        };
         Ok(())
     }
 
@@ -2283,7 +2525,7 @@ impl<P: S14CausalBlockProductionHcQkvResourceProvider> S14CausalBlockHcQkvLayerR
     }
 
     fn finish_validated_block(&mut self) -> std::result::Result<(), String> {
-        if self.phase != RecorderPhase::LayersSealed {
+        if !matches!(self.phase, RecorderPhase::LayersSealed { .. }) {
             return Err("causal-block HC/QKV concrete recorder 没有 sealed block".into());
         }
         self.block_timeline_start = None;
@@ -2429,14 +2671,83 @@ fn validate_paged_static_binding(
     Ok(())
 }
 
-fn is_supported_k4_ratio4_layer(input: &S14CausalBlockLayerInput<'_>) -> Result<bool> {
+fn is_supported_ratio4_layer(input: &S14CausalBlockLayerInput<'_>) -> Result<bool> {
     let ratio = COMPRESS_RATIOS
         .get(usize::from(input.layer))
         .copied()
         .context("causal-block HC/QKV compress-ratio layer 越界")?;
-    // ratio4 的压缩边界由绝对 position 决定；任意连续 K4 都精确跨过一次
-    // `position % 4 == 3` 的 boundary，不能把是否进入 ratio4 recorder 绑定到 base1/5。
-    Ok(input.input_token_ids.len() == K4 && ratio == 4)
+    // ratio4 的压缩边界由绝对 position 决定；物理块按连续 B4 segment 提交。
+    // 当前 production 容量开放 K4/K8，但判定逻辑不再把状态事务写死成单个 K4。
+    Ok(matches!(input.input_token_ids.len(), 4 | 8) && ratio == 4)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_ratio4_attention_bindings<'a>(
+    segment_index: usize,
+    candidate: crate::s14_causal_block_ratio4_boundary::S14CausalBlockRatio4CandidateStateBinding,
+    query_bf16: StorageBufferSlice<'a>,
+    committed_window_kv_bf16: StorageBufferSlice<'a>,
+    current_block_kv_bf16: StorageBufferSlice<'a>,
+    candidate_state_owner: &'a GpuBuffer,
+    position4_compressed_index_u32: StorageBufferSlice<'a>,
+    sink_f32: StorageBufferSlice<'a>,
+    rope_f32: StorageBufferSlice<'a>,
+    output_bf16: StorageBufferSlice<'a>,
+    sticky_status_u32: StorageBufferSlice<'a>,
+) -> Result<S14CausalBlockRatio4AttentionBindings<'a>> {
+    Ok(S14CausalBlockRatio4AttentionBindings {
+        query_bf16: b4_row_segment(query_bf16, segment_index, u64::from(QUERY) * BF16_BYTES)?,
+        committed_window_kv_bf16,
+        current_block_kv_bf16: b4_row_segment(
+            current_block_kv_bf16,
+            segment_index,
+            u64::from(KV) * BF16_BYTES,
+        )?,
+        first_compressed_kv_bf16: StorageBufferSlice {
+            buffer: candidate_state_owner,
+            offset: candidate.first_compressed_kv_offset,
+        },
+        position4_compressed_index_u32: b4_row_segment(
+            position4_compressed_index_u32,
+            segment_index,
+            u64::from(S14_CAUSAL_BLOCK_RATIO4_INDEX_CAPACITY_ROWS) * 4,
+        )?,
+        sink_f32,
+        rope_f32: b4_row_segment(rope_f32, segment_index, 64 * F32_BYTES)?,
+        output_bf16: b4_row_segment(output_bf16, segment_index, u64::from(QUERY) * BF16_BYTES)?,
+        sticky_status_u32,
+    })
+}
+
+fn b4_row_segment<'a>(
+    binding: StorageBufferSlice<'a>,
+    segment_index: usize,
+    row_bytes: u64,
+) -> Result<StorageBufferSlice<'a>> {
+    let relative = u64::try_from(segment_index)
+        .context("B4 segment index 超出 u64")?
+        .checked_mul(K4 as u64)
+        .and_then(|lanes| lanes.checked_mul(row_bytes))
+        .context("B4 segment relative offset overflow")?;
+    let offset = binding
+        .offset
+        .checked_add(relative)
+        .context("B4 segment absolute offset overflow")?;
+    let bytes = (K4 as u64)
+        .checked_mul(row_bytes)
+        .context("B4 segment bytes overflow")?;
+    if row_bytes == 0
+        || offset % 4 != 0
+        || offset
+            .checked_add(bytes)
+            .is_none_or(|end| end > binding.buffer.size())
+    {
+        bail!("B4 segment slice 越界或未对齐");
+    }
+    Ok(StorageBufferSlice {
+        buffer: binding.buffer,
+        offset,
+    })
 }
 
 fn hidden_bytes(block_size: usize) -> Result<u64> {

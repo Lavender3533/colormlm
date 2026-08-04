@@ -1,7 +1,7 @@
-//! S14 StarFold K4 的 HC-pre/HC-post 物理桥。
+//! S14 StarFold K4/K8 的 HC-pre/HC-post 物理桥。
 //!
-//! 该 owner 把 production HC/QKV 的 `[4,4,4096]` BF16 输出转换为 routed/shared
-//! experts 使用的 `[4,4096]` F32；exact reduce 完成后再把 `[4,4096]` F32 写回
+//! 该 owner 把 production HC/QKV 的 `[K,4,4096]` BF16 输出转换为 routed/shared
+//! experts 使用的 `[K,4096]` F32；exact reduce 完成后再把 `[K,4096]` F32 写回
 //! production A/B HC bank。它不加载 routed expert，也不拥有 token commit。
 
 use crate::{
@@ -24,6 +24,7 @@ use ash::vk;
 use std::sync::Arc;
 
 const K4: usize = 4;
+const K8: usize = 8;
 const HIDDEN: u32 = 4096;
 const HC_STREAMS: u64 = 4;
 const HC_FLAT: u32 = HIDDEN * HC_STREAMS as u32;
@@ -65,21 +66,40 @@ struct WorkspaceLayout {
 }
 
 impl WorkspaceLayout {
-    fn build(alignment: u64) -> Result<Self> {
+    fn build(block_size: usize, alignment: u64) -> Result<Self> {
+        validate_block_size(block_size)?;
         let mut cursor = 0u64;
-        let residual = take_strided(&mut cursor, HC_STREAMS * HIDDEN as u64 * 2, alignment)?;
-        let hc_norm = take_strided(&mut cursor, HC_FLAT as u64 * 4, alignment)?;
-        let mixes = take_strided(&mut cursor, 24 * 4, alignment)?;
-        let branch_bf16 = take_strided(&mut cursor, HIDDEN as u64 * 2, alignment)?;
-        let branch_f32 = take_strided(&mut cursor, HIDDEN as u64 * 4, alignment)?;
-        let aux = take_strided(&mut cursor, 20 * 4, alignment)?;
-        let inverse = take_strided(&mut cursor, 4, alignment)?;
-        let qdq_scales = take_strided(&mut cursor, (HIDDEN / 128) as u64 * 4, alignment)?;
-        let reduced_f32 = take(&mut cursor, K4 as u64 * HIDDEN as u64 * 4, alignment)?;
-        let reduced_bf16 = take(&mut cursor, K4 as u64 * HIDDEN as u64 * 2, alignment)?;
+        let residual = take_strided(
+            &mut cursor,
+            HC_STREAMS * HIDDEN as u64 * 2,
+            block_size,
+            alignment,
+        )?;
+        let hc_norm = take_strided(&mut cursor, HC_FLAT as u64 * 4, block_size, alignment)?;
+        let mixes = take_strided(&mut cursor, 24 * 4, block_size, alignment)?;
+        let branch_bf16 = take_strided(&mut cursor, HIDDEN as u64 * 2, block_size, alignment)?;
+        let branch_f32 = take_strided(&mut cursor, HIDDEN as u64 * 4, block_size, alignment)?;
+        let aux = take_strided(&mut cursor, 20 * 4, block_size, alignment)?;
+        let inverse = take_strided(&mut cursor, 4, block_size, alignment)?;
+        let qdq_scales = take_strided(
+            &mut cursor,
+            (HIDDEN / 128) as u64 * 4,
+            block_size,
+            alignment,
+        )?;
+        let reduced_f32 = take(
+            &mut cursor,
+            block_size as u64 * HIDDEN as u64 * 4,
+            alignment,
+        )?;
+        let reduced_bf16 = take(
+            &mut cursor,
+            block_size as u64 * HIDDEN as u64 * 2,
+            alignment,
+        )?;
         let output_hc_bf16 = take(
             &mut cursor,
-            K4 as u64 * HC_STREAMS * HIDDEN as u64 * 2,
+            block_size as u64 * HC_STREAMS * HIDDEN as u64 * 2,
             alignment,
         )?;
         let bytes = align_up(cursor, alignment)?;
@@ -115,6 +135,7 @@ struct StaticHcWeights<'a> {
 struct PreparedLayer {
     layer: u8,
     base_position: u32,
+    block_size: usize,
     post_attention_hidden: S14CausalBlockHiddenBinding,
     next_hidden: S14CausalBlockHiddenBinding,
     static_stream_bank: Option<usize>,
@@ -124,6 +145,7 @@ struct PreparedLayer {
 pub struct S14StarfoldHcPrepareReceipt {
     pub layer: u8,
     pub base_position: u32,
+    pub block_size: usize,
     pub moe_input_f32: S14StarfoldMxfp4ExternalSlice,
     pub reduced_output_f32: S14StarfoldMxfp4ExternalSlice,
     pub next_hidden: S14CausalBlockHiddenBinding,
@@ -138,6 +160,7 @@ pub struct S14StarfoldHcPrepareReceipt {
 pub struct S14StarfoldHcFinalizeReceipt {
     pub layer: u8,
     pub base_position: u32,
+    pub block_size: usize,
     pub next_hidden: S14CausalBlockHiddenBinding,
     pub f32_to_bf16_dispatch_calls: u32,
     pub hc_post_dispatch_calls: u32,
@@ -149,6 +172,7 @@ pub struct S14StarfoldHcBridgeOwner {
     context: Arc<VulkanContext>,
     static_arena: Arc<S14Position0PagedWeightArena>,
     hidden_banks: [S14CausalBlockHiddenBank; 2],
+    block_size: usize,
     workspace: Option<GpuBuffer>,
     control: Option<GpuBuffer>,
     layout: WorkspaceLayout,
@@ -173,8 +197,8 @@ impl S14StarfoldHcBridgeOwner {
         static_arena: Arc<S14Position0PagedWeightArena>,
         hidden_banks: [S14CausalBlockHiddenBank; 2],
     ) -> Result<Self> {
-        validate_hidden_banks(&hidden_banks)?;
-        let layout = WorkspaceLayout::build(storage_alignment(&context))?;
+        let block_size = validate_hidden_banks(&hidden_banks)?;
+        let layout = WorkspaceLayout::build(block_size, storage_alignment(&context))?;
         let workspace = new_device_buffer(&context, layout.bytes)?;
         let control = match new_control_buffer(&context, 4) {
             Ok(buffer) => buffer,
@@ -192,6 +216,7 @@ impl S14StarfoldHcBridgeOwner {
             context,
             static_arena,
             hidden_banks,
+            block_size,
             workspace: Some(workspace),
             control: Some(control),
             layout,
@@ -204,8 +229,8 @@ impl S14StarfoldHcBridgeOwner {
             finalize_command: commands[1],
             prepare_fence: fences[0],
             finalize_fence: fences[1],
-            prepare_binders: Vec::with_capacity(K4 * 4),
-            finalize_binders: Vec::with_capacity(K4 + 1),
+            prepare_binders: Vec::with_capacity(block_size * 4),
+            finalize_binders: Vec::with_capacity(block_size + 1),
             prepared: None,
             destroyed: false,
         })
@@ -219,7 +244,14 @@ impl S14StarfoldHcBridgeOwner {
         if self.prepared.is_some() {
             bail!("S14 StarFold HC bridge 仍有 prepared layer，禁止 rebind hidden banks");
         }
-        validate_hidden_banks(hidden_banks)
+        let block_size = validate_hidden_banks(hidden_banks)?;
+        if block_size != self.block_size {
+            bail!(
+                "S14 StarFold HC bridge rebind block_size 漂移: owner={} banks={block_size}",
+                self.block_size
+            );
+        }
+        Ok(())
     }
 
     /// command/fence/pipeline/workspace owner 原地保留；只在上一块完全 drain 后替换 A/B
@@ -235,6 +267,10 @@ impl S14StarfoldHcBridgeOwner {
         Ok(())
     }
 
+    pub fn block_size(&self) -> usize {
+        self.block_size
+    }
+
     pub fn prepare_layer(
         &mut self,
         layer: u8,
@@ -245,10 +281,11 @@ impl S14StarfoldHcBridgeOwner {
         if self.prepared.is_some() {
             bail!("S14 StarFold HC bridge 上一层尚未 finalize");
         }
-        validate_hidden(post_attention_hidden)?;
+        validate_hidden(post_attention_hidden, self.block_size)?;
         let next_hidden = opposite_hidden_bank(
             &self.hidden_banks,
             post_attention_hidden,
+            self.block_size,
             post_attention_hidden
                 .generation
                 .checked_add(1)
@@ -284,8 +321,8 @@ impl S14StarfoldHcBridgeOwner {
         let workspace = self.workspace()?;
         let control = self.control()?;
         let hc_shape = S14HcPreShape::new(HIDDEN)?;
-        let mut binders = Vec::with_capacity(K4 * 4);
-        for lane in 0..K4 {
+        let mut binders = Vec::with_capacity(self.block_size * 4);
+        for lane in 0..self.block_size {
             let residual = self.layout.residual.lane(lane)?;
             let hc_norm = self.layout.hc_norm.lane(lane)?;
             let mixes = self.layout.mixes.lane(lane)?;
@@ -392,17 +429,18 @@ impl S14StarfoldHcBridgeOwner {
         let input = external_slice(
             workspace,
             self.layout.branch_f32.offset,
-            K4 as u64 * HIDDEN as u64 * 4,
+            self.block_size as u64 * HIDDEN as u64 * 4,
         );
         let reduced = external_slice(
             workspace,
             self.layout.reduced_f32,
-            K4 as u64 * HIDDEN as u64 * 4,
+            self.block_size as u64 * HIDDEN as u64 * 4,
         );
         self.prepare_binders = binders;
         self.prepared = Some(PreparedLayer {
             layer,
             base_position,
+            block_size: self.block_size,
             post_attention_hidden,
             next_hidden,
             static_stream_bank: weights.stream_bank,
@@ -410,11 +448,12 @@ impl S14StarfoldHcBridgeOwner {
         Ok(S14StarfoldHcPrepareReceipt {
             layer,
             base_position,
+            block_size: self.block_size,
             moe_input_f32: input,
             reduced_output_f32: reduced,
             next_hidden,
-            hc_pre_dispatch_calls: K4 as u32 * 3,
-            qdq_dispatch_calls: K4 as u32,
+            hc_pre_dispatch_calls: self.block_size as u32 * 3,
+            qdq_dispatch_calls: self.block_size as u32,
             queue_submit_calls: 1,
             serial_token_forward_calls: 0,
             static_stream_bank: weights.stream_bank,
@@ -434,10 +473,13 @@ impl S14StarfoldHcBridgeOwner {
         if prepared.layer != layer || prepared.base_position != base_position {
             bail!("S14 StarFold HC bridge finalize layer/base identity 漂移");
         }
+        if prepared.block_size != self.block_size {
+            bail!("S14 StarFold HC bridge finalize block_size identity 漂移");
+        }
         let expected = external_slice(
             self.workspace()?,
             self.layout.reduced_f32,
-            K4 as u64 * HIDDEN as u64 * 4,
+            self.block_size as u64 * HIDDEN as u64 * 4,
         );
         if reduced_output_f32.buffer != expected.buffer
             || reduced_output_f32.capacity_bytes != expected.capacity_bytes
@@ -469,7 +511,7 @@ impl S14StarfoldHcBridgeOwner {
         let hc_post = self.hc_post.as_ref().context("HC bridge HC-post 已销毁")?;
         let dispatch = f32_to_bf16.bind_slices(
             &self.context,
-            S14F32ToBf16Shape::new(K4 as u32 * HIDDEN)?,
+            S14F32ToBf16Shape::new(self.block_size as u32 * HIDDEN)?,
             StorageBufferSlice {
                 buffer: workspace,
                 offset: self.layout.reduced_f32,
@@ -485,7 +527,7 @@ impl S14StarfoldHcBridgeOwner {
             compute_barrier(&self.context, self.finalize_command);
         }
         let mut binders = vec![dispatch.binder];
-        for lane in 0..K4 {
+        for lane in 0..self.block_size {
             let dispatch = hc_post.bind_slices(
                 &self.context,
                 S14HcPostShape::new(HIDDEN)?,
@@ -552,9 +594,10 @@ impl S14StarfoldHcBridgeOwner {
         Ok(S14StarfoldHcFinalizeReceipt {
             layer,
             base_position,
+            block_size: self.block_size,
             next_hidden: prepared.next_hidden,
             f32_to_bf16_dispatch_calls: 1,
-            hc_post_dispatch_calls: K4 as u32,
+            hc_post_dispatch_calls: self.block_size as u32,
             queue_submit_calls: 1,
             serial_token_forward_calls: 0,
         })
@@ -698,12 +741,14 @@ fn static_asset(
 fn opposite_hidden_bank(
     banks: &[S14CausalBlockHiddenBank; 2],
     current: S14CausalBlockHiddenBinding,
+    block_size: usize,
     generation: u64,
 ) -> Result<S14CausalBlockHiddenBinding> {
+    validate_block_size(block_size)?;
     let mut output = None;
     let mut current_seen = false;
     for bank in banks {
-        let binding = bank.binding(K4, generation)?;
+        let binding = bank.binding(block_size, generation)?;
         if binding.buffer == current.buffer && binding.offset == current.offset {
             current_seen = true;
         } else {
@@ -719,28 +764,61 @@ fn opposite_hidden_bank(
     output.context("S14 StarFold HC bridge 缺少 opposite hidden bank")
 }
 
-fn validate_hidden(binding: S14CausalBlockHiddenBinding) -> Result<()> {
-    let expected = K4 as u64 * HC_STREAMS * HIDDEN as u64 * 2;
+fn validate_hidden(binding: S14CausalBlockHiddenBinding, block_size: usize) -> Result<()> {
+    validate_block_size(block_size)?;
+    let expected = hidden_bytes(block_size)?;
     if binding.buffer == vk::Buffer::null()
         || binding.offset % 4 != 0
         || binding.bytes != expected
-        || binding.block_size != K4
+        || binding.block_size != block_size
     {
-        bail!("S14 StarFold HC bridge hidden 不是精确 [4,4,4096] BF16");
+        bail!("S14 StarFold HC bridge hidden 不是精确 [K,4,4096] BF16");
     }
     Ok(())
 }
 
-fn validate_hidden_banks(banks: &[S14CausalBlockHiddenBank; 2]) -> Result<()> {
-    let left = banks[0].binding(K4, 0)?;
-    let right = banks[1].binding(K4, 0)?;
+fn validate_hidden_banks(banks: &[S14CausalBlockHiddenBank; 2]) -> Result<usize> {
+    let block_size = block_size_from_hidden_bank_capacity(banks[0].capacity_bytes)?;
+    let right_block_size = block_size_from_hidden_bank_capacity(banks[1].capacity_bytes)?;
+    if block_size != right_block_size {
+        bail!(
+            "S14 StarFold HC bridge A/B hidden bank block_size 漂移: left={block_size} right={right_block_size}"
+        );
+    }
+    let left = banks[0].binding(block_size, 0)?;
+    let right = banks[1].binding(block_size, 0)?;
     if left.buffer == right.buffer
         && left.offset < right.offset + right.bytes
         && right.offset < left.offset + left.bytes
     {
         bail!("S14 StarFold HC bridge A/B hidden banks 重叠");
     }
+    Ok(block_size)
+}
+
+fn block_size_from_hidden_bank_capacity(capacity_bytes: u64) -> Result<usize> {
+    for block_size in [K4, K8] {
+        if capacity_bytes == hidden_bytes(block_size)? {
+            return Ok(block_size);
+        }
+    }
+    bail!("S14 StarFold HC bridge hidden bank capacity 不能唯一推导 K4/K8: bytes={capacity_bytes}")
+}
+
+fn validate_block_size(block_size: usize) -> Result<()> {
+    if !matches!(block_size, K4 | K8) {
+        bail!("S14 StarFold HC bridge 仅支持 K4/K8: block_size={block_size}");
+    }
     Ok(())
+}
+
+fn hidden_bytes(block_size: usize) -> Result<u64> {
+    validate_block_size(block_size)?;
+    (block_size as u64)
+        .checked_mul(HC_STREAMS)
+        .and_then(|value| value.checked_mul(HIDDEN as u64))
+        .and_then(|value| value.checked_mul(2))
+        .context("S14 StarFold HC bridge hidden bytes overflow")
 }
 
 fn create_commands(
@@ -834,9 +912,18 @@ fn storage_alignment(context: &VulkanContext) -> u64 {
     .max(ALIGNMENT_FLOOR)
 }
 
-fn take_strided(cursor: &mut u64, bytes: u64, alignment: u64) -> Result<StridedRegion> {
+fn take_strided(
+    cursor: &mut u64,
+    bytes: u64,
+    block_size: usize,
+    alignment: u64,
+) -> Result<StridedRegion> {
+    validate_block_size(block_size)?;
     let stride = align_up(bytes, alignment)?;
-    let offset = take(cursor, stride * K4 as u64, alignment)?;
+    let region_bytes = stride
+        .checked_mul(block_size as u64)
+        .context("S14 StarFold HC bridge strided workspace overflow")?;
+    let offset = take(cursor, region_bytes, alignment)?;
     Ok(StridedRegion { offset, stride })
 }
 

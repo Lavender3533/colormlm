@@ -1,10 +1,10 @@
-//! 任意连续 base_position、K=4 ratio4 boundary 的 production 强状态 owner。
+//! 任意连续 base_position、K=4/8 ratio4 boundary 的 production 强状态 owner。
 //!
 //! 这个 adapter 不创建状态 fixture。它把 authoritative state 已复制出的同一 prefix
-//! checkpoint arena 作为唯一 candidate owner，复用当前四个position的正式 state-recording
-//! recipe。boundary lane 由 `(3 - base_position % 4) % 4` 动态推导；所有包含该 lane
-//! 的 prefix 都完成 remainder、main/indexer finalize 与 rollover。若 boundary 后仍有 lane，
-//! immediate post-boundary lane 同样从正式 recipe 推导，不能把 position3/4 固化为 lane2/3。
+//! checkpoint arena 作为唯一 candidate owner，复用当前 K 个 position 的正式 state-recording
+//! recipe。K8 在同一 owner epoch 内拆成两个顺序 B4 boundary transaction；segment0 未完成时
+//! segment1 不可进入，segment1 未完成时整个 K8 不可发布。boundary lane 由绝对 position 动态
+//! 推导，所有包含该 lane 的 prefix 都完成 remainder、main/indexer finalize 与 rollover。
 
 use crate::{
     compute::{ComputePipeline, DescriptorBinder, StorageBufferSlice},
@@ -16,6 +16,7 @@ use crate::{
         S14CausalBlockRatio4BoundaryFinalizeReceipt, S14CausalBlockRatio4BoundaryStateRecorder,
         S14CausalBlockRatio4CandidateStateBinding, S14CausalBlockRatio4Position4PreludeReceipt,
         S14CausalBlockRatio4RolloverReceipt, S14CausalBlockRatio4StateWorkspaceBindings,
+        S14CausalBlockRatio4TransactionIdentity,
     },
     s14_f32_to_bf16::{S14F32ToBf16Pipeline, S14F32ToBf16Shape},
     s14_position0_layer_program::{
@@ -38,17 +39,24 @@ use polaris_s14_runner::{DType, NativeState, COMPRESS_RATIOS, FULL_DEPTH_LAYERS}
 use std::{
     collections::BTreeMap,
     fmt,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
 };
 
 const BLOCK_SIZE: usize = 4;
+const MAX_BLOCK_SIZE: usize = 8;
+const COMPRESSED_ROPE_ROW_BYTES: u64 = 64 * F32_BYTES;
 const HIDDEN: u32 = 4096;
+const KV: u64 = 512;
 const INDEX_HEADS: u32 = 64;
 const QUERY_LOW: u32 = 1024;
 const RAW_INDEX_QUERY: u32 = 8192;
 const BF16_BYTES: u64 = 2;
 const F32_BYTES: u64 = 4;
 const ALIGNMENT: u64 = 256;
+static NEXT_RATIO4_OWNER_EPOCH: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct S14CausalBlockRatio4StaticOffsets {
@@ -99,6 +107,7 @@ impl S14CausalBlockRatio4StaticOffsets {
 
 #[derive(Clone, Copy, Debug)]
 struct StateOffsets {
+    committed_window_kv_start: u64,
     main_kv_state: u64,
     main_score_state: u64,
     indexer_kv_state: u64,
@@ -121,6 +130,47 @@ struct Ratio4BlockStatePlan {
     boundary_compressed_count: u32,
     boundary_cache_index: u32,
     compressed_rope_position: u32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Ratio4SegmentStatePlan {
+    segment_index: usize,
+    segment_start_lane: usize,
+    segment_end_lane: usize,
+    block: Ratio4BlockStatePlan,
+}
+
+impl Ratio4SegmentStatePlan {
+    fn build(physical_base_position: u32, segment_index: usize) -> Result<Self> {
+        let segment_start_lane = segment_index
+            .checked_mul(BLOCK_SIZE)
+            .context("ratio4 segment start lane overflow")?;
+        let segment_end_lane = segment_start_lane
+            .checked_add(BLOCK_SIZE)
+            .context("ratio4 segment end lane overflow")?;
+        let base_position = physical_base_position
+            .checked_add(
+                u32::try_from(segment_start_lane)
+                    .context("ratio4 segment start lane conversion")?,
+            )
+            .context("ratio4 segment base position overflow")?;
+        Ok(Self {
+            segment_index,
+            segment_start_lane,
+            segment_end_lane,
+            block: Ratio4BlockStatePlan::build(base_position)?,
+        })
+    }
+
+    fn boundary_global_lane(self) -> usize {
+        self.segment_start_lane + self.block.boundary_lane
+    }
+
+    fn post_boundary_global_lane(self) -> Option<usize> {
+        self.block
+            .post_boundary_lane
+            .map(|lane| self.segment_start_lane + lane)
+    }
 }
 
 impl Ratio4BlockStatePlan {
@@ -223,7 +273,9 @@ impl ScratchLayout {
 struct SharedCore {
     context: Arc<VulkanContext>,
     base_position: u32,
-    block_plan: Ratio4BlockStatePlan,
+    block_size: usize,
+    owner_epoch: u64,
+    segment_plans: Vec<Ratio4SegmentStatePlan>,
     prefix_arena: Arc<S14CausalBlockPrefixCheckpointArena>,
     prefix_program: S14CausalBlockSharedPrefixStateProgram,
     workspace: GpuBuffer,
@@ -256,21 +308,21 @@ impl fmt::Debug for SharedCore {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum LayerPhase {
-    Ready,
-    Finalized,
-    RolledOver,
-    Position4Ready,
+    Ready { segment: usize },
+    Finalized { segment: usize },
+    RolledOver { segment: usize },
+    Complete,
     Poisoned,
 }
 
 pub struct S14CausalBlockRatio4ProductionStateOwner {
     core: Arc<SharedCore>,
     layer: u8,
-    prefix_bases: [u64; BLOCK_SIZE],
+    prefix_bases: Vec<u64>,
     candidate_logical_bytes: u64,
-    recipes: [S14Position0LayerStateRecordingRecipe; BLOCK_SIZE],
+    recipes: Vec<S14Position0LayerStateRecordingRecipe>,
     compressor_input_offset: u64,
-    state: StateOffsets,
+    states: Vec<StateOffsets>,
     static_offsets: S14CausalBlockRatio4StaticOffsets,
     phase: Mutex<LayerPhase>,
 }
@@ -282,7 +334,7 @@ impl fmt::Debug for S14CausalBlockRatio4ProductionStateOwner {
             .field("layer", &self.layer)
             .field("prefix_bases", &self.prefix_bases)
             .field("candidate_logical_bytes", &self.candidate_logical_bytes)
-            .field("state", &self.state)
+            .field("states", &self.states)
             .field("static_offsets", &self.static_offsets)
             .field("phase", &self.phase.lock().ok().map(|value| *value))
             .finish_non_exhaustive()
@@ -318,6 +370,7 @@ impl S14CausalBlockRatio4ProductionStateOwners {
             .lock()
             .map_err(|_| anyhow!("ratio4 owner prefix program poisoned"))?;
         validate_global_inputs(&context, &prefix_arena, &program, graph, authoritative)?;
+        let block_size = prefix_arena.layout().block_size;
         let ratio4_layers = FULL_DEPTH_LAYERS
             .iter()
             .copied()
@@ -329,24 +382,19 @@ impl S14CausalBlockRatio4ProductionStateOwners {
         let core = Arc::new(SharedCore::new(
             Arc::clone(&context),
             authoritative.position,
+            block_size,
             Arc::clone(&prefix_arena),
             Arc::clone(&prefix_program),
             scratch,
         )?);
-        let prefix_bases = [
-            prefix_arena.prefix_offset(0)?,
-            prefix_arena.prefix_offset(1)?,
-            prefix_arena.prefix_offset(2)?,
-            prefix_arena.prefix_offset(3)?,
-        ];
+        let prefix_bases = (0..block_size)
+            .map(|prefix| prefix_arena.prefix_offset(prefix))
+            .collect::<Result<Vec<_>>>()?;
         let mut states = BTreeMap::new();
         for layer in ratio4_layers {
-            let recipes = [
-                program.recipe(0, layer)?.clone(),
-                program.recipe(1, layer)?.clone(),
-                program.recipe(2, layer)?.clone(),
-                program.recipe(3, layer)?.clone(),
-            ];
+            let recipes = (0..block_size)
+                .map(|lane| program.recipe(lane, layer).cloned())
+                .collect::<Result<Vec<_>>>()?;
             let layer_program = graph
                 .layers
                 .get(usize::from(layer))
@@ -354,11 +402,12 @@ impl S14CausalBlockRatio4ProductionStateOwners {
                 .with_context(|| format!("ratio4 owner graph 缺少 L{layer}"))?;
             let static_offsets =
                 S14CausalBlockRatio4StaticOffsets::from_layer_program(layer_program)?;
-            let state = build_state_offsets(authoritative, layer, &recipes)?;
+            let segment_states = build_state_offsets(authoritative, layer, &recipes, block_size)?;
             let compressor_input_offset = validate_recipes(
                 layer,
                 &recipes,
                 authoritative.position,
+                block_size,
                 first_recipe.workspace_bytes,
                 prefix_arena.layout().checkpoint_state_bytes,
                 layer_program.static_layer_bytes,
@@ -368,13 +417,13 @@ impl S14CausalBlockRatio4ProductionStateOwners {
                 Arc::new(S14CausalBlockRatio4ProductionStateOwner {
                     core: Arc::clone(&core),
                     layer,
-                    prefix_bases,
+                    prefix_bases: prefix_bases.clone(),
                     candidate_logical_bytes: prefix_arena.layout().checkpoint_state_bytes,
                     recipes,
                     compressor_input_offset,
-                    state,
+                    states: segment_states,
                     static_offsets,
-                    phase: Mutex::new(LayerPhase::Ready),
+                    phase: Mutex::new(LayerPhase::Ready { segment: 0 }),
                 }),
             );
         }
@@ -417,30 +466,31 @@ impl S14CausalBlockRatio4ProductionStateOwners {
 }
 
 impl S14CausalBlockRatio4BoundaryStateRecorder for S14CausalBlockRatio4ProductionStateOwner {
+    fn transaction_identity(&self) -> S14CausalBlockRatio4TransactionIdentity {
+        S14CausalBlockRatio4TransactionIdentity {
+            base_position: self.core.base_position,
+            block_size: self.core.block_size as u32,
+            segment_count: self.core.segment_plans.len() as u32,
+            owner_epoch: self.core.owner_epoch,
+        }
+    }
+
     fn candidate_state_owner(&self) -> &Arc<GpuBuffer> {
         self.core.prefix_arena.buffer()
     }
 
     fn candidate_state_binding(&self) -> S14CausalBlockRatio4CandidateStateBinding {
-        let boundary_lane = self.core.block_plan.boundary_lane;
-        let post_boundary_lane = self.core.block_plan.post_boundary_lane;
-        let full_prefix_base = self.prefix_bases[BLOCK_SIZE - 1];
-        S14CausalBlockRatio4CandidateStateBinding {
-            layer: self.layer,
-            base_position: self.core.base_position,
-            block_size: BLOCK_SIZE as u32,
-            candidate_base_offset: full_prefix_base,
-            candidate_logical_bytes: self.candidate_logical_bytes,
-            first_compressed_kv_offset: full_prefix_base + self.state.compressed_kv_history_start,
-            first_indexer_row_offset: full_prefix_base + self.state.indexer_history_start,
-            boundary_recipe_position: self.recipes[boundary_lane].position,
-            boundary_recipe_compress_ratio: self.recipes[boundary_lane].compress_ratio,
-            post_boundary_recipe_position: post_boundary_lane
-                .map(|lane| self.recipes[lane].position),
-            post_boundary_recipe_compress_ratio: post_boundary_lane
-                .map(|lane| self.recipes[lane].compress_ratio),
-            compressed_rope_position: self.core.block_plan.compressed_rope_position,
-        }
+        // 旧 ABI 只用于 K4 recorder 的 segment0；K8 recorder 必须调用带 Result 的
+        // `candidate_state_binding_for_segment`，不能凭这个 view 猜第二段。
+        self.build_candidate_state_binding(0)
+            .expect("ratio4 production owner build 已保证 segment0 binding")
+    }
+
+    fn candidate_state_binding_for_segment(
+        &self,
+        segment_index: u32,
+    ) -> Result<S14CausalBlockRatio4CandidateStateBinding> {
+        self.build_candidate_state_binding(segment_index as usize)
     }
 
     unsafe fn record_remainder_and_finalize(
@@ -449,15 +499,49 @@ impl S14CausalBlockRatio4BoundaryStateRecorder for S14CausalBlockRatio4Productio
         command: vk::CommandBuffer,
         workspace: S14CausalBlockRatio4StateWorkspaceBindings<'_>,
     ) -> Result<S14CausalBlockRatio4BoundaryFinalizeReceipt> {
-        self.begin_phase(ctx, command, workspace, LayerPhase::Ready)?;
+        self.require_legacy_k4()?;
+        self.record_remainder_and_finalize_segment(ctx, command, 0, workspace)
+    }
+
+    unsafe fn record_remainder_and_finalize_segment(
+        &self,
+        ctx: &VulkanContext,
+        command: vk::CommandBuffer,
+        segment_index: u32,
+        workspace: S14CausalBlockRatio4StateWorkspaceBindings<'_>,
+    ) -> Result<S14CausalBlockRatio4BoundaryFinalizeReceipt> {
+        let segment_index = usize::try_from(segment_index).context("ratio4 segment conversion")?;
+        let plan = self.segment_plan(segment_index)?;
+        if let Err(error) = self.begin_segment_phase(ctx, command, workspace, segment_index) {
+            self.poison();
+            return Err(error);
+        }
         let mut binders = Vec::new();
         let result = (|| -> Result<()> {
-            // 通用 prefix producer 先写入 boundary lane 的 window，并把所有包含该 lane
-            // 的 prefix application 留给本 owner。这里只接管动态 boundary remainder。
-            let boundary_lane = self.core.block_plan.boundary_lane;
-            for prefix in boundary_lane..BLOCK_SIZE {
+            // segment0 边界前的 lane 由通用 prefix producer 闭合；segment1 不能越过
+            // segment0，所以它的 pre-boundary lane 必须在同一 owner epoch 内顺序接管。
+            if segment_index > 0 {
+                for source_lane in plan.segment_start_lane..plan.boundary_global_lane() {
+                    self.record_non_boundary_lane_applications(
+                        ctx,
+                        command,
+                        workspace,
+                        source_lane,
+                        &mut binders,
+                    )?;
+                }
+            }
+
+            let boundary_lane = plan.boundary_global_lane();
+            for prefix in boundary_lane..self.core.block_size {
                 let candidate_base = self.prefix_bases[prefix];
-                self.begin_post_boundary_window(prefix, boundary_lane)?;
+                self.record_owner_window_if_required(
+                    ctx,
+                    command,
+                    workspace.rotated_current_kv_bf16,
+                    prefix,
+                    boundary_lane,
+                )?;
                 self.copy_hc_lane(ctx, command, workspace.hc_branch_f32, boundary_lane)?;
                 binders.extend(self.recipes[boundary_lane].record_compressor_remainder_at(
                     ctx,
@@ -470,7 +554,13 @@ impl S14CausalBlockRatio4BoundaryStateRecorder for S14CausalBlockRatio4Productio
                     candidate_base,
                 )?);
                 self.mark_boundary_remainder(prefix)?;
-                binders.extend(self.record_finalize(ctx, command, workspace, candidate_base)?);
+                binders.extend(self.record_finalize(
+                    ctx,
+                    command,
+                    workspace,
+                    candidate_base,
+                    segment_index,
+                )?);
                 self.mark_boundary_finalized(prefix)?;
             }
             Ok(())
@@ -478,13 +568,14 @@ impl S14CausalBlockRatio4BoundaryStateRecorder for S14CausalBlockRatio4Productio
         match result {
             Ok(()) => {
                 self.core.append_binders(binders)?;
-                self.set_phase(LayerPhase::Finalized)?;
+                self.set_phase(LayerPhase::Finalized {
+                    segment: segment_index,
+                })?;
                 Ok(S14CausalBlockRatio4BoundaryFinalizeReceipt {
-                    base_position: self.core.base_position,
+                    base_position: plan.block.base_position,
                     block_size: BLOCK_SIZE as u32,
-                    boundary_position: self.core.block_plan.boundary_position,
-                    pre_boundary_remainder_record_calls: (self.core.block_plan.boundary_lane + 1)
-                        as u32,
+                    boundary_position: plan.block.boundary_position,
+                    pre_boundary_remainder_record_calls: (plan.block.boundary_lane + 1) as u32,
                     main_finalize_writeback_calls: 1,
                     indexer_finalize_writeback_calls: 1,
                     compressed_main_rows_written: 1,
@@ -505,12 +596,34 @@ impl S14CausalBlockRatio4BoundaryStateRecorder for S14CausalBlockRatio4Productio
         &self,
         ctx: &VulkanContext,
         command: vk::CommandBuffer,
+        workspace: S14CausalBlockRatio4StateWorkspaceBindings<'_>,
+    ) -> Result<S14CausalBlockRatio4RolloverReceipt> {
+        self.require_legacy_k4()?;
+        self.record_rollover_after_finalize_segment(ctx, command, 0, workspace)
+    }
+
+    unsafe fn record_rollover_after_finalize_segment(
+        &self,
+        ctx: &VulkanContext,
+        command: vk::CommandBuffer,
+        segment_index: u32,
         _workspace: S14CausalBlockRatio4StateWorkspaceBindings<'_>,
     ) -> Result<S14CausalBlockRatio4RolloverReceipt> {
-        self.require_active_phase(ctx, command, LayerPhase::Finalized)?;
+        let segment_index = usize::try_from(segment_index).context("ratio4 segment conversion")?;
+        let plan = self.segment_plan(segment_index)?;
+        if let Err(error) = self.require_active_phase(
+            ctx,
+            command,
+            LayerPhase::Finalized {
+                segment: segment_index,
+            },
+        ) {
+            self.poison();
+            return Err(error);
+        }
         let result = (|| -> Result<()> {
-            let boundary_lane = self.core.block_plan.boundary_lane;
-            for prefix in boundary_lane..BLOCK_SIZE {
+            let boundary_lane = plan.boundary_global_lane();
+            for prefix in boundary_lane..self.core.block_size {
                 let candidate_base = self.prefix_bases[prefix];
                 self.recipes[boundary_lane].record_rollover_at(
                     ctx,
@@ -524,11 +637,13 @@ impl S14CausalBlockRatio4BoundaryStateRecorder for S14CausalBlockRatio4Productio
         })();
         match result {
             Ok(()) => {
-                self.set_phase(LayerPhase::RolledOver)?;
+                self.set_phase(LayerPhase::RolledOver {
+                    segment: segment_index,
+                })?;
                 Ok(S14CausalBlockRatio4RolloverReceipt {
-                    base_position: self.core.base_position,
+                    base_position: plan.block.base_position,
                     block_size: BLOCK_SIZE as u32,
-                    boundary_position: self.core.block_plan.boundary_position,
+                    boundary_position: plan.block.boundary_position,
                     rollover_record_calls: 1,
                     serial_token_forward_calls: 0,
                     cpu_fallback_calls: 0,
@@ -547,62 +662,78 @@ impl S14CausalBlockRatio4BoundaryStateRecorder for S14CausalBlockRatio4Productio
         command: vk::CommandBuffer,
         workspace: S14CausalBlockRatio4StateWorkspaceBindings<'_>,
     ) -> Result<S14CausalBlockRatio4Position4PreludeReceipt> {
-        self.require_active_phase(ctx, command, LayerPhase::RolledOver)?;
-        self.validate_call(ctx, command, workspace)?;
+        self.require_legacy_k4()?;
+        self.record_position4_remainder_and_index_head_segment(ctx, command, 0, workspace)
+    }
+
+    unsafe fn record_position4_remainder_and_index_head_segment(
+        &self,
+        ctx: &VulkanContext,
+        command: vk::CommandBuffer,
+        segment_index: u32,
+        workspace: S14CausalBlockRatio4StateWorkspaceBindings<'_>,
+    ) -> Result<S14CausalBlockRatio4Position4PreludeReceipt> {
+        let segment_index = usize::try_from(segment_index).context("ratio4 segment conversion")?;
+        let plan = self.segment_plan(segment_index)?;
+        if let Err(error) = self.require_active_phase(
+            ctx,
+            command,
+            LayerPhase::RolledOver {
+                segment: segment_index,
+            },
+        ) {
+            self.poison();
+            return Err(error);
+        }
+        if let Err(error) = self.validate_call(ctx, command, workspace) {
+            self.poison();
+            return Err(error);
+        }
         let mut binders = Vec::new();
         let result = (|| -> Result<()> {
-            // boundary 之后可能还有1..3个 lane；每个 lane 必须进入所有包含它的
-            // prefix checkpoint。只处理 immediate post 会让 base%4=2/3 的尾 prefix
-            // 永远无法 seal，并丢失 authoritative candidate 状态。
-            for source_lane in self.core.block_plan.boundary_lane + 1..BLOCK_SIZE {
-                for prefix in source_lane..BLOCK_SIZE {
-                    let candidate_base = self.prefix_bases[prefix];
-                    self.begin_post_boundary_window(prefix, source_lane)?;
-                    self.copy_hc_lane(ctx, command, workspace.hc_branch_f32, source_lane)?;
-                    binders.extend(self.recipes[source_lane].record_compressor_remainder_at(
-                        ctx,
-                        command,
-                        &self.core.numeric,
-                        &self.core.ape,
-                        workspace.static_weights.buffer,
-                        &self.core.workspace,
-                        self.core.prefix_arena.buffer(),
-                        candidate_base,
-                    )?);
-                    self.mark_post_boundary_remainder(prefix)?;
-                    self.recipes[source_lane].record_rollover_at(
-                        ctx,
-                        command,
-                        self.core.prefix_arena.buffer(),
-                        candidate_base,
-                    )?;
-                    self.mark_post_boundary_noop_boundary_and_seal(prefix)?;
-                }
+            // 只闭合当前 B4 segment 的 boundary-tail；segment0 不能提前消费 segment1。
+            for source_lane in plan.boundary_global_lane() + 1..plan.segment_end_lane {
+                self.record_non_boundary_lane_applications(
+                    ctx,
+                    command,
+                    workspace,
+                    source_lane,
+                    &mut binders,
+                )?;
             }
-            binders.extend(self.record_position4_projections(ctx, command, workspace)?);
+            binders.extend(self.record_position4_projections(
+                ctx,
+                command,
+                workspace,
+                segment_index,
+            )?);
             Ok(())
         })();
         match result {
             Ok(()) => {
                 self.core.append_binders(binders)?;
-                self.set_phase(LayerPhase::Position4Ready)?;
-                self.core.finish_layer(self.layer)?;
+                let next_segment = segment_index + 1;
+                if next_segment < self.core.segment_plans.len() {
+                    self.set_phase(LayerPhase::Ready {
+                        segment: next_segment,
+                    })?;
+                } else {
+                    self.core.finish_layer(self.layer)?;
+                    self.set_phase(LayerPhase::Complete)?;
+                }
                 Ok(S14CausalBlockRatio4Position4PreludeReceipt {
-                    base_position: self.core.base_position,
+                    base_position: plan.block.base_position,
                     block_size: BLOCK_SIZE as u32,
-                    position: self.core.block_plan.post_boundary_position,
-                    deferred_position: self
-                        .core
-                        .block_plan
+                    position: plan.block.post_boundary_position,
+                    deferred_position: plan
+                        .block
                         .post_boundary_position
                         .is_none()
-                        .then(|| self.core.block_plan.boundary_position + 1),
-                    remainder_record_calls: tail_lane_application_count(
-                        self.core.block_plan.boundary_lane,
-                    ),
+                        .then(|| plan.block.boundary_position + 1),
+                    remainder_record_calls: tail_lane_application_count(plan.block.boundary_lane),
                     index_head_weight_projection_calls: sparse_index_lane_count(
-                        self.core.base_position,
-                        self.core.block_plan.boundary_lane,
+                        plan.block.base_position,
+                        plan.block.boundary_lane,
                     ),
                     serial_token_forward_calls: 0,
                     cpu_fallback_calls: 0,
@@ -618,6 +749,119 @@ impl S14CausalBlockRatio4BoundaryStateRecorder for S14CausalBlockRatio4Productio
 }
 
 impl S14CausalBlockRatio4ProductionStateOwner {
+    fn segment_plan(&self, segment_index: usize) -> Result<Ratio4SegmentStatePlan> {
+        self.core
+            .segment_plans
+            .get(segment_index)
+            .copied()
+            .with_context(|| format!("L{} ratio4 segment{segment_index} 不存在", self.layer))
+    }
+
+    fn build_candidate_state_binding(
+        &self,
+        segment_index: usize,
+    ) -> Result<S14CausalBlockRatio4CandidateStateBinding> {
+        let plan = self.segment_plan(segment_index)?;
+        let state = self
+            .states
+            .get(segment_index)
+            .context("ratio4 segment state offsets 缺失")?;
+        let full_prefix_base = *self
+            .prefix_bases
+            .last()
+            .context("ratio4 prefix bases 为空")?;
+        // committed window 是 segment 开始前的时态切片，不能和用于 compressed/index
+        // 计数读取的最终 candidate 混为一谈。segment1 从 prefix3 开始；未来更多
+        // B4 segment 也自然使用前一段最后一个 prefix。
+        let committed_window_candidate_base = if plan.segment_start_lane == 0 {
+            full_prefix_base
+        } else {
+            *self
+                .prefix_bases
+                .get(plan.segment_start_lane - 1)
+                .context("ratio4 committed-window 前序 prefix 缺失")?
+        };
+        let boundary_lane = plan.boundary_global_lane();
+        let post_boundary_lane = plan.post_boundary_global_lane();
+        let binding = S14CausalBlockRatio4CandidateStateBinding {
+            layer: self.layer,
+            owner_epoch: self.core.owner_epoch,
+            physical_base_position: self.core.base_position,
+            physical_block_size: self.core.block_size as u32,
+            segment_index: segment_index as u32,
+            segment_count: self.core.segment_plans.len() as u32,
+            base_position: plan.block.base_position,
+            block_size: BLOCK_SIZE as u32,
+            candidate_base_offset: full_prefix_base,
+            candidate_logical_bytes: self.candidate_logical_bytes,
+            committed_window_candidate_base_offset: committed_window_candidate_base,
+            committed_window_kv_offset: committed_window_candidate_base
+                + state.committed_window_kv_start,
+            committed_window_rows: plan.block.committed_window_rows,
+            first_compressed_kv_offset: full_prefix_base + state.compressed_kv_history_start,
+            first_indexer_row_offset: full_prefix_base + state.indexer_history_start,
+            boundary_recipe_position: self.recipes[boundary_lane].position,
+            boundary_recipe_compress_ratio: self.recipes[boundary_lane].compress_ratio,
+            post_boundary_recipe_position: post_boundary_lane
+                .map(|lane| self.recipes[lane].position),
+            post_boundary_recipe_compress_ratio: post_boundary_lane
+                .map(|lane| self.recipes[lane].compress_ratio),
+            compressed_rope_position: plan.block.compressed_rope_position,
+        };
+        binding.validate(self.core.prefix_arena.buffer())?;
+        Ok(binding)
+    }
+
+    fn require_legacy_k4(&self) -> Result<()> {
+        if self.core.block_size != BLOCK_SIZE || self.core.segment_plans.len() != 1 {
+            bail!("L{} ratio4 legacy K4 ABI 禁止消费 K8 owner", self.layer);
+        }
+        Ok(())
+    }
+
+    unsafe fn record_non_boundary_lane_applications(
+        &self,
+        ctx: &VulkanContext,
+        command: vk::CommandBuffer,
+        workspace: S14CausalBlockRatio4StateWorkspaceBindings<'_>,
+        source_lane: usize,
+        binders: &mut Vec<DescriptorBinder>,
+    ) -> Result<()> {
+        if source_lane >= self.core.block_size {
+            bail!("L{} ratio4 non-boundary lane 越界", self.layer);
+        }
+        for prefix in source_lane..self.core.block_size {
+            let candidate_base = self.prefix_bases[prefix];
+            self.record_owner_window_if_required(
+                ctx,
+                command,
+                workspace.rotated_current_kv_bf16,
+                prefix,
+                source_lane,
+            )?;
+            self.copy_hc_lane(ctx, command, workspace.hc_branch_f32, source_lane)?;
+            binders.extend(self.recipes[source_lane].record_compressor_remainder_at(
+                ctx,
+                command,
+                &self.core.numeric,
+                &self.core.ape,
+                workspace.static_weights.buffer,
+                &self.core.workspace,
+                self.core.prefix_arena.buffer(),
+                candidate_base,
+            )?);
+            self.mark_post_boundary_remainder(prefix)?;
+            self.recipes[source_lane].record_rollover_at(
+                ctx,
+                command,
+                self.core.prefix_arena.buffer(),
+                candidate_base,
+            )?;
+            self.mark_post_boundary_noop_boundary_and_seal(prefix)?;
+        }
+        Ok(())
+    }
+
     fn with_prefix_program(
         &self,
         apply: impl FnOnce(&mut S14CausalBlockPrefixStateProgram) -> Result<()>,
@@ -649,9 +893,34 @@ impl S14CausalBlockRatio4ProductionStateOwner {
         self.with_prefix_program(|program| program.mark_remainder_recorded(prefix, self.layer))
     }
 
-    fn begin_post_boundary_window(&self, prefix: usize, source_lane: usize) -> Result<()> {
+    unsafe fn record_owner_window_if_required(
+        &self,
+        ctx: &VulkanContext,
+        command: vk::CommandBuffer,
+        rotated_current_kv_bf16: StorageBufferSlice<'_>,
+        prefix: usize,
+        source_lane: usize,
+    ) -> Result<()> {
         self.with_prefix_program(|program| {
             program.begin_lane_application(prefix, self.layer, source_lane)?;
+            if self.core.block_size == MAX_BLOCK_SIZE {
+                let source_offset = rotated_current_kv_bf16
+                    .offset
+                    .checked_add(source_lane as u64 * KV * BF16_BYTES)
+                    .context("ratio4 K8 deferred window source offset overflow")?;
+                program.state_layout(source_lane)?.record_row_writeback_at(
+                    &self.core.context,
+                    command,
+                    rotated_current_kv_bf16.buffer,
+                    source_offset,
+                    self.core.prefix_arena.buffer(),
+                    self.prefix_bases[prefix],
+                    self.layer,
+                    S14Position0StateRowKind::WindowKv,
+                )?;
+            } else if !std::ptr::eq(ctx, self.core.context.as_ref()) {
+                bail!("ratio4 K4 deferred window context 漂移");
+            }
             program.mark_window_recorded(prefix, self.layer)
         })
     }
@@ -664,18 +933,25 @@ impl S14CausalBlockRatio4ProductionStateOwner {
         })
     }
 
-    fn begin_phase(
+    fn begin_segment_phase(
         &self,
         ctx: &VulkanContext,
         command: vk::CommandBuffer,
         workspace: S14CausalBlockRatio4StateWorkspaceBindings<'_>,
-        expected: LayerPhase,
+        segment_index: usize,
     ) -> Result<()> {
         self.validate_call(ctx, command, workspace)?;
+        let expected = LayerPhase::Ready {
+            segment: segment_index,
+        };
         if *self.lock_phase()? != expected {
             bail!("L{} ratio4 state owner phase 不是 {expected:?}", self.layer);
         }
-        self.core.begin_layer(self.layer)
+        if segment_index == 0 {
+            self.core.begin_layer(self.layer)
+        } else {
+            self.core.require_active_layer(self.layer)
+        }
     }
 
     fn require_active_phase(
@@ -699,8 +975,10 @@ impl S14CausalBlockRatio4ProductionStateOwner {
         command: vk::CommandBuffer,
         workspace: S14CausalBlockRatio4StateWorkspaceBindings<'_>,
     ) -> Result<()> {
-        self.candidate_state_binding()
-            .validate(self.candidate_state_owner())?;
+        self.transaction_identity().validate()?;
+        for segment in 0..self.core.segment_plans.len() {
+            self.build_candidate_state_binding(segment)?;
+        }
         if !std::ptr::eq(ctx, self.core.context.as_ref())
             || command == vk::CommandBuffer::null()
             || workspace.static_weights.offset != 0
@@ -716,24 +994,29 @@ impl S14CausalBlockRatio4ProductionStateOwner {
             );
         }
         validate_slice(
+            workspace.rotated_current_kv_bf16,
+            self.core.block_size as u64 * KV * BF16_BYTES,
+            "K4/K8 rotated current KV",
+        )?;
+        validate_slice(
             workspace.hc_branch_f32,
-            BLOCK_SIZE as u64 * HIDDEN as u64 * F32_BYTES,
+            self.core.block_size as u64 * HIDDEN as u64 * F32_BYTES,
             "HC branch F32",
         )?;
         validate_slice(
             workspace.position4_query_low_f32,
-            BLOCK_SIZE as u64 * QUERY_LOW as u64 * F32_BYTES,
-            "K4 sparse query-low",
+            self.core.block_size as u64 * QUERY_LOW as u64 * F32_BYTES,
+            "K4/K8 sparse query-low",
         )?;
         validate_slice(
             workspace.raw_index_query_bf16,
-            BLOCK_SIZE as u64 * RAW_INDEX_QUERY as u64 * BF16_BYTES,
-            "K4 raw index-query",
+            self.core.block_size as u64 * RAW_INDEX_QUERY as u64 * BF16_BYTES,
+            "K4/K8 raw index-query",
         )?;
         validate_slice(
             workspace.position4_head_weights_bf16,
-            BLOCK_SIZE as u64 * INDEX_HEADS as u64 * BF16_BYTES,
-            "K4 index-head",
+            self.core.block_size as u64 * INDEX_HEADS as u64 * BF16_BYTES,
+            "K4/K8 index-head",
         )?;
         validate_slice(workspace.sticky_status_u32, 4, "sticky status")?;
         Ok(())
@@ -827,24 +1110,32 @@ impl S14CausalBlockRatio4ProductionStateOwner {
         command: vk::CommandBuffer,
         workspace: S14CausalBlockRatio4StateWorkspaceBindings<'_>,
         candidate_base: u64,
+        segment_index: usize,
     ) -> Result<Vec<DescriptorBinder>> {
+        let state = self
+            .states
+            .get(segment_index)
+            .context("ratio4 finalize segment state offsets 缺失")?;
+        let rope_offset = (segment_index as u64)
+            .checked_mul(COMPRESSED_ROPE_ROW_BYTES)
+            .context("ratio4 compressed rope segment offset overflow")?;
         let mut binders = Vec::with_capacity(8);
         let result = (|| -> Result<()> {
             let status = workspace.sticky_status_u32;
             for (kind, kv, score, norm, output) in [
                 (
                     S14Ratio4CompressorKind::Main,
-                    self.state.main_kv_state,
-                    self.state.main_score_state,
+                    state.main_kv_state,
+                    state.main_score_state,
                     self.static_offsets.main_compressor_norm_weight,
-                    self.state.boundary_compressed_kv_target,
+                    state.boundary_compressed_kv_target,
                 ),
                 (
                     S14Ratio4CompressorKind::Indexer,
-                    self.state.indexer_kv_state,
-                    self.state.indexer_score_state,
+                    state.indexer_kv_state,
+                    state.indexer_score_state,
                     self.static_offsets.indexer_compressor_norm_weight,
-                    self.state.boundary_indexer_target,
+                    state.boundary_indexer_target,
                 ),
             ] {
                 let pool = self.core.finalize.pool.bind_slices(
@@ -901,7 +1192,10 @@ impl S14CausalBlockRatio4ProductionStateOwner {
                         buffer: &self.core.workspace,
                         offset: self.core.scratch.main_b,
                     },
-                    StorageBufferSlice::whole(&self.core.compressed_rope),
+                    StorageBufferSlice {
+                        buffer: &self.core.compressed_rope,
+                        offset: rope_offset,
+                    },
                     StorageBufferSlice {
                         buffer: &self.core.workspace,
                         offset: self.core.scratch.main_c,
@@ -966,21 +1260,23 @@ impl S14CausalBlockRatio4ProductionStateOwner {
         ctx: &VulkanContext,
         command: vk::CommandBuffer,
         workspace: S14CausalBlockRatio4StateWorkspaceBindings<'_>,
+        segment_index: usize,
     ) -> Result<Vec<DescriptorBinder>> {
+        let plan = self.segment_plan(segment_index)?;
         let mut binders = Vec::with_capacity(
-            sparse_index_lane_count(self.core.base_position, self.core.block_plan.boundary_lane)
-                as usize
+            sparse_index_lane_count(plan.block.base_position, plan.block.boundary_lane) as usize
                 * 4,
         );
         let result = (|| -> Result<()> {
-            for lane in 0..BLOCK_SIZE {
+            for local_lane in 0..BLOCK_SIZE {
                 if !sparse_index_required(
-                    self.core.base_position,
-                    self.core.block_plan.boundary_lane,
-                    lane,
+                    plan.block.base_position,
+                    plan.block.boundary_lane,
+                    local_lane,
                 ) {
                     continue;
                 }
+                let lane = plan.segment_start_lane + local_lane;
                 let hc_offset = workspace
                     .hc_branch_f32
                     .offset
@@ -1116,22 +1412,48 @@ impl SharedCore {
     fn new(
         context: Arc<VulkanContext>,
         base_position: u32,
+        block_size: usize,
         prefix_arena: Arc<S14CausalBlockPrefixCheckpointArena>,
         prefix_program: S14CausalBlockSharedPrefixStateProgram,
         scratch: ScratchLayout,
     ) -> Result<Self> {
-        let block_plan = Ratio4BlockStatePlan::build(base_position)?;
+        if !matches!(block_size, BLOCK_SIZE | MAX_BLOCK_SIZE) {
+            bail!("ratio4 owner 只接受 K4/K8");
+        }
+        let segment_count = block_size / BLOCK_SIZE;
+        let segment_plans = (0..segment_count)
+            .map(|segment| Ratio4SegmentStatePlan::build(base_position, segment))
+            .collect::<Result<Vec<_>>>()?;
+        let owner_epoch = NEXT_RATIO4_OWNER_EPOCH
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |epoch| {
+                epoch.checked_add(1)
+            })
+            .map_err(|_| anyhow!("ratio4 owner epoch exhausted"))?;
+        if owner_epoch == 0 {
+            bail!("ratio4 owner epoch 不能为0");
+        }
         let mut guard = CoreBuildGuard::new(Arc::clone(&context));
         guard.workspace = Some(device_buffer(&context, scratch.bytes)?);
-        guard.compressed_rope = Some(host_storage_buffer(&context, 64 * F32_BYTES)?);
-        let rope =
-            S14Ratio4CompressorBoundary::new(block_plan.boundary_position)?.rope_cos_sin()?;
-        unsafe {
-            guard
-                .compressed_rope
-                .as_ref()
-                .expect("compressed rope allocated")
-                .write_at(0, bytemuck::cast_slice(&rope));
+        guard.compressed_rope = Some(host_storage_buffer(
+            &context,
+            segment_count as u64 * COMPRESSED_ROPE_ROW_BYTES,
+        )?);
+        for plan in &segment_plans {
+            let rope =
+                S14Ratio4CompressorBoundary::new(plan.block.boundary_position)?.rope_cos_sin()?;
+            let rope_offset_u64 = u64::try_from(plan.segment_index)
+                .context("ratio4 compressed rope segment index conversion")?
+                .checked_mul(COMPRESSED_ROPE_ROW_BYTES)
+                .context("ratio4 compressed rope write offset overflow")?;
+            let rope_offset = usize::try_from(rope_offset_u64)
+                .context("ratio4 compressed rope write offset exceeds usize")?;
+            unsafe {
+                guard
+                    .compressed_rope
+                    .as_ref()
+                    .expect("compressed rope allocated")
+                    .write_at(rope_offset, bytemuck::cast_slice(&rope));
+            }
         }
         guard.numeric = Some(S14NumericPipelines::new(&context)?);
         guard.ape = Some(S14Position0ApeAddPipeline::new(&context)?);
@@ -1146,7 +1468,9 @@ impl SharedCore {
         Ok(Self {
             context,
             base_position,
-            block_plan,
+            block_size,
+            owner_epoch,
+            segment_plans,
             prefix_arena,
             prefix_program,
             workspace: guard.workspace.take().unwrap(),
@@ -1310,35 +1634,42 @@ fn validate_global_inputs(
     authoritative: &NativeState,
 ) -> Result<()> {
     let base_position = authoritative.position;
-    let block_plan = Ratio4BlockStatePlan::build(base_position)?;
+    let block_size = prefix_arena.layout().block_size;
+    S14CausalBlockRatio4TransactionIdentity::new(base_position, block_size as u32)?.validate()?;
     if !Arc::ptr_eq(context, prefix_arena.context())
         || prefix_arena.base_position() != base_position
-        || prefix_arena.layout().block_size != BLOCK_SIZE
+        || !matches!(block_size, BLOCK_SIZE | MAX_BLOCK_SIZE)
         || prefix_program.base_position() != base_position
-        || prefix_program.block_size() != BLOCK_SIZE
+        || prefix_program.block_size() != block_size
         || authoritative.arena_bytes != prefix_arena.layout().checkpoint_state_bytes
         || graph.layers.len() != FULL_DEPTH_LAYERS.len()
     {
         bail!("ratio4 owner context/base/K/arena/43层 identity 漂移");
     }
     let last_position = base_position
-        .checked_add((BLOCK_SIZE - 1) as u32)
-        .context("ratio4 K4 last position overflow")?;
+        .checked_add((block_size - 1) as u32)
+        .context("ratio4 K4/K8 last position overflow")?;
     if last_position >= authoritative.max_seq_len {
-        bail!("ratio4 K4 block超出authoritative max_seq_len");
+        bail!("ratio4 K4/K8 block超出authoritative max_seq_len");
     }
     Ok(())
 }
 
 fn validate_recipes(
     layer: u8,
-    recipes: &[S14Position0LayerStateRecordingRecipe; BLOCK_SIZE],
+    recipes: &[S14Position0LayerStateRecordingRecipe],
     base_position: u32,
+    block_size: usize,
     workspace_bytes: u64,
     candidate_bytes: u64,
     static_bytes: u64,
 ) -> Result<u64> {
-    let block_plan = Ratio4BlockStatePlan::build(base_position)?;
+    if recipes.len() != block_size || !matches!(block_size, BLOCK_SIZE | MAX_BLOCK_SIZE) {
+        bail!("L{layer} ratio4 recipe K identity 漂移");
+    }
+    let segment_plans = (0..block_size / BLOCK_SIZE)
+        .map(|segment| Ratio4SegmentStatePlan::build(base_position, segment))
+        .collect::<Result<Vec<_>>>()?;
     for (lane, recipe) in recipes.iter().enumerate() {
         let expected_position = base_position
             .checked_add(lane as u32)
@@ -1357,15 +1688,18 @@ fn validate_recipes(
             );
         }
     }
-    if recipes[block_plan.boundary_lane].rollover_copies.len() != 16
+    let boundary_lanes = segment_plans
+        .iter()
+        .map(|plan| plan.boundary_global_lane())
+        .collect::<Vec<_>>();
+    if boundary_lanes
+        .iter()
+        .any(|&lane| recipes[lane].rollover_copies.len() != 16)
         || recipes.iter().enumerate().any(|(lane, recipe)| {
-            lane != block_plan.boundary_lane && !recipe.rollover_copies.is_empty()
+            !boundary_lanes.contains(&lane) && !recipe.rollover_copies.is_empty()
         })
     {
-        bail!(
-            "L{layer} ratio4 dynamic boundary lane{} rollover recipe 漂移",
-            block_plan.boundary_lane
-        );
+        bail!("L{layer} ratio4 K4/K8 boundary rollover recipes 漂移");
     }
     let mut input = None;
     for recipe in recipes {
@@ -1393,9 +1727,31 @@ fn validate_recipes(
 fn build_state_offsets(
     authoritative: &NativeState,
     layer: u8,
-    recipes: &[S14Position0LayerStateRecordingRecipe; BLOCK_SIZE],
+    recipes: &[S14Position0LayerStateRecordingRecipe],
+    block_size: usize,
+) -> Result<Vec<StateOffsets>> {
+    if recipes.len() != block_size || !matches!(block_size, BLOCK_SIZE | MAX_BLOCK_SIZE) {
+        bail!("L{layer} ratio4 state offsets K/recipe identity 漂移");
+    }
+    (0..block_size / BLOCK_SIZE)
+        .map(|segment_index| {
+            build_segment_state_offsets(
+                authoritative,
+                layer,
+                recipes,
+                Ratio4SegmentStatePlan::build(authoritative.position, segment_index)?,
+            )
+        })
+        .collect()
+}
+
+fn build_segment_state_offsets(
+    authoritative: &NativeState,
+    layer: u8,
+    recipes: &[S14Position0LayerStateRecordingRecipe],
+    segment_plan: Ratio4SegmentStatePlan,
 ) -> Result<StateOffsets> {
-    let block_plan = Ratio4BlockStatePlan::build(authoritative.position)?;
+    let block_plan = segment_plan.block;
     let kv = unique(
         authoritative
             .kv
@@ -1428,7 +1784,9 @@ fn build_state_offsets(
     {
         bail!("L{layer} ratio4 compressor state dtype/shape 漂移");
     }
-    let committed_layout = S14Position0StateWritebackLayout::build(authoritative)?;
+    let mut committed_state = authoritative.clone();
+    committed_state.position = block_plan.base_position;
+    let committed_layout = S14Position0StateWritebackLayout::build(&committed_state)?;
     let committed_layer = committed_layout
         .layer(layer)
         .context("ratio4 committed state layout 缺层")?;
@@ -1485,16 +1843,17 @@ fn build_state_offsets(
         || indexer_target.state_range.start != expected_indexer_target
         || required_main_end > kv_end
         || required_indexer_end > indexer_end
-        || !recipes[block_plan.boundary_lane]
+        || !recipes[segment_plan.boundary_global_lane()]
             .state_ranges_written
             .contains(&main_target.state_range)
-        || !recipes[block_plan.boundary_lane]
+        || !recipes[segment_plan.boundary_global_lane()]
             .state_ranges_written
             .contains(&indexer_target.state_range)
     {
         bail!("L{layer} ratio4 dynamic compressed target/history/recipe 漂移");
     }
     Ok(StateOffsets {
+        committed_window_kv_start: committed_layer.committed_window_state_range.start,
         main_kv_state: main.kv_state.offset,
         main_score_state: main.score_state.offset,
         indexer_kv_state: indexer.compressor_kv_state.offset,

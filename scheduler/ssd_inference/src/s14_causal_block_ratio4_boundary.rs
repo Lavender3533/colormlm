@@ -1,4 +1,4 @@
-//! K=4 ratio4 跨边界 production Vulkan 录制器。
+//! K=4/K=8 ratio4 跨边界 production Vulkan 录制器。
 //!
 //! 不可交换顺序固定在一个 command buffer 内：position3 compressor remainder、
 //! main/indexer finalize/writeback、rollover、末 lane 真实 remainder/index-query/indexer，
@@ -21,6 +21,8 @@ pub const S14_CAUSAL_BLOCK_RATIO4_BOUNDARY_SPV: &[u8] = include_bytes!(concat!(
 ));
 
 const BLOCK_SIZE: u32 = 4;
+const K8_BLOCK_SIZE: u32 = 8;
+const K8_SEGMENTS: u32 = 2;
 const WINDOW_ROWS: u32 = 128;
 pub const S14_CAUSAL_BLOCK_RATIO4_INDEX_CAPACITY_ROWS: u32 = 32;
 const HEADS: u32 = 64;
@@ -144,6 +146,69 @@ impl S14CausalBlockRatio4BoundaryShape {
     }
 }
 
+/// 一个物理 causal block 内 ratio4 boundary transaction 的强身份。
+/// K4 只有 segment0；K8 必须严格包含两个连续 B4 segment，不能只提交其中之一。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct S14CausalBlockRatio4TransactionIdentity {
+    pub base_position: u32,
+    pub block_size: u32,
+    pub segment_count: u32,
+    pub owner_epoch: u64,
+}
+
+impl S14CausalBlockRatio4TransactionIdentity {
+    pub fn new(base_position: u32, block_size: u32) -> Result<Self> {
+        Self::new_with_owner_epoch(base_position, block_size, 1)
+    }
+
+    pub fn new_with_owner_epoch(
+        base_position: u32,
+        block_size: u32,
+        owner_epoch: u64,
+    ) -> Result<Self> {
+        let segment_count = match block_size {
+            BLOCK_SIZE => 1,
+            K8_BLOCK_SIZE => K8_SEGMENTS,
+            _ => bail!("ratio4 transaction 只接受物理 K=4/8"),
+        };
+        base_position
+            .checked_add(block_size)
+            .ok_or_else(|| anyhow::anyhow!("ratio4 transaction position overflow"))?;
+        Ok(Self {
+            base_position,
+            block_size,
+            segment_count,
+            owner_epoch,
+        })
+    }
+
+    pub fn validate(self) -> Result<()> {
+        let expected = Self::new(self.base_position, self.block_size)?;
+        if self.segment_count != expected.segment_count || self.owner_epoch == 0 {
+            bail!("ratio4 transaction segment count 漂移");
+        }
+        Ok(())
+    }
+
+    pub fn segment_base_position(self, segment_index: u32) -> Result<u32> {
+        self.validate()?;
+        if segment_index >= self.segment_count {
+            bail!("ratio4 transaction segment index 越界");
+        }
+        self.base_position
+            .checked_add(segment_index * BLOCK_SIZE)
+            .ok_or_else(|| anyhow::anyhow!("ratio4 segment base position overflow"))
+    }
+
+    pub fn segment_shape(self, segment_index: u32) -> Result<S14CausalBlockRatio4BoundaryShape> {
+        S14CausalBlockRatio4BoundaryShape::new(
+            self.segment_base_position(segment_index)?,
+            BLOCK_SIZE,
+            4,
+        )
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct S14CausalBlockRatio4AttentionBindings<'a> {
     pub query_bf16: StorageBufferSlice<'a>,
@@ -172,10 +237,20 @@ pub struct S14CausalBlockRatio4Position4IndexerBindings<'a> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct S14CausalBlockRatio4CandidateStateBinding {
     pub layer: u8,
+    pub owner_epoch: u64,
+    pub physical_base_position: u32,
+    pub physical_block_size: u32,
+    pub segment_index: u32,
+    pub segment_count: u32,
     pub base_position: u32,
     pub block_size: u32,
     pub candidate_base_offset: u64,
     pub candidate_logical_bytes: u64,
+    /// 当前 segment attention 的 committed-window view。segment1 的行数包含
+    /// segment0 已写入同一 candidate checkpoint 的四行，不能复用初始 external view。
+    pub committed_window_candidate_base_offset: u64,
+    pub committed_window_kv_offset: u64,
+    pub committed_window_rows: u32,
     pub first_compressed_kv_offset: u64,
     pub first_indexer_row_offset: u64,
     pub boundary_recipe_position: u32,
@@ -187,6 +262,13 @@ pub struct S14CausalBlockRatio4CandidateStateBinding {
 
 impl S14CausalBlockRatio4CandidateStateBinding {
     pub fn validate(self, owner: &GpuBuffer) -> Result<()> {
+        let transaction = S14CausalBlockRatio4TransactionIdentity {
+            base_position: self.physical_base_position,
+            block_size: self.physical_block_size,
+            segment_count: self.segment_count,
+            owner_epoch: self.owner_epoch,
+        };
+        transaction.validate()?;
         let shape = S14CausalBlockRatio4BoundaryShape::new(
             self.base_position,
             self.block_size,
@@ -201,13 +283,29 @@ impl S14CausalBlockRatio4CandidateStateBinding {
             .first_compressed_kv_offset
             .checked_add(compressed_rows * KV_ROW_BYTES)
             .ok_or_else(|| anyhow::anyhow!("ratio4 compressed main row overflow"))?;
+        let committed_window_end = self
+            .committed_window_kv_offset
+            .checked_add(u64::from(self.committed_window_rows) * KV_ROW_BYTES)
+            .ok_or_else(|| anyhow::anyhow!("ratio4 committed window range overflow"))?;
+        let committed_window_candidate_end = self
+            .committed_window_candidate_base_offset
+            .checked_add(self.candidate_logical_bytes)
+            .ok_or_else(|| anyhow::anyhow!("ratio4 committed window candidate range overflow"))?;
         let indexer_end = self
             .first_indexer_row_offset
             .checked_add(compressed_rows * 128 * 2)
             .ok_or_else(|| anyhow::anyhow!("ratio4 compressed indexer row overflow"))?;
-        if self.candidate_base_offset % 4 != 0
+        if self.segment_index >= self.segment_count
+            || self.base_position != transaction.segment_base_position(self.segment_index)?
+            || self.block_size != BLOCK_SIZE
+            || self.candidate_base_offset % 4 != 0
             || self.candidate_logical_bytes == 0
             || candidate_end > owner.size()
+            || self.committed_window_rows != shape.committed_window_rows()
+            || self.committed_window_candidate_base_offset % 4 != 0
+            || committed_window_candidate_end > owner.size()
+            || self.committed_window_kv_offset < self.committed_window_candidate_base_offset
+            || committed_window_end > committed_window_candidate_end
             || self.first_compressed_kv_offset < self.candidate_base_offset
             || main_end > candidate_end
             || self.first_indexer_row_offset < self.candidate_base_offset
@@ -233,6 +331,9 @@ impl S14CausalBlockRatio4CandidateStateBinding {
 pub struct S14CausalBlockRatio4StateWorkspaceBindings<'a> {
     pub static_weights: StorageBufferSlice<'a>,
     pub static_logical_bytes: u64,
+    /// K8 deferred ratio4 lanes 必须由 state owner 按 segment 顺序写入 checkpoint，
+    /// 防止一次性预写未来四行在滑窗回绕时污染 segment0 attention。
+    pub rotated_current_kv_bf16: StorageBufferSlice<'a>,
     pub hc_branch_bf16: StorageBufferSlice<'a>,
     pub hc_branch_f32: StorageBufferSlice<'a>,
     pub position4_query_low_f32: StorageBufferSlice<'a>,
@@ -338,9 +439,32 @@ impl S14CausalBlockRatio4Position4PreludeReceipt {
 /// 真实 state owner 的窄接口。实现必须强拥有 candidate state、正式 state recipe、
 /// compressor/finalize pipelines 与 descriptor，直到同一 command 完成。
 pub trait S14CausalBlockRatio4BoundaryStateRecorder: fmt::Debug {
+    /// 物理 block 与 segment 数量的强身份。旧 K4 owner 默认由 segment0 binding 推导；
+    /// K8 owner 必须覆写并返回 `block_size=8, segment_count=2`。
+    fn transaction_identity(&self) -> S14CausalBlockRatio4TransactionIdentity {
+        let binding = self.candidate_state_binding();
+        S14CausalBlockRatio4TransactionIdentity {
+            base_position: binding.physical_base_position,
+            block_size: binding.physical_block_size,
+            segment_count: binding.segment_count,
+            owner_epoch: binding.owner_epoch,
+        }
+    }
+
     fn candidate_state_owner(&self) -> &Arc<GpuBuffer>;
 
     fn candidate_state_binding(&self) -> S14CausalBlockRatio4CandidateStateBinding;
+
+    /// K8 由同一个 owner 按 segment0/1 暴露两个 B4 view；默认实现只兼容旧 K4。
+    fn candidate_state_binding_for_segment(
+        &self,
+        segment_index: u32,
+    ) -> Result<S14CausalBlockRatio4CandidateStateBinding> {
+        if segment_index != 0 {
+            bail!("旧 ratio4 state owner 不支持第二个 B4 segment");
+        }
+        Ok(self.candidate_state_binding())
+    }
 
     /// # Safety
     /// `command` 必须处于 recording；实现不得提交、等待或执行 CPU fallback。
@@ -350,6 +474,19 @@ pub trait S14CausalBlockRatio4BoundaryStateRecorder: fmt::Debug {
         command: vk::CommandBuffer,
         workspace: S14CausalBlockRatio4StateWorkspaceBindings<'_>,
     ) -> Result<S14CausalBlockRatio4BoundaryFinalizeReceipt>;
+
+    unsafe fn record_remainder_and_finalize_segment(
+        &self,
+        ctx: &VulkanContext,
+        command: vk::CommandBuffer,
+        segment_index: u32,
+        workspace: S14CausalBlockRatio4StateWorkspaceBindings<'_>,
+    ) -> Result<S14CausalBlockRatio4BoundaryFinalizeReceipt> {
+        if segment_index != 0 {
+            bail!("旧 ratio4 state owner 不支持第二个 B4 finalize");
+        }
+        self.record_remainder_and_finalize(ctx, command, workspace)
+    }
 
     /// # Safety
     /// 只会在 main/indexer compressed row 已写回后调用；实现只能 rollover remainder，
@@ -361,6 +498,19 @@ pub trait S14CausalBlockRatio4BoundaryStateRecorder: fmt::Debug {
         workspace: S14CausalBlockRatio4StateWorkspaceBindings<'_>,
     ) -> Result<S14CausalBlockRatio4RolloverReceipt>;
 
+    unsafe fn record_rollover_after_finalize_segment(
+        &self,
+        ctx: &VulkanContext,
+        command: vk::CommandBuffer,
+        segment_index: u32,
+        workspace: S14CausalBlockRatio4StateWorkspaceBindings<'_>,
+    ) -> Result<S14CausalBlockRatio4RolloverReceipt> {
+        if segment_index != 0 {
+            bail!("旧 ratio4 state owner 不支持第二个 B4 rollover");
+        }
+        self.record_rollover_after_finalize(ctx, command, workspace)
+    }
+
     /// # Safety
     /// 只会在 rollover 发布后调用；实现必须写 position4 remainder row4，并在 HC branch
     /// F32 被 QDQ 覆盖前投影真实动态 index-head weight。
@@ -370,6 +520,19 @@ pub trait S14CausalBlockRatio4BoundaryStateRecorder: fmt::Debug {
         command: vk::CommandBuffer,
         workspace: S14CausalBlockRatio4StateWorkspaceBindings<'_>,
     ) -> Result<S14CausalBlockRatio4Position4PreludeReceipt>;
+
+    unsafe fn record_position4_remainder_and_index_head_segment(
+        &self,
+        ctx: &VulkanContext,
+        command: vk::CommandBuffer,
+        segment_index: u32,
+        workspace: S14CausalBlockRatio4StateWorkspaceBindings<'_>,
+    ) -> Result<S14CausalBlockRatio4Position4PreludeReceipt> {
+        if segment_index != 0 {
+            bail!("旧 ratio4 state owner 不支持第二个 B4 tail");
+        }
+        self.record_position4_remainder_and_index_head(ctx, command, workspace)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -430,6 +593,63 @@ pub struct S14CausalBlockRatio4BoundaryRecording {
     pub receipt: S14CausalBlockRatio4BoundaryRecordingReceipt,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct S14CausalBlockRatio4K8BoundaryRecordingReceipt {
+    pub base_position: u32,
+    pub block_size: u32,
+    pub owner_epoch: u64,
+    pub segment_receipts: [S14CausalBlockRatio4BoundaryRecordingReceipt; 2],
+    pub boundary_positions: [u32; 2],
+    pub state_transaction_calls: u32,
+    pub attention_dispatch_calls: u32,
+    pub attention_rows: u32,
+    pub serial_token_forward_calls: u32,
+    pub cpu_fallback_calls: u32,
+}
+
+impl S14CausalBlockRatio4K8BoundaryRecordingReceipt {
+    pub fn validate(self) -> Result<()> {
+        let identity = S14CausalBlockRatio4TransactionIdentity::new_with_owner_epoch(
+            self.base_position,
+            self.block_size,
+            self.owner_epoch,
+        )?;
+        if identity.segment_count != K8_SEGMENTS
+            || self.state_transaction_calls != K8_SEGMENTS
+            || self.attention_dispatch_calls != K8_SEGMENTS
+            || self.attention_rows != K8_BLOCK_SIZE
+            || self.serial_token_forward_calls != 0
+            || self.cpu_fallback_calls != 0
+        {
+            bail!("ratio4 K8 双 B4 回执 identity/count 漂移");
+        }
+        for segment_index in 0..K8_SEGMENTS {
+            let shape = identity.segment_shape(segment_index)?;
+            let receipt = self.segment_receipts[segment_index as usize];
+            receipt.validate()?;
+            if receipt.positions != shape.positions()
+                || self.boundary_positions[segment_index as usize] != shape.boundary_position()
+            {
+                bail!("ratio4 K8 segment 回执顺序或 position 漂移");
+            }
+        }
+        Ok(())
+    }
+}
+
+pub struct S14CausalBlockRatio4K8BoundaryRecording {
+    segments: Vec<S14CausalBlockRatio4BoundaryRecording>,
+    pub receipt: S14CausalBlockRatio4K8BoundaryRecordingReceipt,
+}
+
+impl S14CausalBlockRatio4K8BoundaryRecording {
+    pub fn destroy(self, ctx: &VulkanContext) {
+        for segment in self.segments {
+            segment.destroy(ctx);
+        }
+    }
+}
+
 impl S14CausalBlockRatio4BoundaryRecording {
     pub fn destroy(self, ctx: &VulkanContext) {
         for binder in self.binders {
@@ -486,16 +706,135 @@ impl S14CausalBlockRatio4BoundaryRecorder {
         attention: S14CausalBlockRatio4AttentionBindings<'_>,
         position4: S14CausalBlockRatio4Position4IndexerBindings<'_>,
     ) -> Result<S14CausalBlockRatio4BoundaryRecording> {
+        let identity = state.transaction_identity();
+        identity.validate()?;
+        if identity.block_size != BLOCK_SIZE || identity.segment_count != 1 {
+            bail!("ratio4 K4 recorder 拒绝消费 K8/多段 state owner");
+        }
+        self.record_segment(
+            ctx,
+            command,
+            state,
+            0,
+            state_workspace,
+            attention,
+            position4,
+        )
+    }
+
+    /// 在同一 layer command/owner epoch 内严格录制两个 B4 boundary transaction。
+    /// 两段 attention/indexer bindings 由调用方显式提供，避免第二段错误复用第一段
+    /// committed-window view。任一段失败都不会返回可发布的部分 K8 回执。
+    ///
+    /// # Safety
+    /// 两段 bindings 及 state owner 必须活到 command 完成；command 失败后调用方必须
+    /// abort/reset，禁止提交已录制的第一段。
+    pub unsafe fn record_aligned_k8(
+        &self,
+        ctx: &VulkanContext,
+        command: vk::CommandBuffer,
+        state: &dyn S14CausalBlockRatio4BoundaryStateRecorder,
+        state_workspace: S14CausalBlockRatio4StateWorkspaceBindings<'_>,
+        attention_segments: [S14CausalBlockRatio4AttentionBindings<'_>; 2],
+        position4_segments: [S14CausalBlockRatio4Position4IndexerBindings<'_>; 2],
+    ) -> Result<S14CausalBlockRatio4K8BoundaryRecording> {
+        let identity = state.transaction_identity();
+        identity.validate()?;
+        if identity.block_size != K8_BLOCK_SIZE || identity.segment_count != K8_SEGMENTS {
+            bail!("ratio4 K8 recorder 必须消费同一 K8 双段 state owner");
+        }
+        let mut segments: Vec<S14CausalBlockRatio4BoundaryRecording> =
+            Vec::with_capacity(K8_SEGMENTS as usize);
+        for segment_index in 0..K8_SEGMENTS {
+            let index = segment_index as usize;
+            let recording = match self.record_segment(
+                ctx,
+                command,
+                state,
+                segment_index,
+                state_workspace,
+                attention_segments[index],
+                position4_segments[index],
+            ) {
+                Ok(recording) => recording,
+                Err(error) => {
+                    for recording in segments.drain(..) {
+                        recording.destroy(ctx);
+                    }
+                    return Err(error.context(format!(
+                        "录制 ratio4 K8 segment{segment_index} boundary transaction"
+                    )));
+                }
+            };
+            segments.push(recording);
+            if segment_index + 1 < K8_SEGMENTS {
+                compute_to_compute_barrier(ctx, command);
+            }
+        }
+        let segment_receipts = [segments[0].receipt, segments[1].receipt];
+        let receipt = S14CausalBlockRatio4K8BoundaryRecordingReceipt {
+            base_position: identity.base_position,
+            block_size: identity.block_size,
+            owner_epoch: identity.owner_epoch,
+            segment_receipts,
+            boundary_positions: [
+                segment_receipts[0].positions[segment_receipts[0].boundary_lane as usize],
+                segment_receipts[1].positions[segment_receipts[1].boundary_lane as usize],
+            ],
+            state_transaction_calls: K8_SEGMENTS,
+            attention_dispatch_calls: segment_receipts
+                .iter()
+                .map(|receipt| receipt.attention_dispatch_calls)
+                .sum(),
+            attention_rows: segment_receipts
+                .iter()
+                .map(|receipt| receipt.attention_rows)
+                .sum(),
+            serial_token_forward_calls: segment_receipts
+                .iter()
+                .map(|receipt| receipt.serial_token_forward_calls)
+                .sum(),
+            cpu_fallback_calls: segment_receipts
+                .iter()
+                .map(|receipt| receipt.cpu_fallback_calls)
+                .sum(),
+        };
+        if let Err(error) = receipt.validate() {
+            for recording in segments.drain(..) {
+                recording.destroy(ctx);
+            }
+            return Err(error);
+        }
+        Ok(S14CausalBlockRatio4K8BoundaryRecording { segments, receipt })
+    }
+
+    unsafe fn record_segment(
+        &self,
+        ctx: &VulkanContext,
+        command: vk::CommandBuffer,
+        state: &dyn S14CausalBlockRatio4BoundaryStateRecorder,
+        segment_index: u32,
+        state_workspace: S14CausalBlockRatio4StateWorkspaceBindings<'_>,
+        attention: S14CausalBlockRatio4AttentionBindings<'_>,
+        position4: S14CausalBlockRatio4Position4IndexerBindings<'_>,
+    ) -> Result<S14CausalBlockRatio4BoundaryRecording> {
         if command == vk::CommandBuffer::null() {
             bail!("ratio4 causal-block command 不能为空");
         }
-        let candidate_binding = state.candidate_state_binding();
-        let shape = S14CausalBlockRatio4BoundaryShape::new(
-            candidate_binding.base_position,
-            candidate_binding.block_size,
-            candidate_binding.boundary_recipe_compress_ratio,
-        )?;
+        let identity = state.transaction_identity();
+        identity.validate()?;
+        let candidate_binding = state.candidate_state_binding_for_segment(segment_index)?;
+        let shape = identity.segment_shape(segment_index)?;
         candidate_binding.validate(state.candidate_state_owner())?;
+        if candidate_binding.physical_base_position != identity.base_position
+            || candidate_binding.physical_block_size != identity.block_size
+            || candidate_binding.segment_count != identity.segment_count
+            || candidate_binding.owner_epoch != identity.owner_epoch
+            || candidate_binding.segment_index != segment_index
+            || candidate_binding.base_position != shape.base_position()
+        {
+            bail!("ratio4 segment candidate binding 与 transaction identity 漂移");
+        }
         if shape.max_compressed_rows() > S14_CAUSAL_BLOCK_RATIO4_INDEX_CAPACITY_ROWS {
             bail!(
                 "ratio4 K4 compressed rows 超出 workspace capacity: rows={} capacity={}",
@@ -503,13 +842,23 @@ impl S14CausalBlockRatio4BoundaryRecorder {
                 S14_CAUSAL_BLOCK_RATIO4_INDEX_CAPACITY_ROWS
             );
         }
-        let finalize = state.record_remainder_and_finalize(ctx, command, state_workspace)?;
+        let finalize = state.record_remainder_and_finalize_segment(
+            ctx,
+            command,
+            segment_index,
+            state_workspace,
+        )?;
         finalize.validate(shape)?;
         compute_to_compute_barrier(ctx, command);
 
         let sparse_lane_count = shape.sparse_index_lane_count();
         let mut binders = Vec::with_capacity(sparse_lane_count as usize * 2 + 1);
-        let rollover = match state.record_rollover_after_finalize(ctx, command, state_workspace) {
+        let rollover = match state.record_rollover_after_finalize_segment(
+            ctx,
+            command,
+            segment_index,
+            state_workspace,
+        ) {
             Ok(receipt) => receipt,
             Err(error) => {
                 destroy_binders(ctx, &mut binders);
@@ -522,14 +871,18 @@ impl S14CausalBlockRatio4BoundaryRecorder {
         }
         compute_to_compute_barrier(ctx, command);
 
-        let position4_prelude =
-            match state.record_position4_remainder_and_index_head(ctx, command, state_workspace) {
-                Ok(receipt) => receipt,
-                Err(error) => {
-                    destroy_binders(ctx, &mut binders);
-                    return Err(error.context("录制 ratio4 position4 remainder/index-head"));
-                }
-            };
+        let position4_prelude = match state.record_position4_remainder_and_index_head_segment(
+            ctx,
+            command,
+            segment_index,
+            state_workspace,
+        ) {
+            Ok(receipt) => receipt,
+            Err(error) => {
+                destroy_binders(ctx, &mut binders);
+                return Err(error.context("录制 ratio4 position4 remainder/index-head"));
+            }
+        };
         if let Err(error) = position4_prelude.validate(shape) {
             destroy_binders(ctx, &mut binders);
             return Err(error);

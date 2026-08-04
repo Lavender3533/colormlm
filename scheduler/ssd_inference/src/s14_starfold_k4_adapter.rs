@@ -155,6 +155,24 @@ pub trait S14StarfoldK4ProductionStage: fmt::Debug {
         Err("S14 StarFold stage 未实现 ForcedPrefill begin".into())
     }
 
+    /// K8 仅开放给 teacher-forced prefill；旧实现继续通过 K4 入口工作，generation 不得调用。
+    fn begin_teacher_forced_prefill_kblock(
+        &mut self,
+        base_position: u32,
+        input_token_ids: &[u32],
+        initial_hidden: S14CausalBlockHiddenBinding,
+    ) -> std::result::Result<S14StarfoldK4BeginReceipt, String> {
+        if input_token_ids.len() == K4 {
+            self.begin_teacher_forced_prefill_k4_block(
+                base_position,
+                input_token_ids,
+                initial_hidden,
+            )
+        } else {
+            Err("S14 StarFold stage 未实现 ForcedPrefill K8 begin".into())
+        }
+    }
+
     fn produce_attention_route_and_checkpoint(
         &mut self,
         input: S14StarfoldK4AttentionInput<'_>,
@@ -182,6 +200,25 @@ pub trait S14StarfoldK4ProductionStage: fmt::Debug {
         expert: &S14StarfoldB4RoutedLayerReceipt,
     ) -> std::result::Result<S14StarfoldK4HiddenCommitReceipt, String>;
 
+    /// 一个 K-block layer 由1或2个 B4窗口顺序执行。非末段只把归约结果写入对应 K-row
+    /// reduced slice；末段才允许 HC-post、checkpoint capture 与下一层 hidden 发布。
+    fn commit_routed_down_segment_to_next_hidden(
+        &mut self,
+        input: S14StarfoldK4AttentionInput<'_>,
+        routes: &[RouteDecision],
+        b4_index: usize,
+        b4_count: usize,
+        down: S14StarfoldRoutedDownBinding,
+        expert: &S14StarfoldB4RoutedLayerReceipt,
+    ) -> std::result::Result<Option<S14StarfoldK4HiddenCommitReceipt>, String> {
+        if b4_index == 0 && b4_count == 1 {
+            self.commit_routed_down_to_next_hidden(input, routes, down, expert)
+                .map(Some)
+        } else {
+            Err("S14 StarFold stage 未实现双 B4 K8 reduce transaction".into())
+        }
+    }
+
     fn seal_checkpoint_chain(
         &mut self,
         completed_layers: usize,
@@ -207,6 +244,8 @@ pub struct S14StarfoldK4LayerReceipt {
     pub routes: Vec<RouteDecision>,
     pub checkpoint: S14CausalBlockHcQkvLayerRecordingReceipt,
     pub expert: S14StarfoldB4RoutedLayerReceipt,
+    /// K4 为空；K8 精确包含第二个 B4 window 回执。
+    pub additional_experts: Vec<S14StarfoldB4RoutedLayerReceipt>,
     pub hidden_commit: S14StarfoldK4HiddenCommitReceipt,
 }
 
@@ -214,7 +253,7 @@ pub struct S14StarfoldK4LayerReceipt {
 pub struct S14StarfoldK4FullDepthReceipt {
     pub base_position: u32,
     pub block_size: usize,
-    pub physical_input_token_ids: [u32; STARFOLD_B4_LANES],
+    pub physical_input_token_ids: Vec<u32>,
     pub completed_layers: usize,
     pub routes_by_position: Vec<Vec<RouteDecision>>,
     pub layers: Vec<S14StarfoldK4LayerReceipt>,
@@ -423,13 +462,15 @@ impl<S: S14StarfoldK4ProductionStage> S14StarfoldK4ProductionAdapter<S> {
         }
         let is_position0_draft =
             source == MaterializedTokenSource::SpeculativeDraft && base_position == 0;
-        if input_token_ids.len() != K4
+        let block_size = input_token_ids.len();
+        if !matches!(block_size, 4 | 8)
+            || (source == MaterializedTokenSource::SpeculativeDraft && block_size != K4)
             || (is_position0_draft && position0_provenance.is_none())
             || (position0_provenance.is_some() && !is_position0_draft)
         {
             bail!("S14 StarFold source/base/K/origin 合同非法：普通 draft 要求 nonzero base；base0 draft 必须走 committed-origin 强入口");
         }
-        validate_hidden(initial_hidden, K4)?;
+        validate_hidden(initial_hidden, block_size)?;
         let begin_result = match (source, position0_provenance) {
             (MaterializedTokenSource::SpeculativeDraft, Some(provenance)) => self
                 .stage_mut()?
@@ -443,7 +484,7 @@ impl<S: S14StarfoldK4ProductionStage> S14StarfoldK4ProductionAdapter<S> {
                     .begin_k4_block(base_position, input_token_ids, initial_hidden)
             }
             (MaterializedTokenSource::ForcedPrefill, None) => {
-                self.stage_mut()?.begin_teacher_forced_prefill_k4_block(
+                self.stage_mut()?.begin_teacher_forced_prefill_kblock(
                     base_position,
                     input_token_ids,
                     initial_hidden,
@@ -461,7 +502,7 @@ impl<S: S14StarfoldK4ProductionStage> S14StarfoldK4ProductionAdapter<S> {
             Err(error) => return self.fail_after_stage_begin(0, error),
         };
         if begin.base_position != base_position
-            || begin.block_size != K4
+            || begin.block_size != block_size
             || begin.begin_calls != 1
             || begin.serial_token_forward_calls != 0
         {
@@ -473,7 +514,7 @@ impl<S: S14StarfoldK4ProductionStage> S14StarfoldK4ProductionAdapter<S> {
             current_hidden: initial_hidden,
             source,
             next_layer_index: 0,
-            routes_by_position: (0..K4)
+            routes_by_position: (0..block_size)
                 .map(|_| Vec::with_capacity(FULL_DEPTH_LAYERS.len()))
                 .collect(),
             layers: Vec::with_capacity(FULL_DEPTH_LAYERS.len()),
@@ -533,20 +574,18 @@ impl<S: S14StarfoldK4ProductionStage> S14StarfoldK4ProductionAdapter<S> {
             u64::from(input.base_position),
             &attention.routes,
         )?;
+        let block_size = input.input_token_ids.len();
+        let b4_count = block_size / K4;
         if layer_plan.layer != u16::from(input.layer)
             || layer_plan.base_position != u64::from(input.base_position)
-            || layer_plan.block_size != K4
-            || layer_plan.b4_blocks.len() != 1
+            || layer_plan.block_size != block_size
+            || !matches!(block_size, 4 | 8)
+            || layer_plan.b4_blocks.len() != b4_count
             || layer_plan.commit_boundary
                 != S14StarfoldCommitBoundary::ExistingLongestReliablePrefix
         {
-            bail!("S14 StarFold K4 layer plan identity/commit boundary 漂移");
+            bail!("S14 StarFold K4/K8 layer plan identity/commit boundary 漂移");
         }
-        let b4_plan = layer_plan
-            .b4_blocks
-            .first()
-            .context("S14 StarFold K4 layer plan 缺少唯一 B4 block")?
-            .clone();
         let layer_ordinal = FULL_DEPTH_LAYERS
             .iter()
             .position(|&layer| layer == input.layer)
@@ -596,30 +635,72 @@ impl<S: S14StarfoldK4ProductionStage> S14StarfoldK4ProductionAdapter<S> {
             }
             None => None,
         };
-        let (expert, down) = {
-            let runtime = self
-                .runtime
-                .as_mut()
-                .context("S14 StarFold runtime 已销毁")?;
-            let owner = self
-                .b4_owner
-                .as_mut()
-                .context("S14 StarFold B4 owner 已销毁")?;
-            owner.execute(runtime, &b4_plan, attention.moe_input_f32, current_compute)?
-        };
-        validate_expert_receipt(input, &attention.routes, &expert, down)?;
+        let mut experts = Vec::with_capacity(b4_count);
+        let mut hidden_commit = None;
+        for (b4_index, b4_plan) in layer_plan.b4_blocks.iter().enumerate() {
+            let lane_start = b4_index * K4;
+            let lane_end = lane_start + K4;
+            let b4_base_position = input
+                .base_position
+                .checked_add(u32::try_from(lane_start).context("B4 base lane overflow")?)
+                .context("B4 base position overflow")?;
+            let b4_input = S14StarfoldK4AttentionInput {
+                base_position: b4_base_position,
+                layer: input.layer,
+                input_token_ids: &input.input_token_ids[lane_start..lane_end],
+                input_hidden: input.input_hidden,
+                source: input.source,
+            };
+            let b4_routes = &attention.routes[lane_start..lane_end];
+            let b4_compute = S14StarfoldActiveComputeIdentity::new(
+                prefetch_layer,
+                S14StarfoldRoutedExpertSet::from_route_experts(
+                    b4_routes
+                        .iter()
+                        .flat_map(|route| route.expert_ids.iter().copied()),
+                )?,
+            );
+            let moe_slice = b4_external_slice(attention.moe_input_f32, b4_index)?;
+            let (expert, down) = {
+                let runtime = self
+                    .runtime
+                    .as_mut()
+                    .context("S14 StarFold runtime 已销毁")?;
+                let owner = self
+                    .b4_owner
+                    .as_mut()
+                    .context("S14 StarFold B4 owner 已销毁")?;
+                owner.execute(runtime, b4_plan, moe_slice, b4_compute)?
+            };
+            validate_expert_receipt(b4_input, b4_routes, &expert, down)?;
+            hidden_commit = self
+                .stage_mut()?
+                .commit_routed_down_segment_to_next_hidden(
+                    input, b4_routes, b4_index, b4_count, down, &expert,
+                )
+                .map_err(anyhow::Error::msg)
+                .with_context(|| {
+                    format!(
+                        "提交 S14 StarFold L{} B4 segment {}/{}",
+                        input.layer,
+                        b4_index + 1,
+                        b4_count
+                    )
+                })?;
+            experts.push(expert);
+        }
         if let Some((intent, lease)) = static_l2 {
             // 预取失败只回收优化租约；目标层仍走原 authoritative synchronous prepare，
             // 因而这里不能把 cache warmup 失败升级为数值路径失败。
             let _ = complete_static_l2_prefetch(self.stage_mut()?, &intent, lease);
         }
 
-        let hidden_commit = self
-            .stage_mut()?
-            .commit_routed_down_to_next_hidden(input, &attention.routes, down, &expert)
-            .map_err(anyhow::Error::msg)
-            .with_context(|| format!("提交 S14 StarFold L{} 下一层 hidden", input.layer))?;
+        let hidden_commit = hidden_commit.context("K-block 最后一个 B4 未发布下一层 hidden")?;
         validate_hidden_commit(input, attention.post_attention_hidden, hidden_commit)?;
+
+        let mut experts = experts.into_iter();
+        let expert = experts.next().context("K-block layer 缺少首个 B4 回执")?;
+        let additional_experts = experts.collect();
 
         let receipt = S14StarfoldK4LayerReceipt {
             layer: input.layer,
@@ -627,6 +708,7 @@ impl<S: S14StarfoldK4ProductionStage> S14StarfoldK4ProductionAdapter<S> {
             routes: attention.routes,
             checkpoint: attention.checkpoint,
             expert,
+            additional_experts,
             hidden_commit,
         };
         let active = self.active_mut()?;
@@ -650,10 +732,11 @@ impl<S: S14StarfoldK4ProductionStage> S14StarfoldK4ProductionAdapter<S> {
     }
 
     pub fn seal_layers(&mut self) -> Result<S14StarfoldK4FullDepthReceipt> {
-        let (base_position, completed_layers, final_hidden, source) = {
+        let (base_position, block_size, completed_layers, final_hidden, source) = {
             let active = self.active()?;
             (
                 active.base_position,
+                active.input_token_ids.len(),
                 active.next_layer_index,
                 active.current_hidden,
                 active.source,
@@ -684,9 +767,9 @@ impl<S: S14StarfoldK4ProductionStage> S14StarfoldK4ProductionAdapter<S> {
             Err(error) => return Err(self.abort_after_error(completed_layers, error)),
         };
         if seal.base_position != base_position
-            || seal.block_size != K4
+            || seal.block_size != block_size
             || seal.completed_layers != FULL_DEPTH_LAYERS.len()
-            || seal.checkpoint_count != K4
+            || seal.checkpoint_count != block_size
             || seal.prefix_program_seal_calls != 1
             || seal.checkpoint_commit_calls != 0
             || seal.serial_token_forward_calls != 0
@@ -699,15 +782,11 @@ impl<S: S14StarfoldK4ProductionStage> S14StarfoldK4ProductionAdapter<S> {
 
         // stage 已经 seal；所有仍可能失败的 host-side 聚合必须在 phase 切换前完成，
         // 并在失败时立即走同一个 stage-authoritative abort，不能把清理拖到 Drop。
-        let host_receipt = (|| -> Result<(u32, u64, u32, [u32; STARFOLD_B4_LANES])> {
+        let host_receipt = (|| -> Result<(u32, u64, u32, Vec<u32>)> {
             let active = self.active()?;
             let (packed_uploads, packed_upload_bytes, lane_dispatches) =
                 aggregate_physical_counts(&active.layers)?;
-            let physical_input_token_ids = active
-                .input_token_ids
-                .as_slice()
-                .try_into()
-                .map_err(|_| anyhow!("S14 StarFold sealed K4 input token 数量漂移"))?;
+            let physical_input_token_ids = active.input_token_ids.clone();
             Ok((
                 packed_uploads,
                 packed_upload_bytes,
@@ -736,7 +815,7 @@ impl<S: S14StarfoldK4ProductionStage> S14StarfoldK4ProductionAdapter<S> {
         };
         Ok(S14StarfoldK4FullDepthReceipt {
             base_position,
-            block_size: K4,
+            block_size,
             physical_input_token_ids,
             completed_layers,
             routes_by_position: active.routes_by_position,
@@ -1097,6 +1176,11 @@ where
 struct S14StarfoldConcretePendingLayer {
     layer: u8,
     base_position: u32,
+    block_size: usize,
+    next_b4_segment: usize,
+    unique_experts: usize,
+    routed_reduce_dispatch_calls: u32,
+    queue_submit_calls: u32,
     post_attention_hidden: S14CausalBlockHiddenBinding,
     hc: S14StarfoldHcPrepareReceipt,
 }
@@ -1362,6 +1446,34 @@ impl<H: S14CausalBlockVulkanHcQkvAdapter> S14StarfoldK4ProductionStage
         })
     }
 
+    fn begin_teacher_forced_prefill_kblock(
+        &mut self,
+        base_position: u32,
+        input_token_ids: &[u32],
+        initial_hidden: S14CausalBlockHiddenBinding,
+    ) -> std::result::Result<S14StarfoldK4BeginReceipt, String> {
+        let block_size = input_token_ids.len();
+        if self.destroyed
+            || self.base_position.is_some()
+            || self.pending.is_some()
+            || !matches!(block_size, 4 | 8)
+            || self.position0_generation_provenance.is_some()
+        {
+            return Err("S14 StarFold ForcedPrefill K4/K8 stage begin phase/K 漂移".into());
+        }
+        validate_hidden(initial_hidden, block_size).map_err(|error| format!("{error:#}"))?;
+        self.hc_qkv
+            .begin_teacher_forced_prefill_block(base_position, block_size)?;
+        self.base_position = Some(base_position);
+        self.completed_layers = 0;
+        Ok(S14StarfoldK4BeginReceipt {
+            base_position,
+            block_size,
+            begin_calls: 1,
+            serial_token_forward_calls: 0,
+        })
+    }
+
     fn produce_attention_route_and_checkpoint(
         &mut self,
         input: S14StarfoldK4AttentionInput<'_>,
@@ -1393,6 +1505,11 @@ impl<H: S14CausalBlockVulkanHcQkvAdapter> S14StarfoldK4ProductionStage
         let pending = S14StarfoldConcretePendingLayer {
             layer: input.layer,
             base_position: input.base_position,
+            block_size: input.input_token_ids.len(),
+            next_b4_segment: 0,
+            unique_experts: 0,
+            routed_reduce_dispatch_calls: 0,
+            queue_submit_calls: 0,
             post_attention_hidden: recorded.output.post_attention_hidden,
             hc,
         };
@@ -1429,30 +1546,66 @@ impl<H: S14CausalBlockVulkanHcQkvAdapter> S14StarfoldK4ProductionStage
         down: S14StarfoldRoutedDownBinding,
         expert: &S14StarfoldB4RoutedLayerReceipt,
     ) -> std::result::Result<S14StarfoldK4HiddenCommitReceipt, String> {
+        self.commit_routed_down_segment_to_next_hidden(input, routes, 0, 1, down, expert)?
+            .ok_or_else(|| "K4 routed-down transaction 未发布 hidden".to_owned())
+    }
+
+    fn commit_routed_down_segment_to_next_hidden(
+        &mut self,
+        input: S14StarfoldK4AttentionInput<'_>,
+        routes: &[RouteDecision],
+        b4_index: usize,
+        b4_count: usize,
+        down: S14StarfoldRoutedDownBinding,
+        expert: &S14StarfoldB4RoutedLayerReceipt,
+    ) -> std::result::Result<Option<S14StarfoldK4HiddenCommitReceipt>, String> {
         self.ensure_active(input)
             .map_err(|error| format!("{error:#}"))?;
-        let pending = self
+        let mut pending = self
             .pending
             .ok_or_else(|| "S14 StarFold concrete stage 缺少 HC-pre output".to_owned())?;
+        let expected_b4_count = pending.block_size / K4;
         if pending.layer != input.layer
             || pending.base_position != input.base_position
             || routes.len() != K4
+            || !matches!(pending.block_size, 4 | 8)
+            || b4_count != expected_b4_count
+            || b4_index != pending.next_b4_segment
+            || b4_index >= b4_count
             || expert.layer != u16::from(input.layer)
+            || expert.base_position
+                != u64::from(input.base_position) + u64::try_from(b4_index * K4).unwrap_or(u64::MAX)
         {
             return Err("S14 StarFold concrete stage reduce 输入 identity 漂移".into());
         }
+        let moe_input = b4_external_slice(pending.hc.moe_input_f32, b4_index)
+            .map_err(|error| format!("{error:#}"))?;
+        let reduced_output = b4_external_slice(pending.hc.reduced_output_f32, b4_index)
+            .map_err(|error| format!("{error:#}"))?;
         let shared = self
             .shared_reduce
-            .submit_after_routed_w2(
-                expert,
-                pending.hc.moe_input_f32,
-                down,
-                pending.hc.reduced_output_f32,
-            )
+            .submit_after_routed_w2(expert, moe_input, down, reduced_output)
             .map_err(|error| format!("{error:#}"))?;
         self.shared_reduce
             .wait()
             .map_err(|error| format!("{error:#}"))?;
+        pending.next_b4_segment += 1;
+        pending.unique_experts = pending
+            .unique_experts
+            .checked_add(expert.unique_experts as usize)
+            .ok_or_else(|| "K-block unique expert count overflow".to_owned())?;
+        pending.routed_reduce_dispatch_calls = pending
+            .routed_reduce_dispatch_calls
+            .checked_add(shared.exact_reduce_dispatch_calls)
+            .ok_or_else(|| "K-block reduce dispatch count overflow".to_owned())?;
+        pending.queue_submit_calls = pending
+            .queue_submit_calls
+            .checked_add(shared.queue_submit_calls)
+            .ok_or_else(|| "K-block queue submit count overflow".to_owned())?;
+        if pending.next_b4_segment < b4_count {
+            self.pending = Some(pending);
+            return Ok(None);
+        }
         let finalized = self
             .hc_bridge
             .finalize_layer(
@@ -1465,7 +1618,7 @@ impl<H: S14CausalBlockVulkanHcQkvAdapter> S14StarfoldK4ProductionStage
             output_hidden: finalized.next_hidden,
             grouped_submit_calls: 1,
             serial_token_forward_calls: 0,
-            unique_experts: expert.unique_experts as usize,
+            unique_experts: pending.unique_experts,
         };
         self.hc_qkv
             .capture_grouped_moe_output(pending.post_attention_hidden, &grouped)?;
@@ -1474,15 +1627,15 @@ impl<H: S14CausalBlockVulkanHcQkvAdapter> S14StarfoldK4ProductionStage
             .completed_layers
             .checked_add(1)
             .ok_or_else(|| "S14 StarFold concrete stage layer counter overflow".to_owned())?;
-        Ok(S14StarfoldK4HiddenCommitReceipt {
+        Ok(Some(S14StarfoldK4HiddenCommitReceipt {
             base_position: input.base_position,
             layer: input.layer,
             next_hidden: finalized.next_hidden,
-            routed_reduce_dispatch_calls: shared.exact_reduce_dispatch_calls,
+            routed_reduce_dispatch_calls: pending.routed_reduce_dispatch_calls,
             hc_post_dispatch_calls: finalized.hc_post_dispatch_calls,
-            queue_submit_calls: shared.queue_submit_calls + finalized.queue_submit_calls,
+            queue_submit_calls: pending.queue_submit_calls + finalized.queue_submit_calls,
             serial_token_forward_calls: 0,
-        })
+        }))
     }
 
     fn seal_checkpoint_chain(
@@ -1496,7 +1649,7 @@ impl<H: S14CausalBlockVulkanHcQkvAdapter> S14StarfoldK4ProductionStage
         if completed_layers != FULL_DEPTH_LAYERS.len()
             || self.completed_layers != completed_layers
             || self.pending.is_some()
-            || final_hidden.block_size != K4
+            || !matches!(final_hidden.block_size, 4 | 8)
         {
             return Err("S14 StarFold concrete stage 禁止 seal 不完整 FullDepth43".into());
         }
@@ -1506,9 +1659,9 @@ impl<H: S14CausalBlockVulkanHcQkvAdapter> S14StarfoldK4ProductionStage
         self.hc_qkv.seal_and_drain(completed_layers)?;
         Ok(S14StarfoldK4CheckpointSealReceipt {
             base_position,
-            block_size: K4,
+            block_size: final_hidden.block_size,
             completed_layers,
-            checkpoint_count: K4,
+            checkpoint_count: final_hidden.block_size,
             prefix_program_seal_calls: 1,
             checkpoint_commit_calls: 0,
             serial_token_forward_calls: 0,
@@ -1617,7 +1770,7 @@ fn validate_attention_output(
     if output.attention_router_submit_calls != 1
         || output.checkpoint_recording_calls != 1
         || output.serial_token_forward_calls != 0
-        || output.routes.len() != K4
+        || output.routes.len() != input.input_token_ids.len()
     {
         bail!("S14 StarFold K4 attention/router/checkpoint 调用计数漂移");
     }
@@ -1630,7 +1783,7 @@ fn validate_attention_output(
             bail!("S14 StarFold K4 route layer 漂移");
         }
     }
-    validate_moe_input(output.moe_input_f32)?;
+    validate_moe_input(output.moe_input_f32, input.input_token_ids.len())?;
     validate_checkpoint_receipt(input, output, output.checkpoint)
 }
 
@@ -1688,8 +1841,10 @@ fn validate_hidden_commit(
     post_attention_hidden: S14CausalBlockHiddenBinding,
     receipt: S14StarfoldK4HiddenCommitReceipt,
 ) -> Result<()> {
-    validate_hidden(post_attention_hidden, K4)?;
-    validate_hidden(receipt.next_hidden, K4)?;
+    let block_size = input.input_token_ids.len();
+    let b4_count = block_size / K4;
+    validate_hidden(post_attention_hidden, block_size)?;
+    validate_hidden(receipt.next_hidden, block_size)?;
     let expected_post_attention_generation = input
         .input_hidden
         .generation
@@ -1720,9 +1875,9 @@ fn validate_hidden_commit(
         || receipt.layer != input.layer
         || post_attention_hidden.generation != expected_post_attention_generation
         || receipt.next_hidden.generation != expected_generation
-        || receipt.routed_reduce_dispatch_calls != 1
-        || receipt.hc_post_dispatch_calls != K4 as u32
-        || receipt.queue_submit_calls != 2
+        || receipt.routed_reduce_dispatch_calls != b4_count as u32
+        || receipt.hc_post_dispatch_calls != block_size as u32
+        || receipt.queue_submit_calls != b4_count as u32 + 1
         || receipt.serial_token_forward_calls != 0
         // 双 bank 的真实物理链是 A(g) -> B(g+1) -> A(g+2)。下一层必须回到输入
         // bank，且不得覆盖仍代表 attention 输出的 opposite bank。
@@ -1741,7 +1896,7 @@ fn validate_teacher_forced_prefill_base(
     authoritative
         .validate()
         .map_err(|error| anyhow!("ForcedPrefill authoritative DecoderState 非法: {error}"))?;
-    if input_token_ids.len() != K4
+    if !matches!(input_token_ids.len(), 4 | 8)
         || input_token_ids[0] != authoritative.input_token_id
         || input_token_ids.iter().any(|&token| token >= VOCAB_SIZE)
         || authoritative.native.position != authoritative.position
@@ -1775,9 +1930,51 @@ fn validate_hidden(binding: S14CausalBlockHiddenBinding, block_size: usize) -> R
     Ok(())
 }
 
-fn validate_moe_input(binding: S14StarfoldMxfp4ExternalSlice) -> Result<()> {
-    let expected = K4 as u64 * HIDDEN * F32_BYTES;
-    validate_external_slice(binding, expected, "MoE input [4,4096] F32")
+fn validate_moe_input(binding: S14StarfoldMxfp4ExternalSlice, block_size: usize) -> Result<()> {
+    let expected = block_size as u64 * HIDDEN * F32_BYTES;
+    validate_external_slice(binding, expected, "MoE input [K,4096] F32")
+}
+
+fn b4_external_slice(
+    binding: S14StarfoldMxfp4ExternalSlice,
+    b4_index: usize,
+) -> Result<S14StarfoldMxfp4ExternalSlice> {
+    let bytes = K4 as u64 * HIDDEN * F32_BYTES;
+    let relative = u64::try_from(b4_index)
+        .context("B4 slice index overflow")?
+        .checked_mul(bytes)
+        .context("B4 slice offset overflow")?;
+    let offset = binding
+        .offset
+        .checked_add(relative)
+        .context("B4 external offset overflow")?;
+    let relative_end = relative
+        .checked_add(bytes)
+        .context("B4 external end overflow")?;
+    let absolute_end = offset
+        .checked_add(bytes)
+        .context("B4 external absolute end overflow")?;
+    if binding.buffer == vk::Buffer::null()
+        || binding.offset % 4 != 0
+        || binding.logical_bytes == 0
+        || binding
+            .offset
+            .checked_add(binding.logical_bytes)
+            .is_none_or(|end| end > binding.capacity_bytes)
+        || relative_end > binding.logical_bytes
+        || absolute_end > binding.capacity_bytes
+    {
+        bail!("K-block MoE input 无法切出请求的 B4 segment");
+    }
+    Ok(S14StarfoldMxfp4ExternalSlice {
+        buffer: binding.buffer,
+        offset,
+        // capacity 是底层 buffer 的绝对末端合同，不是当前 logical slice 的长度。
+        // 保留父 arena 容量后，第二个及后续 B4 segment 的绝对 offset 才能被下游
+        // external-slice validator 正确解释。
+        capacity_bytes: binding.capacity_bytes,
+        logical_bytes: bytes,
+    })
 }
 
 fn validate_down_binding(binding: S14StarfoldRoutedDownBinding) -> Result<()> {
@@ -1808,19 +2005,23 @@ fn aggregate_physical_counts(layers: &[S14StarfoldK4LayerReceipt]) -> Result<(u3
         bail!("S14 StarFold K4 physical receipt 不是完整43层");
     }
     layers.iter().try_fold((0u32, 0u64, 0u32), |totals, layer| {
-        Ok((
-            totals
-                .0
-                .checked_add(layer.expert.packed_uploads)
-                .context("S14 StarFold K4 packed upload count overflow")?,
-            totals
-                .1
-                .checked_add(layer.expert.packed_upload_bytes)
-                .context("S14 StarFold K4 packed upload bytes overflow")?,
-            totals
-                .2
-                .checked_add(layer.expert.lane_dispatches)
-                .context("S14 StarFold K4 lane dispatch count overflow")?,
-        ))
+        std::iter::once(&layer.expert)
+            .chain(layer.additional_experts.iter())
+            .try_fold(totals, |totals, expert| {
+                Ok((
+                    totals
+                        .0
+                        .checked_add(expert.packed_uploads)
+                        .context("S14 StarFold K-block packed upload count overflow")?,
+                    totals
+                        .1
+                        .checked_add(expert.packed_upload_bytes)
+                        .context("S14 StarFold K-block packed upload bytes overflow")?,
+                    totals
+                        .2
+                        .checked_add(expert.lane_dispatches)
+                        .context("S14 StarFold K-block lane dispatch count overflow")?,
+                ))
+            })
     })
 }

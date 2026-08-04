@@ -618,6 +618,7 @@ fn validate_sealed_base(
     if full_depth.source != polaris_s14_runner::MaterializedTokenSource::SpeculativeDraft
         || full_depth.base_position != base.position
         || full_depth.block_size != S14_STARFOLD_K4_BLOCK_SIZE
+        || full_depth.physical_input_token_ids.as_slice() != &draft_token_ids[..]
         || full_depth.completed_layers != FULL_DEPTH_LAYERS.len()
         || full_depth.layers.len() != FULL_DEPTH_LAYERS.len()
         || full_depth.routes_by_position.len() != S14_STARFOLD_K4_BLOCK_SIZE
@@ -688,6 +689,7 @@ fn validate_sealed_base(
             || layer.expert.unique_experts == 0
             || layer.expert.unique_experts > 24
             || layer.expert.serial_token_forward_calls != 0
+            || !layer.additional_experts.is_empty()
             || layer.hidden_commit.base_position != base.position
             || layer.hidden_commit.layer != expected_layer
             || layer.hidden_commit.routed_reduce_dispatch_calls == 0
@@ -926,10 +928,10 @@ fn validate_and_prepare_host_commit(
     if added_records.len() != committed_tokens {
         bail!("S14 StarFold K4 selected checkpoint ledger 增量越出 commit_limit");
     }
-    let committed_tokens_u32 = u32::try_from(committed_tokens)
-        .context("S14 StarFold committed token 数无法表示为 u32")?;
-    let committed_tokens_u64 = u64::try_from(committed_tokens)
-        .context("S14 StarFold committed token 数无法表示为 u64")?;
+    let committed_tokens_u32 =
+        u32::try_from(committed_tokens).context("S14 StarFold committed token 数无法表示为 u32")?;
+    let committed_tokens_u64 =
+        u64::try_from(committed_tokens).context("S14 StarFold committed token 数无法表示为 u64")?;
     let expected_committed_position = base
         .position
         .checked_add(committed_tokens_u32)
@@ -987,12 +989,12 @@ fn validate_checkpoint_chain(
         checkpoint
             .validate()
             .map_err(|error| anyhow!("S14 StarFold K4 checkpoint {offset} 非法: {error}"))?;
-        let offset_u32 = u32::try_from(offset)
-            .context("S14 StarFold K4 checkpoint offset 无法表示为 u32")?;
-        let offset_u64 = u64::try_from(offset)
-            .context("S14 StarFold K4 checkpoint offset 无法表示为 u64")?;
-        let offset_u8 = u8::try_from(offset)
-            .context("S14 StarFold K4 checkpoint offset 无法表示为 u8")?;
+        let offset_u32 =
+            u32::try_from(offset).context("S14 StarFold K4 checkpoint offset 无法表示为 u32")?;
+        let offset_u64 =
+            u64::try_from(offset).context("S14 StarFold K4 checkpoint offset 无法表示为 u64")?;
+        let offset_u8 =
+            u8::try_from(offset).context("S14 StarFold K4 checkpoint offset 无法表示为 u8")?;
         let offset_plus_one_u32 = offset_u32
             .checked_add(1)
             .context("S14 StarFold K4 checkpoint offset overflow")?;
@@ -1071,9 +1073,7 @@ fn validate_checkpoint_chain(
 
 /// Production API 映射 checkpoint identity 的唯一 SHA helper。序列化域与 terminal
 /// commit receipt 完全相同，调用方不得另行合成 position/epoch 摘要。
-pub fn s14_starfold_decoder_state_sha256(
-    state: &DecoderStateV1,
-) -> Result<S14StarwaveSha256> {
+pub fn s14_starfold_decoder_state_sha256(state: &DecoderStateV1) -> Result<S14StarwaveSha256> {
     state
         .validate()
         .map_err(|error| anyhow!("DecoderState SHA 输入非法: {error}"))?;
@@ -1215,8 +1215,7 @@ fn next_block_device_binding_sha256(
     input_token_id: u32,
     device: &WholeTokenDeviceCommittedCheckpointBinding<'_>,
 ) -> S14StarwaveSha256 {
-    let mut writer =
-        S14StarwaveProofWriter::new("polaris-s14-starfold-next-k4-device-binding-v1");
+    let mut writer = S14StarwaveProofWriter::new("polaris-s14-starfold-next-k4-device-binding-v1");
     writer.write_u32(S14_STARFOLD_TERMINAL_CHAIN_SCHEMA_VERSION);
     writer.write_u64(next_block_sequence);
     writer.write_u64(previous.block_sequence);
@@ -1238,8 +1237,7 @@ fn next_block_launch_sha256(
     input_token_id: u32,
     device_checkpoint_binding_sha256: S14StarwaveSha256,
 ) -> S14StarwaveSha256 {
-    let mut writer =
-        S14StarwaveProofWriter::new("polaris-s14-starfold-next-k4-launch-binding-v1");
+    let mut writer = S14StarwaveProofWriter::new("polaris-s14-starfold-next-k4-launch-binding-v1");
     writer.write_u32(S14_STARFOLD_TERMINAL_CHAIN_SCHEMA_VERSION);
     writer.write_u64(next_block_sequence);
     writer.write_sha256(previous.commit_chain_sha256);

@@ -19,7 +19,9 @@ use crate::{
     s14_starfold_production_resources::{
         S14StarfoldK4ProductionResourceInputs, S14StarfoldK4ProductionResources,
     },
-    s14_starfold_prompt_prefill::S14StarfoldSealedTeacherForcedBlockCommitReceipt,
+    s14_starfold_prompt_prefill::{
+        S14StarfoldSealedTeacherForcedBlockCommitReceipt, S14_STARFOLD_PREFILL_PHYSICAL_K8,
+    },
     s14_starwave_transaction::S14StarwaveSha256,
     s14_whole_token_device::{WholeTokenDeviceCommittedCheckpointBinding, WholeTokenDeviceState},
     VulkanContext,
@@ -30,6 +32,7 @@ use polaris_s14_runner::{DecoderStateV1, MaterializedTokenSource, FULL_DEPTH_LAY
 use std::{fmt, sync::Arc};
 
 const K4: usize = S14_STARFOLD_K4_BLOCK_SIZE;
+const K8: usize = S14_STARFOLD_PREFILL_PHYSICAL_K8;
 const BF16_BYTES: u64 = 2;
 
 /// 下一块的显式 ledger 模式。mode 是 source 的唯一 authority，调用方不能自由组合二者。
@@ -61,7 +64,8 @@ pub struct S14StarfoldCommittedK4Anchor<'a> {
 /// 不在本输入中，因而接口没有重建 runtime/windows/B4/shared-reduce/HC bridge 的能力。
 pub struct S14StarfoldNextK4RebindInputs<P> {
     pub production: S14StarfoldK4ProductionResourceInputs<P>,
-    pub input_token_ids: [u32; K4],
+    /// ForcedPrefill 接受物理 K4/K8；SpeculativeGeneration 只接受 K4。
+    pub input_token_ids: Vec<u32>,
     pub initial_hidden: S14CausalBlockHiddenBinding,
     pub mode: S14StarfoldK4BlockMode,
 }
@@ -76,7 +80,7 @@ pub struct S14StarfoldNextK4Launch<'a> {
     context: Arc<VulkanContext>,
     paged_arena: Arc<crate::s14_position0_paged_weight_arena::S14Position0PagedWeightArena>,
     base_position: u32,
-    input_token_ids: [u32; K4],
+    input_token_ids: Vec<u32>,
     initial_hidden: S14CausalBlockHiddenBinding,
     mode: S14StarfoldK4BlockMode,
     expected_validated_blocks: u64,
@@ -129,6 +133,10 @@ impl S14StarfoldNextK4Launch<'_> {
     where
         P: S14CausalBlockProductionHcQkvResourceProvider + 'static,
     {
+        let physical_k = validate_mode_block_size(self.mode, self.input_token_ids.len())?;
+        if self.mode != S14StarfoldK4BlockMode::SpeculativeGeneration || physical_k != K4 {
+            bail!("terminal commit 后的下一块只允许物理 K4 speculative generation");
+        }
         validate_receipt_and_host(self.previous_commit, self.authoritative)?;
         let observed = self
             .committed_device
@@ -158,13 +166,9 @@ impl S14StarfoldNextK4Launch<'_> {
             }
         }
         let receipt = match self.mode {
-            S14StarfoldK4BlockMode::TeacherForcedPrefill => resources
-                .adapter_mut()?
-                .execute_teacher_forced_prefill_full_depth(
-                    self.authoritative,
-                    &self.input_token_ids,
-                    self.initial_hidden,
-                )?,
+            S14StarfoldK4BlockMode::TeacherForcedPrefill => {
+                bail!("terminal commit lineage 禁止回退到 teacher-forced prefill")
+            }
             S14StarfoldK4BlockMode::SpeculativeGeneration => resources.execute_k4_full_depth(
                 self.base_position,
                 &self.input_token_ids,
@@ -172,17 +176,12 @@ impl S14StarfoldNextK4Launch<'_> {
                 self.mode.materialized_source(),
             )?,
         };
-        if receipt.base_position != self.base_position
-            || receipt.block_size != K4
-            || receipt.completed_layers != FULL_DEPTH_LAYERS.len()
-            || receipt.layers.len() != FULL_DEPTH_LAYERS.len()
-            || receipt.routes_by_position.len() != K4
-            || receipt.serial_token_forward_calls != 0
-            || !receipt.terminal_ready
-            || receipt.token_committed
-        {
-            bail!("下一 K4 FullDepth43 receipt identity 漂移");
-        }
+        validate_launched_full_depth_receipt(
+            &receipt,
+            self.base_position,
+            &self.input_token_ids,
+            MaterializedTokenSource::SpeculativeDraft,
+        )?;
         Ok(receipt)
     }
 }
@@ -202,7 +201,7 @@ pub struct S14StarfoldTeacherForcedNextK4Launch<'a> {
     context: Arc<VulkanContext>,
     paged_arena: Arc<crate::s14_position0_paged_weight_arena::S14Position0PagedWeightArena>,
     base_position: u32,
-    input_token_ids: [u32; K4],
+    input_token_ids: Vec<u32>,
     initial_hidden: S14CausalBlockHiddenBinding,
     mode: S14StarfoldK4BlockMode,
     expected_validated_blocks: u64,
@@ -222,6 +221,7 @@ impl S14StarfoldTeacherForcedNextK4Launch<'_> {
     where
         P: S14CausalBlockProductionHcQkvResourceProvider + 'static,
     {
+        let physical_k = validate_mode_block_size(self.mode, self.input_token_ids.len())?;
         validate_teacher_forced_anchor(
             self.previous_commit,
             self.authoritative,
@@ -245,7 +245,7 @@ impl S14StarfoldTeacherForcedNextK4Launch<'_> {
         {
             bail!("teacher-forced 下一块 adapter lineage 漂移");
         }
-        match self.mode {
+        let receipt = match self.mode {
             S14StarfoldK4BlockMode::TeacherForcedPrefill => adapter
                 .execute_teacher_forced_prefill_full_depth(
                     self.authoritative,
@@ -258,7 +258,17 @@ impl S14StarfoldTeacherForcedNextK4Launch<'_> {
                 self.initial_hidden,
                 MaterializedTokenSource::SpeculativeDraft,
             ),
+        }?;
+        validate_launched_full_depth_receipt(
+            &receipt,
+            self.base_position,
+            &self.input_token_ids,
+            self.mode.materialized_source(),
+        )?;
+        if receipt.block_size != physical_k {
+            bail!("teacher-forced anchor launch 的物理 K 与 receipt 漂移");
         }
+        Ok(receipt)
     }
 }
 
@@ -293,6 +303,7 @@ where
         expected_hidden_generation,
         anchor.authoritative,
     )?;
+    let physical_k = inputs.input_token_ids.len();
     let expected_validated_blocks = u64::try_from(previous.block_index)
         .context("prefill block index 超出 u64")?
         .checked_add(1)
@@ -323,7 +334,7 @@ where
         .context("消费 teacher-forced 下一块 prefix producer")?;
     if !Arc::ptr_eq(resources.context(), prefix.context())
         || prefix.arena().base_position() != next_base_position
-        || prefix.arena().layout().block_size != K4
+        || prefix.arena().layout().block_size != physical_k
         || prefix.arena().layout().checkpoint_state_bytes != checkpoint.state_bytes()
     {
         let cleanup = prefix.destroy();
@@ -379,6 +390,11 @@ where
 {
     let checkpoint = validate_committed_anchor(&anchor)?;
     let previous = anchor.previous_commit;
+    if inputs.mode != S14StarfoldK4BlockMode::SpeculativeGeneration
+        || inputs.input_token_ids.len() != K4
+    {
+        bail!("generation terminal commit 的下一 rebind 只接受物理 K4 speculative block");
+    }
     let next_base_position = previous.committed_position;
     let expected_hidden_generation = previous
         .sealed_full_depth
@@ -522,37 +538,122 @@ fn validate_teacher_forced_anchor<'a>(
         .validate()
         .map_err(|error| anyhow!("teacher-forced authoritative checkpoint 非法: {error}"))?;
     let commit = &previous.commit;
+    let full_depth = &previous.sealed_full_depth;
+    let physical_k = commit.physical_lanes;
+    validate_prefill_block_size(physical_k)?;
+    if !(1..=physical_k).contains(&commit.logical_lanes) {
+        bail!("teacher-forced logical/physical lane 合同非法");
+    }
     let logical_u32 =
         u32::try_from(commit.logical_lanes).context("teacher-forced logical lanes 超出 u32")?;
     let logical_u64 =
         u64::try_from(commit.logical_lanes).context("teacher-forced logical lanes 超出 u64")?;
-    if !(1..=K4).contains(&commit.logical_lanes)
-        || commit.physical_lanes != K4
-        || commit.committed_position != commit.base_position + logical_u32
-        || commit.committed_epoch != u64::from(commit.base_position) + logical_u64
+    let expected_position = commit
+        .base_position
+        .checked_add(logical_u32)
+        .context("teacher-forced committed position overflow")?;
+    let expected_epoch = u64::from(commit.base_position)
+        .checked_add(logical_u64)
+        .context("teacher-forced committed epoch overflow")?;
+    let selected_checkpoint_index = commit
+        .logical_lanes
+        .checked_sub(1)
+        .context("teacher-forced selected checkpoint underflow")?;
+    let expected_hidden_bytes = hidden_bytes_for_block(physical_k)?;
+    let state_bytes = authoritative.native_arena.bytes().len() as u64;
+
+    if commit.committed_position != expected_position
+        || commit.committed_epoch != expected_epoch
         || commit.committed_active_bank != commit.committed_position as usize & 1
+        || commit.committed_input_token_id >= VOCAB_SIZE
+        || commit.transitions.len() != commit.logical_lanes
         || commit.device.position != commit.committed_position
         || commit.device.epoch != commit.committed_epoch
         || commit.device.active_bank != commit.committed_active_bank
         || commit.device.accepted_tokens != commit.logical_lanes
+        || commit.device.checkpoint_index != selected_checkpoint_index
+        || !commit.device.host_device_bytes_verified
         || !commit.host_device_checkpoint_bytes_verified
         || commit.terminal_head_calls != 0
         || commit.serial_token_forward_calls != 0
-        || previous.sealed_full_depth.base_position != commit.base_position
-        || previous.sealed_full_depth.block_size != K4
-        || previous.sealed_full_depth.source != MaterializedTokenSource::ForcedPrefill
-        || previous.sealed_full_depth.serial_token_forward_calls != 0
+        || commit.arena.checkpoint_arena == vk::Buffer::null()
+        || commit.arena.checkpoint_state_bytes != state_bytes
+        || commit.arena.checkpoint_stride_bytes < commit.arena.checkpoint_state_bytes
+        || commit.arena.selected_checkpoint_index != selected_checkpoint_index
+        || commit.arena.producer_timeline == vk::Semaphore::null()
+        || commit.arena.producer_timeline_generation == 0
+        || commit.arena.producer_timeline_value == 0
+        || !commit.arena.producer_drained_before_commit
+        || full_depth.base_position != commit.base_position
+        || full_depth.block_size != physical_k
+        || full_depth.physical_input_token_ids.len() != physical_k
+        || full_depth
+            .physical_input_token_ids
+            .iter()
+            .any(|&token| token >= VOCAB_SIZE)
+        || full_depth.physical_input_token_ids[commit.logical_lanes..]
+            .iter()
+            .any(|&token| token != commit.committed_input_token_id)
+        || full_depth.completed_layers != FULL_DEPTH_LAYERS.len()
+        || full_depth.layers.len() != FULL_DEPTH_LAYERS.len()
+        || full_depth.routes_by_position.len() != physical_k
+        || full_depth.source != MaterializedTokenSource::ForcedPrefill
+        || full_depth.checkpoint_seal.base_position != commit.base_position
+        || full_depth.checkpoint_seal.block_size != physical_k
+        || full_depth.checkpoint_seal.completed_layers != FULL_DEPTH_LAYERS.len()
+        || full_depth.checkpoint_seal.checkpoint_count != physical_k
+        || full_depth.checkpoint_seal.prefix_program_seal_calls != 1
+        || full_depth.checkpoint_seal.checkpoint_commit_calls != 0
+        || full_depth.checkpoint_seal.serial_token_forward_calls != 0
+        || full_depth.final_hidden.buffer == vk::Buffer::null()
+        || full_depth.final_hidden.offset % 4 != 0
+        || full_depth.final_hidden.bytes != expected_hidden_bytes
+        || full_depth.final_hidden.block_size != physical_k
+        || full_depth.serial_token_forward_calls != 0
+        || !full_depth.terminal_ready
+        || full_depth.token_committed
         || authoritative.position != commit.committed_position
+        || authoritative.native.position != commit.committed_position
         || authoritative.commit_epoch != commit.committed_epoch
         || usize::from(authoritative.active_fixed_bank) != commit.committed_active_bank
         || authoritative.input_token_id != commit.committed_input_token_id
     {
         bail!("teacher-forced commit/full-depth/authoritative identity 未闭合");
     }
+
+    let ledger_start = authoritative
+        .committed_tokens
+        .len()
+        .checked_sub(commit.logical_lanes)
+        .context("teacher-forced authoritative ledger 短于本 block")?;
+    for (lane, transition) in commit.transitions.iter().enumerate() {
+        let lane_u32 = u32::try_from(lane).context("teacher-forced transition lane 超出 u32")?;
+        let expected_next_input = if lane + 1 < commit.logical_lanes {
+            full_depth.physical_input_token_ids[lane + 1]
+        } else {
+            commit.committed_input_token_id
+        };
+        let ledger = &authoritative.committed_tokens[ledger_start + lane];
+        if transition.position != commit.base_position + lane_u32
+            || transition.input_token_id != full_depth.physical_input_token_ids[lane]
+            || transition.observed_next_input_token_id != expected_next_input
+            || transition.observed_next_input_token_id >= VOCAB_SIZE
+            || ledger.position != transition.position
+            || ledger.input_token_id != transition.input_token_id
+            || ledger.predicted_token_id != transition.observed_next_input_token_id
+        {
+            bail!("teacher-forced transition/physical input/authoritative ledger 链漂移");
+        }
+    }
+    validate_full_depth_layer_chain(full_depth, commit.base_position, physical_k)?;
+
     let checkpoint = device.committed_checkpoint_binding()?;
     if checkpoint.epoch() != commit.committed_epoch
         || checkpoint.active_bank() != commit.committed_active_bank
-        || checkpoint.state_bytes() != authoritative.native_arena.bytes().len() as u64
+        || checkpoint.state_bytes() != state_bytes
+        || checkpoint.epoch() != device.epoch()
+        || checkpoint.active_bank() != device.active_bank()
+        || checkpoint.state_bytes() != device.state_bytes()
     {
         bail!("teacher-forced committed device identity 漂移");
     }
@@ -658,6 +759,8 @@ fn validate_commit_receipt(previous: &S14StarfoldK4CommitReceipt) -> Result<()> 
         || selected.predicted_token_id != previous.predicted_token_ids[previous.checkpoint_index]
         || full_depth.base_position != previous.base_position
         || full_depth.block_size != K4
+        || full_depth.physical_input_token_ids.as_slice() != &previous.draft_token_ids[..]
+        || full_depth.source != MaterializedTokenSource::SpeculativeDraft
         || full_depth.completed_layers != FULL_DEPTH_LAYERS.len()
         || full_depth.layers.len() != FULL_DEPTH_LAYERS.len()
         || full_depth.routes_by_position.len() != K4
@@ -713,6 +816,7 @@ fn validate_commit_receipt(previous: &S14StarfoldK4CommitReceipt) -> Result<()> 
     {
         bail!("上一 K4 FullDepth43 layer/route/hidden chain identity 漂移");
     }
+    validate_full_depth_layer_chain(full_depth, previous.base_position, K4)?;
     Ok(())
 }
 
@@ -727,6 +831,7 @@ fn validate_next_block_inputs<P>(
 where
     P: S14CausalBlockProductionHcQkvResourceProvider + 'static,
 {
+    let physical_k = validate_mode_block_size(inputs.mode, inputs.input_token_ids.len())?;
     validate_context_owner(
         resources.context(),
         inputs.production.hc_qkv_provider.context(),
@@ -749,7 +854,12 @@ where
         )
     );
     if !source_matches_mode
-        || inputs.input_token_ids[0] != authoritative.input_token_id
+        || authoritative.position != next_base_position
+        || authoritative.native.position != next_base_position
+        || authoritative.commit_epoch != checkpoint.epoch()
+        || usize::from(authoritative.active_fixed_bank) != checkpoint.active_bank()
+        || authoritative.native_arena.bytes().len() as u64 != checkpoint.state_bytes()
+        || inputs.input_token_ids.first().copied() != Some(authoritative.input_token_id)
         || inputs
             .input_token_ids
             .iter()
@@ -769,9 +879,9 @@ where
         .production
         .hc_qkv_provider
         .value()
-        .validate_production_bundle(K4)
+        .validate_production_bundle(physical_k)
         .map_err(anyhow::Error::msg)
-        .context("下一 K4 provider readiness 拒绝")?;
+        .context("下一 K4/K8 provider readiness 拒绝")?;
     inputs
         .production
         .hc_qkv_provider
@@ -788,6 +898,7 @@ where
         inputs.production.hidden_banks.value(),
         inputs.initial_hidden,
         expected_hidden_generation,
+        physical_k,
     )
 }
 
@@ -795,19 +906,20 @@ fn validate_initial_hidden_owner(
     banks: &[S14CausalBlockHiddenBank; 2],
     initial_hidden: S14CausalBlockHiddenBinding,
     expected_generation: u64,
+    physical_k: usize,
 ) -> Result<()> {
-    let expected_bytes = K4 as u64 * S14_CAUSAL_BLOCK_HC_ELEMENTS_PER_LANE as u64 * BF16_BYTES;
+    let expected_bytes = hidden_bytes_for_block(physical_k)?;
     if initial_hidden.buffer == vk::Buffer::null()
         || initial_hidden.offset % 4 != 0
         || initial_hidden.bytes != expected_bytes
-        || initial_hidden.block_size != K4
+        || initial_hidden.block_size != physical_k
         || initial_hidden.generation != expected_generation
     {
         bail!("下一 K4 initial hidden ABI/generation 漂移");
     }
     let owners = banks
         .iter()
-        .map(|bank| bank.binding(K4, expected_generation))
+        .map(|bank| bank.binding(physical_k, expected_generation))
         .collect::<Result<Vec<_>>>()?;
     if owners
         .iter()
@@ -816,6 +928,150 @@ fn validate_initial_hidden_owner(
         != 1
     {
         bail!("下一 K4 initial hidden 不唯一属于新 A/B owner");
+    }
+    Ok(())
+}
+
+fn validate_mode_block_size(mode: S14StarfoldK4BlockMode, physical_k: usize) -> Result<usize> {
+    match mode {
+        S14StarfoldK4BlockMode::TeacherForcedPrefill => validate_prefill_block_size(physical_k)?,
+        S14StarfoldK4BlockMode::SpeculativeGeneration if physical_k == K4 => {}
+        S14StarfoldK4BlockMode::SpeculativeGeneration => {
+            bail!("SpeculativeGeneration 只允许物理 K4，actual={physical_k}")
+        }
+    }
+    Ok(physical_k)
+}
+
+fn validate_prefill_block_size(physical_k: usize) -> Result<()> {
+    if !matches!(physical_k, K4 | K8) {
+        bail!("TeacherForcedPrefill 只允许物理 K4/K8，actual={physical_k}");
+    }
+    Ok(())
+}
+
+fn hidden_bytes_for_block(physical_k: usize) -> Result<u64> {
+    validate_prefill_block_size(physical_k)?;
+    u64::try_from(physical_k)
+        .context("physical K 超出 u64")?
+        .checked_mul(S14_CAUSAL_BLOCK_HC_ELEMENTS_PER_LANE as u64)
+        .and_then(|elements| elements.checked_mul(BF16_BYTES))
+        .context("K-block hidden bytes overflow")
+}
+
+fn validate_launched_full_depth_receipt(
+    receipt: &S14StarfoldK4FullDepthReceipt,
+    base_position: u32,
+    input_token_ids: &[u32],
+    source: MaterializedTokenSource,
+) -> Result<()> {
+    let physical_k = input_token_ids.len();
+    match source {
+        MaterializedTokenSource::ForcedPrefill => validate_prefill_block_size(physical_k)?,
+        MaterializedTokenSource::SpeculativeDraft if physical_k == K4 => {}
+        MaterializedTokenSource::SpeculativeDraft => {
+            bail!("generation FullDepth receipt 只允许物理 K4")
+        }
+        _ => bail!("rebind launch 禁止未授权 materialized source"),
+    }
+    let expected_hidden_bytes = hidden_bytes_for_block(physical_k)?;
+    if receipt.base_position != base_position
+        || receipt.block_size != physical_k
+        || receipt.physical_input_token_ids.as_slice() != input_token_ids
+        || receipt.source != source
+        || receipt.completed_layers != FULL_DEPTH_LAYERS.len()
+        || receipt.layers.len() != FULL_DEPTH_LAYERS.len()
+        || receipt.routes_by_position.len() != physical_k
+        || receipt.checkpoint_seal.base_position != base_position
+        || receipt.checkpoint_seal.block_size != physical_k
+        || receipt.checkpoint_seal.completed_layers != FULL_DEPTH_LAYERS.len()
+        || receipt.checkpoint_seal.checkpoint_count != physical_k
+        || receipt.checkpoint_seal.prefix_program_seal_calls != 1
+        || receipt.checkpoint_seal.checkpoint_commit_calls != 0
+        || receipt.checkpoint_seal.serial_token_forward_calls != 0
+        || receipt.final_hidden.buffer == vk::Buffer::null()
+        || receipt.final_hidden.offset % 4 != 0
+        || receipt.final_hidden.bytes != expected_hidden_bytes
+        || receipt.final_hidden.block_size != physical_k
+        || receipt.serial_token_forward_calls != 0
+        || !receipt.terminal_ready
+        || receipt.token_committed
+    {
+        bail!("下一 K4/K8 FullDepth43 receipt identity 漂移");
+    }
+    validate_full_depth_layer_chain(receipt, base_position, physical_k)
+}
+
+fn validate_full_depth_layer_chain(
+    receipt: &S14StarfoldK4FullDepthReceipt,
+    base_position: u32,
+    physical_k: usize,
+) -> Result<()> {
+    validate_prefill_block_size(physical_k)?;
+    let b4_count = physical_k / K4;
+    if receipt.routes_by_position.iter().any(|routes| {
+        routes.len() != FULL_DEPTH_LAYERS.len()
+            || routes
+                .iter()
+                .zip(FULL_DEPTH_LAYERS)
+                .any(|(route, layer)| route.layer != layer)
+    }) {
+        bail!("K-block routes_by_position 深度/层序漂移");
+    }
+    for (layer_index, (&expected_layer, layer)) in
+        FULL_DEPTH_LAYERS.iter().zip(&receipt.layers).enumerate()
+    {
+        let expected_routes = receipt
+            .routes_by_position
+            .iter()
+            .map(|routes| &routes[layer_index]);
+        if layer.layer != expected_layer
+            || layer.base_position != base_position
+            || layer.routes.len() != physical_k
+            || layer
+                .routes
+                .iter()
+                .zip(expected_routes)
+                .any(|(left, right)| left != right)
+            || layer.checkpoint.base_position != base_position
+            || layer.checkpoint.layer != expected_layer
+            || layer.checkpoint.block_size != physical_k
+            || layer.checkpoint.serial_token_forward_calls != 0
+            || layer.expert.layer != u16::from(expected_layer)
+            || layer.expert.base_position != u64::from(base_position)
+            || layer.expert.serial_token_forward_calls != 0
+            || layer.additional_experts.len() != b4_count - 1
+            || layer
+                .additional_experts
+                .iter()
+                .enumerate()
+                .any(|(index, expert)| {
+                    expert.layer != u16::from(expected_layer)
+                        || expert.base_position
+                            != u64::from(base_position)
+                                + u64::try_from((index + 1) * K4).unwrap_or(u64::MAX)
+                        || expert.serial_token_forward_calls != 0
+                })
+            || layer.hidden_commit.base_position != base_position
+            || layer.hidden_commit.layer != expected_layer
+            || layer.hidden_commit.next_hidden.block_size != physical_k
+            || layer.hidden_commit.serial_token_forward_calls != 0
+        {
+            bail!("K-block FullDepth43 layer/B4/route/hidden receipt 链漂移");
+        }
+        if layer_index > 0
+            && receipt.layers[layer_index - 1].hidden_commit.next_hidden
+                != layer.checkpoint.input_hidden
+        {
+            bail!("K-block FullDepth43 相邻层 hidden binding 不连续");
+        }
+    }
+    if receipt
+        .layers
+        .last()
+        .is_none_or(|layer| layer.hidden_commit.next_hidden != receipt.final_hidden)
+    {
+        bail!("K-block FullDepth43 final hidden 未与末层发布绑定");
     }
     Ok(())
 }

@@ -29,7 +29,8 @@ use crate::{
 use anyhow::{anyhow, bail, Context, Result};
 use ash::vk::{self, Handle};
 use polaris_s14_runner::{
-    GraphProfile, RouteDecision, RouterKind, COMPRESS_RATIOS, FULL_DEPTH_LAYERS,
+    GraphProfile, MaterializedTokenSource, RouteDecision, RouterKind, COMPRESS_RATIOS,
+    FULL_DEPTH_LAYERS, VOCAB_SIZE,
 };
 
 pub const S14_STARFOLD_K4_PHYSICAL_TRANSACTION_SCHEMA_VERSION: u32 = 2;
@@ -752,8 +753,14 @@ fn validate_full_depth_receipt(
 ) -> Result<u64> {
     let expected_base = u32::try_from(binding.anchor.next_position)
         .context("S14 StarFold K4 anchor position 超出 u32")?;
-    if receipt.base_position != expected_base
+    if receipt.source != MaterializedTokenSource::SpeculativeDraft
+        || receipt.base_position != expected_base
         || receipt.block_size != K4
+        || receipt.physical_input_token_ids.len() != K4
+        || receipt
+            .physical_input_token_ids
+            .iter()
+            .any(|&token| token >= VOCAB_SIZE)
         || receipt.completed_layers != FULL_DEPTH_LAYERS.len()
         || receipt.layers.len() != FULL_DEPTH_LAYERS.len()
         || receipt.routes_by_position.len() != K4
@@ -785,6 +792,7 @@ fn validate_full_depth_receipt(
         if layer.layer != expected_layer
             || layer.base_position != expected_base
             || layer.routes.len() != K4
+            || !layer.additional_experts.is_empty()
         {
             bail!("S14 StarFold K4 L{expected_layer} layer/base/B4 identity 漂移");
         }

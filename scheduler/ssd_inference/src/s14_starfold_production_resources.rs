@@ -121,6 +121,19 @@ impl S14StarfoldOwnedRuntimeParts {
     {
         build_s14_starfold_k4_production_resources(self, inputs)
     }
+
+    /// 首块 teacher-forced prefill 可为 K4/K8；generation 仍由调用方和 provenance 合同
+    /// 锁定为 K4。旧 `build_k4` 保留为兼容窄入口。
+    pub fn build_kblock<P>(
+        self,
+        inputs: S14StarfoldK4ProductionResourceInputs<P>,
+        physical_block_size: usize,
+    ) -> Result<S14StarfoldK4ProductionResources<P>>
+    where
+        P: S14CausalBlockProductionHcQkvResourceProvider + 'static,
+    {
+        build_s14_starfold_kblock_production_resources(self, inputs, physical_block_size)
+    }
 }
 
 impl Drop for S14StarfoldOwnedRuntimeParts {
@@ -225,7 +238,7 @@ where
             .adapter_mut()?
             .execute_teacher_forced_prefill_full_depth(
                 authoritative,
-                &block.physical_input_token_ids,
+                block.physical_input_token_ids(),
                 initial_hidden,
             )?;
         self.finish_teacher_forced_prefill_product(full_depth, block)
@@ -458,13 +471,29 @@ where
 }
 
 pub fn build_s14_starfold_k4_production_resources<P>(
-    mut owned: S14StarfoldOwnedRuntimeParts,
+    owned: S14StarfoldOwnedRuntimeParts,
     inputs: S14StarfoldK4ProductionResourceInputs<P>,
 ) -> Result<S14StarfoldK4ProductionResources<P>>
 where
     P: S14CausalBlockProductionHcQkvResourceProvider + 'static,
 {
+    build_s14_starfold_kblock_production_resources(owned, inputs, K4)
+}
+
+pub fn build_s14_starfold_kblock_production_resources<P>(
+    mut owned: S14StarfoldOwnedRuntimeParts,
+    inputs: S14StarfoldK4ProductionResourceInputs<P>,
+    physical_block_size: usize,
+) -> Result<S14StarfoldK4ProductionResources<P>>
+where
+    P: S14CausalBlockProductionHcQkvResourceProvider + 'static,
+{
     let position0_generation_provenance = inputs.position0_generation_provenance;
+    if !matches!(physical_block_size, 4 | 8)
+        || (position0_generation_provenance.is_some() && physical_block_size != K4)
+    {
+        bail!("S14 StarFold production builder 的 physical K/provenance 合同非法");
+    }
     if !owned.context.timeline_semaphore || !owned.context.has_dedicated_transfer() {
         bail!("S14 StarFold production builder 要求 timeline semaphore 与独立 transfer queue");
     }
@@ -487,7 +516,7 @@ where
     inputs
         .hc_qkv_provider
         .value()
-        .validate_production_bundle(K4)
+        .validate_production_bundle(physical_block_size)
         .map_err(anyhow::Error::msg)
         .context("S14 StarFold HC/QKV provider readiness 拒绝")?;
     validate_hidden_banks(inputs.hidden_banks.value())?;
@@ -501,8 +530,9 @@ where
         .map_err(anyhow::Error::msg)
         .context("消费 S14 StarFold 同源 K4 prefix producer")?;
     let checkpoint_state_bytes = prefix.arena().layout().checkpoint_state_bytes;
-    let checkpoint_slots = prefix.arena().layout().block_size;
-    if !Arc::ptr_eq(&owned.context, prefix.context()) || prefix.arena().layout().block_size != K4 {
+    if !Arc::ptr_eq(&owned.context, prefix.context())
+        || prefix.arena().layout().block_size != physical_block_size
+    {
         let cleanup = prefix.destroy();
         return Err(anyhow!(
             "S14 StarFold prefix producer context/K 漂移; cleanup={cleanup:?}"
@@ -556,7 +586,8 @@ where
     let terminal_endpoint = S14StarfoldTerminalEndpoint::new(
         Arc::clone(&owned.context),
         checkpoint_state_bytes,
-        checkpoint_slots,
+        // direct terminal 只服务 generation K4；K8 prefill 的 prefix arena 不进入 head。
+        K4,
     )
     .context("构造 S14 StarFold 同源 direct terminal endpoint")?;
     let paged_arena = owned

@@ -5,7 +5,7 @@
 //! 成功 close 会只退休请求级 owners 并把常驻 StarFold 双窗口原样归还。
 
 use crate::{
-    s14_causal_block_layer::S14CausalBlockHiddenBinding,
+    s14_causal_block_layer::{S14CausalBlockHiddenBinding, S14_CAUSAL_BLOCK_HC_ELEMENTS_PER_LANE},
     s14_causal_block_production_bundle::S14CausalBlockProductionHcQkvResourceProvider,
     s14_position0_paged_weight_arena::S14Position0PagedWeightArena,
     s14_runtime::{S14Runtime, S14Session},
@@ -163,7 +163,7 @@ pub struct S14StarfoldBlockResourceRequest<'a> {
     pub position0_committed_origin: Option<S14StarwavePosition0CommittedOrigin>,
     pub block_sequence: u64,
     pub mode: S14StarfoldK4BlockMode,
-    pub input_token_ids: [u32; K4],
+    pub input_token_ids: Vec<u32>,
     pub expected_initial_hidden_generation: u64,
 }
 
@@ -821,8 +821,11 @@ where
         &mut self,
         block: &S14StarfoldTeacherForcedBlockPlan,
     ) -> Result<S14StarfoldSealedTeacherForcedBlockCommitReceipt> {
+        block
+            .validate()
+            .context("session 拒绝非法 K4/K8 prefill block plan")?;
         let product = self.build_block_resources(
-            block.physical_input_token_ids,
+            block.physical_input_token_ids(),
             S14StarfoldK4BlockMode::TeacherForcedPrefill,
             None,
         )?;
@@ -832,7 +835,7 @@ where
             external_owners,
         } = product;
         let sealed = if self.resources.is_none() {
-            self.install_first_resources(production, external_owners)?;
+            self.install_first_resources(production, external_owners, block.physical_k())?;
             let authoritative = self
                 .decoder
                 .as_ref()
@@ -866,7 +869,7 @@ where
                     },
                     S14StarfoldNextK4RebindInputs {
                         production,
-                        input_token_ids: block.physical_input_token_ids,
+                        input_token_ids: block.physical_input_token_ids().to_vec(),
                         initial_hidden,
                         mode: S14StarfoldK4BlockMode::TeacherForcedPrefill,
                     },
@@ -932,7 +935,7 @@ where
         proposal: &S14StarwaveDraftProposal,
     ) -> Result<S14StarfoldK4FullDepthReceipt> {
         let product = self.build_block_resources(
-            *proposal.input_token_ids(),
+            proposal.input_token_ids(),
             S14StarfoldK4BlockMode::SpeculativeGeneration,
             proposal.position0_committed_origin(),
         )?;
@@ -942,7 +945,7 @@ where
             external_owners,
         } = product;
         if self.resources.is_none() {
-            self.install_first_resources(production, external_owners)?;
+            self.install_first_resources(production, external_owners, K4)?;
             let authoritative = self
                 .decoder
                 .as_ref()
@@ -965,7 +968,7 @@ where
                 },
                 S14StarfoldNextK4RebindInputs {
                     production,
-                    input_token_ids: *proposal.input_token_ids(),
+                    input_token_ids: proposal.input_token_ids().to_vec(),
                     initial_hidden,
                     mode: S14StarfoldK4BlockMode::SpeculativeGeneration,
                 },
@@ -999,7 +1002,7 @@ where
             },
             S14StarfoldNextK4RebindInputs {
                 production,
-                input_token_ids: *proposal.input_token_ids(),
+                input_token_ids: proposal.input_token_ids().to_vec(),
                 initial_hidden,
                 mode: S14StarfoldK4BlockMode::SpeculativeGeneration,
             },
@@ -1019,7 +1022,7 @@ where
 
     fn build_block_resources(
         &mut self,
-        input_token_ids: [u32; K4],
+        input_token_ids: &[u32],
         mode: S14StarfoldK4BlockMode,
         position0_committed_origin: Option<S14StarwavePosition0CommittedOrigin>,
     ) -> Result<S14StarfoldBlockResourceProduct<F::Provider, F::ExternalOwners>> {
@@ -1028,8 +1031,12 @@ where
                 "上一 block rebind/external retirement 未闭合；production session 已 fail-closed，只允许 close"
             );
         }
-        if input_token_ids.iter().any(|&token| token >= VOCAB_SIZE) {
-            bail!("block factory input token 越出 vocab");
+        let physical_k = input_token_ids.len();
+        if !matches!(physical_k, 4 | 8)
+            || (mode == S14StarfoldK4BlockMode::SpeculativeGeneration && physical_k != K4)
+            || input_token_ids.iter().any(|&token| token >= VOCAB_SIZE)
+        {
+            bail!("block factory mode/K/input token 合同非法");
         }
         let (context, paged_arena) = if let Some(resources) = &self.resources {
             (
@@ -1074,6 +1081,15 @@ where
             .as_mut()
             .context("block factory 缺少 decoder")?;
         let (authoritative, device) = decoder.authoritative_host_device_mut()?;
+        let requires_position0_origin =
+            mode == S14StarfoldK4BlockMode::SpeculativeGeneration && authoritative.position == 0;
+        if input_token_ids.first().copied() != Some(authoritative.input_token_id)
+            || position0_committed_origin.is_some() != requires_position0_origin
+            || (mode == S14StarfoldK4BlockMode::TeacherForcedPrefill
+                && position0_committed_origin.is_some())
+        {
+            bail!("block factory request 的 mode/base/input/position0 origin 身份漂移");
+        }
         let detached = device
             .snapshot_detached_committed_state(&context)
             .context("为 concrete block factory snapshot committed device checkpoint")?;
@@ -1096,13 +1112,32 @@ where
                 position0_committed_origin,
                 block_sequence,
                 mode,
-                input_token_ids,
+                input_token_ids: input_token_ids.to_vec(),
                 expected_initial_hidden_generation: expected_generation,
             })?;
         let inventory = product.external_owners.inventory();
+        let expected_hidden_bytes = u64::try_from(physical_k)
+            .context("block factory physical K 超出 u64")?
+            .checked_mul(S14_CAUSAL_BLOCK_HC_ELEMENTS_PER_LANE as u64)
+            .and_then(|elements| elements.checked_mul(2))
+            .context("block factory initial hidden bytes overflow")?;
+        let initial_hidden_owner_matches = product
+            .production
+            .hidden_banks
+            .value()
+            .iter()
+            .filter_map(|bank| bank.binding(physical_k, expected_generation).ok())
+            .filter(|&binding| binding == product.initial_hidden)
+            .count();
         if inventory.provider_owners != 1
             || inventory.hidden_bank_owners != 2
             || inventory.prefix_arena_owners != 1
+            || product.initial_hidden.buffer == vk::Buffer::null()
+            || product.initial_hidden.offset % 4 != 0
+            || product.initial_hidden.bytes != expected_hidden_bytes
+            || product.initial_hidden.block_size != physical_k
+            || product.initial_hidden.generation != expected_generation
+            || initial_hidden_owner_matches != 1
         {
             let S14StarfoldBlockResourceProduct {
                 production,
@@ -1111,7 +1146,7 @@ where
             } = product;
             drop(production);
             let cleanup = external_owners.destroy(&context);
-            bail!("block factory 未交付唯一 provider/双 hidden/唯一 prefix owner; cleanup={cleanup:?}");
+            bail!("block factory 未交付唯一 provider/双 hidden/唯一 prefix/同源 initial hidden; cleanup={cleanup:?}");
         }
         Ok(product)
     }
@@ -1120,6 +1155,7 @@ where
         &mut self,
         production: S14StarfoldK4ProductionResourceInputs<F::Provider>,
         mut external: F::ExternalOwners,
+        physical_k: usize,
     ) -> Result<()> {
         let cleanup_context = Arc::clone(
             self.decoder
@@ -1137,7 +1173,7 @@ where
                 ));
             }
         };
-        match owned.build_k4(production) {
+        match owned.build_kblock(production, physical_k) {
             Ok(resources) => {
                 self.resources = Some(resources);
                 self.current_external = Some(external);

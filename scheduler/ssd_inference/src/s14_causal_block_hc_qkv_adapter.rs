@@ -111,12 +111,15 @@ impl S14CausalBlockHcQkvLayerRecordingReceipt {
             .get(usize::from(input.layer))
             .copied()
             .ok_or_else(|| "causal-block HC/QKV compress-ratio layer 越界".to_owned())?;
-        let ratio4_boundary = input.input_token_ids.len() == 4 && ratio == 4;
+        let block_size = input.input_token_ids.len();
+        let ratio4_boundary = matches!(block_size, 4 | 8) && ratio == 4;
+        let ratio4_segments = if ratio4_boundary { block_size / 4 } else { 0 };
         let expected_contiguous_dispatches = u32::from(!ratio4_boundary);
-        // 动态 ratio4 boundary shader 在同一个 K4 dispatch 内处理 boundary 前后 lanes；
-        // boundary lane 随 base%4 改变，但物理 dispatch 数始终只有一次。
-        let expected_ratio4_attention_dispatches = u32::from(ratio4_boundary);
-        let expected_ratio4_state_transitions = u32::from(ratio4_boundary);
+        // ratio4 以 B4 segment 为不可交换的状态事务单位：K4 一段，K8 两段。
+        // attention/router 仍按整个物理块准备，但每个 segment 必须各自完成一次
+        // finalize→rollover→boundary-aware attention，最后才发布整块 hidden。
+        let expected_ratio4_attention_dispatches = ratio4_segments as u32;
+        let expected_ratio4_state_transitions = ratio4_segments as u32;
         if self.base_position != input.base_position
             || self.layer != input.layer
             || self.block_size != input.input_token_ids.len()
@@ -292,10 +295,17 @@ struct AdapterActiveBlock {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct AdapterSealedBlock {
+    base_position: u32,
+    block_size: usize,
+    source: MaterializedTokenSource,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum AdapterPhase {
     Idle,
     Active(AdapterActiveBlock),
-    LayersSealed,
+    LayersSealed(AdapterSealedBlock),
     Poisoned {
         completed_layers: usize,
         drained: bool,
@@ -359,6 +369,9 @@ impl<R: S14CausalBlockHcQkvLayerRecorder> S14CausalBlockProductionHcQkvAdapter<R
         }
         if !matches!(block_size, 4 | 8) {
             return Err("causal-block HC/QKV adapter K 只允许4或8".into());
+        }
+        if source == MaterializedTokenSource::SpeculativeDraft && block_size != 4 {
+            return Err("causal-block HC/QKV generation draft 物理 K 必须为4".into());
         }
         let end = base_position
             .checked_add(block_size as u32)
@@ -486,15 +499,20 @@ impl<R: S14CausalBlockHcQkvLayerRecorder> S14CausalBlockProductionHcQkvAdapter<R
         {
             return Err("causal-block HC/QKV 禁止 seal 不完整或悬空 layer".into());
         }
+        let sealed = AdapterSealedBlock {
+            base_position: active.base_position,
+            block_size: active.block_size,
+            source: active.source,
+        };
         self.recorder.seal_and_drain(completed_layers)?;
-        self.phase = AdapterPhase::LayersSealed;
+        self.phase = AdapterPhase::LayersSealed(sealed);
         Ok(())
     }
 
     fn abort_inner(&mut self, completed_layers: usize) -> Result<(), String> {
         let (expected_completed, needs_drain) = match self.phase {
             AdapterPhase::Active(active) => (active.next_layer, true),
-            AdapterPhase::LayersSealed => (FULL_DEPTH_LAYERS.len(), false),
+            AdapterPhase::LayersSealed(_) => (FULL_DEPTH_LAYERS.len(), false),
             AdapterPhase::Poisoned {
                 completed_layers,
                 drained,
@@ -515,7 +533,7 @@ impl<R: S14CausalBlockHcQkvLayerRecorder> S14CausalBlockProductionHcQkvAdapter<R
     }
 
     fn finish_inner(&mut self) -> Result<(), String> {
-        if self.phase != AdapterPhase::LayersSealed {
+        if !matches!(self.phase, AdapterPhase::LayersSealed(_)) {
             return Err("causal-block HC/QKV 没有已验收的 sealed block".into());
         }
         self.recorder.finish_validated_block()?;
@@ -529,7 +547,7 @@ impl<R: S14CausalBlockHcQkvLayerRecorder> S14CausalBlockProductionHcQkvAdapter<R
         }
         let completed_layers = match self.phase {
             AdapterPhase::Active(active) => Some(active.next_layer),
-            AdapterPhase::LayersSealed => Some(FULL_DEPTH_LAYERS.len()),
+            AdapterPhase::LayersSealed(_) => Some(FULL_DEPTH_LAYERS.len()),
             AdapterPhase::Poisoned {
                 completed_layers, ..
             } => Some(completed_layers),
@@ -601,20 +619,49 @@ where
     pub(crate) fn starfold_teacher_forced_prefill_prefix_product(
         &self,
     ) -> Result<S14CausalBlockStarfoldPrefillPrefixProduct, String> {
-        if self.phase != AdapterPhase::LayersSealed {
-            return Err("StarFold ForcedPrefill prefix 要求 HC/QKV adapter 已 seal".into());
-        }
-        self.recorder
+        let sealed = match self.phase {
+            AdapterPhase::LayersSealed(sealed)
+                if sealed.source == MaterializedTokenSource::ForcedPrefill
+                    && matches!(sealed.block_size, 4 | 8) =>
+            {
+                sealed
+            }
+            _ => {
+                return Err(
+                    "StarFold ForcedPrefill prefix 要求已 seal 的 K4/8 ForcedPrefill block".into(),
+                )
+            }
+        };
+        let product = self
+            .recorder
             .starfold_teacher_forced_prefill_prefix_product()
-            .map_err(|error| format!("{error:#}"))
+            .map_err(|error| format!("{error:#}"))?;
+        product
+            .validate_for_starfold_teacher_forced_prefill(sealed.base_position, sealed.block_size)
+            .map_err(|error| format!("{error:#}"))?;
+        Ok(product)
     }
 
     pub(crate) fn starfold_terminal_block_owners(
         &self,
         final_hidden: S14CausalBlockHiddenBinding,
     ) -> Result<S14CausalBlockStarfoldTerminalBlockOwners, String> {
-        if self.phase != AdapterPhase::LayersSealed {
-            return Err("StarFold terminal owner 要求 HC/QKV adapter 已 seal".into());
+        let sealed = match self.phase {
+            AdapterPhase::LayersSealed(sealed)
+                if sealed.source == MaterializedTokenSource::SpeculativeDraft
+                    && sealed.block_size == 4
+                    && final_hidden.block_size == sealed.block_size =>
+            {
+                sealed
+            }
+            _ => return Err("StarFold terminal owner 要求已 seal 的 generation K4 block".into()),
+        };
+        if sealed
+            .base_position
+            .checked_add(sealed.block_size as u32)
+            .is_none_or(|end| end > 127)
+        {
+            return Err("StarFold terminal sealed generation identity 越界".into());
         }
         self.recorder
             .starfold_terminal_block_owners(final_hidden)

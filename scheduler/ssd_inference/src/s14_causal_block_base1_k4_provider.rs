@@ -47,6 +47,7 @@ use std::{
 
 pub const S14_BASE1_K4_BASE_POSITION: u32 = 1;
 pub const S14_BASE1_K4_BLOCK_SIZE: usize = 4;
+pub const S14_BASE1_K8_BLOCK_SIZE: usize = 8;
 
 const KV_ELEMENTS_PER_LANE: u64 = 512;
 const ROPE_ELEMENTS_PER_LANE: u64 = 64;
@@ -77,7 +78,7 @@ pub struct S14Base1K4ProviderInputs {
     /// Provider 构造时冻结的 token 来源，禁止逐层把 prefill 冒充 draft。
     pub source: MaterializedTokenSource,
     pub authoritative: S14Base1K4AuthoritativeStateBinding,
-    pub input_token_ids: [u32; S14_BASE1_K4_BLOCK_SIZE],
+    pub input_token_ids: Vec<u32>,
     pub ratio4_boundary_states: BTreeMap<u8, Arc<dyn S14CausalBlockRatio4BoundaryStateRecorder>>,
     pub prefix_state_producer: S14CausalBlockPrefixStateProducer,
 }
@@ -148,7 +149,7 @@ pub struct S14Base1K4ProductionHcQkvProvider {
     source: MaterializedTokenSource,
     state_layout: S14Position0StateWritebackLayout,
     authoritative_device_state: S14CausalBlockOwnedBufferSlice,
-    input_token_ids: [u32; S14_BASE1_K4_BLOCK_SIZE],
+    input_token_ids: Vec<u32>,
     graphs: Vec<S14Position0L0GraphPlan>,
     weights: Vec<S14CausalBlockHcQkvWeightOffsets>,
     rope_by_ratio: BTreeMap<u16, S14CausalBlockOwnedBufferSlice>,
@@ -199,6 +200,9 @@ pub fn build_s14_base1_k4_production_hc_qkv_provider(
         prefix_state_producer,
     } = inputs;
 
+    let block_size = input_token_ids.len();
+    validate_supported_block_size(block_size)?;
+
     validate_authoritative_state(&authoritative, base_position, source)?;
     if upload_lease.base_position() != base_position || upload_lease.source() != source {
         bail!(
@@ -219,10 +223,10 @@ pub fn build_s14_base1_k4_production_hc_qkv_provider(
         .iter()
         .map(S14CausalBlockHcQkvWeightOffsets::from_position0_graph)
         .collect::<Result<Vec<_>>>()?;
-    validate_ratio4_state_owners(&context, &ratio4_boundary_states, base_position)?;
+    validate_ratio4_state_owners(&context, &ratio4_boundary_states, base_position, block_size)?;
     if !Arc::ptr_eq(&context, prefix_state_producer.context())
         || prefix_state_producer.arena().base_position() != base_position
-        || prefix_state_producer.arena().layout().block_size != S14_BASE1_K4_BLOCK_SIZE
+        || prefix_state_producer.arena().layout().block_size != block_size
         || prefix_state_producer.source() != source
     {
         bail!("base1/K4 prefix state producer context/base/K 漂移");
@@ -240,7 +244,7 @@ pub fn build_s14_base1_k4_production_hc_qkv_provider(
             .lock()
             .map_err(|_| anyhow!("base1/K4 head upload/store mutex poisoned"))?;
         let payloads =
-            build_route_aux_payloads(&manifest, &graphs, input_token_ids, &mut upload.store)?;
+            build_route_aux_payloads(&manifest, &graphs, &input_token_ids, &mut upload.store)?;
         let S14CausalBlockTerminalHeadUploadState { uploader, store } = &mut *upload;
         if !uploader.resident_static_uploaded() {
             let receipt = uploader.upload_static_once(
@@ -257,10 +261,10 @@ pub fn build_s14_base1_k4_production_hc_qkv_provider(
         payloads
     };
 
-    let rope_payloads = build_rope_payloads(base_position)?;
+    let rope_payloads = build_rope_payloads(base_position, block_size)?;
     let aux_layout = AuxLayout::build(&route_aux_payloads, &rope_payloads)?;
     let aux = Arc::new(host_storage_buffer(&context, aux_layout.bytes)?);
-    let current_kv_bytes = current_kv_total_bytes()?;
+    let current_kv_bytes = current_kv_total_bytes(block_size)?;
     let current_kv = match GpuBuffer::new_vram(
         &context,
         current_kv_bytes,
@@ -278,7 +282,7 @@ pub fn build_s14_base1_k4_production_hc_qkv_provider(
     let resource_build = (|| -> Result<_> {
         let rope_by_ratio = write_rope_payloads(&aux, &aux_layout, &rope_payloads)?;
         let route_aux_by_layer = write_route_aux_payloads(&aux, &aux_layout, &route_aux_payloads)?;
-        let current_kv_by_layer = build_current_kv_slices(&current_kv)?;
+        let current_kv_by_layer = build_current_kv_slices(&current_kv, block_size)?;
         Ok((rope_by_ratio, route_aux_by_layer, current_kv_by_layer))
     })();
     let (rope_by_ratio, route_aux_by_layer, current_kv_by_layer) = match resource_build {
@@ -316,7 +320,7 @@ pub fn build_s14_base1_k4_production_hc_qkv_provider(
         aux: Some(aux),
         current_kv: Some(current_kv),
     };
-    if let Err(error) = provider.validate_internal(S14_BASE1_K4_BLOCK_SIZE) {
+    if let Err(error) = provider.validate_internal(block_size) {
         drop(provider);
         let cleanup = owner.destroy();
         return Err(anyhow!(
@@ -609,14 +613,20 @@ impl S14Base1K4ProductionHcQkvProvider {
         input_token_ids: &[u32],
         checkpoint_state_bytes: u64,
     ) -> Result<()> {
-        self.validate_internal(S14_BASE1_K4_BLOCK_SIZE)?;
-        validate_ratio4_state_owners(&self.context, &self.ratio4_boundary_states, base_position)?;
+        let block_size = self.input_token_ids.len();
+        self.validate_internal(block_size)?;
+        validate_ratio4_state_owners(
+            &self.context,
+            &self.ratio4_boundary_states,
+            base_position,
+            block_size,
+        )?;
         let prefix = self
             .prefix_state_producer
             .as_ref()
             .context("K4 committed rebind 缺少 prefix producer")?;
         if base_position != self.base_position
-            || input_token_ids != self.input_token_ids
+            || input_token_ids != self.input_token_ids.as_slice()
             || checkpoint_state_bytes != self.authoritative_device_state.bytes
             || !Arc::ptr_eq(&self.context, prefix.context())
             || prefix.arena().base_position() != base_position
@@ -642,7 +652,7 @@ impl S14Base1K4ProductionHcQkvProvider {
             .context("base1/K4 next layer index 越界")?;
         if input.base_position != self.base_position
             || input.layer != expected_layer
-            || input.input_token_ids != self.input_token_ids
+            || input.input_token_ids != self.input_token_ids.as_slice()
             || input.source != self.source
         {
             bail!("base1/K4 input base/layer/token/source 漂移");
@@ -749,7 +759,10 @@ impl S14Base1K4ProductionHcQkvProvider {
     }
 
     fn validate_core_internal(&self, block_size: usize) -> Result<()> {
-        if block_size != S14_BASE1_K4_BLOCK_SIZE
+        if !matches!(
+            block_size,
+            S14_BASE1_K4_BLOCK_SIZE | S14_BASE1_K8_BLOCK_SIZE
+        ) || block_size != self.input_token_ids.len()
             || self.state_layout.position != self.base_position
             || self.graphs.len() != FULL_DEPTH_LAYERS.len()
             || self.weights.len() != FULL_DEPTH_LAYERS.len()
@@ -774,6 +787,7 @@ impl S14Base1K4ProductionHcQkvProvider {
             &self.context,
             &self.ratio4_boundary_states,
             self.base_position,
+            block_size,
         )?;
         if self
             .graphs
@@ -788,7 +802,7 @@ impl S14Base1K4ProductionHcQkvProvider {
                 self.rope_by_ratio
                     .get(&ratio)
                     .context("base1/K4 provider RoPE ratio 缺失")?,
-                rope_bytes()?,
+                rope_bytes(block_size)?,
                 "K-row RoPE",
             )?;
         }
@@ -841,7 +855,9 @@ fn validate_ratio4_state_owners(
     _context: &Arc<VulkanContext>,
     states: &BTreeMap<u8, Arc<dyn S14CausalBlockRatio4BoundaryStateRecorder>>,
     base_position: u32,
+    block_size: usize,
 ) -> Result<()> {
+    validate_supported_block_size(block_size)?;
     let expected = FULL_DEPTH_LAYERS
         .iter()
         .copied()
@@ -851,13 +867,24 @@ fn validate_ratio4_state_owners(
         bail!("base1/K4 ratio4 candidate state 必须精确覆盖21个真实层");
     }
     for (&layer, state) in states {
-        let binding = state.candidate_state_binding();
-        binding.validate(state.candidate_state_owner())?;
-        if binding.layer != layer
-            || binding.base_position != base_position
-            || binding.block_size as usize != S14_BASE1_K4_BLOCK_SIZE
+        let transaction = state.transaction_identity();
+        transaction.validate()?;
+        if transaction.base_position != base_position
+            || transaction.block_size as usize != block_size
         {
-            bail!("base1/K4 L{layer} ratio4 candidate state context/base/K 漂移");
+            bail!("K-block L{layer} ratio4 transaction base/K 漂移");
+        }
+        for segment_index in 0..transaction.segment_count {
+            let binding = state.candidate_state_binding_for_segment(segment_index)?;
+            binding.validate(state.candidate_state_owner())?;
+            if binding.layer != layer
+                || binding.owner_epoch != transaction.owner_epoch
+                || binding.physical_base_position != base_position
+                || binding.physical_block_size as usize != block_size
+                || binding.segment_index != segment_index
+            {
+                bail!("K-block L{layer} ratio4 candidate segment identity 漂移");
+            }
         }
     }
     Ok(())
@@ -866,7 +893,7 @@ fn validate_ratio4_state_owners(
 fn build_route_aux_payloads(
     manifest: &Position0WholeTokenManifest,
     graphs: &[S14Position0L0GraphPlan],
-    input_token_ids: [u32; S14_BASE1_K4_BLOCK_SIZE],
+    input_token_ids: &[u32],
     store: &mut crate::s14_position0_mapped_assets::VerifiedMappedAssetStore,
 ) -> Result<Vec<Vec<u8>>> {
     let mut payloads = Vec::with_capacity(FULL_DEPTH_LAYERS.len());
@@ -898,8 +925,8 @@ fn build_route_aux_payloads(
             .bytes();
         let payload = match graph.route_mode {
             S14RoutePostprocessGpuMode::PhysicalIds => {
-                let mut ids = Vec::with_capacity(S14_BASE1_K4_BLOCK_SIZE * EXPERTS_PER_TOKEN);
-                for token in input_token_ids {
+                let mut ids = Vec::with_capacity(input_token_ids.len() * EXPERTS_PER_TOKEN);
+                for &token in input_token_ids {
                     ids.extend(graph.decode_tid2eid_row_for_token(asset, bytes, token)?);
                 }
                 bytemuck::cast_slice(&ids).to_vec()
@@ -920,12 +947,12 @@ fn build_route_aux_payloads(
     Ok(payloads)
 }
 
-fn build_rope_payloads(base_position: u32) -> Result<BTreeMap<u16, Vec<u8>>> {
+fn build_rope_payloads(base_position: u32, block_size: usize) -> Result<BTreeMap<u16, Vec<u8>>> {
+    validate_supported_block_size(block_size)?;
     let mut output = BTreeMap::new();
     for ratio in [0u16, 4, 128] {
-        let mut rows =
-            Vec::<f32>::with_capacity(S14_BASE1_K4_BLOCK_SIZE * ROPE_ELEMENTS_PER_LANE as usize);
-        for lane in 0..S14_BASE1_K4_BLOCK_SIZE {
+        let mut rows = Vec::<f32>::with_capacity(block_size * ROPE_ELEMENTS_PER_LANE as usize);
+        for lane in 0..block_size {
             let position = base_position
                 .checked_add(lane as u32)
                 .context("base1/K4 RoPE position overflow")?;
@@ -1025,8 +1052,11 @@ fn write_route_aux_payloads(
         .collect()
 }
 
-fn build_current_kv_slices(buffer: &Arc<GpuBuffer>) -> Result<Vec<S14CausalBlockOwnedBufferSlice>> {
-    let layer_bytes = current_kv_layer_bytes()?;
+fn build_current_kv_slices(
+    buffer: &Arc<GpuBuffer>,
+    block_size: usize,
+) -> Result<Vec<S14CausalBlockOwnedBufferSlice>> {
+    let layer_bytes = current_kv_layer_bytes(block_size)?;
     FULL_DEPTH_LAYERS
         .iter()
         .enumerate()
@@ -1099,24 +1129,36 @@ fn unique_asset<'a>(
     Ok(first)
 }
 
-fn rope_bytes() -> Result<u64> {
-    (S14_BASE1_K4_BLOCK_SIZE as u64)
+fn rope_bytes(block_size: usize) -> Result<u64> {
+    validate_supported_block_size(block_size)?;
+    (block_size as u64)
         .checked_mul(ROPE_ELEMENTS_PER_LANE)
         .and_then(|elements| elements.checked_mul(F32_BYTES))
         .context("base1/K4 rope bytes overflow")
 }
 
-fn current_kv_layer_bytes() -> Result<u64> {
-    (S14_BASE1_K4_BLOCK_SIZE as u64)
+fn current_kv_layer_bytes(block_size: usize) -> Result<u64> {
+    validate_supported_block_size(block_size)?;
+    (block_size as u64)
         .checked_mul(KV_ELEMENTS_PER_LANE)
         .and_then(|elements| elements.checked_mul(BF16_BYTES))
         .context("base1/K4 current-KV layer bytes overflow")
 }
 
-fn current_kv_total_bytes() -> Result<u64> {
-    current_kv_layer_bytes()?
+fn current_kv_total_bytes(block_size: usize) -> Result<u64> {
+    current_kv_layer_bytes(block_size)?
         .checked_mul(FULL_DEPTH_LAYERS.len() as u64)
         .context("base1/K4 current-KV arena bytes overflow")
+}
+
+fn validate_supported_block_size(block_size: usize) -> Result<()> {
+    if !matches!(
+        block_size,
+        S14_BASE1_K4_BLOCK_SIZE | S14_BASE1_K8_BLOCK_SIZE
+    ) {
+        bail!("S14 production provider 只接受物理 K4/K8，actual={block_size}");
+    }
+    Ok(())
 }
 
 fn align_up(value: u64, alignment: u64) -> Result<u64> {
