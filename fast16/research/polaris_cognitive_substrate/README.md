@@ -16,3 +16,17 @@
 $env:PYTHONUTF8='1'
 python fast16/research/polaris_cognitive_substrate/minimal_thought_graph.py
 ```
+
+## 真实权重岛出生—修剪门
+
+`live_birth_prune_gate.py` 只在外部验证器产生失败回执后启动 v17 Qwen
+L44–L47 连续权重岛，使用岛产生修复，再用受限 AST 和7个外部用例验证。
+无论候选是否通过，临时岛进程都必须终止。
+
+```powershell
+$env:PYTHONUTF8='1'
+python fast16/research/polaris_cognitive_substrate/live_birth_prune_gate.py
+```
+
+它是进程级出生/修剪原型，不是单运行时内的原生动态计算图。结果与边界见
+`LIVE_GATE_RESULT_20260804.md`。

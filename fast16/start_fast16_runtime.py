@@ -293,6 +293,14 @@ def parse_args() -> argparse.Namespace:
         help="关闭llama-server启动warmup；用于要求第0条严格对齐的张量采集。",
     )
     parser.add_argument(
+        "--allow-mmap",
+        action="store_true",
+        help=(
+            "允许核心GGUF使用文件映射；仅改变物理装载，"
+            "用于Vulkan pinned-host预算不足的短研究门。"
+        ),
+    )
+    parser.add_argument(
         "--spec-type",
         choices=(
             "none",
@@ -1298,7 +1306,6 @@ def main() -> int:
         str(args.batch_size),
         "--ubatch-size",
         str(args.ubatch_size),
-        "--no-mmap",
         "--cache-ram",
         "0",
         "--ctx-checkpoints",
@@ -1319,6 +1326,8 @@ def main() -> int:
         "--port",
         str(args.port),
     ]
+    if not args.allow_mmap:
+        command.append("--no-mmap")
     if args.spec_type == "ngram-mod":
         command.extend(
             [

@@ -1,0 +1,97 @@
+{
+  "format": "polaris-genesis-live-birth-prune-gate-v0",
+  "status": "pass",
+  "scope": "single_task_process_level_spawn_not_native_dynamic_graph",
+  "assertions": {
+    "failure_preceded_spawn": true,
+    "real_island_manifest_bound": true,
+    "real_route_receipt_nonempty": true,
+    "repair_passed_external_validator": true,
+    "unrelated_design_ir_hash_preserved": true,
+    "temporary_island_pruned": true
+  },
+  "initial_candidate": "def normalize_score(value):\n    return max(0, min(100, int(value)))\n",
+  "repaired_candidate": "def normalize_score(value):\n    if value is None or isinstance(value, bool):\n        return None\n    try:\n        num = float(value)\n        return max(0, min(100, num))\n    except (ValueError, TypeError):\n        return None\n",
+  "events": [
+    {
+      "event": "test.receipt",
+      "status": "fail",
+      "receipt": {
+        "passed": false,
+        "failures": [
+          "case:12.5:expected:12.5:observed:12",
+          "case:None:raised:TypeError",
+          "case:True:expected:None:observed:1",
+          "case:'not-a-number':raised:ValueError"
+        ],
+        "source_sha256": "86285fe4254808021109dd5e0407aab0eae18123e1c52a1ca39791f47716a2d4"
+      }
+    },
+    {
+      "event": "spawn",
+      "node": "island.qwen.v17.l44_l47",
+      "trigger": "test.receipt:fail",
+      "manifest_sha256": "7ea2b40a2551ba30bf4dd664043c0bc33d9c486785a62ce2793e7c3ec8ff3cba"
+    },
+    {
+      "event": "candidate.patch",
+      "source_sha256": "305caff748f544d2c8857e35c42ed9cb01046348ebc09ad3bf76602a6d397f3c",
+      "model": "Polaris-GenesisGate-v0",
+      "process_id": 32844
+    },
+    {
+      "event": "test.receipt",
+      "status": "pass",
+      "receipt": {
+        "passed": true,
+        "failures": [],
+        "source_sha256": "305caff748f544d2c8857e35c42ed9cb01046348ebc09ad3bf76602a6d397f3c"
+      }
+    },
+    {
+      "event": "commit",
+      "candidate_sha256": "305caff748f544d2c8857e35c42ed9cb01046348ebc09ad3bf76602a6d397f3c"
+    },
+    {
+      "event": "prune",
+      "node": "island.qwen.v17.l44_l47",
+      "process_id": 32844,
+      "status": "pruned"
+    }
+  ],
+  "island": {
+    "manifest": "D:\\project\\大模型ssd化\\fast16\\research\\v17_coder_island\\runtime-v3\\island.json",
+    "manifest_sha256": "7ea2b40a2551ba30bf4dd664043c0bc33d9c486785a62ce2793e7c3ec8ff3cba",
+    "source_layers": [
+      44,
+      45,
+      46,
+      47
+    ],
+    "total_weight_bytes": 3773072128,
+    "route_receipt": "D:\\project\\大模型ssd化\\fast16\\research\\polaris_cognitive_substrate\\live_birth_prune\\route_dump.bin",
+    "route_receipt_bytes": 4096,
+    "route_receipt_sha256": "567bc78f6d0d3046770bfcb052808b320e376d1c44852cf30d71cc6eed2599c0"
+  },
+  "timings": {
+    "startup_seconds": 17.791402300004847,
+    "request_seconds": 24.195486700045876,
+    "model_timings": {
+      "cache_n": 0,
+      "prompt_n": 134,
+      "prompt_ms": 17073.479,
+      "prompt_per_token_ms": 127.41402238805969,
+      "prompt_per_second": 7.848429719566821,
+      "predicted_n": 61,
+      "predicted_ms": 7095.933,
+      "predicted_per_token_ms": 116.32677049180327,
+      "predicted_per_second": 8.596473501088582
+    }
+  },
+  "limitations": [
+    "初始失败候选是固定fixture，不是v38当场生成。",
+    "spawn/prune发生在进程级；尚未在单一运行时内创建或删除计算图节点。",
+    "v17岛仍通过v38固定语言主干和输出头表达。",
+    "单题通过不构成能力提升或新架构证据。"
+  ]
+}
