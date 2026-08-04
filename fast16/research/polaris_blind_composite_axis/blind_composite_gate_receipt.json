@@ -1,0 +1,3422 @@
+{
+  "coverage": {
+    "all_hidden_axes_unique": true,
+    "three_term_worlds": 3,
+    "two_term_worlds": 4,
+    "unique_hidden_axes": 7
+  },
+  "elapsed_seconds": 5.620718500000066,
+  "evaluations": [
+    {
+      "assertions": {
+        "best_single_organ_at_most_62pct": true,
+        "frame_frozen_from_current_discovery": true,
+        "frame_uses_at_least_two_organs": true,
+        "heldout_accuracy_at_least_98pct": true,
+        "intervention_consistency_at_least_98pct": true,
+        "joint_gain_over_single_at_least_30pp": true,
+        "leave_one_required_organ_drops_at_least_30pp": true,
+        "permuted_labels_do_not_exceed_chance_recovery_bound": true,
+        "permuted_labels_have_low_mean_information": true,
+        "sealed_hashes_match": true
+      },
+      "frame": {
+        "canonical": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+        "description_length": 7,
+        "negate": false,
+        "operator": "parity",
+        "required_organs": [
+          "resource_organ",
+          "time_organ"
+        ],
+        "terms": [
+          {
+            "left": "resource.burst_size",
+            "organ_id": "resource_organ",
+            "right": "resource.memory_pressure"
+          },
+          {
+            "left": "time.deadline",
+            "organ_id": "time_organ",
+            "right": "time.duration"
+          }
+        ]
+      },
+      "hidden_axis_after_scoring": {
+        "hidden_axis": {
+          "canonical": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+          "description_length": 7,
+          "negate": false,
+          "operator": "parity",
+          "required_organs": [
+            "resource_organ",
+            "time_organ"
+          ],
+          "terms": [
+            {
+              "left": "resource.burst_size",
+              "organ_id": "resource_organ",
+              "right": "resource.memory_pressure"
+            },
+            {
+              "left": "time.deadline",
+              "organ_id": "time_organ",
+              "right": "time.duration"
+            }
+          ]
+        },
+        "seed": 17
+      },
+      "metrics": {
+        "best_single_organ_accuracy": 0.46875,
+        "holdout_accuracy": 1.0,
+        "identity_memory_accuracy": 0.484375,
+        "intervention_consistency": 1.0,
+        "joint_gain_over_single": 0.53125,
+        "leave_one_organ_out_accuracy": {
+          "resource_organ": 0.486328125,
+          "time_organ": 0.501953125
+        },
+        "majority_accuracy": 0.484375,
+        "minimum_leave_one_organ_drop": 0.498046875,
+        "permuted_label_metrics": {
+          "chance_recovery_rate": 0.1,
+          "mean_accuracy": 0.51446533203125,
+          "mean_information_accuracy": 0.59014892578125,
+          "recovery_rate_limit_3sigma": 0.21250000000000002,
+          "repeats": 64,
+          "target_recovery_rate": 0.125,
+          "trials": [
+            {
+              "accuracy": 0.0,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 1.0,
+              "repeat": 0
+            },
+            {
+              "accuracy": 0.466796875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure))",
+              "information_accuracy": 0.533203125,
+              "repeat": 1
+            },
+            {
+              "accuracy": 0.486328125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.513671875,
+              "repeat": 2
+            },
+            {
+              "accuracy": 0.462890625,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.537109375,
+              "repeat": 3
+            },
+            {
+              "accuracy": 0.466796875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure))",
+              "information_accuracy": 0.533203125,
+              "repeat": 4
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 1.0,
+              "repeat": 5
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 1.0,
+              "repeat": 6
+            },
+            {
+              "accuracy": 0.48828125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51171875,
+              "repeat": 7
+            },
+            {
+              "accuracy": 0.0,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 1.0,
+              "repeat": 8
+            },
+            {
+              "accuracy": 0.54296875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.54296875,
+              "repeat": 9
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 1.0,
+              "repeat": 10
+            },
+            {
+              "accuracy": 0.466796875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure))",
+              "information_accuracy": 0.533203125,
+              "repeat": 11
+            },
+            {
+              "accuracy": 0.505859375,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.505859375,
+              "repeat": 12
+            },
+            {
+              "accuracy": 0.466796875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.533203125,
+              "repeat": 13
+            },
+            {
+              "accuracy": 0.54296875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.54296875,
+              "repeat": 14
+            },
+            {
+              "accuracy": 0.466796875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.533203125,
+              "repeat": 15
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 1.0,
+              "repeat": 16
+            },
+            {
+              "accuracy": 0.46484375,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.53515625,
+              "repeat": 17
+            },
+            {
+              "accuracy": 0.533203125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 0.533203125,
+              "repeat": 18
+            },
+            {
+              "accuracy": 0.529296875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.529296875,
+              "repeat": 19
+            },
+            {
+              "accuracy": 0.45703125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.54296875,
+              "repeat": 20
+            },
+            {
+              "accuracy": 0.54296875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.54296875,
+              "repeat": 21
+            },
+            {
+              "accuracy": 0.533203125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.533203125,
+              "repeat": 22
+            },
+            {
+              "accuracy": 0.470703125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.529296875,
+              "repeat": 23
+            },
+            {
+              "accuracy": 0.533203125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.533203125,
+              "repeat": 24
+            },
+            {
+              "accuracy": 0.486328125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.513671875,
+              "repeat": 25
+            },
+            {
+              "accuracy": 0.533203125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 0.533203125,
+              "repeat": 26
+            },
+            {
+              "accuracy": 0.45703125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.54296875,
+              "repeat": 27
+            },
+            {
+              "accuracy": 0.46484375,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.53515625,
+              "repeat": 28
+            },
+            {
+              "accuracy": 0.533203125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 0.533203125,
+              "repeat": 29
+            },
+            {
+              "accuracy": 0.53515625,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.53515625,
+              "repeat": 30
+            },
+            {
+              "accuracy": 0.470703125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.529296875,
+              "repeat": 31
+            },
+            {
+              "accuracy": 0.537109375,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.537109375,
+              "repeat": 32
+            },
+            {
+              "accuracy": 0.466796875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.533203125,
+              "repeat": 33
+            },
+            {
+              "accuracy": 0.533203125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 0.533203125,
+              "repeat": 34
+            },
+            {
+              "accuracy": 0.0,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 1.0,
+              "repeat": 35
+            },
+            {
+              "accuracy": 0.529296875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.529296875,
+              "repeat": 36
+            },
+            {
+              "accuracy": 0.46484375,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.53515625,
+              "repeat": 37
+            },
+            {
+              "accuracy": 0.53515625,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.53515625,
+              "repeat": 38
+            },
+            {
+              "accuracy": 0.462890625,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.537109375,
+              "repeat": 39
+            },
+            {
+              "accuracy": 0.466796875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure))",
+              "information_accuracy": 0.533203125,
+              "repeat": 40
+            },
+            {
+              "accuracy": 0.533203125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.533203125,
+              "repeat": 41
+            },
+            {
+              "accuracy": 0.529296875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.529296875,
+              "repeat": 42
+            },
+            {
+              "accuracy": 0.46484375,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.53515625,
+              "repeat": 43
+            },
+            {
+              "accuracy": 0.470703125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.529296875,
+              "repeat": 44
+            },
+            {
+              "accuracy": 0.529296875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.529296875,
+              "repeat": 45
+            },
+            {
+              "accuracy": 0.529296875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.529296875,
+              "repeat": 46
+            },
+            {
+              "accuracy": 0.533203125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 0.533203125,
+              "repeat": 47
+            },
+            {
+              "accuracy": 0.486328125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.513671875,
+              "repeat": 48
+            },
+            {
+              "accuracy": 0.533203125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.533203125,
+              "repeat": 49
+            },
+            {
+              "accuracy": 0.533203125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.533203125,
+              "repeat": 50
+            },
+            {
+              "accuracy": 0.533203125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.533203125,
+              "repeat": 51
+            },
+            {
+              "accuracy": 0.466796875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.533203125,
+              "repeat": 52
+            },
+            {
+              "accuracy": 0.513671875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.513671875,
+              "repeat": 53
+            },
+            {
+              "accuracy": 0.54296875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.54296875,
+              "repeat": 54
+            },
+            {
+              "accuracy": 0.486328125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.513671875,
+              "repeat": 55
+            },
+            {
+              "accuracy": 0.45703125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.54296875,
+              "repeat": 56
+            },
+            {
+              "accuracy": 0.537109375,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.537109375,
+              "repeat": 57
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 1.0,
+              "repeat": 58
+            },
+            {
+              "accuracy": 0.462890625,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.537109375,
+              "repeat": 59
+            },
+            {
+              "accuracy": 0.462890625,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.537109375,
+              "repeat": 60
+            },
+            {
+              "accuracy": 0.486328125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.513671875,
+              "repeat": 61
+            },
+            {
+              "accuracy": 0.466796875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure))",
+              "information_accuracy": 0.533203125,
+              "repeat": 62
+            },
+            {
+              "accuracy": 0.462890625,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.537109375,
+              "repeat": 63
+            }
+          ],
+          "unique_candidate_function_count": 20
+        },
+        "random_partition_accuracy": 0.484375
+      },
+      "passed": true,
+      "provenance": {
+        "discovery_sha256": "a2e6a238e9ea73ff5fc231596ef6c2acbdc7f3bf2d8afe76cb6e3fc1a9c67cf9",
+        "frame_sha256": "3ccb86ed61e8b75d86ca002a99d73ac162f595d48b5ddd6d6c9818b46793fcba",
+        "holdout_revealed_only_by_evaluator": true,
+        "observed_copied_from_frame_expected": false,
+        "sealed_holdout_sha256": "361e46e1df63b00a5408f561dacdb6220e5ddc277916466f0e897dad84e0701e"
+      },
+      "seed": 17
+    },
+    {
+      "assertions": {
+        "best_single_organ_at_most_62pct": true,
+        "frame_frozen_from_current_discovery": true,
+        "frame_uses_at_least_two_organs": true,
+        "heldout_accuracy_at_least_98pct": true,
+        "intervention_consistency_at_least_98pct": true,
+        "joint_gain_over_single_at_least_30pp": true,
+        "leave_one_required_organ_drops_at_least_30pp": true,
+        "permuted_labels_do_not_exceed_chance_recovery_bound": true,
+        "permuted_labels_have_low_mean_information": true,
+        "sealed_hashes_match": true
+      },
+      "frame": {
+        "canonical": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+        "description_length": 11,
+        "negate": true,
+        "operator": "parity",
+        "required_organs": [
+          "interaction_organ",
+          "resource_organ",
+          "state_organ"
+        ],
+        "terms": [
+          {
+            "left": "interaction.feedback_count",
+            "organ_id": "interaction_organ",
+            "right": "interaction.turn_interval"
+          },
+          {
+            "left": "resource.burst_size",
+            "organ_id": "resource_organ",
+            "right": "resource.memory_pressure"
+          },
+          {
+            "left": "state.lifetime",
+            "organ_id": "state_organ",
+            "right": "state.mutation_rate"
+          }
+        ]
+      },
+      "hidden_axis_after_scoring": {
+        "hidden_axis": {
+          "canonical": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+          "description_length": 11,
+          "negate": true,
+          "operator": "parity",
+          "required_organs": [
+            "interaction_organ",
+            "resource_organ",
+            "state_organ"
+          ],
+          "terms": [
+            {
+              "left": "interaction.feedback_count",
+              "organ_id": "interaction_organ",
+              "right": "interaction.turn_interval"
+            },
+            {
+              "left": "resource.burst_size",
+              "organ_id": "resource_organ",
+              "right": "resource.memory_pressure"
+            },
+            {
+              "left": "state.lifetime",
+              "organ_id": "state_organ",
+              "right": "state.mutation_rate"
+            }
+          ]
+        },
+        "seed": 28
+      },
+      "metrics": {
+        "best_single_organ_accuracy": 0.478515625,
+        "holdout_accuracy": 1.0,
+        "identity_memory_accuracy": 0.515625,
+        "intervention_consistency": 1.0,
+        "joint_gain_over_single": 0.521484375,
+        "leave_one_organ_out_accuracy": {
+          "interaction_organ": 0.501953125,
+          "resource_organ": 0.494140625,
+          "state_organ": 0.54296875
+        },
+        "majority_accuracy": 0.515625,
+        "minimum_leave_one_organ_drop": 0.45703125,
+        "permuted_label_metrics": {
+          "chance_recovery_rate": 0.1,
+          "mean_accuracy": 0.4974365234375,
+          "mean_information_accuracy": 0.54534912109375,
+          "recovery_rate_limit_3sigma": 0.21250000000000002,
+          "repeats": 64,
+          "target_recovery_rate": 0.0625,
+          "trials": [
+            {
+              "accuracy": 0.51171875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51171875,
+              "repeat": 0
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 1.0,
+              "repeat": 1
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51953125,
+              "repeat": 2
+            },
+            {
+              "accuracy": 0.494140625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.505859375,
+              "repeat": 3
+            },
+            {
+              "accuracy": 0.515625,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.515625,
+              "repeat": 4
+            },
+            {
+              "accuracy": 0.48046875,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51953125,
+              "repeat": 5
+            },
+            {
+              "accuracy": 0.484375,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.515625,
+              "repeat": 6
+            },
+            {
+              "accuracy": 0.45703125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 0.54296875,
+              "repeat": 7
+            },
+            {
+              "accuracy": 0.48046875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51953125,
+              "repeat": 8
+            },
+            {
+              "accuracy": 0.48046875,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51953125,
+              "repeat": 9
+            },
+            {
+              "accuracy": 0.48828125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51171875,
+              "repeat": 10
+            },
+            {
+              "accuracy": 0.494140625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.505859375,
+              "repeat": 11
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.501953125,
+              "repeat": 12
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51953125,
+              "repeat": 13
+            },
+            {
+              "accuracy": 0.48046875,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51953125,
+              "repeat": 14
+            },
+            {
+              "accuracy": 0.515625,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.515625,
+              "repeat": 15
+            },
+            {
+              "accuracy": 0.515625,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.515625,
+              "repeat": 16
+            },
+            {
+              "accuracy": 0.515625,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.515625,
+              "repeat": 17
+            },
+            {
+              "accuracy": 0.45703125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 0.54296875,
+              "repeat": 18
+            },
+            {
+              "accuracy": 0.54296875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure))",
+              "information_accuracy": 0.54296875,
+              "repeat": 19
+            },
+            {
+              "accuracy": 0.0,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 1.0,
+              "repeat": 20
+            },
+            {
+              "accuracy": 0.0,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 1.0,
+              "repeat": 21
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.501953125,
+              "repeat": 22
+            },
+            {
+              "accuracy": 0.515625,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.515625,
+              "repeat": 23
+            },
+            {
+              "accuracy": 0.48828125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51171875,
+              "repeat": 24
+            },
+            {
+              "accuracy": 0.48828125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51171875,
+              "repeat": 25
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51953125,
+              "repeat": 26
+            },
+            {
+              "accuracy": 0.529296875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.529296875,
+              "repeat": 27
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 1.0,
+              "repeat": 28
+            },
+            {
+              "accuracy": 0.45703125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 0.54296875,
+              "repeat": 29
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51953125,
+              "repeat": 30
+            },
+            {
+              "accuracy": 0.48046875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51953125,
+              "repeat": 31
+            },
+            {
+              "accuracy": 0.470703125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.529296875,
+              "repeat": 32
+            },
+            {
+              "accuracy": 0.48046875,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51953125,
+              "repeat": 33
+            },
+            {
+              "accuracy": 0.51171875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51171875,
+              "repeat": 34
+            },
+            {
+              "accuracy": 0.494140625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.505859375,
+              "repeat": 35
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.501953125,
+              "repeat": 36
+            },
+            {
+              "accuracy": 0.484375,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.515625,
+              "repeat": 37
+            },
+            {
+              "accuracy": 0.51171875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51171875,
+              "repeat": 38
+            },
+            {
+              "accuracy": 0.48046875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51953125,
+              "repeat": 39
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.501953125,
+              "repeat": 40
+            },
+            {
+              "accuracy": 0.48046875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51953125,
+              "repeat": 41
+            },
+            {
+              "accuracy": 0.48828125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51171875,
+              "repeat": 42
+            },
+            {
+              "accuracy": 0.48046875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51953125,
+              "repeat": 43
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.501953125,
+              "repeat": 44
+            },
+            {
+              "accuracy": 0.45703125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 0.54296875,
+              "repeat": 45
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.501953125,
+              "repeat": 46
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.501953125,
+              "repeat": 47
+            },
+            {
+              "accuracy": 0.470703125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.529296875,
+              "repeat": 48
+            },
+            {
+              "accuracy": 0.529296875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.529296875,
+              "repeat": 49
+            },
+            {
+              "accuracy": 0.505859375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.505859375,
+              "repeat": 50
+            },
+            {
+              "accuracy": 0.505859375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.505859375,
+              "repeat": 51
+            },
+            {
+              "accuracy": 0.505859375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.505859375,
+              "repeat": 52
+            },
+            {
+              "accuracy": 0.505859375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.505859375,
+              "repeat": 53
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.501953125,
+              "repeat": 54
+            },
+            {
+              "accuracy": 0.51171875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51171875,
+              "repeat": 55
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.501953125,
+              "repeat": 56
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.501953125,
+              "repeat": 57
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.501953125,
+              "repeat": 58
+            },
+            {
+              "accuracy": 0.51171875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51171875,
+              "repeat": 59
+            },
+            {
+              "accuracy": 0.48828125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51171875,
+              "repeat": 60
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.501953125,
+              "repeat": 61
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51953125,
+              "repeat": 62
+            },
+            {
+              "accuracy": 0.494140625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.505859375,
+              "repeat": 63
+            }
+          ],
+          "unique_candidate_function_count": 20
+        },
+        "random_partition_accuracy": 0.45703125
+      },
+      "passed": true,
+      "provenance": {
+        "discovery_sha256": "bfffcd41b66f50ef2cbda6a9a2dbd097d96e576be1c07cb9129fe444da9c944d",
+        "frame_sha256": "45b53507909ba50daf3c5db615bcf182bf42475c7f01d74663bc162b6db7c947",
+        "holdout_revealed_only_by_evaluator": true,
+        "observed_copied_from_frame_expected": false,
+        "sealed_holdout_sha256": "0b1a687d8a18a089874ce9bec0ff1c4541574fd5b65ae1d280d1e283eb0a4408"
+      },
+      "seed": 28
+    },
+    {
+      "assertions": {
+        "best_single_organ_at_most_62pct": true,
+        "frame_frozen_from_current_discovery": true,
+        "frame_uses_at_least_two_organs": true,
+        "heldout_accuracy_at_least_98pct": true,
+        "intervention_consistency_at_least_98pct": true,
+        "joint_gain_over_single_at_least_30pp": true,
+        "leave_one_required_organ_drops_at_least_30pp": true,
+        "permuted_labels_do_not_exceed_chance_recovery_bound": true,
+        "permuted_labels_have_low_mean_information": true,
+        "sealed_hashes_match": true
+      },
+      "frame": {
+        "canonical": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+        "description_length": 7,
+        "negate": false,
+        "operator": "parity",
+        "required_organs": [
+          "interaction_organ",
+          "resource_organ"
+        ],
+        "terms": [
+          {
+            "left": "interaction.feedback_count",
+            "organ_id": "interaction_organ",
+            "right": "interaction.turn_interval"
+          },
+          {
+            "left": "resource.burst_size",
+            "organ_id": "resource_organ",
+            "right": "resource.memory_pressure"
+          }
+        ]
+      },
+      "hidden_axis_after_scoring": {
+        "hidden_axis": {
+          "canonical": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+          "description_length": 7,
+          "negate": false,
+          "operator": "parity",
+          "required_organs": [
+            "interaction_organ",
+            "resource_organ"
+          ],
+          "terms": [
+            {
+              "left": "interaction.feedback_count",
+              "organ_id": "interaction_organ",
+              "right": "interaction.turn_interval"
+            },
+            {
+              "left": "resource.burst_size",
+              "organ_id": "resource_organ",
+              "right": "resource.memory_pressure"
+            }
+          ]
+        },
+        "seed": 43
+      },
+      "metrics": {
+        "best_single_organ_accuracy": 0.515625,
+        "holdout_accuracy": 1.0,
+        "identity_memory_accuracy": 0.529296875,
+        "intervention_consistency": 1.0,
+        "joint_gain_over_single": 0.484375,
+        "leave_one_organ_out_accuracy": {
+          "interaction_organ": 0.484375,
+          "resource_organ": 0.509765625
+        },
+        "majority_accuracy": 0.529296875,
+        "minimum_leave_one_organ_drop": 0.490234375,
+        "permuted_label_metrics": {
+          "chance_recovery_rate": 0.1,
+          "mean_accuracy": 0.522674560546875,
+          "mean_information_accuracy": 0.553314208984375,
+          "recovery_rate_limit_3sigma": 0.21250000000000002,
+          "repeats": 64,
+          "target_recovery_rate": 0.078125,
+          "trials": [
+            {
+              "accuracy": 0.494140625,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.505859375,
+              "repeat": 0
+            },
+            {
+              "accuracy": 0.5,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.5,
+              "repeat": 1
+            },
+            {
+              "accuracy": 0.474609375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.525390625,
+              "repeat": 2
+            },
+            {
+              "accuracy": 0.515625,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.515625,
+              "repeat": 3
+            },
+            {
+              "accuracy": 0.48046875,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51953125,
+              "repeat": 4
+            },
+            {
+              "accuracy": 0.4765625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.5234375,
+              "repeat": 5
+            },
+            {
+              "accuracy": 0.494140625,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.505859375,
+              "repeat": 6
+            },
+            {
+              "accuracy": 0.48828125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51171875,
+              "repeat": 7
+            },
+            {
+              "accuracy": 0.484375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.515625,
+              "repeat": 8
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.501953125,
+              "repeat": 9
+            },
+            {
+              "accuracy": 0.5,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.5,
+              "repeat": 10
+            },
+            {
+              "accuracy": 0.525390625,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.525390625,
+              "repeat": 11
+            },
+            {
+              "accuracy": 0.474609375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.525390625,
+              "repeat": 12
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51953125,
+              "repeat": 13
+            },
+            {
+              "accuracy": 0.5,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.5,
+              "repeat": 14
+            },
+            {
+              "accuracy": 0.484375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.515625,
+              "repeat": 15
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.501953125,
+              "repeat": 16
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.501953125,
+              "repeat": 17
+            },
+            {
+              "accuracy": 0.521484375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.521484375,
+              "repeat": 18
+            },
+            {
+              "accuracy": 0.474609375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.525390625,
+              "repeat": 19
+            },
+            {
+              "accuracy": 0.474609375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.525390625,
+              "repeat": 20
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 1.0,
+              "repeat": 21
+            },
+            {
+              "accuracy": 0.48046875,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51953125,
+              "repeat": 22
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 1.0,
+              "repeat": 23
+            },
+            {
+              "accuracy": 0.5234375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.5234375,
+              "repeat": 24
+            },
+            {
+              "accuracy": 0.48046875,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51953125,
+              "repeat": 25
+            },
+            {
+              "accuracy": 0.4765625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.5234375,
+              "repeat": 26
+            },
+            {
+              "accuracy": 0.5,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.5,
+              "repeat": 27
+            },
+            {
+              "accuracy": 0.5,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.5,
+              "repeat": 28
+            },
+            {
+              "accuracy": 0.494140625,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.505859375,
+              "repeat": 29
+            },
+            {
+              "accuracy": 0.0,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure))",
+              "information_accuracy": 1.0,
+              "repeat": 30
+            },
+            {
+              "accuracy": 0.484375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.515625,
+              "repeat": 31
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51953125,
+              "repeat": 32
+            },
+            {
+              "accuracy": 0.478515625,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.521484375,
+              "repeat": 33
+            },
+            {
+              "accuracy": 0.474609375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.525390625,
+              "repeat": 34
+            },
+            {
+              "accuracy": 0.474609375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.525390625,
+              "repeat": 35
+            },
+            {
+              "accuracy": 0.505859375,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.505859375,
+              "repeat": 36
+            },
+            {
+              "accuracy": 0.484375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.515625,
+              "repeat": 37
+            },
+            {
+              "accuracy": 0.5234375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.5234375,
+              "repeat": 38
+            },
+            {
+              "accuracy": 0.521484375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.521484375,
+              "repeat": 39
+            },
+            {
+              "accuracy": 0.474609375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.525390625,
+              "repeat": 40
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51953125,
+              "repeat": 41
+            },
+            {
+              "accuracy": 0.4765625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.5234375,
+              "repeat": 42
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.501953125,
+              "repeat": 43
+            },
+            {
+              "accuracy": 0.5,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.5,
+              "repeat": 44
+            },
+            {
+              "accuracy": 0.51171875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51171875,
+              "repeat": 45
+            },
+            {
+              "accuracy": 0.48828125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51171875,
+              "repeat": 46
+            },
+            {
+              "accuracy": 0.505859375,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.505859375,
+              "repeat": 47
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51953125,
+              "repeat": 48
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51953125,
+              "repeat": 49
+            },
+            {
+              "accuracy": 0.5234375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.5234375,
+              "repeat": 50
+            },
+            {
+              "accuracy": 0.521484375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.521484375,
+              "repeat": 51
+            },
+            {
+              "accuracy": 0.521484375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.521484375,
+              "repeat": 52
+            },
+            {
+              "accuracy": 0.4765625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.5234375,
+              "repeat": 53
+            },
+            {
+              "accuracy": 0.5234375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.5234375,
+              "repeat": 54
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.501953125,
+              "repeat": 55
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51953125,
+              "repeat": 56
+            },
+            {
+              "accuracy": 0.521484375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.521484375,
+              "repeat": 57
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51953125,
+              "repeat": 58
+            },
+            {
+              "accuracy": 0.5,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.5,
+              "repeat": 59
+            },
+            {
+              "accuracy": 0.5234375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.5234375,
+              "repeat": 60
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 1.0,
+              "repeat": 61
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 1.0,
+              "repeat": 62
+            },
+            {
+              "accuracy": 0.478515625,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.521484375,
+              "repeat": 63
+            }
+          ],
+          "unique_candidate_function_count": 20
+        },
+        "random_partition_accuracy": 0.501953125
+      },
+      "passed": true,
+      "provenance": {
+        "discovery_sha256": "a266c70de89264dc68137e43ef7f05ba282d8eeac13e0d01f8e01e50fb349627",
+        "frame_sha256": "86bd333cfc37cb787f85984d9e0415c46761d5c9ccddd5821dd6bc362c65a103",
+        "holdout_revealed_only_by_evaluator": true,
+        "observed_copied_from_frame_expected": false,
+        "sealed_holdout_sha256": "58cd47aa86df2c5a3de91b8b262aa52edd475896e939ebc08533397dae04d665"
+      },
+      "seed": 43
+    },
+    {
+      "assertions": {
+        "best_single_organ_at_most_62pct": true,
+        "frame_frozen_from_current_discovery": true,
+        "frame_uses_at_least_two_organs": true,
+        "heldout_accuracy_at_least_98pct": true,
+        "intervention_consistency_at_least_98pct": true,
+        "joint_gain_over_single_at_least_30pp": true,
+        "leave_one_required_organ_drops_at_least_30pp": true,
+        "permuted_labels_do_not_exceed_chance_recovery_bound": true,
+        "permuted_labels_have_low_mean_information": true,
+        "sealed_hashes_match": true
+      },
+      "frame": {
+        "canonical": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+        "description_length": 10,
+        "negate": false,
+        "operator": "parity",
+        "required_organs": [
+          "interaction_organ",
+          "state_organ",
+          "time_organ"
+        ],
+        "terms": [
+          {
+            "left": "interaction.feedback_count",
+            "organ_id": "interaction_organ",
+            "right": "interaction.turn_interval"
+          },
+          {
+            "left": "state.lifetime",
+            "organ_id": "state_organ",
+            "right": "state.mutation_rate"
+          },
+          {
+            "left": "time.deadline",
+            "organ_id": "time_organ",
+            "right": "time.duration"
+          }
+        ]
+      },
+      "hidden_axis_after_scoring": {
+        "hidden_axis": {
+          "canonical": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+          "description_length": 10,
+          "negate": false,
+          "operator": "parity",
+          "required_organs": [
+            "interaction_organ",
+            "state_organ",
+            "time_organ"
+          ],
+          "terms": [
+            {
+              "left": "interaction.feedback_count",
+              "organ_id": "interaction_organ",
+              "right": "interaction.turn_interval"
+            },
+            {
+              "left": "state.lifetime",
+              "organ_id": "state_organ",
+              "right": "state.mutation_rate"
+            },
+            {
+              "left": "time.deadline",
+              "organ_id": "time_organ",
+              "right": "time.duration"
+            }
+          ]
+        },
+        "seed": 52
+      },
+      "metrics": {
+        "best_single_organ_accuracy": 0.52734375,
+        "holdout_accuracy": 1.0,
+        "identity_memory_accuracy": 0.533203125,
+        "intervention_consistency": 1.0,
+        "joint_gain_over_single": 0.47265625,
+        "leave_one_organ_out_accuracy": {
+          "interaction_organ": 0.529296875,
+          "state_organ": 0.51953125,
+          "time_organ": 0.484375
+        },
+        "majority_accuracy": 0.533203125,
+        "minimum_leave_one_organ_drop": 0.470703125,
+        "permuted_label_metrics": {
+          "chance_recovery_rate": 0.1,
+          "mean_accuracy": 0.46051025390625,
+          "mean_information_accuracy": 0.55682373046875,
+          "recovery_rate_limit_3sigma": 0.21250000000000002,
+          "repeats": 64,
+          "target_recovery_rate": 0.078125,
+          "trials": [
+            {
+              "accuracy": 0.51171875,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.51171875,
+              "repeat": 0
+            },
+            {
+              "accuracy": 0.51171875,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.51171875,
+              "repeat": 1
+            },
+            {
+              "accuracy": 0.529296875,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.529296875,
+              "repeat": 2
+            },
+            {
+              "accuracy": 0.4609375,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.5390625,
+              "repeat": 3
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.501953125,
+              "repeat": 4
+            },
+            {
+              "accuracy": 0.529296875,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.529296875,
+              "repeat": 5
+            },
+            {
+              "accuracy": 0.537109375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure))",
+              "information_accuracy": 0.537109375,
+              "repeat": 6
+            },
+            {
+              "accuracy": 0.51171875,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.51171875,
+              "repeat": 7
+            },
+            {
+              "accuracy": 0.48828125,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.51171875,
+              "repeat": 8
+            },
+            {
+              "accuracy": 0.5,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.5,
+              "repeat": 9
+            },
+            {
+              "accuracy": 0.0,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 1.0,
+              "repeat": 10
+            },
+            {
+              "accuracy": 0.515625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.515625,
+              "repeat": 11
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51953125,
+              "repeat": 12
+            },
+            {
+              "accuracy": 0.515625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.515625,
+              "repeat": 13
+            },
+            {
+              "accuracy": 0.515625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.515625,
+              "repeat": 14
+            },
+            {
+              "accuracy": 0.484375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.515625,
+              "repeat": 15
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.501953125,
+              "repeat": 16
+            },
+            {
+              "accuracy": 0.537109375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure))",
+              "information_accuracy": 0.537109375,
+              "repeat": 17
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.501953125,
+              "repeat": 18
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.501953125,
+              "repeat": 19
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.501953125,
+              "repeat": 20
+            },
+            {
+              "accuracy": 0.462890625,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 0.537109375,
+              "repeat": 21
+            },
+            {
+              "accuracy": 0.48046875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51953125,
+              "repeat": 22
+            },
+            {
+              "accuracy": 0.484375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.515625,
+              "repeat": 23
+            },
+            {
+              "accuracy": 0.5390625,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.5390625,
+              "repeat": 24
+            },
+            {
+              "accuracy": 0.5,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.5,
+              "repeat": 25
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51953125,
+              "repeat": 26
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51953125,
+              "repeat": 27
+            },
+            {
+              "accuracy": 0.48046875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51953125,
+              "repeat": 28
+            },
+            {
+              "accuracy": 0.470703125,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.529296875,
+              "repeat": 29
+            },
+            {
+              "accuracy": 0.470703125,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.529296875,
+              "repeat": 30
+            },
+            {
+              "accuracy": 0.0,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 1.0,
+              "repeat": 31
+            },
+            {
+              "accuracy": 0.48046875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51953125,
+              "repeat": 32
+            },
+            {
+              "accuracy": 0.4609375,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.5390625,
+              "repeat": 33
+            },
+            {
+              "accuracy": 0.48828125,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.51171875,
+              "repeat": 34
+            },
+            {
+              "accuracy": 0.4609375,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.5390625,
+              "repeat": 35
+            },
+            {
+              "accuracy": 0.462890625,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 0.537109375,
+              "repeat": 36
+            },
+            {
+              "accuracy": 0.0,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 1.0,
+              "repeat": 37
+            },
+            {
+              "accuracy": 0.0,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 1.0,
+              "repeat": 38
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.501953125,
+              "repeat": 39
+            },
+            {
+              "accuracy": 0.529296875,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.529296875,
+              "repeat": 40
+            },
+            {
+              "accuracy": 0.529296875,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.529296875,
+              "repeat": 41
+            },
+            {
+              "accuracy": 0.51171875,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.51171875,
+              "repeat": 42
+            },
+            {
+              "accuracy": 0.529296875,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.529296875,
+              "repeat": 43
+            },
+            {
+              "accuracy": 0.470703125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.529296875,
+              "repeat": 44
+            },
+            {
+              "accuracy": 0.484375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.515625,
+              "repeat": 45
+            },
+            {
+              "accuracy": 0.515625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.515625,
+              "repeat": 46
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51953125,
+              "repeat": 47
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.501953125,
+              "repeat": 48
+            },
+            {
+              "accuracy": 0.462890625,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 0.537109375,
+              "repeat": 49
+            },
+            {
+              "accuracy": 0.5,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.5,
+              "repeat": 50
+            },
+            {
+              "accuracy": 0.48828125,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.51171875,
+              "repeat": 51
+            },
+            {
+              "accuracy": 0.4609375,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.5390625,
+              "repeat": 52
+            },
+            {
+              "accuracy": 0.48828125,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.51171875,
+              "repeat": 53
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51953125,
+              "repeat": 54
+            },
+            {
+              "accuracy": 0.0,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 1.0,
+              "repeat": 55
+            },
+            {
+              "accuracy": 0.470703125,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.529296875,
+              "repeat": 56
+            },
+            {
+              "accuracy": 0.529296875,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.529296875,
+              "repeat": 57
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.501953125,
+              "repeat": 58
+            },
+            {
+              "accuracy": 0.5390625,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.5390625,
+              "repeat": 59
+            },
+            {
+              "accuracy": 0.484375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.515625,
+              "repeat": 60
+            },
+            {
+              "accuracy": 0.51171875,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.51171875,
+              "repeat": 61
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.501953125,
+              "repeat": 62
+            },
+            {
+              "accuracy": 0.48046875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51953125,
+              "repeat": 63
+            }
+          ],
+          "unique_candidate_function_count": 20
+        },
+        "random_partition_accuracy": 0.513671875
+      },
+      "passed": true,
+      "provenance": {
+        "discovery_sha256": "5c28a910d076f4e30f6561d7f4d91e9aa0dd3a7cf9fe1b34e07f749d7d3b8a88",
+        "frame_sha256": "387f863f55536618abc93377d70e356fd451513d651937b8bc0cfb17960817e3",
+        "holdout_revealed_only_by_evaluator": true,
+        "observed_copied_from_frame_expected": false,
+        "sealed_holdout_sha256": "ae2b2defac4946fe8dc78fc6aae488b614c44fdafd831e728fae7219f2c4d616"
+      },
+      "seed": 52
+    },
+    {
+      "assertions": {
+        "best_single_organ_at_most_62pct": true,
+        "frame_frozen_from_current_discovery": true,
+        "frame_uses_at_least_two_organs": true,
+        "heldout_accuracy_at_least_98pct": true,
+        "intervention_consistency_at_least_98pct": true,
+        "joint_gain_over_single_at_least_30pp": true,
+        "leave_one_required_organ_drops_at_least_30pp": true,
+        "permuted_labels_do_not_exceed_chance_recovery_bound": true,
+        "permuted_labels_have_low_mean_information": true,
+        "sealed_hashes_match": true
+      },
+      "frame": {
+        "canonical": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+        "description_length": 8,
+        "negate": true,
+        "operator": "parity",
+        "required_organs": [
+          "interaction_organ",
+          "time_organ"
+        ],
+        "terms": [
+          {
+            "left": "interaction.feedback_count",
+            "organ_id": "interaction_organ",
+            "right": "interaction.turn_interval"
+          },
+          {
+            "left": "time.deadline",
+            "organ_id": "time_organ",
+            "right": "time.duration"
+          }
+        ]
+      },
+      "hidden_axis_after_scoring": {
+        "hidden_axis": {
+          "canonical": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+          "description_length": 8,
+          "negate": true,
+          "operator": "parity",
+          "required_organs": [
+            "interaction_organ",
+            "time_organ"
+          ],
+          "terms": [
+            {
+              "left": "interaction.feedback_count",
+              "organ_id": "interaction_organ",
+              "right": "interaction.turn_interval"
+            },
+            {
+              "left": "time.deadline",
+              "organ_id": "time_organ",
+              "right": "time.duration"
+            }
+          ]
+        },
+        "seed": 71
+      },
+      "metrics": {
+        "best_single_organ_accuracy": 0.474609375,
+        "holdout_accuracy": 1.0,
+        "identity_memory_accuracy": 0.494140625,
+        "intervention_consistency": 1.0,
+        "joint_gain_over_single": 0.525390625,
+        "leave_one_organ_out_accuracy": {
+          "interaction_organ": 0.537109375,
+          "time_organ": 0.51171875
+        },
+        "majority_accuracy": 0.494140625,
+        "minimum_leave_one_organ_drop": 0.462890625,
+        "permuted_label_metrics": {
+          "chance_recovery_rate": 0.1,
+          "mean_accuracy": 0.53399658203125,
+          "mean_information_accuracy": 0.5791015625,
+          "recovery_rate_limit_3sigma": 0.21250000000000002,
+          "repeats": 64,
+          "target_recovery_rate": 0.125,
+          "trials": [
+            {
+              "accuracy": 0.533203125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.533203125,
+              "repeat": 0
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 1.0,
+              "repeat": 1
+            },
+            {
+              "accuracy": 0.509765625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.509765625,
+              "repeat": 2
+            },
+            {
+              "accuracy": 0.509765625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.509765625,
+              "repeat": 3
+            },
+            {
+              "accuracy": 0.466796875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.533203125,
+              "repeat": 4
+            },
+            {
+              "accuracy": 0.515625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure))",
+              "information_accuracy": 0.515625,
+              "repeat": 5
+            },
+            {
+              "accuracy": 0.455078125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.544921875,
+              "repeat": 6
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 1.0,
+              "repeat": 7
+            },
+            {
+              "accuracy": 0.5,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.5,
+              "repeat": 8
+            },
+            {
+              "accuracy": 0.0,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 1.0,
+              "repeat": 9
+            },
+            {
+              "accuracy": 0.466796875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.533203125,
+              "repeat": 10
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.501953125,
+              "repeat": 11
+            },
+            {
+              "accuracy": 0.515625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure))",
+              "information_accuracy": 0.515625,
+              "repeat": 12
+            },
+            {
+              "accuracy": 0.484375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 0.515625,
+              "repeat": 13
+            },
+            {
+              "accuracy": 0.466796875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.533203125,
+              "repeat": 14
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.501953125,
+              "repeat": 15
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51953125,
+              "repeat": 16
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51953125,
+              "repeat": 17
+            },
+            {
+              "accuracy": 0.490234375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.509765625,
+              "repeat": 18
+            },
+            {
+              "accuracy": 0.509765625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.509765625,
+              "repeat": 19
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51953125,
+              "repeat": 20
+            },
+            {
+              "accuracy": 0.45703125,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.54296875,
+              "repeat": 21
+            },
+            {
+              "accuracy": 0.515625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure))",
+              "information_accuracy": 0.515625,
+              "repeat": 22
+            },
+            {
+              "accuracy": 0.5,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.5,
+              "repeat": 23
+            },
+            {
+              "accuracy": 0.544921875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.544921875,
+              "repeat": 24
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.501953125,
+              "repeat": 25
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 1.0,
+              "repeat": 26
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.501953125,
+              "repeat": 27
+            },
+            {
+              "accuracy": 0.515625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure))",
+              "information_accuracy": 0.515625,
+              "repeat": 28
+            },
+            {
+              "accuracy": 0.515625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure))",
+              "information_accuracy": 0.515625,
+              "repeat": 29
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51953125,
+              "repeat": 30
+            },
+            {
+              "accuracy": 0.54296875,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.54296875,
+              "repeat": 31
+            },
+            {
+              "accuracy": 0.5,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.5,
+              "repeat": 32
+            },
+            {
+              "accuracy": 0.54296875,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.54296875,
+              "repeat": 33
+            },
+            {
+              "accuracy": 0.515625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure))",
+              "information_accuracy": 0.515625,
+              "repeat": 34
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.501953125,
+              "repeat": 35
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 1.0,
+              "repeat": 36
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 1.0,
+              "repeat": 37
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.501953125,
+              "repeat": 38
+            },
+            {
+              "accuracy": 0.490234375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.509765625,
+              "repeat": 39
+            },
+            {
+              "accuracy": 0.45703125,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.54296875,
+              "repeat": 40
+            },
+            {
+              "accuracy": 0.5,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.5,
+              "repeat": 41
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 1.0,
+              "repeat": 42
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.501953125,
+              "repeat": 43
+            },
+            {
+              "accuracy": 0.515625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure))",
+              "information_accuracy": 0.515625,
+              "repeat": 44
+            },
+            {
+              "accuracy": 0.490234375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.509765625,
+              "repeat": 45
+            },
+            {
+              "accuracy": 0.544921875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.544921875,
+              "repeat": 46
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.501953125,
+              "repeat": 47
+            },
+            {
+              "accuracy": 0.0,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 1.0,
+              "repeat": 48
+            },
+            {
+              "accuracy": 0.484375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 0.515625,
+              "repeat": 49
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51953125,
+              "repeat": 50
+            },
+            {
+              "accuracy": 0.455078125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.544921875,
+              "repeat": 51
+            },
+            {
+              "accuracy": 0.490234375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.509765625,
+              "repeat": 52
+            },
+            {
+              "accuracy": 0.48046875,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.51953125,
+              "repeat": 53
+            },
+            {
+              "accuracy": 0.544921875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.544921875,
+              "repeat": 54
+            },
+            {
+              "accuracy": 0.5,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.5,
+              "repeat": 55
+            },
+            {
+              "accuracy": 0.509765625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.509765625,
+              "repeat": 56
+            },
+            {
+              "accuracy": 0.466796875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.533203125,
+              "repeat": 57
+            },
+            {
+              "accuracy": 0.515625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure))",
+              "information_accuracy": 0.515625,
+              "repeat": 58
+            },
+            {
+              "accuracy": 0.51953125,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51953125,
+              "repeat": 59
+            },
+            {
+              "accuracy": 0.533203125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.533203125,
+              "repeat": 60
+            },
+            {
+              "accuracy": 0.466796875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.533203125,
+              "repeat": 61
+            },
+            {
+              "accuracy": 0.544921875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.544921875,
+              "repeat": 62
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.501953125,
+              "repeat": 63
+            }
+          ],
+          "unique_candidate_function_count": 20
+        },
+        "random_partition_accuracy": 0.478515625
+      },
+      "passed": true,
+      "provenance": {
+        "discovery_sha256": "7deede63bc25df048f38bf646c68a894b154d5ef83aa70c142d8673ed5aa9c33",
+        "frame_sha256": "28c289ad648109bf1dd10c35d3c0976f30ea175a9eabfb59f7be7165be960908",
+        "holdout_revealed_only_by_evaluator": true,
+        "observed_copied_from_frame_expected": false,
+        "sealed_holdout_sha256": "6662a554a2c4e9a8ece18239b45d399d6224dcdb8b6596a5893835b62ddbb363"
+      },
+      "seed": 71
+    },
+    {
+      "assertions": {
+        "best_single_organ_at_most_62pct": true,
+        "frame_frozen_from_current_discovery": true,
+        "frame_uses_at_least_two_organs": true,
+        "heldout_accuracy_at_least_98pct": true,
+        "intervention_consistency_at_least_98pct": true,
+        "joint_gain_over_single_at_least_30pp": true,
+        "leave_one_required_organ_drops_at_least_30pp": true,
+        "permuted_labels_do_not_exceed_chance_recovery_bound": true,
+        "permuted_labels_have_low_mean_information": true,
+        "sealed_hashes_match": true
+      },
+      "frame": {
+        "canonical": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+        "description_length": 10,
+        "negate": false,
+        "operator": "parity",
+        "required_organs": [
+          "resource_organ",
+          "state_organ",
+          "time_organ"
+        ],
+        "terms": [
+          {
+            "left": "resource.burst_size",
+            "organ_id": "resource_organ",
+            "right": "resource.memory_pressure"
+          },
+          {
+            "left": "state.lifetime",
+            "organ_id": "state_organ",
+            "right": "state.mutation_rate"
+          },
+          {
+            "left": "time.deadline",
+            "organ_id": "time_organ",
+            "right": "time.duration"
+          }
+        ]
+      },
+      "hidden_axis_after_scoring": {
+        "hidden_axis": {
+          "canonical": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+          "description_length": 10,
+          "negate": false,
+          "operator": "parity",
+          "required_organs": [
+            "resource_organ",
+            "state_organ",
+            "time_organ"
+          ],
+          "terms": [
+            {
+              "left": "resource.burst_size",
+              "organ_id": "resource_organ",
+              "right": "resource.memory_pressure"
+            },
+            {
+              "left": "state.lifetime",
+              "organ_id": "state_organ",
+              "right": "state.mutation_rate"
+            },
+            {
+              "left": "time.deadline",
+              "organ_id": "time_organ",
+              "right": "time.duration"
+            }
+          ]
+        },
+        "seed": 88
+      },
+      "metrics": {
+        "best_single_organ_accuracy": 0.51953125,
+        "holdout_accuracy": 1.0,
+        "identity_memory_accuracy": 0.466796875,
+        "intervention_consistency": 1.0,
+        "joint_gain_over_single": 0.48046875,
+        "leave_one_organ_out_accuracy": {
+          "resource_organ": 0.49609375,
+          "state_organ": 0.501953125,
+          "time_organ": 0.50390625
+        },
+        "majority_accuracy": 0.466796875,
+        "minimum_leave_one_organ_drop": 0.49609375,
+        "permuted_label_metrics": {
+          "chance_recovery_rate": 0.1,
+          "mean_accuracy": 0.49993896484375,
+          "mean_information_accuracy": 0.576171875,
+          "recovery_rate_limit_3sigma": 0.21250000000000002,
+          "repeats": 64,
+          "target_recovery_rate": 0.125,
+          "trials": [
+            {
+              "accuracy": 0.478515625,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 0.521484375,
+              "repeat": 0
+            },
+            {
+              "accuracy": 0.478515625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.521484375,
+              "repeat": 1
+            },
+            {
+              "accuracy": 0.521484375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.521484375,
+              "repeat": 2
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.501953125,
+              "repeat": 3
+            },
+            {
+              "accuracy": 0.50390625,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.50390625,
+              "repeat": 4
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.501953125,
+              "repeat": 5
+            },
+            {
+              "accuracy": 0.49609375,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.50390625,
+              "repeat": 6
+            },
+            {
+              "accuracy": 0.51171875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.51171875,
+              "repeat": 7
+            },
+            {
+              "accuracy": 0.529296875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.529296875,
+              "repeat": 8
+            },
+            {
+              "accuracy": 0.478515625,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 0.521484375,
+              "repeat": 9
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.501953125,
+              "repeat": 10
+            },
+            {
+              "accuracy": 0.529296875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.529296875,
+              "repeat": 11
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.501953125,
+              "repeat": 12
+            },
+            {
+              "accuracy": 0.4765625,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.5234375,
+              "repeat": 13
+            },
+            {
+              "accuracy": 0.5234375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.5234375,
+              "repeat": 14
+            },
+            {
+              "accuracy": 0.478515625,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 0.521484375,
+              "repeat": 15
+            },
+            {
+              "accuracy": 0.521484375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.521484375,
+              "repeat": 16
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 1.0,
+              "repeat": 17
+            },
+            {
+              "accuracy": 0.4765625,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.5234375,
+              "repeat": 18
+            },
+            {
+              "accuracy": 0.470703125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.529296875,
+              "repeat": 19
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 1.0,
+              "repeat": 20
+            },
+            {
+              "accuracy": 0.4765625,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.5234375,
+              "repeat": 21
+            },
+            {
+              "accuracy": 0.49609375,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.50390625,
+              "repeat": 22
+            },
+            {
+              "accuracy": 0.49609375,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.50390625,
+              "repeat": 23
+            },
+            {
+              "accuracy": 0.5234375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.5234375,
+              "repeat": 24
+            },
+            {
+              "accuracy": 0.50390625,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.50390625,
+              "repeat": 25
+            },
+            {
+              "accuracy": 0.470703125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.529296875,
+              "repeat": 26
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 1.0,
+              "repeat": 27
+            },
+            {
+              "accuracy": 0.5234375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.5234375,
+              "repeat": 28
+            },
+            {
+              "accuracy": 0.51171875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.51171875,
+              "repeat": 29
+            },
+            {
+              "accuracy": 0.478515625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.521484375,
+              "repeat": 30
+            },
+            {
+              "accuracy": 0.529296875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.529296875,
+              "repeat": 31
+            },
+            {
+              "accuracy": 0.4765625,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.5234375,
+              "repeat": 32
+            },
+            {
+              "accuracy": 0.5234375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.5234375,
+              "repeat": 33
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.501953125,
+              "repeat": 34
+            },
+            {
+              "accuracy": 0.49609375,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.50390625,
+              "repeat": 35
+            },
+            {
+              "accuracy": 0.48828125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.51171875,
+              "repeat": 36
+            },
+            {
+              "accuracy": 0.0,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 1.0,
+              "repeat": 37
+            },
+            {
+              "accuracy": 0.5234375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.5234375,
+              "repeat": 38
+            },
+            {
+              "accuracy": 0.0,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 1.0,
+              "repeat": 39
+            },
+            {
+              "accuracy": 0.478515625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.521484375,
+              "repeat": 40
+            },
+            {
+              "accuracy": 0.0,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 1.0,
+              "repeat": 41
+            },
+            {
+              "accuracy": 0.48828125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.51171875,
+              "repeat": 42
+            },
+            {
+              "accuracy": 0.50390625,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.50390625,
+              "repeat": 43
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.501953125,
+              "repeat": 44
+            },
+            {
+              "accuracy": 0.529296875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.529296875,
+              "repeat": 45
+            },
+            {
+              "accuracy": 0.529296875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.529296875,
+              "repeat": 46
+            },
+            {
+              "accuracy": 0.51171875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.51171875,
+              "repeat": 47
+            },
+            {
+              "accuracy": 0.48828125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.51171875,
+              "repeat": 48
+            },
+            {
+              "accuracy": 0.49609375,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.50390625,
+              "repeat": 49
+            },
+            {
+              "accuracy": 0.4765625,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.5234375,
+              "repeat": 50
+            },
+            {
+              "accuracy": 0.48828125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.51171875,
+              "repeat": 51
+            },
+            {
+              "accuracy": 0.5234375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.5234375,
+              "repeat": 52
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.501953125,
+              "repeat": 53
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.501953125,
+              "repeat": 54
+            },
+            {
+              "accuracy": 0.4609375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.5390625,
+              "repeat": 55
+            },
+            {
+              "accuracy": 0.50390625,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.50390625,
+              "repeat": 56
+            },
+            {
+              "accuracy": 0.478515625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.521484375,
+              "repeat": 57
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.501953125,
+              "repeat": 58
+            },
+            {
+              "accuracy": 0.51171875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.51171875,
+              "repeat": 59
+            },
+            {
+              "accuracy": 0.529296875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.529296875,
+              "repeat": 60
+            },
+            {
+              "accuracy": 0.0,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 1.0,
+              "repeat": 61
+            },
+            {
+              "accuracy": 0.50390625,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.50390625,
+              "repeat": 62
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 1.0,
+              "repeat": 63
+            }
+          ],
+          "unique_candidate_function_count": 20
+        },
+        "random_partition_accuracy": 0.470703125
+      },
+      "passed": true,
+      "provenance": {
+        "discovery_sha256": "cba5e83b81a5955a3ae1a94aea255f120ca8a4f28e1eab8f787cec0d7cb5fa70",
+        "frame_sha256": "1540cd63e367221ee5205daa344b525deaa787e8c65c588bcf4d52fb785b6ca0",
+        "holdout_revealed_only_by_evaluator": true,
+        "observed_copied_from_frame_expected": false,
+        "sealed_holdout_sha256": "eb7ec0547b419d1e2a297e4084248a6332cc4161848bbaae5f14e7aa938d784f"
+      },
+      "seed": 88
+    },
+    {
+      "assertions": {
+        "best_single_organ_at_most_62pct": true,
+        "frame_frozen_from_current_discovery": true,
+        "frame_uses_at_least_two_organs": true,
+        "heldout_accuracy_at_least_98pct": true,
+        "intervention_consistency_at_least_98pct": true,
+        "joint_gain_over_single_at_least_30pp": true,
+        "leave_one_required_organ_drops_at_least_30pp": true,
+        "permuted_labels_do_not_exceed_chance_recovery_bound": true,
+        "permuted_labels_have_low_mean_information": true,
+        "sealed_hashes_match": true
+      },
+      "frame": {
+        "canonical": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+        "description_length": 8,
+        "negate": true,
+        "operator": "parity",
+        "required_organs": [
+          "resource_organ",
+          "time_organ"
+        ],
+        "terms": [
+          {
+            "left": "resource.burst_size",
+            "organ_id": "resource_organ",
+            "right": "resource.memory_pressure"
+          },
+          {
+            "left": "time.deadline",
+            "organ_id": "time_organ",
+            "right": "time.duration"
+          }
+        ]
+      },
+      "hidden_axis_after_scoring": {
+        "hidden_axis": {
+          "canonical": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+          "description_length": 8,
+          "negate": true,
+          "operator": "parity",
+          "required_organs": [
+            "resource_organ",
+            "time_organ"
+          ],
+          "terms": [
+            {
+              "left": "resource.burst_size",
+              "organ_id": "resource_organ",
+              "right": "resource.memory_pressure"
+            },
+            {
+              "left": "time.deadline",
+              "organ_id": "time_organ",
+              "right": "time.duration"
+            }
+          ]
+        },
+        "seed": 101
+      },
+      "metrics": {
+        "best_single_organ_accuracy": 0.509765625,
+        "holdout_accuracy": 1.0,
+        "identity_memory_accuracy": 0.486328125,
+        "intervention_consistency": 1.0,
+        "joint_gain_over_single": 0.490234375,
+        "leave_one_organ_out_accuracy": {
+          "resource_organ": 0.509765625,
+          "time_organ": 0.47265625
+        },
+        "majority_accuracy": 0.486328125,
+        "minimum_leave_one_organ_drop": 0.490234375,
+        "permuted_label_metrics": {
+          "chance_recovery_rate": 0.1,
+          "mean_accuracy": 0.490142822265625,
+          "mean_information_accuracy": 0.552032470703125,
+          "recovery_rate_limit_3sigma": 0.21250000000000002,
+          "repeats": 64,
+          "target_recovery_rate": 0.078125,
+          "trials": [
+            {
+              "accuracy": 0.486328125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.513671875,
+              "repeat": 0
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 0.501953125,
+              "repeat": 1
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.501953125,
+              "repeat": 2
+            },
+            {
+              "accuracy": 0.0,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 1.0,
+              "repeat": 3
+            },
+            {
+              "accuracy": 0.47265625,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.52734375,
+              "repeat": 4
+            },
+            {
+              "accuracy": 0.513671875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.513671875,
+              "repeat": 5
+            },
+            {
+              "accuracy": 0.4765625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.5234375,
+              "repeat": 6
+            },
+            {
+              "accuracy": 0.4765625,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.5234375,
+              "repeat": 7
+            },
+            {
+              "accuracy": 0.52734375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.52734375,
+              "repeat": 8
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.501953125,
+              "repeat": 9
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 0.501953125,
+              "repeat": 10
+            },
+            {
+              "accuracy": 0.486328125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.513671875,
+              "repeat": 11
+            },
+            {
+              "accuracy": 0.4765625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.5234375,
+              "repeat": 12
+            },
+            {
+              "accuracy": 0.47265625,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.52734375,
+              "repeat": 13
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure)",
+              "information_accuracy": 0.501953125,
+              "repeat": 14
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.501953125,
+              "repeat": 15
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure))",
+              "information_accuracy": 0.501953125,
+              "repeat": 16
+            },
+            {
+              "accuracy": 0.46484375,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.53515625,
+              "repeat": 17
+            },
+            {
+              "accuracy": 0.5234375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.5234375,
+              "repeat": 18
+            },
+            {
+              "accuracy": 0.48828125,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51171875,
+              "repeat": 19
+            },
+            {
+              "accuracy": 0.486328125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.513671875,
+              "repeat": 20
+            },
+            {
+              "accuracy": 0.5234375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.5234375,
+              "repeat": 21
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.501953125,
+              "repeat": 22
+            },
+            {
+              "accuracy": 0.52734375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.52734375,
+              "repeat": 23
+            },
+            {
+              "accuracy": 0.4765625,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.5234375,
+              "repeat": 24
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure))",
+              "information_accuracy": 0.501953125,
+              "repeat": 25
+            },
+            {
+              "accuracy": 0.0,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 1.0,
+              "repeat": 26
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure))",
+              "information_accuracy": 0.501953125,
+              "repeat": 27
+            },
+            {
+              "accuracy": 0.46484375,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.53515625,
+              "repeat": 28
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.501953125,
+              "repeat": 29
+            },
+            {
+              "accuracy": 0.0,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 1.0,
+              "repeat": 30
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.501953125,
+              "repeat": 31
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.501953125,
+              "repeat": 32
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.501953125,
+              "repeat": 33
+            },
+            {
+              "accuracy": 0.53515625,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.53515625,
+              "repeat": 34
+            },
+            {
+              "accuracy": 0.486328125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.513671875,
+              "repeat": 35
+            },
+            {
+              "accuracy": 0.53515625,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.53515625,
+              "repeat": 36
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.501953125,
+              "repeat": 37
+            },
+            {
+              "accuracy": 0.486328125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.513671875,
+              "repeat": 38
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.501953125,
+              "repeat": 39
+            },
+            {
+              "accuracy": 0.513671875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.513671875,
+              "repeat": 40
+            },
+            {
+              "accuracy": 0.51171875,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.51171875,
+              "repeat": 41
+            },
+            {
+              "accuracy": 0.4765625,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.5234375,
+              "repeat": 42
+            },
+            {
+              "accuracy": 0.486328125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.513671875,
+              "repeat": 43
+            },
+            {
+              "accuracy": 0.48828125,
+              "axis": "lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.51171875,
+              "repeat": 44
+            },
+            {
+              "accuracy": 0.46484375,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.53515625,
+              "repeat": 45
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.501953125,
+              "repeat": 46
+            },
+            {
+              "accuracy": 0.4765625,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.5234375,
+              "repeat": 47
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.501953125,
+              "repeat": 48
+            },
+            {
+              "accuracy": 0.5234375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.5234375,
+              "repeat": 49
+            },
+            {
+              "accuracy": 0.5234375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.5234375,
+              "repeat": 50
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure))",
+              "information_accuracy": 0.501953125,
+              "repeat": 51
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure))",
+              "information_accuracy": 0.501953125,
+              "repeat": 52
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.501953125,
+              "repeat": 53
+            },
+            {
+              "accuracy": 0.5234375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.5234375,
+              "repeat": 54
+            },
+            {
+              "accuracy": 0.486328125,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.513671875,
+              "repeat": 55
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 1.0,
+              "repeat": 56
+            },
+            {
+              "accuracy": 0.5234375,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(state.lifetime,state.mutation_rate)",
+              "information_accuracy": 0.5234375,
+              "repeat": 57
+            },
+            {
+              "accuracy": 0.5234375,
+              "axis": "not(lt(interaction.feedback_count,interaction.turn_interval) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.5234375,
+              "repeat": 58
+            },
+            {
+              "accuracy": 1.0,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 1.0,
+              "repeat": 59
+            },
+            {
+              "accuracy": 0.46484375,
+              "axis": "not(lt(resource.burst_size,resource.memory_pressure) xor lt(state.lifetime,state.mutation_rate))",
+              "information_accuracy": 0.53515625,
+              "repeat": 60
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "not(lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration))",
+              "information_accuracy": 0.501953125,
+              "repeat": 61
+            },
+            {
+              "accuracy": 0.501953125,
+              "axis": "lt(state.lifetime,state.mutation_rate) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.501953125,
+              "repeat": 62
+            },
+            {
+              "accuracy": 0.498046875,
+              "axis": "lt(interaction.feedback_count,interaction.turn_interval) xor lt(resource.burst_size,resource.memory_pressure) xor lt(time.deadline,time.duration)",
+              "information_accuracy": 0.501953125,
+              "repeat": 63
+            }
+          ],
+          "unique_candidate_function_count": 20
+        },
+        "random_partition_accuracy": 0.517578125
+      },
+      "passed": true,
+      "provenance": {
+        "discovery_sha256": "6b732f16baacd8c42939aaebecdfa11dcb81a319657a5ea331e4a72bfeaab990",
+        "frame_sha256": "949c1b1e6b5ef33b2b9ebde5df6d92f3e86cd3dd4611e071548e6e25c7cfe75b",
+        "holdout_revealed_only_by_evaluator": true,
+        "observed_copied_from_frame_expected": false,
+        "sealed_holdout_sha256": "c968a339e2b6bc358851184e124db228023eca8d33cfeb420a7c9149714105bf"
+      },
+      "seed": 101
+    }
+  ],
+  "format": "polaris-blind-composite-axis-multiseed-gate-v1",
+  "passed": true,
+  "process_isolation": {
+    "evaluator_process": true,
+    "generator_process": true,
+    "holdout_cli_argument_exposed_to_reframer": false,
+    "reframer_process": true
+  },
+  "seed_count": 7,
+  "seeds_passed": 7,
+  "status": "synthetic_blind_composite_axis_not_model_intelligence",
+  "truth_boundary": {
+    "gpu_used": false,
+    "heldout_outcomes_known_to_reframer": false,
+    "hidden_expression_known_to_reframer": false,
+    "model_started": false,
+    "search_grammar_known_in_advance": true,
+    "training_large_neural_model": false
+  }
+}
