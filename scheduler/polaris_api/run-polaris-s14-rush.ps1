@@ -15,6 +15,7 @@ $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $modelRoot = 'D:\models\Polaris-S14'
 $cacheRoot = Join-Path $modelRoot 'range_cache'
+$packIndex = Join-Path $modelRoot 'range_cache_pack\index.v1.json'
 $binary = Join-Path $root 'scheduler\target\release\polaris_api.exe'
 $logRoot = Join-Path $root '.tmp-polaris-tests'
 $stderrLog = Join-Path $logRoot 'polaris-s14-rush.stderr.log'
@@ -44,10 +45,9 @@ $environment = @{
     POLARIS_API_ADDR = '127.0.0.1:11435'
     POLARIS_S14_EXPLICIT_PAGE_FETCH = '1'
     POLARIS_S14_PROJECTION_TWIN_FALLBACK = $(if ($ProjectionTwinFallback) { '1' } else { '0' })
-    # 32-GiB hosts cannot afford the former 4-GiB packed L2 together with K8
-    # checkpoint/state banks.  Two GiB keeps useful hot packets without forcing
-    # Windows into 95% physical-memory pressure.
-    POLARIS_S14_PACKED_L2_MIB = '2048'
+    # SSD pack 消除热页的数千次 reopen/stat；RAM L2 降为 1 GiB，给 K4
+    # checkpoint/state 和 Windows 留出物理内存余量。
+    POLARIS_S14_PACKED_L2_MIB = '1024'
     POLARIS_S14_STARFOLD_MICROTILE_MIB = '16'
     # K8 is throughput-oriented, but on an 8-GiB RX 5700 XT its checkpoint
     # arena falls back to host memory and starves the GPU.  K4 keeps the active
@@ -62,6 +62,9 @@ $environment = @{
     HTTPS_PROXY = 'http://127.0.0.1:7897'
     S14_DYNAMIC_PAGE_FETCH_MODELSCOPE_ENDPOINT = 'https://www.modelscope.cn/models'
     S14_DYNAMIC_PAGE_FETCH_LFS_SNAPSHOT = (Join-Path $modelRoot 'hub_blobs_snapshot.json')
+}
+if (Test-Path -LiteralPath $packIndex -PathType Leaf) {
+    $environment.POLARIS_S14_RANGE_PACK_INDEX = (Resolve-Path -LiteralPath $packIndex).Path
 }
 
 $running = Get-Process -Name polaris_api -ErrorAction SilentlyContinue
@@ -86,5 +89,10 @@ $process = Start-Process `
     CacheBudgetGiB = [Math]::Round($cacheBudgetBytes / 1GB, 2)
     DiskReserveGiB = $DiskReserveGiB
     ProjectionTwinFallback = [bool]$ProjectionTwinFallback
+    RangePackIndex = $(if ($environment.ContainsKey('POLARIS_S14_RANGE_PACK_INDEX')) {
+        $environment.POLARIS_S14_RANGE_PACK_INDEX
+    } else {
+        $null
+    })
     StderrLog = $stderrLog
 }

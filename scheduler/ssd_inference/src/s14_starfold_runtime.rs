@@ -1104,6 +1104,12 @@ impl S14StarfoldRuntime {
         microtile_bytes: u32,
         page_fetch_mode: DynamicPageFetchMode,
     ) -> Result<Self> {
+        let cache_root = cache_root
+            .canonicalize()
+            .with_context(|| format!("resolve S14 StarFold cache root {}", cache_root.display()))?;
+        if !cache_root.is_dir() {
+            bail!("S14 StarFold cache root 不是目录");
+        }
         let contract = S14StarfoldDoubleWindowContract::new(microtile_bytes)?;
         let resource_owner = S14StarfoldVulkanResourceOwner::new(ctx, microtile_bytes)
             .context("初始化 S14 StarFold Vulkan 双窗口物理 owner")?;
@@ -1120,7 +1126,7 @@ impl S14StarfoldRuntime {
             .context("初始化 S14 StarFold packed MXFP4 RAM L2")?;
         let projection_twin_fallback = projection_twin_fallback_from_env()?;
         Ok(Self {
-            cache_root: cache_root.to_path_buf(),
+            cache_root,
             page_fetch_mode,
             projection_twin_fallback,
             validation_epoch,
@@ -1315,9 +1321,6 @@ impl S14StarfoldRuntime {
             .map_err(anyhow::Error::new)
             .context("取得 S14 StarFold 进程级 proof/SHA/mmap 热 lease")?;
         let asset = hot_lease.asset().clone();
-        source
-            .planned
-            .validate_resolved_position0_asset(&asset, Some(source.span.key.expert_id))?;
         let microtile = hot_lease
             .microtile(source.span.source_segment_offset, source.span.byte_len)
             .map_err(anyhow::Error::new)

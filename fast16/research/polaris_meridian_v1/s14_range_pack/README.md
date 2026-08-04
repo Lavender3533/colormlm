@@ -45,3 +45,27 @@ python -X utf8 range_pack.py materialize \
 - 运行时试图把 52.231GB 全部塞入 32GiB HBM。
 
 这些门只保证来源和传输正确，不证明 S14 聪明。质量仍需通过原生四题早停门。
+
+## 急行 v2：loose Range 合并为 SSD pack
+
+`range_cache_pack_writer.py` 不会下载或删除任何 loose Range。它按 `.bin` 的
+最近修改时间选择热页，把最多 4 GiB 页合并到一个不可变 pack，并生成
+`index.v1.json`。每个 entry 以 4096 字节对齐；写入时会重新校验 sidecar
+身份、payload SHA-256 和 proof SHA-256。pack 与 index 都先写同目录临时文件、
+`fsync` 后原子提交。
+
+只做选页规划，不读取大 payload：
+
+```powershell
+python -X utf8 .\range_cache_pack_writer.py --dry-run
+```
+
+构建默认 4 GiB 热 pack：
+
+```powershell
+python -X utf8 .\range_cache_pack_writer.py
+```
+
+已存在 `index.v1.json` 时，新 pack 只追加尚未收录的热页，索引 generation
+递增，已有 pack 不会改写。运行时仅在索引存在时启用 pack，未覆盖页继续走
+loose/远程路径。

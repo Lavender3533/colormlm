@@ -86,6 +86,7 @@ pub mod s14_position0_whole_token;
 pub mod s14_position0_workspace;
 pub mod s14_position1_attention;
 pub mod s14_position3_attention;
+pub mod s14_range_pack_store;
 pub mod s14_ratio128_compressor_finalize;
 pub mod s14_ratio4_compressor_finalize;
 pub mod s14_ratio4_global_topk;
