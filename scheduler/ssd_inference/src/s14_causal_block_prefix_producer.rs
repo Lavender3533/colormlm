@@ -1,7 +1,8 @@
 //! 任意已提交 base_position、K=4 block-major prefix checkpoint 的真实 Vulkan producer。
 //!
-//! 每层 HC/QKV 得到 K 行 `hc_branch_f32` 与 `kv_raw_bf16` 后，本 producer 在同一个
-//! command buffer 中把 source lane `s` 的写集累积到 prefix `s..K`。compressor 投影每个
+//! 每层 HC/QKV 得到 K 行 `hc_branch_f32` 与已按各自绝对 position 完成 RoPE 的 KV 后，
+//! 本 producer 在同一个 command buffer 中把 source lane `s` 的写集累积到 prefix
+//! `s..K`。compressor 投影每个
 //! source lane 只计算一次，随后把正式 recipe 的 writeback 行复制到其余 prefix。ratio4
 //! 的 lane0/1 在这里闭合；lane2/3 只先写 window KV，并由 boundary state owner 在同一
 //! command 中完成 remainder/finalize/rollover。没有结构 receipt 能替代这些 Vulkan 录制。
@@ -40,7 +41,9 @@ pub struct S14CausalBlockPrefixLayerInputs<'a> {
     pub static_weights: StorageBufferSlice<'a>,
     pub static_logical_bytes: u64,
     pub hc_branch_f32: StorageBufferSlice<'a>,
-    pub current_kv_bf16: StorageBufferSlice<'a>,
+    /// 已按 `base_position + lane` 完成 position RoPE 的 K 行 KV。raw KV 只允许
+    /// 供本轮 attention 使用，禁止写入跨 prefix/window 的历史状态。
+    pub rotated_current_kv_bf16: StorageBufferSlice<'a>,
 }
 
 impl fmt::Debug for S14CausalBlockPrefixLayerInputs<'_> {
@@ -52,7 +55,10 @@ impl fmt::Debug for S14CausalBlockPrefixLayerInputs<'_> {
             .field("static_weights", &self.static_weights.buffer.handle())
             .field("static_logical_bytes", &self.static_logical_bytes)
             .field("hc_branch_f32", &self.hc_branch_f32.buffer.handle())
-            .field("current_kv_bf16", &self.current_kv_bf16.buffer.handle())
+            .field(
+                "rotated_current_kv_bf16",
+                &self.rotated_current_kv_bf16.buffer.handle(),
+            )
             .finish()
     }
 }
@@ -261,9 +267,9 @@ impl S14CausalBlockPrefixStateProducer {
             "HC branch F32",
         )?;
         validate_slice(
-            inputs.current_kv_bf16,
+            inputs.rotated_current_kv_bf16,
             BLOCK_SIZE as u64 * KV * BF16_BYTES,
-            "current KV BF16",
+            "rotated current KV BF16",
         )?;
         if !self.pending_binders()?.is_empty() {
             bail!("K4 prefix producer 上一层 binder 尚未在 fence 后释放");
@@ -308,14 +314,14 @@ impl S14CausalBlockPrefixStateProducer {
                     program.begin_lane_application(prefix_index, inputs.layer, source_lane)?;
                 }
                 let source_offset = inputs
-                    .current_kv_bf16
+                    .rotated_current_kv_bf16
                     .offset
                     .checked_add(source_lane as u64 * KV * BF16_BYTES)
-                    .context("K4 prefix current-KV source offset overflow")?;
+                    .context("K4 prefix rotated-current-KV source offset overflow")?;
                 program.state_layout(source_lane)?.record_row_writeback_at(
                     &self.context,
                     inputs.command,
-                    inputs.current_kv_bf16.buffer,
+                    inputs.rotated_current_kv_bf16.buffer,
                     source_offset,
                     self.arena.buffer(),
                     self.arena.prefix_offset(prefix_index)?,

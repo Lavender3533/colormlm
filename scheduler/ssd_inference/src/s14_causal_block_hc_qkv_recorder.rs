@@ -1183,7 +1183,10 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
                     },
                     static_logical_bytes: static_layer.logical_bytes,
                     hc_branch_f32: self.layout.slice(workspace, self.layout.hc_branch_f32),
-                    current_kv_bf16: self.layout.slice(workspace, self.layout.kv_raw_bf16),
+                    // Prefix/window state is consumed as historical, already-RoPE KV by
+                    // subsequent lanes and K4 blocks.  The current-block attention recorder
+                    // continues to bind the raw rows separately.
+                    rotated_current_kv_bf16: resources.rotated_current_block_kv_bf16.storage(),
                 })?;
             }
         }
