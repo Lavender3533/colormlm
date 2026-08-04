@@ -5,6 +5,10 @@ param(
     [ValidateSet('Auto', 'Local', 'Docker')][string]$Backend = 'Auto',
     [bool]$ExplicitPageFetch = $true,
     [string]$RangeProxyUrl = 'http://127.0.0.1:7897',
+    [ValidateRange(1, 32)][int]$RushMaxTokens = 8,
+    [ValidateRange(1, 24)][int]$RushRangeWorkers = 12,
+    [ValidateRange(20, 128)][int]$RushDiskReserveGiB = 24,
+    [switch]$ProjectionTwinFallback,
     [int]$ApiWaitSeconds = 60,
     [int]$WebUiWaitSeconds = 120,
     [switch]$NoBrowser
@@ -18,6 +22,8 @@ $OutputEncoding = [Text.UTF8Encoding]::new($false)
 
 $checkScript = Join-Path $PSScriptRoot 'check-polaris-chat.ps1'
 $workspace = Split-Path -Parent $PSScriptRoot
+$rushEnvironmentScript = Join-Path $workspace 'scheduler\polaris_api\polaris-s14-rush-env.ps1'
+. $rushEnvironmentScript
 $runtimeDir = Join-Path $PSScriptRoot 'runtime\polaris-chat'
 $startedApi = $null
 $startedWebUi = $null
@@ -50,34 +56,19 @@ function Start-ApiAdapter {
     }
     New-Item -ItemType Directory -Path $runtimeDir -Force | Out-Null
     $listenAddress = "$($uri.Host):$($uri.Port)"
-    $previousAddress = [Environment]::GetEnvironmentVariable('POLARIS_API_ADDR', 'Process')
-    $previousFetch = [Environment]::GetEnvironmentVariable('POLARIS_S14_EXPLICIT_PAGE_FETCH', 'Process')
-    $previousHttpProxy = [Environment]::GetEnvironmentVariable('HTTP_PROXY', 'Process')
-    $previousHttpsProxy = [Environment]::GetEnvironmentVariable('HTTPS_PROXY', 'Process')
-    try {
-        [Environment]::SetEnvironmentVariable('POLARIS_API_ADDR', $listenAddress, 'Process')
-        [Environment]::SetEnvironmentVariable(
-            'POLARIS_S14_EXPLICIT_PAGE_FETCH',
-            $(if ($ExplicitPageFetch) { '1' } else { '0' }),
-            'Process'
-        )
-        if ($ExplicitPageFetch) {
-            if ($RangeProxyUrl.TrimEnd('/') -ne 'http://127.0.0.1:7897') {
-                throw '当前 production Range 策略只允许 http://127.0.0.1:7897'
-            }
-            [Environment]::SetEnvironmentVariable('HTTP_PROXY', $RangeProxyUrl, 'Process')
-            [Environment]::SetEnvironmentVariable('HTTPS_PROXY', $RangeProxyUrl, 'Process')
-        }
-        return Start-Process -FilePath $Binary -PassThru -WindowStyle Hidden `
-            -RedirectStandardOutput (Join-Path $runtimeDir 'polaris_api.stdout.log') `
-            -RedirectStandardError (Join-Path $runtimeDir 'polaris_api.stderr.log')
-    }
-    finally {
-        [Environment]::SetEnvironmentVariable('POLARIS_API_ADDR', $previousAddress, 'Process')
-        [Environment]::SetEnvironmentVariable('POLARIS_S14_EXPLICIT_PAGE_FETCH', $previousFetch, 'Process')
-        [Environment]::SetEnvironmentVariable('HTTP_PROXY', $previousHttpProxy, 'Process')
-        [Environment]::SetEnvironmentVariable('HTTPS_PROXY', $previousHttpsProxy, 'Process')
-    }
+    $rushProfile = Get-PolarisS14RushEnvironment `
+        -ApiAddress $listenAddress `
+        -MaxTokens $RushMaxTokens `
+        -RangeWorkers $RushRangeWorkers `
+        -DiskReserveGiB $RushDiskReserveGiB `
+        -ExplicitPageFetch $ExplicitPageFetch `
+        -RangeProxyUrl $RangeProxyUrl `
+        -ProjectionTwinFallback ([bool]$ProjectionTwinFallback)
+    return Start-Process -FilePath $Binary -PassThru -WindowStyle Hidden `
+        -WorkingDirectory $workspace `
+        -Environment $rushProfile.Environment `
+        -RedirectStandardOutput (Join-Path $runtimeDir 'polaris_api.stdout.log') `
+        -RedirectStandardError (Join-Path $runtimeDir 'polaris_api.stderr.log')
 }
 
 function Test-DockerReady {
