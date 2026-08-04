@@ -1,0 +1,1979 @@
+{
+  "format": "polaris-evidence-constellation-minimal-gate-v0",
+  "status": "structural_semantics_only_not_model_intelligence",
+  "passed": true,
+  "scenario_count": 3,
+  "assertion_count": 16,
+  "assertions_passed": 16,
+  "contract": {
+    "model_started": false,
+    "training_performed": false,
+    "neural_confidence_is_evidence": false,
+    "conflicts_are_averaged": false,
+    "partial_commit_is_surviving_branch_intersection": true,
+    "same_source_receipt_supersedes_previous": true
+  },
+  "scenarios": [
+    {
+      "scenario": "scenario.website.java_php",
+      "passed": true,
+      "assertions": {
+        "java_php_conflict_created_two_branches": true,
+        "common_design_committed_before_backend_choice": true,
+        "php_committed_only_after_complete_evidence": true,
+        "composer_failure_rolled_back_only_php": true,
+        "java_branch_revived_after_new_evidence": true,
+        "same_source_receipt_superseded_not_double_counted": true
+      },
+      "checkpoints": {
+        "branch_birth": {
+          "proposal_id": "proposal.backend_php",
+          "source_branch_id": "branch.0",
+          "new_branch_id": "branch.1",
+          "priority": 0.9615384615384615,
+          "conflicts": {
+            "backend.stack": [
+              "claim.backend_java",
+              "claim.backend_php"
+            ]
+          }
+        },
+        "common_commit": {
+          "viable_branches": [
+            "branch.0",
+            "branch.1"
+          ],
+          "common_slots": [
+            "design.api_contract",
+            "design.layout",
+            "goal"
+          ],
+          "newly_committed_claims": [
+            "claim.shared_api_contract",
+            "claim.shared_layout"
+          ],
+          "committed": {
+            "design.api_contract": "claim.shared_api_contract",
+            "design.layout": "claim.shared_layout",
+            "goal": "anchor.website_goal"
+          },
+          "blocked": false
+        },
+        "php_commit": {
+          "viable_branches": [
+            "branch.1"
+          ],
+          "common_slots": [
+            "backend.stack",
+            "design.api_contract",
+            "design.layout",
+            "goal"
+          ],
+          "newly_committed_claims": [
+            "claim.backend_php"
+          ],
+          "committed": {
+            "backend.stack": "claim.backend_php",
+            "design.api_contract": "claim.shared_api_contract",
+            "design.layout": "claim.shared_layout",
+            "goal": "anchor.website_goal"
+          },
+          "blocked": false
+        },
+        "rollback": {
+          "receipt": {
+            "receipt_id": "receipt.composer_failed",
+            "requirement_id": "env.composer_install",
+            "observed": false,
+            "source_group": "composer_tool",
+            "reliability": 1.0,
+            "match_strength": 1.0,
+            "epoch": 15
+          },
+          "affected_claims": [
+            "claim.backend_php"
+          ],
+          "rolled_back_claims": [
+            "claim.backend_php"
+          ]
+        },
+        "java_commit": {
+          "viable_branches": [
+            "branch.0"
+          ],
+          "common_slots": [
+            "backend.stack",
+            "design.api_contract",
+            "design.layout",
+            "goal"
+          ],
+          "newly_committed_claims": [
+            "claim.backend_java"
+          ],
+          "committed": {
+            "backend.stack": "claim.backend_java",
+            "design.api_contract": "claim.shared_api_contract",
+            "design.layout": "claim.shared_layout",
+            "goal": "anchor.website_goal"
+          },
+          "blocked": false
+        }
+      },
+      "snapshot": {
+        "field_id": "scenario.website.java_php",
+        "epoch": 18,
+        "proposal_round_sealed": true,
+        "claims": {
+          "anchor.website_goal": {
+            "claim_id": "anchor.website_goal",
+            "slot": "goal",
+            "value": "build_responsive_web_application",
+            "organ_id": "user",
+            "requirements": [],
+            "depends_on": [],
+            "anchor": true
+          },
+          "claim.backend_java": {
+            "claim_id": "claim.backend_java",
+            "slot": "backend.stack",
+            "value": "Java/Spring",
+            "organ_id": "code_island",
+            "requirements": [
+              {
+                "requirement_id": "env.pom_xml",
+                "expected": true,
+                "threshold": 0.95
+              },
+              {
+                "requirement_id": "env.jvm_runtime",
+                "expected": true,
+                "threshold": 0.95
+              }
+            ],
+            "depends_on": [
+              "claim.shared_api_contract"
+            ],
+            "anchor": false
+          },
+          "claim.backend_php": {
+            "claim_id": "claim.backend_php",
+            "slot": "backend.stack",
+            "value": "PHP/Laravel",
+            "organ_id": "code_island",
+            "requirements": [
+              {
+                "requirement_id": "env.composer_json",
+                "expected": true,
+                "threshold": 0.95
+              },
+              {
+                "requirement_id": "env.php_runtime",
+                "expected": true,
+                "threshold": 0.95
+              },
+              {
+                "requirement_id": "env.composer_install",
+                "expected": true,
+                "threshold": 0.95
+              }
+            ],
+            "depends_on": [
+              "claim.shared_api_contract"
+            ],
+            "anchor": false
+          },
+          "claim.shared_api_contract": {
+            "claim_id": "claim.shared_api_contract",
+            "slot": "design.api_contract",
+            "value": "items_v1",
+            "organ_id": "design_organ",
+            "requirements": [
+              {
+                "requirement_id": "schema.items_v1_valid",
+                "expected": true,
+                "threshold": 0.95
+              }
+            ],
+            "depends_on": [
+              "anchor.website_goal"
+            ],
+            "anchor": false
+          },
+          "claim.shared_layout": {
+            "claim_id": "claim.shared_layout",
+            "slot": "design.layout",
+            "value": "responsive_dashboard",
+            "organ_id": "design_organ",
+            "requirements": [
+              {
+                "requirement_id": "user.layout_accepted",
+                "expected": true,
+                "threshold": 0.95
+              }
+            ],
+            "depends_on": [
+              "anchor.website_goal"
+            ],
+            "anchor": false
+          }
+        },
+        "proposals": {
+          "proposal.backend_java": {
+            "proposal_id": "proposal.backend_java",
+            "organ_id": "code_island",
+            "claims": [
+              {
+                "claim_id": "claim.backend_java",
+                "slot": "backend.stack",
+                "value": "Java/Spring",
+                "organ_id": "code_island",
+                "requirements": [
+                  {
+                    "requirement_id": "env.pom_xml",
+                    "expected": true,
+                    "threshold": 0.95
+                  },
+                  {
+                    "requirement_id": "env.jvm_runtime",
+                    "expected": true,
+                    "threshold": 0.95
+                  }
+                ],
+                "depends_on": [
+                  "claim.shared_api_contract"
+                ],
+                "anchor": false
+              }
+            ],
+            "goal_alignment": 1.0,
+            "novelty": 0.5,
+            "expected_gain": 1.0,
+            "physical_cost": 2.0,
+            "exploration_priority": 0.8333333333333334
+          },
+          "proposal.backend_php": {
+            "proposal_id": "proposal.backend_php",
+            "organ_id": "code_island",
+            "claims": [
+              {
+                "claim_id": "claim.backend_php",
+                "slot": "backend.stack",
+                "value": "PHP/Laravel",
+                "organ_id": "code_island",
+                "requirements": [
+                  {
+                    "requirement_id": "env.composer_json",
+                    "expected": true,
+                    "threshold": 0.95
+                  },
+                  {
+                    "requirement_id": "env.php_runtime",
+                    "expected": true,
+                    "threshold": 0.95
+                  },
+                  {
+                    "requirement_id": "env.composer_install",
+                    "expected": true,
+                    "threshold": 0.95
+                  }
+                ],
+                "depends_on": [
+                  "claim.shared_api_contract"
+                ],
+                "anchor": false
+              }
+            ],
+            "goal_alignment": 1.0,
+            "novelty": 0.5,
+            "expected_gain": 1.0,
+            "physical_cost": 1.6,
+            "exploration_priority": 0.9615384615384615
+          },
+          "proposal.shared_design": {
+            "proposal_id": "proposal.shared_design",
+            "organ_id": "design_organ",
+            "claims": [
+              {
+                "claim_id": "claim.shared_layout",
+                "slot": "design.layout",
+                "value": "responsive_dashboard",
+                "organ_id": "design_organ",
+                "requirements": [
+                  {
+                    "requirement_id": "user.layout_accepted",
+                    "expected": true,
+                    "threshold": 0.95
+                  }
+                ],
+                "depends_on": [
+                  "anchor.website_goal"
+                ],
+                "anchor": false
+              },
+              {
+                "claim_id": "claim.shared_api_contract",
+                "slot": "design.api_contract",
+                "value": "items_v1",
+                "organ_id": "design_organ",
+                "requirements": [
+                  {
+                    "requirement_id": "schema.items_v1_valid",
+                    "expected": true,
+                    "threshold": 0.95
+                  }
+                ],
+                "depends_on": [
+                  "anchor.website_goal"
+                ],
+                "anchor": false
+              }
+            ],
+            "goal_alignment": 1.0,
+            "novelty": 0.5,
+            "expected_gain": 1.0,
+            "physical_cost": 0.2,
+            "exploration_priority": 2.0833333333333335
+          }
+        },
+        "branches": {
+          "branch.0": {
+            "branch_id": "branch.0",
+            "assignments": {
+              "goal": "anchor.website_goal",
+              "design.layout": "claim.shared_layout",
+              "design.api_contract": "claim.shared_api_contract",
+              "backend.stack": "claim.backend_java"
+            },
+            "parent_branch_id": null,
+            "born_from": "field_birth",
+            "viable": true
+          },
+          "branch.1": {
+            "branch_id": "branch.1",
+            "assignments": {
+              "goal": "anchor.website_goal",
+              "design.layout": "claim.shared_layout",
+              "design.api_contract": "claim.shared_api_contract",
+              "backend.stack": "claim.backend_php"
+            },
+            "parent_branch_id": "branch.0",
+            "born_from": "proposal.backend_php",
+            "viable": false
+          }
+        },
+        "assessments": {
+          "anchor.website_goal": {
+            "claim_id": "anchor.website_goal",
+            "status": "certified",
+            "certification": 1.0,
+            "contradiction": 0.0,
+            "requirement_support": {},
+            "requirement_refute": {}
+          },
+          "claim.backend_java": {
+            "claim_id": "claim.backend_java",
+            "status": "certified",
+            "certification": 1.0,
+            "contradiction": 0.0,
+            "requirement_support": {
+              "env.pom_xml": 1.0,
+              "env.jvm_runtime": 1.0
+            },
+            "requirement_refute": {
+              "env.pom_xml": 0.0,
+              "env.jvm_runtime": 0.0
+            }
+          },
+          "claim.backend_php": {
+            "claim_id": "claim.backend_php",
+            "status": "contradicted",
+            "certification": 0.0,
+            "contradiction": 1.0,
+            "requirement_support": {
+              "env.composer_json": 1.0,
+              "env.php_runtime": 1.0,
+              "env.composer_install": 0.0
+            },
+            "requirement_refute": {
+              "env.composer_json": 0.0,
+              "env.php_runtime": 0.0,
+              "env.composer_install": 1.0
+            }
+          },
+          "claim.shared_api_contract": {
+            "claim_id": "claim.shared_api_contract",
+            "status": "certified",
+            "certification": 1.0,
+            "contradiction": 0.0,
+            "requirement_support": {
+              "schema.items_v1_valid": 1.0
+            },
+            "requirement_refute": {
+              "schema.items_v1_valid": 0.0
+            }
+          },
+          "claim.shared_layout": {
+            "claim_id": "claim.shared_layout",
+            "status": "certified",
+            "certification": 1.0,
+            "contradiction": 0.0,
+            "requirement_support": {
+              "user.layout_accepted": 1.0
+            },
+            "requirement_refute": {
+              "user.layout_accepted": 0.0
+            }
+          }
+        },
+        "committed": {
+          "backend.stack": "claim.backend_java",
+          "design.api_contract": "claim.shared_api_contract",
+          "design.layout": "claim.shared_layout",
+          "goal": "anchor.website_goal"
+        },
+        "evidence_log": [
+          {
+            "receipt_id": "receipt.layout",
+            "requirement_id": "user.layout_accepted",
+            "observed": true,
+            "source_group": "user_contract",
+            "reliability": 1.0,
+            "match_strength": 1.0,
+            "epoch": 6
+          },
+          {
+            "receipt_id": "receipt.schema",
+            "requirement_id": "schema.items_v1_valid",
+            "observed": true,
+            "source_group": "schema_validator",
+            "reliability": 1.0,
+            "match_strength": 1.0,
+            "epoch": 7
+          },
+          {
+            "receipt_id": "receipt.pom",
+            "requirement_id": "env.pom_xml",
+            "observed": true,
+            "source_group": "filesystem",
+            "reliability": 1.0,
+            "match_strength": 1.0,
+            "epoch": 9
+          },
+          {
+            "receipt_id": "receipt.jvm_missing",
+            "requirement_id": "env.jvm_runtime",
+            "observed": false,
+            "source_group": "runtime_probe",
+            "reliability": 1.0,
+            "match_strength": 1.0,
+            "epoch": 10
+          },
+          {
+            "receipt_id": "receipt.composer_json",
+            "requirement_id": "env.composer_json",
+            "observed": true,
+            "source_group": "filesystem",
+            "reliability": 1.0,
+            "match_strength": 1.0,
+            "epoch": 11
+          },
+          {
+            "receipt_id": "receipt.php_runtime",
+            "requirement_id": "env.php_runtime",
+            "observed": true,
+            "source_group": "runtime_probe",
+            "reliability": 1.0,
+            "match_strength": 1.0,
+            "epoch": 12
+          },
+          {
+            "receipt_id": "receipt.composer_ok",
+            "requirement_id": "env.composer_install",
+            "observed": true,
+            "source_group": "composer_tool",
+            "reliability": 1.0,
+            "match_strength": 1.0,
+            "epoch": 13
+          },
+          {
+            "receipt_id": "receipt.composer_failed",
+            "requirement_id": "env.composer_install",
+            "observed": false,
+            "source_group": "composer_tool",
+            "reliability": 1.0,
+            "match_strength": 1.0,
+            "epoch": 15
+          },
+          {
+            "receipt_id": "receipt.jvm_provisioned",
+            "requirement_id": "env.jvm_runtime",
+            "observed": true,
+            "source_group": "runtime_probe",
+            "reliability": 1.0,
+            "match_strength": 1.0,
+            "epoch": 17
+          }
+        ],
+        "transitions": [
+          {
+            "epoch": 1,
+            "action": "anchor",
+            "detail": {
+              "claim_id": "anchor.website_goal",
+              "slot": "goal"
+            }
+          },
+          {
+            "epoch": 2,
+            "action": "merge",
+            "detail": {
+              "proposal_id": "proposal.shared_design",
+              "branch_id": "branch.0",
+              "priority": 2.0833333333333335,
+              "written_slots": [
+                "design.api_contract",
+                "design.layout"
+              ]
+            }
+          },
+          {
+            "epoch": 3,
+            "action": "merge",
+            "detail": {
+              "proposal_id": "proposal.backend_java",
+              "branch_id": "branch.0",
+              "priority": 0.8333333333333334,
+              "written_slots": [
+                "backend.stack"
+              ]
+            }
+          },
+          {
+            "epoch": 4,
+            "action": "branch",
+            "detail": {
+              "proposal_id": "proposal.backend_php",
+              "source_branch_id": "branch.0",
+              "new_branch_id": "branch.1",
+              "priority": 0.9615384615384615,
+              "conflicts": {
+                "backend.stack": [
+                  "claim.backend_java",
+                  "claim.backend_php"
+                ]
+              }
+            }
+          },
+          {
+            "epoch": 5,
+            "action": "seal_proposals",
+            "detail": {
+              "proposal_count": 3,
+              "branch_count": 2
+            }
+          },
+          {
+            "epoch": 6,
+            "action": "attach_evidence",
+            "detail": {
+              "receipt": {
+                "receipt_id": "receipt.layout",
+                "requirement_id": "user.layout_accepted",
+                "observed": true,
+                "source_group": "user_contract",
+                "reliability": 1.0,
+                "match_strength": 1.0,
+                "epoch": 6
+              },
+              "affected_claims": [
+                "claim.shared_layout"
+              ],
+              "rolled_back_claims": []
+            }
+          },
+          {
+            "epoch": 7,
+            "action": "attach_evidence",
+            "detail": {
+              "receipt": {
+                "receipt_id": "receipt.schema",
+                "requirement_id": "schema.items_v1_valid",
+                "observed": true,
+                "source_group": "schema_validator",
+                "reliability": 1.0,
+                "match_strength": 1.0,
+                "epoch": 7
+              },
+              "affected_claims": [
+                "claim.shared_api_contract"
+              ],
+              "rolled_back_claims": []
+            }
+          },
+          {
+            "epoch": 8,
+            "action": "partial_commit",
+            "detail": {
+              "viable_branches": [
+                "branch.0",
+                "branch.1"
+              ],
+              "common_slots": [
+                "design.api_contract",
+                "design.layout",
+                "goal"
+              ],
+              "newly_committed_claims": [
+                "claim.shared_api_contract",
+                "claim.shared_layout"
+              ],
+              "committed": {
+                "design.api_contract": "claim.shared_api_contract",
+                "design.layout": "claim.shared_layout",
+                "goal": "anchor.website_goal"
+              },
+              "blocked": false
+            }
+          },
+          {
+            "epoch": 9,
+            "action": "attach_evidence",
+            "detail": {
+              "receipt": {
+                "receipt_id": "receipt.pom",
+                "requirement_id": "env.pom_xml",
+                "observed": true,
+                "source_group": "filesystem",
+                "reliability": 1.0,
+                "match_strength": 1.0,
+                "epoch": 9
+              },
+              "affected_claims": [
+                "claim.backend_java"
+              ],
+              "rolled_back_claims": []
+            }
+          },
+          {
+            "epoch": 10,
+            "action": "attach_evidence",
+            "detail": {
+              "receipt": {
+                "receipt_id": "receipt.jvm_missing",
+                "requirement_id": "env.jvm_runtime",
+                "observed": false,
+                "source_group": "runtime_probe",
+                "reliability": 1.0,
+                "match_strength": 1.0,
+                "epoch": 10
+              },
+              "affected_claims": [
+                "claim.backend_java"
+              ],
+              "rolled_back_claims": []
+            }
+          },
+          {
+            "epoch": 11,
+            "action": "attach_evidence",
+            "detail": {
+              "receipt": {
+                "receipt_id": "receipt.composer_json",
+                "requirement_id": "env.composer_json",
+                "observed": true,
+                "source_group": "filesystem",
+                "reliability": 1.0,
+                "match_strength": 1.0,
+                "epoch": 11
+              },
+              "affected_claims": [
+                "claim.backend_php"
+              ],
+              "rolled_back_claims": []
+            }
+          },
+          {
+            "epoch": 12,
+            "action": "attach_evidence",
+            "detail": {
+              "receipt": {
+                "receipt_id": "receipt.php_runtime",
+                "requirement_id": "env.php_runtime",
+                "observed": true,
+                "source_group": "runtime_probe",
+                "reliability": 1.0,
+                "match_strength": 1.0,
+                "epoch": 12
+              },
+              "affected_claims": [
+                "claim.backend_php"
+              ],
+              "rolled_back_claims": []
+            }
+          },
+          {
+            "epoch": 13,
+            "action": "attach_evidence",
+            "detail": {
+              "receipt": {
+                "receipt_id": "receipt.composer_ok",
+                "requirement_id": "env.composer_install",
+                "observed": true,
+                "source_group": "composer_tool",
+                "reliability": 1.0,
+                "match_strength": 1.0,
+                "epoch": 13
+              },
+              "affected_claims": [
+                "claim.backend_php"
+              ],
+              "rolled_back_claims": []
+            }
+          },
+          {
+            "epoch": 14,
+            "action": "partial_commit",
+            "detail": {
+              "viable_branches": [
+                "branch.1"
+              ],
+              "common_slots": [
+                "backend.stack",
+                "design.api_contract",
+                "design.layout",
+                "goal"
+              ],
+              "newly_committed_claims": [
+                "claim.backend_php"
+              ],
+              "committed": {
+                "backend.stack": "claim.backend_php",
+                "design.api_contract": "claim.shared_api_contract",
+                "design.layout": "claim.shared_layout",
+                "goal": "anchor.website_goal"
+              },
+              "blocked": false
+            }
+          },
+          {
+            "epoch": 15,
+            "action": "attach_evidence",
+            "detail": {
+              "receipt": {
+                "receipt_id": "receipt.composer_failed",
+                "requirement_id": "env.composer_install",
+                "observed": false,
+                "source_group": "composer_tool",
+                "reliability": 1.0,
+                "match_strength": 1.0,
+                "epoch": 15
+              },
+              "affected_claims": [
+                "claim.backend_php"
+              ],
+              "rolled_back_claims": [
+                "claim.backend_php"
+              ]
+            }
+          },
+          {
+            "epoch": 16,
+            "action": "partial_commit",
+            "detail": {
+              "viable_branches": [],
+              "common_slots": [],
+              "newly_committed_claims": [],
+              "committed": {
+                "design.api_contract": "claim.shared_api_contract",
+                "design.layout": "claim.shared_layout",
+                "goal": "anchor.website_goal"
+              },
+              "blocked": true
+            }
+          },
+          {
+            "epoch": 17,
+            "action": "attach_evidence",
+            "detail": {
+              "receipt": {
+                "receipt_id": "receipt.jvm_provisioned",
+                "requirement_id": "env.jvm_runtime",
+                "observed": true,
+                "source_group": "runtime_probe",
+                "reliability": 1.0,
+                "match_strength": 1.0,
+                "epoch": 17
+              },
+              "affected_claims": [
+                "claim.backend_java"
+              ],
+              "rolled_back_claims": []
+            }
+          },
+          {
+            "epoch": 18,
+            "action": "partial_commit",
+            "detail": {
+              "viable_branches": [
+                "branch.0"
+              ],
+              "common_slots": [
+                "backend.stack",
+                "design.api_contract",
+                "design.layout",
+                "goal"
+              ],
+              "newly_committed_claims": [
+                "claim.backend_java"
+              ],
+              "committed": {
+                "backend.stack": "claim.backend_java",
+                "design.api_contract": "claim.shared_api_contract",
+                "design.layout": "claim.shared_layout",
+                "goal": "anchor.website_goal"
+              },
+              "blocked": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "scenario.visual.responsive_synthesis",
+      "passed": true,
+      "assertions": {
+        "three_layout_worlds_existed_without_probability_averaging": true,
+        "shared_visual_objects_committed_before_layout": true,
+        "desktop_and_mobile_receipts_rejected_global_layouts": true,
+        "synthesis_was_a_third_branch_not_an_average": true,
+        "only_hybrid_branch_remained_viable": true
+      },
+      "checkpoints": {
+        "early_commit": {
+          "viable_branches": [
+            "branch.0",
+            "branch.1",
+            "branch.2"
+          ],
+          "common_slots": [
+            "input.screenshot",
+            "ui.data_contract",
+            "ui.interactions"
+          ],
+          "newly_committed_claims": [
+            "claim.visual_data_contract",
+            "claim.interaction_contract"
+          ],
+          "committed": {
+            "input.screenshot": "anchor.screenshot",
+            "ui.data_contract": "claim.visual_data_contract",
+            "ui.interactions": "claim.interaction_contract"
+          },
+          "blocked": false
+        },
+        "final_commit": {
+          "viable_branches": [
+            "branch.2"
+          ],
+          "common_slots": [
+            "input.screenshot",
+            "ui.data_contract",
+            "ui.interactions",
+            "ui.layout_strategy"
+          ],
+          "newly_committed_claims": [
+            "claim.layout_responsive_hybrid"
+          ],
+          "committed": {
+            "input.screenshot": "anchor.screenshot",
+            "ui.data_contract": "claim.visual_data_contract",
+            "ui.interactions": "claim.interaction_contract",
+            "ui.layout_strategy": "claim.layout_responsive_hybrid"
+          },
+          "blocked": false
+        },
+        "layout_assessments": {
+          "claim.layout_all_table": "contradicted",
+          "claim.layout_all_cards": "contradicted",
+          "claim.layout_responsive_hybrid": "certified"
+        }
+      },
+      "snapshot": {
+        "field_id": "scenario.visual.responsive_synthesis",
+        "epoch": 15,
+        "proposal_round_sealed": true,
+        "claims": {
+          "anchor.screenshot": {
+            "claim_id": "anchor.screenshot",
+            "slot": "input.screenshot",
+            "value": "sha256:fixture-responsive-dashboard",
+            "organ_id": "user",
+            "requirements": [],
+            "depends_on": [],
+            "anchor": true
+          },
+          "claim.interaction_contract": {
+            "claim_id": "claim.interaction_contract",
+            "slot": "ui.interactions",
+            "value": "filter_detail_alert",
+            "organ_id": "frontend_organ",
+            "requirements": [
+              {
+                "requirement_id": "browser.interactions_required",
+                "expected": true,
+                "threshold": 0.95
+              }
+            ],
+            "depends_on": [
+              "anchor.screenshot"
+            ],
+            "anchor": false
+          },
+          "claim.layout_all_cards": {
+            "claim_id": "claim.layout_all_cards",
+            "slot": "ui.layout_strategy",
+            "value": "cards_on_all_viewports",
+            "organ_id": "frontend_organ",
+            "requirements": [
+              {
+                "requirement_id": "browser.desktop_cards_ok",
+                "expected": true,
+                "threshold": 0.95
+              },
+              {
+                "requirement_id": "browser.mobile_cards_ok",
+                "expected": true,
+                "threshold": 0.95
+              }
+            ],
+            "depends_on": [
+              "claim.visual_data_contract"
+            ],
+            "anchor": false
+          },
+          "claim.layout_all_table": {
+            "claim_id": "claim.layout_all_table",
+            "slot": "ui.layout_strategy",
+            "value": "table_on_all_viewports",
+            "organ_id": "frontend_organ",
+            "requirements": [
+              {
+                "requirement_id": "browser.desktop_table_ok",
+                "expected": true,
+                "threshold": 0.95
+              },
+              {
+                "requirement_id": "browser.mobile_table_ok",
+                "expected": true,
+                "threshold": 0.95
+              }
+            ],
+            "depends_on": [
+              "claim.visual_data_contract"
+            ],
+            "anchor": false
+          },
+          "claim.layout_responsive_hybrid": {
+            "claim_id": "claim.layout_responsive_hybrid",
+            "slot": "ui.layout_strategy",
+            "value": "desktop_table_mobile_cards",
+            "organ_id": "composition_organ",
+            "requirements": [
+              {
+                "requirement_id": "browser.desktop_table_ok",
+                "expected": true,
+                "threshold": 0.95
+              },
+              {
+                "requirement_id": "browser.mobile_cards_ok",
+                "expected": true,
+                "threshold": 0.95
+              }
+            ],
+            "depends_on": [
+              "claim.visual_data_contract",
+              "claim.interaction_contract"
+            ],
+            "anchor": false
+          },
+          "claim.visual_data_contract": {
+            "claim_id": "claim.visual_data_contract",
+            "slot": "ui.data_contract",
+            "value": "50_rows_with_warning_state",
+            "organ_id": "vision_island",
+            "requirements": [
+              {
+                "requirement_id": "vision.fields_measured",
+                "expected": true,
+                "threshold": 0.95
+              }
+            ],
+            "depends_on": [
+              "anchor.screenshot"
+            ],
+            "anchor": false
+          }
+        },
+        "proposals": {
+          "proposal.interaction_common": {
+            "proposal_id": "proposal.interaction_common",
+            "organ_id": "frontend_organ",
+            "claims": [
+              {
+                "claim_id": "claim.interaction_contract",
+                "slot": "ui.interactions",
+                "value": "filter_detail_alert",
+                "organ_id": "frontend_organ",
+                "requirements": [
+                  {
+                    "requirement_id": "browser.interactions_required",
+                    "expected": true,
+                    "threshold": 0.95
+                  }
+                ],
+                "depends_on": [
+                  "anchor.screenshot"
+                ],
+                "anchor": false
+              }
+            ],
+            "goal_alignment": 1.0,
+            "novelty": 0.5,
+            "expected_gain": 1.0,
+            "physical_cost": 0.8,
+            "exploration_priority": 1.3888888888888888
+          },
+          "proposal.layout_cards": {
+            "proposal_id": "proposal.layout_cards",
+            "organ_id": "frontend_organ",
+            "claims": [
+              {
+                "claim_id": "claim.layout_all_cards",
+                "slot": "ui.layout_strategy",
+                "value": "cards_on_all_viewports",
+                "organ_id": "frontend_organ",
+                "requirements": [
+                  {
+                    "requirement_id": "browser.desktop_cards_ok",
+                    "expected": true,
+                    "threshold": 0.95
+                  },
+                  {
+                    "requirement_id": "browser.mobile_cards_ok",
+                    "expected": true,
+                    "threshold": 0.95
+                  }
+                ],
+                "depends_on": [
+                  "claim.visual_data_contract"
+                ],
+                "anchor": false
+              }
+            ],
+            "goal_alignment": 1.0,
+            "novelty": 0.5,
+            "expected_gain": 1.0,
+            "physical_cost": 0.9,
+            "exploration_priority": 1.3157894736842106
+          },
+          "proposal.layout_hybrid": {
+            "proposal_id": "proposal.layout_hybrid",
+            "organ_id": "composition_organ",
+            "claims": [
+              {
+                "claim_id": "claim.layout_responsive_hybrid",
+                "slot": "ui.layout_strategy",
+                "value": "desktop_table_mobile_cards",
+                "organ_id": "composition_organ",
+                "requirements": [
+                  {
+                    "requirement_id": "browser.desktop_table_ok",
+                    "expected": true,
+                    "threshold": 0.95
+                  },
+                  {
+                    "requirement_id": "browser.mobile_cards_ok",
+                    "expected": true,
+                    "threshold": 0.95
+                  }
+                ],
+                "depends_on": [
+                  "claim.visual_data_contract",
+                  "claim.interaction_contract"
+                ],
+                "anchor": false
+              }
+            ],
+            "goal_alignment": 1.0,
+            "novelty": 0.5,
+            "expected_gain": 1.0,
+            "physical_cost": 1.2,
+            "exploration_priority": 1.1363636363636362
+          },
+          "proposal.layout_table": {
+            "proposal_id": "proposal.layout_table",
+            "organ_id": "frontend_organ",
+            "claims": [
+              {
+                "claim_id": "claim.layout_all_table",
+                "slot": "ui.layout_strategy",
+                "value": "table_on_all_viewports",
+                "organ_id": "frontend_organ",
+                "requirements": [
+                  {
+                    "requirement_id": "browser.desktop_table_ok",
+                    "expected": true,
+                    "threshold": 0.95
+                  },
+                  {
+                    "requirement_id": "browser.mobile_table_ok",
+                    "expected": true,
+                    "threshold": 0.95
+                  }
+                ],
+                "depends_on": [
+                  "claim.visual_data_contract"
+                ],
+                "anchor": false
+              }
+            ],
+            "goal_alignment": 1.0,
+            "novelty": 0.5,
+            "expected_gain": 1.0,
+            "physical_cost": 1.0,
+            "exploration_priority": 1.25
+          },
+          "proposal.visual_common": {
+            "proposal_id": "proposal.visual_common",
+            "organ_id": "vision_island",
+            "claims": [
+              {
+                "claim_id": "claim.visual_data_contract",
+                "slot": "ui.data_contract",
+                "value": "50_rows_with_warning_state",
+                "organ_id": "vision_island",
+                "requirements": [
+                  {
+                    "requirement_id": "vision.fields_measured",
+                    "expected": true,
+                    "threshold": 0.95
+                  }
+                ],
+                "depends_on": [
+                  "anchor.screenshot"
+                ],
+                "anchor": false
+              }
+            ],
+            "goal_alignment": 1.0,
+            "novelty": 0.5,
+            "expected_gain": 1.0,
+            "physical_cost": 1.0,
+            "exploration_priority": 1.25
+          }
+        },
+        "branches": {
+          "branch.0": {
+            "branch_id": "branch.0",
+            "assignments": {
+              "input.screenshot": "anchor.screenshot",
+              "ui.data_contract": "claim.visual_data_contract",
+              "ui.interactions": "claim.interaction_contract",
+              "ui.layout_strategy": "claim.layout_all_table"
+            },
+            "parent_branch_id": null,
+            "born_from": "field_birth",
+            "viable": false
+          },
+          "branch.1": {
+            "branch_id": "branch.1",
+            "assignments": {
+              "input.screenshot": "anchor.screenshot",
+              "ui.data_contract": "claim.visual_data_contract",
+              "ui.interactions": "claim.interaction_contract",
+              "ui.layout_strategy": "claim.layout_all_cards"
+            },
+            "parent_branch_id": "branch.0",
+            "born_from": "proposal.layout_cards",
+            "viable": false
+          },
+          "branch.2": {
+            "branch_id": "branch.2",
+            "assignments": {
+              "input.screenshot": "anchor.screenshot",
+              "ui.data_contract": "claim.visual_data_contract",
+              "ui.interactions": "claim.interaction_contract",
+              "ui.layout_strategy": "claim.layout_responsive_hybrid"
+            },
+            "parent_branch_id": "branch.0",
+            "born_from": "proposal.layout_hybrid",
+            "viable": true
+          }
+        },
+        "assessments": {
+          "anchor.screenshot": {
+            "claim_id": "anchor.screenshot",
+            "status": "certified",
+            "certification": 1.0,
+            "contradiction": 0.0,
+            "requirement_support": {},
+            "requirement_refute": {}
+          },
+          "claim.interaction_contract": {
+            "claim_id": "claim.interaction_contract",
+            "status": "certified",
+            "certification": 1.0,
+            "contradiction": 0.0,
+            "requirement_support": {
+              "browser.interactions_required": 1.0
+            },
+            "requirement_refute": {
+              "browser.interactions_required": 0.0
+            }
+          },
+          "claim.layout_all_cards": {
+            "claim_id": "claim.layout_all_cards",
+            "status": "contradicted",
+            "certification": 0.0,
+            "contradiction": 1.0,
+            "requirement_support": {
+              "browser.desktop_cards_ok": 0.0,
+              "browser.mobile_cards_ok": 1.0
+            },
+            "requirement_refute": {
+              "browser.desktop_cards_ok": 1.0,
+              "browser.mobile_cards_ok": 0.0
+            }
+          },
+          "claim.layout_all_table": {
+            "claim_id": "claim.layout_all_table",
+            "status": "contradicted",
+            "certification": 0.0,
+            "contradiction": 1.0,
+            "requirement_support": {
+              "browser.desktop_table_ok": 1.0,
+              "browser.mobile_table_ok": 0.0
+            },
+            "requirement_refute": {
+              "browser.desktop_table_ok": 0.0,
+              "browser.mobile_table_ok": 1.0
+            }
+          },
+          "claim.layout_responsive_hybrid": {
+            "claim_id": "claim.layout_responsive_hybrid",
+            "status": "certified",
+            "certification": 1.0,
+            "contradiction": 0.0,
+            "requirement_support": {
+              "browser.desktop_table_ok": 1.0,
+              "browser.mobile_cards_ok": 1.0
+            },
+            "requirement_refute": {
+              "browser.desktop_table_ok": 0.0,
+              "browser.mobile_cards_ok": 0.0
+            }
+          },
+          "claim.visual_data_contract": {
+            "claim_id": "claim.visual_data_contract",
+            "status": "certified",
+            "certification": 1.0,
+            "contradiction": 0.0,
+            "requirement_support": {
+              "vision.fields_measured": 1.0
+            },
+            "requirement_refute": {
+              "vision.fields_measured": 0.0
+            }
+          }
+        },
+        "committed": {
+          "input.screenshot": "anchor.screenshot",
+          "ui.data_contract": "claim.visual_data_contract",
+          "ui.interactions": "claim.interaction_contract",
+          "ui.layout_strategy": "claim.layout_responsive_hybrid"
+        },
+        "evidence_log": [
+          {
+            "receipt_id": "receipt.visual_fields",
+            "requirement_id": "vision.fields_measured",
+            "observed": true,
+            "source_group": "vision_measurement",
+            "reliability": 1.0,
+            "match_strength": 1.0,
+            "epoch": 8
+          },
+          {
+            "receipt_id": "receipt.interactions",
+            "requirement_id": "browser.interactions_required",
+            "observed": true,
+            "source_group": "browser_trace",
+            "reliability": 1.0,
+            "match_strength": 1.0,
+            "epoch": 9
+          },
+          {
+            "receipt_id": "receipt.desktop_table",
+            "requirement_id": "browser.desktop_table_ok",
+            "observed": true,
+            "source_group": "browser_desktop",
+            "reliability": 1.0,
+            "match_strength": 1.0,
+            "epoch": 11
+          },
+          {
+            "receipt_id": "receipt.mobile_table",
+            "requirement_id": "browser.mobile_table_ok",
+            "observed": false,
+            "source_group": "browser_mobile",
+            "reliability": 1.0,
+            "match_strength": 1.0,
+            "epoch": 12
+          },
+          {
+            "receipt_id": "receipt.desktop_cards",
+            "requirement_id": "browser.desktop_cards_ok",
+            "observed": false,
+            "source_group": "browser_desktop",
+            "reliability": 1.0,
+            "match_strength": 1.0,
+            "epoch": 13
+          },
+          {
+            "receipt_id": "receipt.mobile_cards",
+            "requirement_id": "browser.mobile_cards_ok",
+            "observed": true,
+            "source_group": "browser_mobile",
+            "reliability": 1.0,
+            "match_strength": 1.0,
+            "epoch": 14
+          }
+        ],
+        "transitions": [
+          {
+            "epoch": 1,
+            "action": "anchor",
+            "detail": {
+              "claim_id": "anchor.screenshot",
+              "slot": "input.screenshot"
+            }
+          },
+          {
+            "epoch": 2,
+            "action": "merge",
+            "detail": {
+              "proposal_id": "proposal.visual_common",
+              "branch_id": "branch.0",
+              "priority": 1.25,
+              "written_slots": [
+                "ui.data_contract"
+              ]
+            }
+          },
+          {
+            "epoch": 3,
+            "action": "merge",
+            "detail": {
+              "proposal_id": "proposal.interaction_common",
+              "branch_id": "branch.0",
+              "priority": 1.3888888888888888,
+              "written_slots": [
+                "ui.interactions"
+              ]
+            }
+          },
+          {
+            "epoch": 4,
+            "action": "merge",
+            "detail": {
+              "proposal_id": "proposal.layout_table",
+              "branch_id": "branch.0",
+              "priority": 1.25,
+              "written_slots": [
+                "ui.layout_strategy"
+              ]
+            }
+          },
+          {
+            "epoch": 5,
+            "action": "branch",
+            "detail": {
+              "proposal_id": "proposal.layout_cards",
+              "source_branch_id": "branch.0",
+              "new_branch_id": "branch.1",
+              "priority": 1.3157894736842106,
+              "conflicts": {
+                "ui.layout_strategy": [
+                  "claim.layout_all_table",
+                  "claim.layout_all_cards"
+                ]
+              }
+            }
+          },
+          {
+            "epoch": 6,
+            "action": "branch",
+            "detail": {
+              "proposal_id": "proposal.layout_hybrid",
+              "source_branch_id": "branch.0",
+              "new_branch_id": "branch.2",
+              "priority": 1.1363636363636362,
+              "conflicts": {
+                "ui.layout_strategy": [
+                  "claim.layout_all_table",
+                  "claim.layout_responsive_hybrid"
+                ]
+              }
+            }
+          },
+          {
+            "epoch": 7,
+            "action": "seal_proposals",
+            "detail": {
+              "proposal_count": 5,
+              "branch_count": 3
+            }
+          },
+          {
+            "epoch": 8,
+            "action": "attach_evidence",
+            "detail": {
+              "receipt": {
+                "receipt_id": "receipt.visual_fields",
+                "requirement_id": "vision.fields_measured",
+                "observed": true,
+                "source_group": "vision_measurement",
+                "reliability": 1.0,
+                "match_strength": 1.0,
+                "epoch": 8
+              },
+              "affected_claims": [
+                "claim.visual_data_contract"
+              ],
+              "rolled_back_claims": []
+            }
+          },
+          {
+            "epoch": 9,
+            "action": "attach_evidence",
+            "detail": {
+              "receipt": {
+                "receipt_id": "receipt.interactions",
+                "requirement_id": "browser.interactions_required",
+                "observed": true,
+                "source_group": "browser_trace",
+                "reliability": 1.0,
+                "match_strength": 1.0,
+                "epoch": 9
+              },
+              "affected_claims": [
+                "claim.interaction_contract"
+              ],
+              "rolled_back_claims": []
+            }
+          },
+          {
+            "epoch": 10,
+            "action": "partial_commit",
+            "detail": {
+              "viable_branches": [
+                "branch.0",
+                "branch.1",
+                "branch.2"
+              ],
+              "common_slots": [
+                "input.screenshot",
+                "ui.data_contract",
+                "ui.interactions"
+              ],
+              "newly_committed_claims": [
+                "claim.visual_data_contract",
+                "claim.interaction_contract"
+              ],
+              "committed": {
+                "input.screenshot": "anchor.screenshot",
+                "ui.data_contract": "claim.visual_data_contract",
+                "ui.interactions": "claim.interaction_contract"
+              },
+              "blocked": false
+            }
+          },
+          {
+            "epoch": 11,
+            "action": "attach_evidence",
+            "detail": {
+              "receipt": {
+                "receipt_id": "receipt.desktop_table",
+                "requirement_id": "browser.desktop_table_ok",
+                "observed": true,
+                "source_group": "browser_desktop",
+                "reliability": 1.0,
+                "match_strength": 1.0,
+                "epoch": 11
+              },
+              "affected_claims": [
+                "claim.layout_all_table",
+                "claim.layout_responsive_hybrid"
+              ],
+              "rolled_back_claims": []
+            }
+          },
+          {
+            "epoch": 12,
+            "action": "attach_evidence",
+            "detail": {
+              "receipt": {
+                "receipt_id": "receipt.mobile_table",
+                "requirement_id": "browser.mobile_table_ok",
+                "observed": false,
+                "source_group": "browser_mobile",
+                "reliability": 1.0,
+                "match_strength": 1.0,
+                "epoch": 12
+              },
+              "affected_claims": [
+                "claim.layout_all_table"
+              ],
+              "rolled_back_claims": []
+            }
+          },
+          {
+            "epoch": 13,
+            "action": "attach_evidence",
+            "detail": {
+              "receipt": {
+                "receipt_id": "receipt.desktop_cards",
+                "requirement_id": "browser.desktop_cards_ok",
+                "observed": false,
+                "source_group": "browser_desktop",
+                "reliability": 1.0,
+                "match_strength": 1.0,
+                "epoch": 13
+              },
+              "affected_claims": [
+                "claim.layout_all_cards"
+              ],
+              "rolled_back_claims": []
+            }
+          },
+          {
+            "epoch": 14,
+            "action": "attach_evidence",
+            "detail": {
+              "receipt": {
+                "receipt_id": "receipt.mobile_cards",
+                "requirement_id": "browser.mobile_cards_ok",
+                "observed": true,
+                "source_group": "browser_mobile",
+                "reliability": 1.0,
+                "match_strength": 1.0,
+                "epoch": 14
+              },
+              "affected_claims": [
+                "claim.layout_all_cards",
+                "claim.layout_responsive_hybrid"
+              ],
+              "rolled_back_claims": []
+            }
+          },
+          {
+            "epoch": 15,
+            "action": "partial_commit",
+            "detail": {
+              "viable_branches": [
+                "branch.2"
+              ],
+              "common_slots": [
+                "input.screenshot",
+                "ui.data_contract",
+                "ui.interactions",
+                "ui.layout_strategy"
+              ],
+              "newly_committed_claims": [
+                "claim.layout_responsive_hybrid"
+              ],
+              "committed": {
+                "input.screenshot": "anchor.screenshot",
+                "ui.data_contract": "claim.visual_data_contract",
+                "ui.interactions": "claim.interaction_contract",
+                "ui.layout_strategy": "claim.layout_responsive_hybrid"
+              },
+              "blocked": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "scenario.fact.conflicting_models",
+      "passed": true,
+      "assertions": {
+        "conflicting_model_outputs_became_branches": true,
+        "higher_or_repeated_neural_priority_did_not_certify_truth": true,
+        "runtime_evidence_certified_matching_claim": true,
+        "runtime_evidence_contradicted_opposite_claim": true,
+        "answer_committed_only_after_external_receipt": true
+      },
+      "checkpoints": {
+        "before_probe": {
+          "viable_branches": [
+            "branch.0",
+            "branch.1"
+          ],
+          "common_slots": [
+            "query"
+          ],
+          "newly_committed_claims": [],
+          "committed": {
+            "query": "anchor.api_question"
+          },
+          "blocked": false
+        },
+        "after_probe": {
+          "viable_branches": [
+            "branch.0"
+          ],
+          "common_slots": [
+            "answer.api_x",
+            "query"
+          ],
+          "newly_committed_claims": [
+            "claim.api_exists"
+          ],
+          "committed": {
+            "answer.api_x": "claim.api_exists",
+            "query": "anchor.api_question"
+          },
+          "blocked": false
+        },
+        "proposal_priorities": {
+          "proposal.model_a": 0.76,
+          "proposal.model_b": 1.1666666666666667
+        }
+      },
+      "snapshot": {
+        "field_id": "scenario.fact.conflicting_models",
+        "epoch": 8,
+        "proposal_round_sealed": true,
+        "claims": {
+          "anchor.api_question": {
+            "claim_id": "anchor.api_question",
+            "slot": "query",
+            "value": "Does API X exist?",
+            "organ_id": "user",
+            "requirements": [],
+            "depends_on": [],
+            "anchor": true
+          },
+          "claim.api_exists": {
+            "claim_id": "claim.api_exists",
+            "slot": "answer.api_x",
+            "value": true,
+            "organ_id": "large_model_a",
+            "requirements": [
+              {
+                "requirement_id": "probe.api_x_exists",
+                "expected": true,
+                "threshold": 0.95
+              }
+            ],
+            "depends_on": [
+              "anchor.api_question"
+            ],
+            "anchor": false
+          },
+          "claim.api_missing": {
+            "claim_id": "claim.api_missing",
+            "slot": "answer.api_x",
+            "value": false,
+            "organ_id": "large_model_b",
+            "requirements": [
+              {
+                "requirement_id": "probe.api_x_exists",
+                "expected": false,
+                "threshold": 0.95
+              }
+            ],
+            "depends_on": [
+              "anchor.api_question"
+            ],
+            "anchor": false
+          }
+        },
+        "proposals": {
+          "proposal.model_a": {
+            "proposal_id": "proposal.model_a",
+            "organ_id": "large_model_a",
+            "claims": [
+              {
+                "claim_id": "claim.api_exists",
+                "slot": "answer.api_x",
+                "value": true,
+                "organ_id": "large_model_a",
+                "requirements": [
+                  {
+                    "requirement_id": "probe.api_x_exists",
+                    "expected": true,
+                    "threshold": 0.95
+                  }
+                ],
+                "depends_on": [
+                  "anchor.api_question"
+                ],
+                "anchor": false
+              }
+            ],
+            "goal_alignment": 1.0,
+            "novelty": 0.8,
+            "expected_gain": 2.0,
+            "physical_cost": 4.0,
+            "exploration_priority": 0.76
+          },
+          "proposal.model_a_repeat": {
+            "proposal_id": "proposal.model_a_repeat",
+            "organ_id": "large_model_a",
+            "claims": [
+              {
+                "claim_id": "claim.api_exists",
+                "slot": "answer.api_x",
+                "value": true,
+                "organ_id": "large_model_a",
+                "requirements": [
+                  {
+                    "requirement_id": "probe.api_x_exists",
+                    "expected": true,
+                    "threshold": 0.95
+                  }
+                ],
+                "depends_on": [
+                  "anchor.api_question"
+                ],
+                "anchor": false
+              }
+            ],
+            "goal_alignment": 1.0,
+            "novelty": 0.1,
+            "expected_gain": 0.1,
+            "physical_cost": 4.0,
+            "exploration_priority": 0.24000000000000005
+          },
+          "proposal.model_b": {
+            "proposal_id": "proposal.model_b",
+            "organ_id": "large_model_b",
+            "claims": [
+              {
+                "claim_id": "claim.api_missing",
+                "slot": "answer.api_x",
+                "value": false,
+                "organ_id": "large_model_b",
+                "requirements": [
+                  {
+                    "requirement_id": "probe.api_x_exists",
+                    "expected": false,
+                    "threshold": 0.95
+                  }
+                ],
+                "depends_on": [
+                  "anchor.api_question"
+                ],
+                "anchor": false
+              }
+            ],
+            "goal_alignment": 1.0,
+            "novelty": 0.7,
+            "expected_gain": 1.8,
+            "physical_cost": 2.0,
+            "exploration_priority": 1.1666666666666667
+          }
+        },
+        "branches": {
+          "branch.0": {
+            "branch_id": "branch.0",
+            "assignments": {
+              "query": "anchor.api_question",
+              "answer.api_x": "claim.api_exists"
+            },
+            "parent_branch_id": null,
+            "born_from": "field_birth",
+            "viable": true
+          },
+          "branch.1": {
+            "branch_id": "branch.1",
+            "assignments": {
+              "query": "anchor.api_question",
+              "answer.api_x": "claim.api_missing"
+            },
+            "parent_branch_id": "branch.0",
+            "born_from": "proposal.model_b",
+            "viable": false
+          }
+        },
+        "assessments": {
+          "anchor.api_question": {
+            "claim_id": "anchor.api_question",
+            "status": "certified",
+            "certification": 1.0,
+            "contradiction": 0.0,
+            "requirement_support": {},
+            "requirement_refute": {}
+          },
+          "claim.api_exists": {
+            "claim_id": "claim.api_exists",
+            "status": "certified",
+            "certification": 1.0,
+            "contradiction": 0.0,
+            "requirement_support": {
+              "probe.api_x_exists": 1.0
+            },
+            "requirement_refute": {
+              "probe.api_x_exists": 0.0
+            }
+          },
+          "claim.api_missing": {
+            "claim_id": "claim.api_missing",
+            "status": "contradicted",
+            "certification": 0.0,
+            "contradiction": 1.0,
+            "requirement_support": {
+              "probe.api_x_exists": 0.0
+            },
+            "requirement_refute": {
+              "probe.api_x_exists": 1.0
+            }
+          }
+        },
+        "committed": {
+          "answer.api_x": "claim.api_exists",
+          "query": "anchor.api_question"
+        },
+        "evidence_log": [
+          {
+            "receipt_id": "receipt.runtime_probe",
+            "requirement_id": "probe.api_x_exists",
+            "observed": true,
+            "source_group": "runtime_probe",
+            "reliability": 1.0,
+            "match_strength": 1.0,
+            "epoch": 7
+          }
+        ],
+        "transitions": [
+          {
+            "epoch": 1,
+            "action": "anchor",
+            "detail": {
+              "claim_id": "anchor.api_question",
+              "slot": "query"
+            }
+          },
+          {
+            "epoch": 2,
+            "action": "merge",
+            "detail": {
+              "proposal_id": "proposal.model_a",
+              "branch_id": "branch.0",
+              "priority": 0.76,
+              "written_slots": [
+                "answer.api_x"
+              ]
+            }
+          },
+          {
+            "epoch": 3,
+            "action": "branch",
+            "detail": {
+              "proposal_id": "proposal.model_b",
+              "source_branch_id": "branch.0",
+              "new_branch_id": "branch.1",
+              "priority": 1.1666666666666667,
+              "conflicts": {
+                "answer.api_x": [
+                  "claim.api_exists",
+                  "claim.api_missing"
+                ]
+              }
+            }
+          },
+          {
+            "epoch": 4,
+            "action": "merge",
+            "detail": {
+              "proposal_id": "proposal.model_a_repeat",
+              "branch_id": "branch.0",
+              "priority": 0.24000000000000005,
+              "written_slots": [
+                "answer.api_x"
+              ]
+            }
+          },
+          {
+            "epoch": 5,
+            "action": "seal_proposals",
+            "detail": {
+              "proposal_count": 3,
+              "branch_count": 2
+            }
+          },
+          {
+            "epoch": 6,
+            "action": "partial_commit",
+            "detail": {
+              "viable_branches": [
+                "branch.0",
+                "branch.1"
+              ],
+              "common_slots": [
+                "query"
+              ],
+              "newly_committed_claims": [],
+              "committed": {
+                "query": "anchor.api_question"
+              },
+              "blocked": false
+            }
+          },
+          {
+            "epoch": 7,
+            "action": "attach_evidence",
+            "detail": {
+              "receipt": {
+                "receipt_id": "receipt.runtime_probe",
+                "requirement_id": "probe.api_x_exists",
+                "observed": true,
+                "source_group": "runtime_probe",
+                "reliability": 1.0,
+                "match_strength": 1.0,
+                "epoch": 7
+              },
+              "affected_claims": [
+                "claim.api_exists",
+                "claim.api_missing"
+              ],
+              "rolled_back_claims": []
+            }
+          },
+          {
+            "epoch": 8,
+            "action": "partial_commit",
+            "detail": {
+              "viable_branches": [
+                "branch.0"
+              ],
+              "common_slots": [
+                "answer.api_x",
+                "query"
+              ],
+              "newly_committed_claims": [
+                "claim.api_exists"
+              ],
+              "committed": {
+                "answer.api_x": "claim.api_exists",
+                "query": "anchor.api_question"
+              },
+              "blocked": false
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
