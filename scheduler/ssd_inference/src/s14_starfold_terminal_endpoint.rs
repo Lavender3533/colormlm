@@ -31,6 +31,9 @@ use anyhow::{bail, Context, Result};
 use polaris_s14_runner::{Position0WholeTokenManifest, RouteDecision, FULL_DEPTH_LAYERS};
 use std::sync::Arc;
 
+const STARFOLD_DIRECT_TERMINAL_MAX_BLOCK_SIZE: usize = 4;
+const STARFOLD_DIRECT_TERMINAL_CHECKPOINT_SLOTS: usize = 1;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum S14StarfoldTerminalEndpointPhase {
     Idle,
@@ -84,18 +87,15 @@ impl std::fmt::Debug for S14StarfoldTerminalEndpoint {
 }
 
 impl S14StarfoldTerminalEndpoint {
-    pub fn new(
-        context: Arc<VulkanContext>,
-        checkpoint_state_bytes: u64,
-        checkpoint_slots: usize,
-    ) -> Result<Self> {
+    pub fn new(context: Arc<VulkanContext>, checkpoint_state_bytes: u64) -> Result<Self> {
         if !context.timeline_semaphore {
             bail!("StarFold terminal endpoint 要求 timeline semaphore");
         }
         let checkpoint_pool = S14CausalBlockCheckpointArenaPool::new(
             Arc::clone(&context),
             checkpoint_state_bytes,
-            checkpoint_slots,
+            STARFOLD_DIRECT_TERMINAL_MAX_BLOCK_SIZE,
+            STARFOLD_DIRECT_TERMINAL_CHECKPOINT_SLOTS,
         )?;
         let recorder = S14CausalBlockBatchedTerminalRecorder::new(
             Arc::clone(&context),
@@ -258,6 +258,7 @@ fn validate_block_inputs(
     let owned = &inputs.final_hidden_owner;
     if owned.buffer.handle() != inputs.final_hidden.buffer
         || owned.offset != inputs.final_hidden.offset
+        || inputs.final_hidden.block_size != STARFOLD_DIRECT_TERMINAL_MAX_BLOCK_SIZE
         || inputs.final_hidden.block_size != inputs.prefix_checkpoint_arena.layout().block_size
     {
         bail!("StarFold terminal final hidden/prefix arena identity 漂移");

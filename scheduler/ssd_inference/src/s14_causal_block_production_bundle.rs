@@ -565,6 +565,7 @@ where
     let checkpoint_pool = S14CausalBlockCheckpointArenaPool::new(
         Arc::clone(&context),
         shape.checkpoint_state_bytes,
+        shape.block_size,
         shape.checkpoint_slots,
     )?;
     let terminal_recorder = S14CausalBlockBatchedTerminalRecorder::new(

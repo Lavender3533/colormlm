@@ -172,7 +172,10 @@ pub struct S14StarfoldHcBridgeOwner {
     context: Arc<VulkanContext>,
     static_arena: Arc<S14Position0PagedWeightArena>,
     hidden_banks: [S14CausalBlockHiddenBank; 2],
-    block_size: usize,
+    /// A/B bank 与 workspace 的最大物理容量。它不是当前 block 的 K。
+    capacity_block_size: usize,
+    /// 当前事务显式声明的物理 K；只能由 stage begin/finish 边界改变。
+    active_block_size: Option<usize>,
     workspace: Option<GpuBuffer>,
     control: Option<GpuBuffer>,
     layout: WorkspaceLayout,
@@ -197,8 +200,8 @@ impl S14StarfoldHcBridgeOwner {
         static_arena: Arc<S14Position0PagedWeightArena>,
         hidden_banks: [S14CausalBlockHiddenBank; 2],
     ) -> Result<Self> {
-        let block_size = validate_hidden_banks(&hidden_banks)?;
-        let layout = WorkspaceLayout::build(block_size, storage_alignment(&context))?;
+        let capacity_block_size = validate_hidden_bank_capacity(&hidden_banks)?;
+        let layout = WorkspaceLayout::build(capacity_block_size, storage_alignment(&context))?;
         let workspace = new_device_buffer(&context, layout.bytes)?;
         let control = match new_control_buffer(&context, 4) {
             Ok(buffer) => buffer,
@@ -216,7 +219,8 @@ impl S14StarfoldHcBridgeOwner {
             context,
             static_arena,
             hidden_banks,
-            block_size,
+            capacity_block_size,
+            active_block_size: None,
             workspace: Some(workspace),
             control: Some(control),
             layout,
@@ -229,8 +233,8 @@ impl S14StarfoldHcBridgeOwner {
             finalize_command: commands[1],
             prepare_fence: fences[0],
             finalize_fence: fences[1],
-            prepare_binders: Vec::with_capacity(block_size * 4),
-            finalize_binders: Vec::with_capacity(block_size + 1),
+            prepare_binders: Vec::with_capacity(capacity_block_size * 4),
+            finalize_binders: Vec::with_capacity(capacity_block_size + 1),
             prepared: None,
             destroyed: false,
         })
@@ -241,14 +245,14 @@ impl S14StarfoldHcBridgeOwner {
         hidden_banks: &[S14CausalBlockHiddenBank; 2],
     ) -> Result<()> {
         self.ensure_live()?;
-        if self.prepared.is_some() {
-            bail!("S14 StarFold HC bridge 仍有 prepared layer，禁止 rebind hidden banks");
+        if self.prepared.is_some() || self.active_block_size.is_some() {
+            bail!("S14 StarFold HC bridge 仍有 active/prepared block，禁止 rebind hidden banks");
         }
-        let block_size = validate_hidden_banks(hidden_banks)?;
-        if block_size != self.block_size {
+        let capacity_block_size = validate_hidden_bank_capacity(hidden_banks)?;
+        if capacity_block_size != self.capacity_block_size {
             bail!(
-                "S14 StarFold HC bridge rebind block_size 漂移: owner={} banks={block_size}",
-                self.block_size
+                "S14 StarFold HC bridge rebind capacity 漂移: owner={} banks={capacity_block_size}",
+                self.capacity_block_size
             );
         }
         Ok(())
@@ -267,8 +271,43 @@ impl S14StarfoldHcBridgeOwner {
         Ok(())
     }
 
-    pub fn block_size(&self) -> usize {
-        self.block_size
+    pub(crate) fn begin_block(&mut self, block_size: usize) -> Result<()> {
+        self.ensure_live()?;
+        validate_block_size(block_size)?;
+        if self.active_block_size.is_some() || self.prepared.is_some() {
+            bail!("S14 StarFold HC bridge 上一 block 尚未 finish/drain");
+        }
+        if block_size > self.capacity_block_size {
+            bail!(
+                "S14 StarFold HC bridge active K 超过常驻容量: active={block_size} capacity={}",
+                self.capacity_block_size
+            );
+        }
+        for bank in &self.hidden_banks {
+            bank.binding(block_size, 0)
+                .context("S14 StarFold HC bridge active K 无法绑定 hidden bank")?;
+        }
+        self.active_block_size = Some(block_size);
+        Ok(())
+    }
+
+    pub(crate) fn finish_block(&mut self) -> Result<()> {
+        self.ensure_live()?;
+        if self.active_block_size.is_none() || self.prepared.is_some() {
+            bail!("S14 StarFold HC bridge block 尚未开始或仍有 prepared layer");
+        }
+        self.active_block_size = None;
+        Ok(())
+    }
+
+    pub(crate) fn abort_block(&mut self) {
+        self.prepared = None;
+        self.active_block_size = None;
+    }
+
+    fn active_block_size(&self) -> Result<usize> {
+        self.active_block_size
+            .context("S14 StarFold HC bridge 缺少显式 active K")
     }
 
     pub fn prepare_layer(
@@ -281,11 +320,12 @@ impl S14StarfoldHcBridgeOwner {
         if self.prepared.is_some() {
             bail!("S14 StarFold HC bridge 上一层尚未 finalize");
         }
-        validate_hidden(post_attention_hidden, self.block_size)?;
+        let block_size = self.active_block_size()?;
+        validate_hidden(post_attention_hidden, block_size)?;
         let next_hidden = opposite_hidden_bank(
             &self.hidden_banks,
             post_attention_hidden,
-            self.block_size,
+            block_size,
             post_attention_hidden
                 .generation
                 .checked_add(1)
@@ -321,8 +361,8 @@ impl S14StarfoldHcBridgeOwner {
         let workspace = self.workspace()?;
         let control = self.control()?;
         let hc_shape = S14HcPreShape::new(HIDDEN)?;
-        let mut binders = Vec::with_capacity(self.block_size * 4);
-        for lane in 0..self.block_size {
+        let mut binders = Vec::with_capacity(block_size * 4);
+        for lane in 0..block_size {
             let residual = self.layout.residual.lane(lane)?;
             let hc_norm = self.layout.hc_norm.lane(lane)?;
             let mixes = self.layout.mixes.lane(lane)?;
@@ -429,18 +469,18 @@ impl S14StarfoldHcBridgeOwner {
         let input = external_slice(
             workspace,
             self.layout.branch_f32.offset,
-            self.block_size as u64 * HIDDEN as u64 * 4,
+            block_size as u64 * HIDDEN as u64 * 4,
         );
         let reduced = external_slice(
             workspace,
             self.layout.reduced_f32,
-            self.block_size as u64 * HIDDEN as u64 * 4,
+            block_size as u64 * HIDDEN as u64 * 4,
         );
         self.prepare_binders = binders;
         self.prepared = Some(PreparedLayer {
             layer,
             base_position,
-            block_size: self.block_size,
+            block_size,
             post_attention_hidden,
             next_hidden,
             static_stream_bank: weights.stream_bank,
@@ -448,12 +488,12 @@ impl S14StarfoldHcBridgeOwner {
         Ok(S14StarfoldHcPrepareReceipt {
             layer,
             base_position,
-            block_size: self.block_size,
+            block_size,
             moe_input_f32: input,
             reduced_output_f32: reduced,
             next_hidden,
-            hc_pre_dispatch_calls: self.block_size as u32 * 3,
-            qdq_dispatch_calls: self.block_size as u32,
+            hc_pre_dispatch_calls: block_size as u32 * 3,
+            qdq_dispatch_calls: block_size as u32,
             queue_submit_calls: 1,
             serial_token_forward_calls: 0,
             static_stream_bank: weights.stream_bank,
@@ -473,13 +513,14 @@ impl S14StarfoldHcBridgeOwner {
         if prepared.layer != layer || prepared.base_position != base_position {
             bail!("S14 StarFold HC bridge finalize layer/base identity 漂移");
         }
-        if prepared.block_size != self.block_size {
+        let block_size = self.active_block_size()?;
+        if prepared.block_size != block_size {
             bail!("S14 StarFold HC bridge finalize block_size identity 漂移");
         }
         let expected = external_slice(
             self.workspace()?,
             self.layout.reduced_f32,
-            self.block_size as u64 * HIDDEN as u64 * 4,
+            block_size as u64 * HIDDEN as u64 * 4,
         );
         if reduced_output_f32.buffer != expected.buffer
             || reduced_output_f32.capacity_bytes != expected.capacity_bytes
@@ -511,7 +552,7 @@ impl S14StarfoldHcBridgeOwner {
         let hc_post = self.hc_post.as_ref().context("HC bridge HC-post 已销毁")?;
         let dispatch = f32_to_bf16.bind_slices(
             &self.context,
-            S14F32ToBf16Shape::new(self.block_size as u32 * HIDDEN)?,
+            S14F32ToBf16Shape::new(block_size as u32 * HIDDEN)?,
             StorageBufferSlice {
                 buffer: workspace,
                 offset: self.layout.reduced_f32,
@@ -527,7 +568,7 @@ impl S14StarfoldHcBridgeOwner {
             compute_barrier(&self.context, self.finalize_command);
         }
         let mut binders = vec![dispatch.binder];
-        for lane in 0..self.block_size {
+        for lane in 0..block_size {
             let dispatch = hc_post.bind_slices(
                 &self.context,
                 S14HcPostShape::new(HIDDEN)?,
@@ -594,10 +635,10 @@ impl S14StarfoldHcBridgeOwner {
         Ok(S14StarfoldHcFinalizeReceipt {
             layer,
             base_position,
-            block_size: self.block_size,
+            block_size,
             next_hidden: prepared.next_hidden,
             f32_to_bf16_dispatch_calls: 1,
-            hc_post_dispatch_calls: self.block_size as u32,
+            hc_post_dispatch_calls: block_size as u32,
             queue_submit_calls: 1,
             serial_token_forward_calls: 0,
         })
@@ -640,6 +681,7 @@ impl S14StarfoldHcBridgeOwner {
             buffer.destroy(&self.context);
         }
         self.prepared = None;
+        self.active_block_size = None;
         self.destroyed = true;
         Ok(())
     }
@@ -772,17 +814,24 @@ fn validate_hidden(binding: S14CausalBlockHiddenBinding, block_size: usize) -> R
         || binding.bytes != expected
         || binding.block_size != block_size
     {
-        bail!("S14 StarFold HC bridge hidden 不是精确 [K,4,4096] BF16");
+        bail!(
+            "S14 StarFold HC bridge hidden 不是精确 [K,4,4096] BF16: active_K={block_size} expected_bytes={expected} actual=(buffer={:?}, offset={}, bytes={}, K={}, generation={})",
+            binding.buffer,
+            binding.offset,
+            binding.bytes,
+            binding.block_size,
+            binding.generation,
+        );
     }
     Ok(())
 }
 
-fn validate_hidden_banks(banks: &[S14CausalBlockHiddenBank; 2]) -> Result<usize> {
+fn validate_hidden_bank_capacity(banks: &[S14CausalBlockHiddenBank; 2]) -> Result<usize> {
     let block_size = block_size_from_hidden_bank_capacity(banks[0].capacity_bytes)?;
     let right_block_size = block_size_from_hidden_bank_capacity(banks[1].capacity_bytes)?;
     if block_size != right_block_size {
         bail!(
-            "S14 StarFold HC bridge A/B hidden bank block_size 漂移: left={block_size} right={right_block_size}"
+            "S14 StarFold HC bridge A/B hidden bank capacity 漂移: left_K={block_size} right_K={right_block_size}"
         );
     }
     let left = banks[0].binding(block_size, 0)?;

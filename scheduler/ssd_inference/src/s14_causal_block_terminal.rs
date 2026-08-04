@@ -23,7 +23,7 @@ use crate::{
         S14HeadChunkArgmaxShape, S14HeadChunkWorkspace, S14_HEAD_ARGMAX_WORDS,
     },
     s14_position0_hybrid_upload::S14Position0HeadChunkReceipt,
-    GpuBuffer, VulkanContext,
+    GpuBuffer, GpuBufferMemoryTier, VulkanContext,
 };
 use anyhow::{bail, Context, Result};
 use ash::vk;
@@ -35,7 +35,6 @@ use std::{
 };
 
 const CHECKPOINT_ALIGNMENT: u64 = 256;
-const MAX_BLOCK_SIZE: usize = 8;
 const TERMINAL_WAIT_TIMEOUT_NS: u64 = 60_000_000_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -49,13 +48,13 @@ pub struct S14CausalBlockCheckpointArenaLayout {
 }
 
 impl S14CausalBlockCheckpointArenaLayout {
-    pub fn build(checkpoint_state_bytes: u64, slots: usize) -> Result<Self> {
-        if checkpoint_state_bytes == 0 || slots == 0 {
-            bail!("causal-block checkpoint arena state bytes/slots 不能为0");
+    pub fn build(checkpoint_state_bytes: u64, max_block_size: usize, slots: usize) -> Result<Self> {
+        if checkpoint_state_bytes == 0 || !matches!(max_block_size, 4 | 8) || slots == 0 {
+            bail!("causal-block checkpoint arena state bytes/max K/slots 非法");
         }
         let checkpoint_stride_bytes = align_up(checkpoint_state_bytes, CHECKPOINT_ALIGNMENT)?;
         let slot_bytes = checkpoint_stride_bytes
-            .checked_mul(MAX_BLOCK_SIZE as u64)
+            .checked_mul(max_block_size as u64)
             .context("causal-block checkpoint slot bytes overflow")?;
         let arena_bytes = slot_bytes
             .checked_mul(slots as u64)
@@ -63,7 +62,7 @@ impl S14CausalBlockCheckpointArenaLayout {
         Ok(Self {
             checkpoint_state_bytes,
             checkpoint_stride_bytes,
-            max_block_size: MAX_BLOCK_SIZE,
+            max_block_size,
             slots,
             slot_bytes,
             arena_bytes,
@@ -80,8 +79,11 @@ impl S14CausalBlockCheckpointArenaLayout {
     }
 
     fn used_bytes(self, block_size: usize) -> Result<u64> {
-        if !matches!(block_size, 4 | 8) {
-            bail!("causal-block checkpoint arena 只接受 K=4/8");
+        if !matches!(block_size, 4 | 8) || block_size > self.max_block_size {
+            bail!(
+                "causal-block checkpoint arena K={block_size} 超出 max K={}",
+                self.max_block_size
+            );
         }
         self.checkpoint_stride_bytes
             .checked_mul(block_size.saturating_sub(1) as u64)
@@ -110,6 +112,7 @@ struct LeaseEntry {
 
 #[derive(Debug)]
 struct LeaseLedger {
+    max_block_size: usize,
     free: Vec<bool>,
     active: BTreeMap<u64, LeaseEntry>,
     next_lease_id: u64,
@@ -118,8 +121,9 @@ struct LeaseLedger {
 }
 
 impl LeaseLedger {
-    fn new(slots: usize) -> Self {
+    fn new(max_block_size: usize, slots: usize) -> Self {
         Self {
+            max_block_size,
             free: vec![true; slots],
             active: BTreeMap::new(),
             next_lease_id: 1,
@@ -132,8 +136,11 @@ impl LeaseLedger {
     }
 
     fn reserve(&mut self, block_size: usize) -> Result<(u64, usize)> {
-        if !matches!(block_size, 4 | 8) {
-            bail!("causal-block checkpoint reservation 只接受 K=4/8");
+        if !matches!(block_size, 4 | 8) || block_size > self.max_block_size {
+            bail!(
+                "causal-block checkpoint reservation K={block_size} 超出 max K={}",
+                self.max_block_size
+            );
         }
         let slot = self
             .free
@@ -222,6 +229,7 @@ pub struct S14CausalBlockCheckpointArenaPool {
     ctx: Arc<VulkanContext>,
     layout: S14CausalBlockCheckpointArenaLayout,
     arena: GpuBuffer,
+    arena_tier: GpuBufferMemoryTier,
     ready_timeline: vk::Semaphore,
     ledger: Mutex<LeaseLedger>,
 }
@@ -232,6 +240,7 @@ impl fmt::Debug for S14CausalBlockCheckpointArenaPool {
             .debug_struct("S14CausalBlockCheckpointArenaPool")
             .field("layout", &self.layout)
             .field("arena", &self.arena.handle())
+            .field("arena_tier", &self.arena_tier)
             .field("ready_timeline", &self.ready_timeline)
             .field("telemetry", &self.telemetry().ok())
             .finish()
@@ -242,17 +251,23 @@ impl S14CausalBlockCheckpointArenaPool {
     pub fn new(
         ctx: Arc<VulkanContext>,
         checkpoint_state_bytes: u64,
+        max_block_size: usize,
         slots: usize,
     ) -> Result<Arc<Self>> {
         if !ctx.timeline_semaphore {
             bail!("causal-block checkpoint arena 要求 timeline semaphore");
         }
-        let layout = S14CausalBlockCheckpointArenaLayout::build(checkpoint_state_bytes, slots)?;
+        let layout = S14CausalBlockCheckpointArenaLayout::build(
+            checkpoint_state_bytes,
+            max_block_size,
+            slots,
+        )?;
         let usage = vk::BufferUsageFlags::TRANSFER_DST
             | vk::BufferUsageFlags::TRANSFER_SRC
             | vk::BufferUsageFlags::STORAGE_BUFFER;
-        let arena = GpuBuffer::new_vram(&ctx, layout.arena_bytes, usage)
+        let arena = GpuBuffer::new_device_first_storage(&ctx, layout.arena_bytes, usage)
             .context("allocate causal-block checkpoint arena")?;
+        let arena_tier = arena.memory_tier();
         let mut type_info = vk::SemaphoreTypeCreateInfo::default()
             .semaphore_type(vk::SemaphoreType::TIMELINE)
             .initial_value(0);
@@ -272,13 +287,18 @@ impl S14CausalBlockCheckpointArenaPool {
             ctx,
             layout,
             arena,
+            arena_tier,
             ready_timeline,
-            ledger: Mutex::new(LeaseLedger::new(slots)),
+            ledger: Mutex::new(LeaseLedger::new(max_block_size, slots)),
         }))
     }
 
     pub fn layout(&self) -> S14CausalBlockCheckpointArenaLayout {
         self.layout
+    }
+
+    pub fn memory_tier(&self) -> GpuBufferMemoryTier {
+        self.arena_tier
     }
 
     pub fn telemetry(&self) -> Result<S14CausalBlockCheckpointArenaTelemetry> {
@@ -290,6 +310,9 @@ impl S14CausalBlockCheckpointArenaPool {
     }
 
     fn acquire(self: &Arc<Self>, block_size: usize) -> Result<CheckpointReservation> {
+        // 在查找/占用 slot 前就拒绝超出 pool 物理 max K 的请求，不允许先污染
+        // ledger 再由 commit 阶段补救。
+        self.layout.used_bytes(block_size)?;
         let (lease_id, slot) = self
             .ledger
             .lock()
@@ -568,7 +591,8 @@ impl S14CausalBlockBatchedTerminalRecorder {
         if !Arc::ptr_eq(&ctx, &pool.ctx) {
             bail!("causal-block terminal recorder/pool 不属于同一 Vulkan context");
         }
-        let max_shape = S14HeadChunkArgmaxShape::production_batched(MAX_BLOCK_SIZE as u32)?;
+        let max_shape =
+            S14HeadChunkArgmaxShape::production_batched(pool.layout.max_block_size as u32)?;
         let workspace_layout = TerminalWorkspaceLayout::build(max_shape)?;
         let workspace = GpuBuffer::new_vram(
             &ctx,
@@ -950,6 +974,7 @@ fn validate_terminal_input(
     input: &S14CausalBlockTerminalInputBinding<'_>,
 ) -> Result<()> {
     let block_size = input.final_hidden.block_size;
+    pool.layout.used_bytes(block_size)?;
     let shape = S14HeadChunkArgmaxShape::production_batched(block_size as u32)?;
     let expected_hidden_bytes = (block_size as u64)
         .checked_mul(S14_CAUSAL_BLOCK_HC_ELEMENTS_PER_LANE as u64)
@@ -1293,12 +1318,12 @@ mod tests {
 
     #[test]
     fn k_prefix_layout_and_lease_ledger_reject_stale_release() {
-        let layout = S14CausalBlockCheckpointArenaLayout::build(46_000_003, 2).unwrap();
+        let layout = S14CausalBlockCheckpointArenaLayout::build(46_000_003, 8, 2).unwrap();
         assert_eq!(layout.checkpoint_stride_bytes % CHECKPOINT_ALIGNMENT, 0);
         assert!(layout.used_bytes(4).unwrap() <= layout.slot_bytes);
         assert!(layout.used_bytes(8).unwrap() <= layout.slot_bytes);
 
-        let mut ledger = LeaseLedger::new(2);
+        let mut ledger = LeaseLedger::new(8, 2);
         let (lease_id, slot) = ledger.reserve(8).unwrap();
         let receipt = S14CausalBlockDeviceFutureReceipt {
             base_position: 17,

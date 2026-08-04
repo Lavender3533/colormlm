@@ -954,6 +954,7 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
         P: S14CausalBlockProductionHcQkvResourceProvider,
     {
         let validate = (|| -> Result<()> {
+            let block_size = prefix_producer.arena().layout().block_size;
             if self.phase != RecorderPhase::Idle
                 || self.in_flight
                 || !self.pending_binders.borrow().is_empty()
@@ -962,14 +963,17 @@ impl<P: S14CausalBlockHcQkvResourceProvider> S14CausalBlockProductionHcQkvLayerR
             {
                 bail!("causal-block HC/QKV recorder 未 finish/drain，禁止 rebind");
             }
+            if !matches!(block_size, K4 | 8) {
+                bail!("causal-block HC/QKV rebind prefix active K 非 K4/K8: {block_size}");
+            }
             provider
-                .validate_post_prefix_handoff(K4)
+                .validate_post_prefix_handoff(block_size)
                 .map_err(anyhow::Error::msg)?;
             if !Arc::ptr_eq(&self.static_arena, provider.paged_weight_arena())
                 || !Arc::ptr_eq(&self.ctx, prefix_producer.context())
                 || prefix_producer.source() != provider.materialized_token_source()
                 || prefix_producer.arena().base_position() != base_position
-                || prefix_producer.arena().layout().block_size != K4
+                || prefix_producer.arena().layout().block_size != block_size
             {
                 bail!("causal-block HC/QKV rebind arena/context/base/K identity 漂移");
             }

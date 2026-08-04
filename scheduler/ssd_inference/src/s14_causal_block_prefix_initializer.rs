@@ -21,7 +21,7 @@ use crate::{
         validate_s14_starwave_generation_origin, S14StarwavePosition0CommittedOrigin,
     },
     s14_whole_token_device::WholeTokenDetachedCommittedState,
-    GpuBuffer, VulkanContext,
+    GpuBuffer, GpuBufferMemoryTier, VulkanContext,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use ash::vk;
@@ -36,6 +36,14 @@ pub enum S14CausalBlockPrefixBootstrapPolicy {
     CommittedContinuation,
     Position0CommittedGeneration,
     ForcedPrefill,
+}
+
+/// Prefix checkpoint 的物理驻留层级。两种层级共享完全相同的 Vulkan buffer ABI、
+/// prefix 累积顺序与 terminal/readback 合同；这里只改变 allocation heap，不改变数值路径。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum S14CausalBlockPrefixStorageTier {
+    DeviceLocal,
+    HostVisibleSystem,
 }
 
 const POSITION0_INPUT_TOKEN_ID: u32 = 0;
@@ -54,6 +62,7 @@ pub struct S14CausalBlockPrefixInitializationCompletion {
     pub queue_submit_calls: u32,
     pub fence_wait_calls: u32,
     pub completed_before_producer: bool,
+    pub storage_tier: S14CausalBlockPrefixStorageTier,
 }
 
 /// 成功构造即代表 authoritative copy 已 submit 且 fence 完成。调用方只能通过
@@ -261,19 +270,14 @@ impl S14CausalBlockPrefixInitializationOwner {
                 return Err(error.context("构造 causal-block prefix checkpoint layout"));
             }
         };
-        let prefix_buffer = match GpuBuffer::new_vram(
-            &context,
-            layout.used_bytes,
-            vk::BufferUsageFlags::STORAGE_BUFFER
-                | vk::BufferUsageFlags::TRANSFER_SRC
-                | vk::BufferUsageFlags::TRANSFER_DST,
-        ) {
-            Ok(buffer) => buffer,
-            Err(error) => {
-                committed_buffer.destroy(&context);
-                return Err(error.context("allocate causal-block prefix checkpoint storage"));
-            }
-        };
+        let (prefix_buffer, storage_tier) =
+            match allocate_prefix_storage(&context, layout.used_bytes) {
+                Ok(allocation) => allocation,
+                Err(error) => {
+                    committed_buffer.destroy(&context);
+                    return Err(error.context("allocate causal-block prefix checkpoint storage"));
+                }
+            };
         let authoritative_device = Arc::new(committed_buffer);
         let prefix_storage = Arc::new(prefix_buffer);
         let prefix_arena = match S14CausalBlockPrefixCheckpointArena::bind(
@@ -356,6 +360,7 @@ impl S14CausalBlockPrefixInitializationOwner {
             state_bytes,
             base_position,
             block_size,
+            storage_tier,
         ) {
             Ok(completion) => completion,
             Err(error) => {
@@ -614,6 +619,7 @@ fn validate_initialization_receipt(
     state_bytes: u64,
     base_position: u32,
     block_size: usize,
+    storage_tier: S14CausalBlockPrefixStorageTier,
 ) -> Result<S14CausalBlockPrefixInitializationCompletion> {
     let copied_bytes = state_bytes
         .checked_mul(block_size as u64)
@@ -639,7 +645,29 @@ fn validate_initialization_receipt(
         queue_submit_calls: 1,
         fence_wait_calls: 1,
         completed_before_producer: true,
+        storage_tier,
     })
+}
+
+fn allocate_prefix_storage(
+    context: &VulkanContext,
+    bytes: u64,
+) -> Result<(GpuBuffer, S14CausalBlockPrefixStorageTier)> {
+    let usage = vk::BufferUsageFlags::STORAGE_BUFFER
+        | vk::BufferUsageFlags::TRANSFER_SRC
+        | vk::BufferUsageFlags::TRANSFER_DST;
+    let buffer = GpuBuffer::new_device_first_storage(context, bytes, usage)?;
+    let storage_tier = match buffer.memory_tier() {
+        GpuBufferMemoryTier::DeviceLocal => S14CausalBlockPrefixStorageTier::DeviceLocal,
+        GpuBufferMemoryTier::HostVisibleSystem => {
+            S14CausalBlockPrefixStorageTier::HostVisibleSystem
+        }
+        GpuBufferMemoryTier::Other => {
+            buffer.destroy(context);
+            bail!("prefix checkpoint 两级分配返回未授权 memory tier");
+        }
+    };
+    Ok((buffer, storage_tier))
 }
 
 fn allocate_initialization_command(

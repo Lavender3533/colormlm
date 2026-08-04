@@ -583,13 +583,9 @@ where
         stage,
     )
     .context("接管 S14Runtime 唯一 StarFold runtime/windows")?;
-    let terminal_endpoint = S14StarfoldTerminalEndpoint::new(
-        Arc::clone(&owned.context),
-        checkpoint_state_bytes,
-        // direct terminal 只服务 generation K4；K8 prefill 的 prefix arena 不进入 head。
-        K4,
-    )
-    .context("构造 S14 StarFold 同源 direct terminal endpoint")?;
+    let terminal_endpoint =
+        S14StarfoldTerminalEndpoint::new(Arc::clone(&owned.context), checkpoint_state_bytes)
+            .context("构造 S14 StarFold 同源 direct terminal endpoint")?;
     let paged_arena = owned
         .paged_arena
         .take()

@@ -1378,7 +1378,13 @@ impl<H: S14CausalBlockVulkanHcQkvAdapter> S14StarfoldK4ProductionStage
             );
         }
         validate_hidden(initial_hidden, K4).map_err(|error| format!("{error:#}"))?;
-        self.hc_qkv.begin_block(base_position, K4)?;
+        self.hc_bridge
+            .begin_block(K4)
+            .map_err(|error| format!("{error:#}"))?;
+        if let Err(error) = self.hc_qkv.begin_block(base_position, K4) {
+            self.hc_bridge.abort_block();
+            return Err(error);
+        }
         self.base_position = Some(base_position);
         self.completed_layers = 0;
         Ok(S14StarfoldK4BeginReceipt {
@@ -1406,8 +1412,16 @@ impl<H: S14CausalBlockVulkanHcQkvAdapter> S14StarfoldK4ProductionStage
             );
         }
         validate_hidden(initial_hidden, K4).map_err(|error| format!("{error:#}"))?;
-        self.hc_qkv
-            .begin_position0_committed_generation_block(provenance, K4)?;
+        self.hc_bridge
+            .begin_block(K4)
+            .map_err(|error| format!("{error:#}"))?;
+        if let Err(error) = self
+            .hc_qkv
+            .begin_position0_committed_generation_block(provenance, K4)
+        {
+            self.hc_bridge.abort_block();
+            return Err(error);
+        }
         self.position0_generation_provenance = None;
         self.base_position = Some(0);
         self.completed_layers = 0;
@@ -1434,8 +1448,16 @@ impl<H: S14CausalBlockVulkanHcQkvAdapter> S14StarfoldK4ProductionStage
             return Err("S14 StarFold ForcedPrefill stage begin phase/K 漂移".into());
         }
         validate_hidden(initial_hidden, K4).map_err(|error| format!("{error:#}"))?;
-        self.hc_qkv
-            .begin_teacher_forced_prefill_block(base_position, K4)?;
+        self.hc_bridge
+            .begin_block(K4)
+            .map_err(|error| format!("{error:#}"))?;
+        if let Err(error) = self
+            .hc_qkv
+            .begin_teacher_forced_prefill_block(base_position, K4)
+        {
+            self.hc_bridge.abort_block();
+            return Err(error);
+        }
         self.base_position = Some(base_position);
         self.completed_layers = 0;
         Ok(S14StarfoldK4BeginReceipt {
@@ -1462,8 +1484,16 @@ impl<H: S14CausalBlockVulkanHcQkvAdapter> S14StarfoldK4ProductionStage
             return Err("S14 StarFold ForcedPrefill K4/K8 stage begin phase/K 漂移".into());
         }
         validate_hidden(initial_hidden, block_size).map_err(|error| format!("{error:#}"))?;
-        self.hc_qkv
-            .begin_teacher_forced_prefill_block(base_position, block_size)?;
+        self.hc_bridge
+            .begin_block(block_size)
+            .map_err(|error| format!("{error:#}"))?;
+        if let Err(error) = self
+            .hc_qkv
+            .begin_teacher_forced_prefill_block(base_position, block_size)
+        {
+            self.hc_bridge.abort_block();
+            return Err(error);
+        }
         self.base_position = Some(base_position);
         self.completed_layers = 0;
         Ok(S14StarfoldK4BeginReceipt {
@@ -1676,6 +1706,9 @@ impl<H: S14CausalBlockVulkanHcQkvAdapter> S14StarfoldK4ProductionStage
             return Err("S14 StarFold concrete stage 没有 sealed block".into());
         }
         self.hc_qkv.finish_validated_block()?;
+        self.hc_bridge
+            .finish_block()
+            .map_err(|error| format!("{error:#}"))?;
         self.base_position = None;
         self.completed_layers = 0;
         Ok(())
@@ -1692,6 +1725,9 @@ impl<H: S14CausalBlockVulkanHcQkvAdapter> S14StarfoldK4ProductionStage
             .wait()
             .map_err(|error| format!("{error:#}"));
         let hc = self.hc_qkv.drain_and_abort(completed_layers);
+        // bridge 的 active K 属于本 block 的事务身份；无论下游 drain 回执是否失败，
+        // 当前 block 都已经进入 abort 路径，不能让 stale K 污染下一次 begin/rebind。
+        self.hc_bridge.abort_block();
         shared?;
         hc?;
         self.base_position = None;

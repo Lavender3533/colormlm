@@ -135,7 +135,7 @@ pub mod verified_payload_cache;
 pub mod vram_pool;
 pub mod weights;
 
-pub use buffer::GpuBuffer;
+pub use buffer::{GpuBuffer, GpuBufferMemoryTier};
 pub use compute::{
     ComputePipeline, DescriptorBinder, ATTN_V_SPV, DEQUANT_Q4_K_SPV, DEQUANT_Q6_K_SPV,
     EMBEDDING_SPV, MATMUL_FP32_NAIVE_SPV, MATMUL_XWT_SPV, MATVEC_WT_SPV, RESIDUAL_ADD_SPV,
