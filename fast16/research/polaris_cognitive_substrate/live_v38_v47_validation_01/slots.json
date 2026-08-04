@@ -1,0 +1,17 @@
+{
+  "schema_version": "design-copy-slots-v1",
+  "task_id": "pf47-validation-01",
+  "prompt_sha256": "5bc3109887e179ce30a8b97e6529d412811eb5c474fef3899cb15046fe4703ac",
+  "slots": [
+    {
+      "id": 0,
+      "kind": "title",
+      "text": "暴雨事件指挥板"
+    },
+    {
+      "id": 1,
+      "kind": "lede",
+      "text": "展示地图式区域、事件队列、严重度图例、负责人分派与已处理回退；移动端先呈现队列再呈现地图，所有状态都有文字。"
+    }
+  ]
+}

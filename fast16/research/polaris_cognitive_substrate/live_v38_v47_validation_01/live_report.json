@@ -1,0 +1,48 @@
+{
+  "format": "polaris-v38-v47-live-validation-gate-v1",
+  "status": "fail",
+  "scope": "single_frozen_validation_task",
+  "task_id": "pf47-validation-01",
+  "model": "ColorLM-v38-Qwen36-Shared-Sequence-Policy",
+  "model_parameter_count": 34660610688,
+  "endpoint": "http://127.0.0.1:8138",
+  "timing": {
+    "exact_model_request_seconds_captured": false,
+    "observed_tool_wall_seconds_approx": 26
+  },
+  "failure_stage": "v47_legal_combination_projection",
+  "model_output": {
+    "source_bytes": 277,
+    "raw_sha256": "7d4b9af07adcf7a8079f65fb26d341e437e2aee7589016dbf8747cc24012d27b",
+    "raw_genome": {
+      "v": "dg1",
+      "q": [0, 1],
+      "y": ["dark", "cyan", "normal", "soft"],
+      "l": ["split", "stack", 1],
+      "c": [
+        ["hero", "plain"],
+        ["filters", "generic"],
+        ["table", "ops"],
+        ["drawer", "detail"],
+        ["dialog", "confirm"]
+      ],
+      "x": ["filter", "open", "confirm", "sort"],
+      "r": ["table>cards", "drawer>full"],
+      "a": 255,
+      "z": "inline"
+    },
+    "complete_objects": 1,
+    "decode_status": "rejected",
+    "errors": [
+      "$.c[2]: split 的 content 槽不允许 table",
+      "$.c[3]: split 的 detail 槽不允许 drawer",
+      "$.c[4]: split 的 support 槽不允许 dialog"
+    ]
+  },
+  "candidate": null,
+  "gate": null,
+  "retry_or_repair_applied": false,
+  "runtime_stopped_after_gate": true,
+  "diagnosis": "v38 已能快速产出完整 Design Genome；当前失败是布局 split 与 table/drawer/dialog 组件组合不合法，属于联合结构决策问题，不是权重加载、显存或长文本生成问题。",
+  "claim_limit": "只是一条冻结 validation 题的在线 Genome 选择失败回执；未编译 HTML、未运行浏览器、未重试、未修改规则。"
+}

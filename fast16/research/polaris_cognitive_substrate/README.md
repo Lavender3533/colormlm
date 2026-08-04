@@ -50,3 +50,19 @@ python fast16/research/polaris_cognitive_substrate/polaris_embryo_v0.py
 v47 兼容合同、验证和版本状态可以被同一个权威合同组装；因为使用的是冻结开发题
 混合产物，commit 只提交该 HTML 夹具，不能据此声称已完成任意任务在线生成或
 v47 Genome Head 能力晋级。
+
+## 在线 v38 → v47 Genome validation 短门
+
+`live_v38_v47_validation_gate.py` 只让现成 v38 在线生成约 88 token 的闭集
+Design Genome，再由 v47 通用组件编译器展开 HTML，避免让本地模型生成上千 token
+源码。它只消费冻结 `validation` 题，禁止自动修复或重试。
+
+```powershell
+python fast16/research/polaris_cognitive_substrate/live_v38_v47_validation_gate.py
+```
+
+2026-08-04 的第一次 `pf47-validation-01` 在线门在合法组合投影处失败：v38
+输出了完整 Genome，但选择 `split` 布局的同时选择了 `table/drawer/dialog`，三项
+都不属于该布局的允许集合。运行时随后停止，没有编译 HTML、没有改规则重跑。
+真实失败回执位于 `live_v38_v47_validation_01/live_report.json`。这把当前短板定位为
+布局与组件的联合结构决策，而不是 S14 式权重加载或长文本生成。
