@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import threading
 import time
 import urllib.error
@@ -828,6 +829,7 @@ class RangeCache:
         allow_fetch: bool = False,
         download_budget_bytes: int = 0,
         cache_budget_bytes: int | None = None,
+        cache_free_reserve_bytes: int = 0,
         authoritative_hashes: Mapping[str, str] | None = None,
         require_authoritative: bool = False,
         timeout: float = 300.0,
@@ -836,7 +838,11 @@ class RangeCache:
     ) -> None:
         endpoint = endpoint.rstrip("/")
         _require_https(endpoint)
-        if download_budget_bytes < 0 or cache_budget_bytes is not None and cache_budget_bytes < 0:
+        if (
+            download_budget_bytes < 0
+            or (cache_budget_bytes is not None and cache_budget_bytes < 0)
+            or cache_free_reserve_bytes < 0
+        ):
             raise rp.ContractError("Range budget 不能为负数")
         if chunk_bytes <= 0:
             raise rp.ContractError("chunk_bytes 必须为正数")
@@ -847,6 +853,7 @@ class RangeCache:
         self.allow_fetch = allow_fetch
         self.download_budget_bytes = int(download_budget_bytes)
         self.cache_budget_bytes = int(cache_budget_bytes) if cache_budget_bytes is not None else None
+        self.cache_free_reserve_bytes = int(cache_free_reserve_bytes)
         self.authoritative_hashes = dict(authoritative_hashes or {})
         for key, digest in self.authoritative_hashes.items():
             if not isinstance(key, str) or not SHA256_RE.fullmatch(str(digest)):
@@ -898,6 +905,18 @@ class RangeCache:
                 raise rp.ContractError("上一个 Range 请求仍有未结算 reservation")
             self.download_budget_bytes = download_budget_bytes
             self._download_used = 0
+
+    @property
+    def cache_storage_telemetry(self) -> dict[str, int | None]:
+        free_bytes = shutil.disk_usage(self.root).free
+        with self._budget_lock:
+            return {
+                "cache_used_bytes": self._cache_used,
+                "cache_reserved_bytes": self._cache_reserved,
+                "cache_budget_bytes": self.cache_budget_bytes,
+                "disk_free_bytes": free_bytes,
+                "disk_free_reserve_bytes": self.cache_free_reserve_bytes,
+            }
 
     @property
     def proof_cache_telemetry(self) -> dict[str, Any]:
@@ -1163,8 +1182,22 @@ class RangeCache:
                 self._cache_used + self._cache_reserved + cache_bytes > self.cache_budget_bytes
             ):
                 raise rp.ContractError(
-                    f"cache budget 超限：used={self._cache_used}, requested={cache_bytes}, "
+                    f"cache budget 超限：used={self._cache_used}, "
+                    f"active_reserved={self._cache_reserved}, requested={cache_bytes}, "
                     f"limit={self.cache_budget_bytes}"
+                )
+            disk_free_bytes = shutil.disk_usage(self.root).free
+            required_free_bytes = (
+                self.cache_free_reserve_bytes
+                + self._cache_reserved
+                + cache_bytes
+            )
+            if disk_free_bytes < required_free_bytes:
+                raise rp.ContractError(
+                    "Range cache 磁盘保留线不足："
+                    f"free={disk_free_bytes}, reserve={self.cache_free_reserve_bytes}, "
+                    f"active_reserved={self._cache_reserved}, requested={cache_bytes}, "
+                    f"required_free={required_free_bytes}"
                 )
             self._download_reserved += download_bytes
             self._cache_reserved += cache_bytes

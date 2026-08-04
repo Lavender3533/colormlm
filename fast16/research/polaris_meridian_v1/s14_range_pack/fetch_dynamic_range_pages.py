@@ -29,6 +29,8 @@ MANIFEST_FORMAT = "polaris-s14-dynamic-page-fetch-manifest-v1"
 # 单个 token/lane 是36项；causal-block K=8 会把同层8条 route 去重后合并，
 # 上限仍是精确的 8 * 36，不接受无界 manifest。
 MAX_RANGE_COUNT = 8 * 36
+DEFAULT_CACHE_BUDGET_BYTES = 64 << 30
+MIN_DISK_FREE_RESERVE_BYTES = 20 << 30
 
 
 def _validate_manifest(value: Any) -> list[dict[str, Any]]:
@@ -222,7 +224,7 @@ class _ThreadLocalRequestsRangeTransport:
             }
 
 
-def _runtime_limits() -> tuple[int, int]:
+def _runtime_limits() -> tuple[int, int, int, int]:
     retries = int(os.environ.get("S14_DYNAMIC_PAGE_FETCH_RETRIES", "5"))
     if retries < 1 or retries > 8:
         raise online_range.rp.ContractError(
@@ -233,7 +235,27 @@ def _runtime_limits() -> tuple[int, int]:
         raise online_range.rp.ContractError(
             "S14_DYNAMIC_PAGE_FETCH_WORKERS 必须在1..12"
         )
-    return retries, workers
+    cache_budget_bytes = int(
+        os.environ.get(
+            "S14_DYNAMIC_PAGE_CACHE_BUDGET_BYTES",
+            str(DEFAULT_CACHE_BUDGET_BYTES),
+        )
+    )
+    if cache_budget_bytes < 1 << 30 or cache_budget_bytes > 2 << 40:
+        raise online_range.rp.ContractError(
+            "S14_DYNAMIC_PAGE_CACHE_BUDGET_BYTES 必须在1GiB..2TiB"
+        )
+    disk_free_reserve_bytes = int(
+        os.environ.get(
+            "S14_DYNAMIC_PAGE_DISK_RESERVE_BYTES",
+            str(MIN_DISK_FREE_RESERVE_BYTES),
+        )
+    )
+    if disk_free_reserve_bytes < MIN_DISK_FREE_RESERVE_BYTES:
+        raise online_range.rp.ContractError(
+            "S14_DYNAMIC_PAGE_DISK_RESERVE_BYTES 不得低于20GiB"
+        )
+    return retries, workers, cache_budget_bytes, disk_free_reserve_bytes
 
 
 def _execute_request(
@@ -245,6 +267,8 @@ def _execute_request(
     executor: concurrent.futures.ThreadPoolExecutor,
     transport: _ThreadLocalRequestsRangeTransport,
     retries: int,
+    cache_budget_bytes: int,
+    disk_free_reserve_bytes: int,
 ) -> dict[str, Any]:
     request_started = time.perf_counter()
     entries = _validate_manifest(manifest)
@@ -269,6 +293,8 @@ def _execute_request(
             cache_root,
             allow_fetch=True,
             download_budget_bytes=download_budget_bytes,
+            cache_budget_bytes=cache_budget_bytes,
+            cache_free_reserve_bytes=disk_free_reserve_bytes,
             endpoint=endpoint,
             transport=transport,
         )
@@ -345,12 +371,18 @@ def _execute_request(
         ),
         "ranges": rows,
         "proof_cache": cache.proof_cache_telemetry,
+        "cache_storage": cache.cache_storage_telemetry,
         "transport": transport.telemetry,
     }
 
 
 def _serve() -> int:
-    retries, workers = _runtime_limits()
+    (
+        retries,
+        workers,
+        cache_budget_bytes,
+        disk_free_reserve_bytes,
+    ) = _runtime_limits()
     cache_pool: dict[tuple[str, str], online_range.RangeCache] = {}
     transport = _ThreadLocalRequestsRangeTransport()
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
@@ -379,6 +411,8 @@ def _serve() -> int:
                     executor=executor,
                     transport=transport,
                     retries=retries,
+                    cache_budget_bytes=cache_budget_bytes,
+                    disk_free_reserve_bytes=disk_free_reserve_bytes,
                 )
                 response = {"request_id": request_id, "ok": True, "result": result}
             except Exception as error:
@@ -408,7 +442,12 @@ def main() -> int:
         return _serve()
     if args.manifest is None or args.cache_root is None or args.download_budget_bytes is None:
         raise online_range.rp.ContractError("单次模式必须提供manifest/cache-root/download-budget")
-    retries, workers = _runtime_limits()
+    (
+        retries,
+        workers,
+        cache_budget_bytes,
+        disk_free_reserve_bytes,
+    ) = _runtime_limits()
     manifest = _load_manifest(args.manifest)
     transport = _ThreadLocalRequestsRangeTransport()
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
@@ -420,6 +459,8 @@ def main() -> int:
             executor=executor,
             transport=transport,
             retries=retries,
+            cache_budget_bytes=cache_budget_bytes,
+            disk_free_reserve_bytes=disk_free_reserve_bytes,
         )
     print(json.dumps(result, ensure_ascii=False))
     return 0
