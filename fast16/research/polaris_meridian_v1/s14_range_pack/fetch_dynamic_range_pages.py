@@ -48,10 +48,51 @@ MIN_ORIGIN_DEADLINE_SECONDS = 5.0
 MAX_ORIGIN_DEADLINE_SECONDS = 240.0
 ORIGIN_IO_TIMEOUT_SECONDS = 15.0
 ORIGIN_PROGRESS_CHUNK_BYTES = 256 << 10
+MODELSCOPE_LFS_SNAPSHOT_FORMAT = "polaris-deepseek-fixed-revision-lfs-v1"
+MODELSCOPE_RESOLVE_REVISION = "master"
 
 
 class _OriginDeadlineExceeded(TimeoutError):
     pass
+
+
+def _load_modelscope_lfs_snapshot(path: Path) -> dict[str, tuple[int, str]]:
+    snapshot = json.loads(path.read_text(encoding="utf-8"))
+    if (
+        snapshot.get("format") != MODELSCOPE_LFS_SNAPSHOT_FORMAT
+        or snapshot.get("repo") != online_range.rp.REPO
+        or snapshot.get("revision") != online_range.rp.REVISION
+    ):
+        raise online_range.rp.ContractError(
+            "ModelScope LFS snapshot format/repo/revision 不匹配"
+        )
+    raw_files = snapshot.get("files")
+    if not isinstance(raw_files, list) or not raw_files:
+        raise online_range.rp.ContractError("ModelScope LFS snapshot.files 为空")
+    result: dict[str, tuple[int, str]] = {}
+    for raw in raw_files:
+        if not isinstance(raw, dict):
+            raise online_range.rp.ContractError("ModelScope LFS snapshot file entry 非法")
+        filename = raw.get("file")
+        byte_count = raw.get("bytes")
+        digest = raw.get("lfs_sha256")
+        if (
+            not isinstance(filename, str)
+            or not filename
+            or "/" in filename
+            or "\\" in filename
+            or isinstance(byte_count, bool)
+            or not isinstance(byte_count, int)
+            or byte_count <= 0
+            or not isinstance(digest, str)
+            or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+            or filename in result
+        ):
+            raise online_range.rp.ContractError(
+                f"ModelScope LFS snapshot file identity 非法: {filename!r}"
+            )
+        result[filename] = (byte_count, digest)
+    return result
 
 
 class _RequestDeadlineExceeded(TimeoutError):
@@ -715,6 +756,7 @@ class _ThreadLocalRequestsRangeTransport:
         self._blocked_until_by_origin: dict[str, float] = {}
         self._fallback_attempts = 0
         self._fallback_successes = 0
+        self._modelscope_attestations = 0
         self._origin_deadline_seconds = float(
             os.environ.get(
                 "S14_DYNAMIC_PAGE_FETCH_ORIGIN_DEADLINE_SECONDS",
@@ -744,6 +786,26 @@ class _ThreadLocalRequestsRangeTransport:
             if endpoint not in fallback_endpoints:
                 fallback_endpoints.append(endpoint)
         self._fallback_endpoints = tuple(fallback_endpoints)
+        modelscope_endpoint = os.environ.get(
+            "S14_DYNAMIC_PAGE_FETCH_MODELSCOPE_ENDPOINT", ""
+        ).strip().rstrip("/")
+        self._modelscope_endpoint = modelscope_endpoint or None
+        self._modelscope_lfs: dict[str, tuple[int, str]] = {}
+        if self._modelscope_endpoint is not None:
+            online_range._require_https(self._modelscope_endpoint)
+            snapshot_raw = os.environ.get(
+                "S14_DYNAMIC_PAGE_FETCH_LFS_SNAPSHOT", ""
+            ).strip()
+            if not snapshot_raw:
+                raise online_range.rp.ContractError(
+                    "启用 ModelScope Range 必须提供 pinned LFS snapshot"
+                )
+            snapshot_path = Path(snapshot_raw).expanduser().resolve(strict=True)
+            if not snapshot_path.is_file():
+                raise online_range.rp.ContractError(
+                    "ModelScope LFS snapshot 不是文件"
+                )
+            self._modelscope_lfs = _load_modelscope_lfs_snapshot(snapshot_path)
         self._rate_limit_retries = int(
             os.environ.get("S14_DYNAMIC_PAGE_FETCH_429_RETRIES", "8")
         )
@@ -808,6 +870,7 @@ class _ThreadLocalRequestsRangeTransport:
                     self._fallback_attempts += 1
                 continue
             try:
+                modelscope_identity = self._modelscope_identity(candidate)
                 response = self._open_single_range(
                     candidate,
                     start,
@@ -817,6 +880,7 @@ class _ThreadLocalRequestsRangeTransport:
                     progress=progress,
                     range_key=range_key,
                     allow_extended_retry=is_last,
+                    modelscope_identity=modelscope_identity,
                 )
             except urllib.error.HTTPError as error:
                 last_error = error
@@ -852,7 +916,37 @@ class _ThreadLocalRequestsRangeTransport:
         if not url.startswith(prefix):
             return (url,)
         suffix = url[len(self._primary_endpoint) :]
-        return (url, *(f"{endpoint}{suffix}" for endpoint in self._fallback_endpoints))
+        candidates: list[str] = []
+        if self._modelscope_endpoint is not None:
+            revision = urllib.parse.quote(online_range.rp.REVISION, safe="")
+            marker = f"/resolve/{revision}/"
+            if marker not in suffix:
+                raise online_range.rp.ContractError(
+                    "无法把 pinned Hugging Face URL 映射到 ModelScope master"
+                )
+            modelscope_suffix = suffix.replace(
+                marker, f"/resolve/{MODELSCOPE_RESOLVE_REVISION}/", 1
+            )
+            candidates.append(f"{self._modelscope_endpoint}{modelscope_suffix}")
+        candidates.append(url)
+        candidates.extend(
+            f"{endpoint}{suffix}" for endpoint in self._fallback_endpoints
+        )
+        return tuple(dict.fromkeys(candidates))
+
+    def _modelscope_identity(self, url: str) -> tuple[int, str] | None:
+        if self._modelscope_endpoint is None:
+            return None
+        prefix = f"{self._modelscope_endpoint}/"
+        if not url.startswith(prefix):
+            return None
+        filename = urllib.parse.unquote(urllib.parse.urlsplit(url).path.rsplit("/", 1)[-1])
+        identity = self._modelscope_lfs.get(filename)
+        if identity is None:
+            raise online_range.rp.ContractError(
+                f"ModelScope Range 文件不在 pinned LFS snapshot: {filename}"
+            )
+        return identity
 
     def _active_progress(self) -> tuple[_RequestProgress | None, str]:
         scope = getattr(self._local, "progress_scope", None)
@@ -882,6 +976,7 @@ class _ThreadLocalRequestsRangeTransport:
         progress: _RequestProgress | None,
         range_key: str,
         allow_extended_retry: bool,
+        modelscope_identity: tuple[int, str] | None,
     ) -> _RequestsResponse:
         origin = self._origin(url)
         connection_attempt = 0
@@ -948,6 +1043,29 @@ class _ThreadLocalRequestsRangeTransport:
                     raise urllib.error.HTTPError(
                         final_url, status, reason, headers, None
                     )
+                if modelscope_identity is not None:
+                    expected_bytes, expected_lfs_sha256 = modelscope_identity
+                    linked_etag = (
+                        response.headers.get("X-Linked-ETag", "")
+                        .strip()
+                        .strip('"')
+                        .lower()
+                    )
+                    content_range = response.headers.get("Content-Range", "")
+                    match = online_range.CONTENT_RANGE_RE.fullmatch(content_range)
+                    observed_file_bytes = int(match.group(3)) if match else -1
+                    if (
+                        response.status_code != 206
+                        or linked_etag != expected_lfs_sha256
+                        or observed_file_bytes != expected_bytes
+                    ):
+                        response.close()
+                        raise online_range.rp.ContractError(
+                            "ModelScope Range 未绑定 pinned LFS object: "
+                            f"linked_etag={linked_etag!r}, file_bytes={observed_file_bytes}"
+                        )
+                    with self._stats_lock:
+                        self._modelscope_attestations += 1
                 return _RequestsResponse(
                     response,
                     progress=progress,
@@ -1047,6 +1165,7 @@ class _ThreadLocalRequestsRangeTransport:
                 "fallback_endpoints": len(self._fallback_endpoints),
                 "fallback_attempts": self._fallback_attempts,
                 "fallback_successes": self._fallback_successes,
+                "modelscope_attestations": self._modelscope_attestations,
                 "origin_deadline_seconds": self._origin_deadline_seconds,
             }
 
