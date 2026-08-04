@@ -1,0 +1,52 @@
+{
+  "format": "polaris-s14-k4-runtime-utf8-gate-v1",
+  "source_result": "scheduler/target/s14-unique-gate-3fa50e0-20260804-085246.result.json",
+  "git_head": "3fa50e0a794eb50c509ad216279b7cf870b097d2",
+  "executable": "scheduler/target/release/polaris_api.exe",
+  "executable_sha256": "dbf13018131a4f2a49f2d9b2dc6cd77b14b08dc3a5051f46fd3f1e6d518271cb",
+  "startup_contract": "StarFold resident windows=2x16 MiB, routed_path=constellation",
+  "request": {
+    "model": "Polaris-S14",
+    "nonce": "S14-b1be94f6fa48",
+    "temperature": 0,
+    "max_tokens": 16,
+    "stream": false,
+    "explicit_stop_strings": false
+  },
+  "response": {
+    "http_status": 200,
+    "wall_seconds": 868.595,
+    "prompt_tokens": 22,
+    "completion_tokens": 5,
+    "finish_reason": "stop",
+    "eos_observed": true,
+    "content": "抱歉，并package",
+    "continuous_utf8": true
+  },
+  "runtime_proofs": {
+    "non_fixed_first_input": true,
+    "minimum_generation_k4_blocks": 2,
+    "second_generation_block_consumed_previous_checkpoint": true,
+    "basis": [
+      "请求包含随机 nonce，官方 codec 报告 prompt_tokens=22。",
+      "production run_blocks 每个 committed block 强制提交 1..=4 token。",
+      "completion_tokens=5，因此至少执行并提交两个 generation K4 block。",
+      "每个成功 block 都强校验 consumed checkpoint 等于上一 committed checkpoint，并校验 position、commit_epoch 与 SHA 链；任一漂移都会返回 engine error 而非 HTTP 200。",
+      "请求未提供 stop 字符串，因此 finish_reason=stop 由 EOS token 触发。"
+    ]
+  },
+  "cleanup": {
+    "polaris_api_processes": 0,
+    "dynamic_fetch_worker_processes": 0,
+    "port_11435_listeners": 0
+  },
+  "storage": {
+    "range_cache_policy": "64 GiB high-water / 60 GiB low-water / 20 GiB minimum free reserve",
+    "disk_free_bytes_after_gate": 51063083008
+  },
+  "limitations": [
+    "本门因 EOS 在第5个 completion token 停止，未证明单次回复达到16 token。",
+    "输出语义质量仍差，尚未完成能力/质量验收。",
+    "868.595秒远未达到交互式聊天速度。"
+  ]
+}
