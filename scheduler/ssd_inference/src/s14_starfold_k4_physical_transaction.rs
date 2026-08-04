@@ -32,9 +32,9 @@ use polaris_s14_runner::{
     GraphProfile, RouteDecision, RouterKind, COMPRESS_RATIOS, FULL_DEPTH_LAYERS,
 };
 
-pub const S14_STARFOLD_K4_PHYSICAL_TRANSACTION_SCHEMA_VERSION: u32 = 1;
+pub const S14_STARFOLD_K4_PHYSICAL_TRANSACTION_SCHEMA_VERSION: u32 = 2;
 pub const S14_STARFOLD_PHYSICAL_PROOF_SCHEME: &str =
-    "polaris-s14-stargraph-starfold-k4-fulldepth43-physical-v1";
+    "polaris-s14-stargraph-starfold-k4-fulldepth43-physical-v2";
 
 const K4: usize = STARFOLD_B4_LANES;
 const BF16_BYTES: u64 = 2;
@@ -652,7 +652,7 @@ fn production_binding_sha256(
     reliable_prefix_positions: u8,
     prepared_prefix_sha256: S14StarwaveSha256,
 ) -> S14StarwaveSha256 {
-    let mut writer = S14StarwaveProofWriter::new("polaris-s14-starfold-k4-production-binding-v1");
+    let mut writer = S14StarwaveProofWriter::new("polaris-s14-starfold-k4-production-binding-v2");
     writer.write_u32(S14_STARFOLD_K4_PHYSICAL_TRANSACTION_SCHEMA_VERSION);
     writer.write_u64(transaction_id);
     writer.write_u64(batch_id);
@@ -977,6 +977,9 @@ fn validate_projection(
         || receipt.packed_upload_bytes == 0
         || receipt.lane_dispatches == 0
         || receipt.queue_submit_calls != receipt.packed_uploads
+        || (projection != S14StarfoldExpertProjection::W3
+            && receipt.source_projection_fallbacks != 0)
+        || receipt.source_projection_fallbacks > receipt.unique_experts
         || receipt.serial_token_forward_calls != 0
     {
         bail!(
@@ -1056,7 +1059,7 @@ fn physical_evidence_sha256(
 ) -> S14StarwaveSha256 {
     let receipt = &product.full_depth;
     let mut writer =
-        S14StarwaveProofWriter::new("polaris-s14-stargraph-starfold-k4-physical-evidence-v1");
+        S14StarwaveProofWriter::new("polaris-s14-stargraph-starfold-k4-physical-evidence-v2");
     writer.write_u32(S14_STARFOLD_K4_PHYSICAL_TRANSACTION_SCHEMA_VERSION);
     writer.write_u64(binding.transaction_id);
     writer.write_u64(binding.batch_id);
@@ -1199,6 +1202,7 @@ fn write_projection(
     writer.write_u64(receipt.packed_upload_bytes);
     writer.write_u32(receipt.lane_dispatches);
     writer.write_u32(receipt.queue_submit_calls);
+    writer.write_u32(receipt.source_projection_fallbacks);
     writer.write_u32(receipt.serial_token_forward_calls);
 }
 
@@ -1232,7 +1236,7 @@ fn abort_receipt_sha256(
     discarded_physical_evidence_sha256: Option<S14StarwaveSha256>,
     checkpoint: S14StarfoldK4CommittedCheckpoint,
 ) -> S14StarwaveSha256 {
-    let mut writer = S14StarwaveProofWriter::new("polaris-s14-starfold-k4-physical-abort-v1");
+    let mut writer = S14StarwaveProofWriter::new("polaris-s14-starfold-k4-physical-abort-v2");
     writer.write_u32(S14_STARFOLD_K4_PHYSICAL_TRANSACTION_SCHEMA_VERSION);
     writer.write_u64(transaction_id);
     writer.write_u64(batch_id);

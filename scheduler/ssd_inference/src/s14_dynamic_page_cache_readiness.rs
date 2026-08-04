@@ -226,6 +226,19 @@ impl DynamicPagePlannedFetchAsset {
     }
 }
 
+/// Cheap local admission check used by storage-aware routing decisions.  It
+/// never upgrades an asset to verified: the authoritative mmap/SHA gate still
+/// runs later.  A partial file or a payload with the wrong byte count is cold.
+pub fn planned_range_asset_committed_locally(planned: &S14PlannedRangeAsset) -> bool {
+    let partial = planned
+        .payload_path
+        .with_file_name(format!("{}.bin.part", planned.cache_key));
+    !partial.exists()
+        && planned.proof_path.is_file()
+        && fs::metadata(&planned.payload_path)
+            .is_ok_and(|metadata| metadata.is_file() && metadata.len() == planned.bytes)
+}
+
 #[derive(Debug)]
 pub enum DynamicPageMaterializeError {
     FetchRequired(DynamicPageFetchRequired),

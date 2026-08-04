@@ -48,14 +48,43 @@ pub fn materialize_packed_mxfp4_tile(
     expert_id: u16,
     work: &S14StarfoldExpertTileWork,
 ) -> Result<S14StarfoldPackedMxfp4Tile> {
+    materialize_packed_mxfp4_tile_from_projection(
+        runtime,
+        layer_plan,
+        expert_id,
+        work,
+        work.projection,
+    )
+}
+
+/// Materialize a logical projection from an explicitly bound source
+/// projection.  Production normally passes the same projection.  The only
+/// supported storage-resilience twin is W3 <- W1: both share the exact (n,k)
+/// MXFP4 layout, while packet identity records the W1 proof source.
+pub fn materialize_packed_mxfp4_tile_from_projection(
+    runtime: &mut S14StarfoldRuntime,
+    layer_plan: &S14StarfoldB4LayerPlan,
+    expert_id: u16,
+    work: &S14StarfoldExpertTileWork,
+    source_projection: S14StarfoldExpertProjection,
+) -> Result<S14StarfoldPackedMxfp4Tile> {
     let window_bytes = runtime.contract().microtile_bytes;
     let shape = work.projection.shape(window_bytes)?;
+    let source_shape = source_projection.shape(window_bytes)?;
+    if source_shape != shape
+        || (source_projection != work.projection
+            && !(work.projection == S14StarfoldExpertProjection::W3
+                && source_projection == S14StarfoldExpertProjection::W1))
+    {
+        bail!("S14 StarFold source projection 不属于受支持的同形 twin 合同");
+    }
     let expected = shape.tile(work.tile.tile_index)?;
     if expected != work.tile {
         bail!("S14 StarFold packed tile work 与 shape 计算结果漂移");
     }
-    let weight_template = source_template(layer_plan, expert_id, work.projection.weight_segment())?;
-    let scale_template = source_template(layer_plan, expert_id, work.projection.scale_segment())?;
+    let weight_template =
+        source_template(layer_plan, expert_id, source_projection.weight_segment())?;
+    let scale_template = source_template(layer_plan, expert_id, source_projection.scale_segment())?;
 
     let weight_offset = u64::from(expected.row_base)
         .checked_mul(shape.packed_weight_row_bytes())

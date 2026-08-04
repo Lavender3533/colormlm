@@ -18,7 +18,7 @@ use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 use std::{collections::BTreeSet, sync::Arc};
 
-pub const S14_STARFOLD_CONSTELLATION_CONTRACT_VERSION: u32 = 1;
+pub const S14_STARFOLD_CONSTELLATION_CONTRACT_VERSION: u32 = 2;
 pub const S14_STARFOLD_CONSTELLATION_MIN_WINDOW_BYTES: u32 = 16 * 1024 * 1024;
 pub const S14_STARFOLD_CONSTELLATION_MAX_WINDOW_BYTES: u32 = 64 * 1024 * 1024;
 
@@ -55,6 +55,7 @@ pub struct S14StarfoldConstellationLane {
 pub struct S14StarfoldConstellationCandidate {
     pub expert_id: u16,
     pub projection: S14StarfoldExpertProjection,
+    pub source_projection: S14StarfoldExpertProjection,
     pub shape: S14StarfoldMxfp4TileShape,
     pub tile_index: u32,
     pub scale_audit: S14StarfoldMxfp4ScaleAudit,
@@ -65,6 +66,7 @@ pub struct S14StarfoldConstellationCandidate {
 #[derive(Debug)]
 pub struct S14StarfoldConstellationMember {
     pub expert_id: u16,
+    pub source_projection: S14StarfoldExpertProjection,
     pub source_key: StarfoldPageKey,
     pub shape: S14StarfoldMxfp4TileShape,
     pub tile_index: u32,
@@ -137,7 +139,8 @@ impl S14StarfoldConstellationPacket {
                 bail!("S14 StarFold 星座包成员发生重叠或顺序漂移");
             }
             if member.source_key.layer != self.key.layer
-                || member.source_key.segment != projection.weight_segment()
+                || !source_projection_allowed(projection, member.source_projection)
+                || member.source_key.segment != member.source_projection.weight_segment()
             {
                 bail!("S14 StarFold 星座包成员 layer/projection identity 漂移");
             }
@@ -376,6 +379,7 @@ pub trait S14StarfoldConstellationRuntimeHook {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct S14StarfoldConstellationMemberReceipt {
     pub expert_id: u16,
+    pub source_projection: S14StarfoldExpertProjection,
     pub source_key: StarfoldPageKey,
     pub window_offset: u64,
     pub payload_bytes: u64,
@@ -398,6 +402,7 @@ pub struct S14StarfoldConstellationPacketReceipt {
 
 impl S14StarfoldConstellationPacketReceipt {
     pub fn validate(&self) -> Result<()> {
+        let logical_projection = projection_from_code(self.key.projection)?;
         let member_bytes = self.members.iter().try_fold(0u64, |sum, member| {
             sum.checked_add(member.payload_bytes)
                 .context("S14 StarFold 星座回执 member bytes overflow")
@@ -419,6 +424,17 @@ impl S14StarfoldConstellationPacketReceipt {
             || self.serial_token_forward_calls != 0
         {
             bail!("S14 StarFold 星座包回执不能证明一次 upload→一次 compute");
+        }
+        let mut experts = BTreeSet::new();
+        for member in &self.members {
+            if !experts.insert(member.expert_id)
+                || member.source_key.layer != self.key.layer
+                || member.source_key.expert_id != member.expert_id
+                || !source_projection_allowed(logical_projection, member.source_projection)
+                || member.source_key.segment != member.source_projection.weight_segment()
+            {
+                bail!("S14 StarFold 星座包回执 source projection/expert identity 漂移");
+            }
         }
         Ok(())
     }
@@ -447,6 +463,7 @@ fn build_packet(
             .context("S14 StarFold 星座包 logical bytes overflow")?;
         members.push(S14StarfoldConstellationMember {
             expert_id: candidate.expert_id,
+            source_projection: candidate.source_projection,
             source_key: candidate.proof.key(),
             shape: candidate.shape,
             tile_index: candidate.tile_index,
@@ -503,6 +520,7 @@ fn validate_candidate(
     projection: S14StarfoldExpertProjection,
     window_capacity_bytes: u32,
 ) -> Result<()> {
+    let expected_shape = projection.shape(window_capacity_bytes)?;
     let spec = candidate.shape.tile(candidate.tile_index)?;
     let key = candidate.proof.key();
     let expected_audit = S14StarfoldMxfp4ScaleAudit::scan_host_payload(
@@ -511,12 +529,14 @@ fn validate_candidate(
         candidate.proof.bytes(),
     )?;
     if candidate.projection != projection
+        || !source_projection_allowed(projection, candidate.source_projection)
+        || candidate.shape != expected_shape
         || candidate.shape.window_capacity_bytes() != window_capacity_bytes
         || candidate.shape.tile_count() != 1
         || candidate.tile_index != 0
         || candidate.expert_id != key.expert_id
         || key.layer != layer
-        || key.segment != projection.weight_segment()
+        || key.segment != candidate.source_projection.weight_segment()
         || key.tile_index != candidate.tile_index
         || candidate.proof.packed_mxfp4().is_none()
         || candidate.proof.byte_len() != spec.payload_bytes
@@ -599,7 +619,7 @@ fn packet_identity(
     payload: &[u8],
 ) -> Result<[u8; 32]> {
     let mut sha = Sha256::new();
-    sha.update(b"polaris-s14-starfold-constellation-packet-v1\0");
+    sha.update(b"polaris-s14-starfold-constellation-packet-v2\0");
     sha.update(S14_STARFOLD_CONSTELLATION_CONTRACT_VERSION.to_le_bytes());
     sha.update(layer.to_le_bytes());
     sha.update(base_position.to_le_bytes());
@@ -614,6 +634,7 @@ fn packet_identity(
     );
     for member in members {
         sha.update(member.expert_id.to_le_bytes());
+        sha.update([projection_code(member.source_projection)]);
         sha.update(member.source_key.layer.to_le_bytes());
         sha.update(member.source_key.expert_id.to_le_bytes());
         sha.update([member.source_key.segment as u8]);
@@ -630,13 +651,7 @@ fn packet_identity(
             update_identity_bytes(&mut sha, identity.asset().proof_sha256.as_bytes())?;
             update_identity_bytes(&mut sha, identity.asset().range_key.as_bytes())?;
             update_identity_bytes(&mut sha, identity.source().planned.tensor.as_bytes())?;
-            sha.update(
-                identity
-                    .source()
-                    .span
-                    .source_segment_offset
-                    .to_le_bytes(),
-            );
+            sha.update(identity.source().span.source_segment_offset.to_le_bytes());
             sha.update(identity.source().span.byte_len.to_le_bytes());
         }
         sha.update(
@@ -685,4 +700,18 @@ fn projection_from_code(code: u8) -> Result<S14StarfoldExpertProjection> {
         2 => Ok(S14StarfoldExpertProjection::W2),
         _ => bail!("S14 StarFold 星座包 projection code 非法"),
     }
+}
+
+const fn source_projection_allowed(
+    logical: S14StarfoldExpertProjection,
+    source: S14StarfoldExpertProjection,
+) -> bool {
+    logical as u8 == source as u8
+        || matches!(
+            (logical, source),
+            (
+                S14StarfoldExpertProjection::W3,
+                S14StarfoldExpertProjection::W1
+            )
+        )
 }

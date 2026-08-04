@@ -17,7 +17,9 @@ use crate::{
         S14StarfoldConstellationComputeSubmissionReceipt, S14StarfoldMxfp4ComputeOwner,
         S14StarfoldMxfp4LaneIo,
     },
-    s14_starfold_mxfp4_stream::materialize_packed_mxfp4_tile,
+    s14_starfold_mxfp4_stream::{
+        materialize_packed_mxfp4_tile, materialize_packed_mxfp4_tile_from_projection,
+    },
     s14_starfold_mxfp4_tile::S14StarfoldMxfp4ExternalSlice,
     s14_starfold_prefetch_pipeline::{
         S14StarfoldActiveComputeIdentity, S14StarfoldPacketProjection,
@@ -106,6 +108,7 @@ pub struct S14StarfoldProjectionExecutionReceipt {
     pub packed_upload_bytes: u64,
     pub lane_dispatches: u32,
     pub queue_submit_calls: u32,
+    pub source_projection_fallbacks: u32,
     pub completion: S14StarfoldTimelinePoint,
     pub serial_token_forward_calls: u32,
 }
@@ -250,18 +253,21 @@ impl<'a> S14StarfoldConstellationPacketProducer<'a> {
             self.group_bytes[self.next_group],
         )?;
         let mut lease = self.planner.issue_same_layer_packet(intent)?;
-        if let Err(error) =
-            runtime.fetch_b4_packet_ranges(self.layer_plan, self.projection, &expert_ids)
-        {
-            let cleanup = lease.fail(S14StarfoldPrefetchFailurePhase::SsdFetch);
-            return match cleanup {
-                Ok(_) => Err(error),
-                Err(cleanup) => Err(anyhow::anyhow!(
-                    "{error:#}; constellation packet Range lease cleanup={cleanup:#}"
-                )),
+        let source_projections =
+            match runtime.prepare_b4_packet_ranges(self.layer_plan, self.projection, &expert_ids) {
+                Ok(source_projections) => source_projections,
+                Err(error) => {
+                    let cleanup = lease.fail(S14StarfoldPrefetchFailurePhase::SsdFetch);
+                    return match cleanup {
+                        Ok(_) => Err(error),
+                        Err(cleanup) => Err(anyhow::anyhow!(
+                            "{error:#}; constellation packet Range lease cleanup={cleanup:#}"
+                        )),
+                    };
+                }
             };
-        }
-        let materialized = self.materialize_group(runtime, group, packet_ordinal);
+        let materialized =
+            self.materialize_group(runtime, group, packet_ordinal, &source_projections);
         let packet = match materialized {
             Ok(packet) => packet,
             Err(error) => {
@@ -295,9 +301,14 @@ impl<'a> S14StarfoldConstellationPacketProducer<'a> {
         runtime: &mut S14StarfoldRuntime,
         group: Range<usize>,
         packet_ordinal: u16,
+        source_projections: &[S14StarfoldExpertProjection],
     ) -> Result<Arc<S14StarfoldConstellationPacket>> {
         let mut candidates = Vec::with_capacity(group.len());
-        for expert in &self.schedule.experts[group] {
+        let experts = &self.schedule.experts[group];
+        if experts.len() != source_projections.len() {
+            bail!("S14 StarFold constellation source projection 数量漂移");
+        }
+        for (expert, &source_projection) in experts.iter().zip(source_projections) {
             let mut works = expert.tiles_for(self.projection);
             let work = works
                 .next()
@@ -305,8 +316,13 @@ impl<'a> S14StarfoldConstellationPacketProducer<'a> {
             if works.next().is_some() {
                 bail!("S14 StarFold constellation producer 要求每专家单 tile");
             }
-            let packed =
-                materialize_packed_mxfp4_tile(runtime, self.layer_plan, expert.expert_id, work)?;
+            let packed = materialize_packed_mxfp4_tile_from_projection(
+                runtime,
+                self.layer_plan,
+                expert.expert_id,
+                work,
+                source_projection,
+            )?;
             let mut lanes = Vec::with_capacity(expert.lane_uses.len());
             for lane_use in &expert.lane_uses {
                 let branch = branch_index(lane_use.lane, lane_use.route_rank)?;
@@ -328,6 +344,7 @@ impl<'a> S14StarfoldConstellationPacketProducer<'a> {
             candidates.push(S14StarfoldConstellationCandidate {
                 expert_id: expert.expert_id,
                 projection: self.projection,
+                source_projection,
                 shape: packed.shape,
                 tile_index: packed.tile_index,
                 scale_audit: packed.scale_audit(),
@@ -482,6 +499,7 @@ impl S14StarfoldRoutedExecutor {
                 packed_upload_bytes,
                 lane_dispatches,
                 queue_submit_calls,
+                source_projection_fallbacks: 0,
                 completion: completion
                     .context("S14 StarFold routed projection 缺少 compute completion")?,
                 serial_token_forward_calls: 0,
@@ -544,6 +562,7 @@ impl S14StarfoldRoutedExecutor {
             candidates.push(S14StarfoldConstellationCandidate {
                 expert_id: expert.expert_id,
                 projection,
+                source_projection: projection,
                 shape: packed.shape,
                 tile_index: packed.tile_index,
                 scale_audit: packed.scale_audit(),
@@ -799,6 +818,7 @@ impl S14StarfoldRoutedExecutor {
         let mut packed_upload_bytes = 0u64;
         let mut lane_dispatches = 0u32;
         let mut queue_submit_calls = 0u32;
+        let mut source_projection_fallbacks = 0u32;
         let mut completion = None;
         for (ordinal, packet) in packets.into_iter().enumerate() {
             packet.validate()?;
@@ -811,7 +831,14 @@ impl S14StarfoldRoutedExecutor {
                 bail!("S14 StarFold 星座 packet 序列 identity 漂移");
             }
             for member in packet.members() {
-                experts.insert(member.expert_id);
+                if !experts.insert(member.expert_id) {
+                    bail!("S14 StarFold 星座执行跨 packet 专家重复");
+                }
+                if member.source_projection != projection {
+                    source_projection_fallbacks = source_projection_fallbacks
+                        .checked_add(1)
+                        .context("S14 StarFold 星座 source projection fallback count overflow")?;
+                }
                 for lane in member.lanes() {
                     if !routes.insert((lane.lane, lane.route_rank)) {
                         bail!("S14 StarFold 星座执行检测到重复 lane/rank");
@@ -862,6 +889,7 @@ impl S14StarfoldRoutedExecutor {
             packed_upload_bytes,
             lane_dispatches,
             queue_submit_calls,
+            source_projection_fallbacks,
             completion: completion.context("S14 StarFold 星座执行缺少 completion")?,
             serial_token_forward_calls: 0,
         })
@@ -880,6 +908,7 @@ impl S14StarfoldRoutedExecutor {
         let mut packed_upload_bytes = 0u64;
         let mut lane_dispatches = 0u32;
         let mut queue_submit_calls = 0u32;
+        let mut source_projection_fallbacks = 0u32;
         let mut completion = None;
         let mut packet_ordinal = 0u16;
 
@@ -912,6 +941,12 @@ impl S14StarfoldRoutedExecutor {
             for member in packet.members() {
                 if !experts.insert(member.expert_id) {
                     bail!("S14 StarFold constellation stream 跨 packet 专家重复");
+                }
+                if member.source_projection != projection {
+                    source_projection_fallbacks =
+                        source_projection_fallbacks.checked_add(1).context(
+                            "S14 StarFold constellation stream source fallback count overflow",
+                        )?;
                 }
                 for lane in member.lanes() {
                     if !routes.insert((lane.lane, lane.route_rank)) {
@@ -970,6 +1005,7 @@ impl S14StarfoldRoutedExecutor {
             packed_upload_bytes,
             lane_dispatches,
             queue_submit_calls,
+            source_projection_fallbacks,
             completion: completion.context("S14 StarFold constellation stream 缺少 completion")?,
             serial_token_forward_calls: 0,
         })

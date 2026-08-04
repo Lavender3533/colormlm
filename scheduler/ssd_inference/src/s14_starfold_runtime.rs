@@ -7,7 +7,7 @@
 use crate::{
     s14_dynamic_page_cache_readiness::{
         fetch_dynamic_page_plans_batched_only, fetch_planned_range_assets_batched_only,
-        DynamicPageFetchMode, DynamicPagePlannedFetchAsset,
+        planned_range_asset_committed_locally, DynamicPageFetchMode, DynamicPagePlannedFetchAsset,
     },
     s14_dynamic_routed_page_plan::{
         DynamicRoutedPagePlan, FullDepthExpertCatalog, OnlineTop6, RoutedProjection,
@@ -56,6 +56,7 @@ use std::{
 
 pub const S14_STARFOLD_WINDOW_COUNT: usize = 2;
 pub const S14_STARFOLD_DEFAULT_MICROTILE_BYTES: u32 = STARFOLD_ONE_MIB;
+pub const S14_STARFOLD_PROJECTION_TWIN_FALLBACK_ENV: &str = "POLARIS_S14_PROJECTION_TWIN_FALLBACK";
 
 /// K=4 使用一个 B4 route block，K=8 顺序使用两个；两者共用同一对物理窗口。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1030,12 +1031,56 @@ impl S14StarfoldComputeSubmissionReceipt {
     }
 }
 
+fn packet_projection_planned_assets<'a>(
+    plan: &'a S14StarfoldB4LayerPlan,
+    expert_id: u16,
+    projection: S14StarfoldExpertProjection,
+) -> Result<[&'a S14PlannedRangeAsset; 2]> {
+    let find = |segment| {
+        plan.microtile_sources()
+            .iter()
+            .find(|source| {
+                source.span.key.expert_id == expert_id && source.span.key.segment == segment
+            })
+            .map(|source| &source.planned)
+            .with_context(|| {
+                format!(
+                    "S14 StarFold packet 缺少 expert={expert_id} segment={segment:?} Range source"
+                )
+            })
+    };
+    Ok([
+        find(projection.weight_segment())?,
+        find(projection.scale_segment())?,
+    ])
+}
+
+fn projection_twin_fallback_from_env() -> Result<bool> {
+    let Some(raw) = std::env::var_os(S14_STARFOLD_PROJECTION_TWIN_FALLBACK_ENV) else {
+        return Ok(false);
+    };
+    let value = raw
+        .to_str()
+        .context("S14 projection twin fallback 环境变量不是 UTF-8")?
+        .trim()
+        .to_ascii_lowercase();
+    match value.as_str() {
+        "1" | "true" | "yes" | "on" => Ok(true),
+        "0" | "false" | "no" | "off" | "" => Ok(false),
+        _ => bail!(
+            "{} 只接受 0/1/true/false/yes/no/on/off",
+            S14_STARFOLD_PROJECTION_TWIN_FALLBACK_ENV
+        ),
+    }
+}
+
 /// 生产 owner：借用进程级 proof/SHA mmap 热 lease 缓存，并独占唯一 Vulkan 双窗口
 /// 物理 executor。下面的票据接口让同一 proof lease 穿过 upload→ready→compute；
 /// 这里不发布 token。
 pub struct S14StarfoldRuntime {
     cache_root: PathBuf,
     page_fetch_mode: DynamicPageFetchMode,
+    projection_twin_fallback: bool,
     validation_epoch: StarfoldVerifiedLeaseValidationEpoch,
     contract: S14StarfoldDoubleWindowContract,
     resource_owner: Option<S14StarfoldVulkanResourceOwner>,
@@ -1073,9 +1118,11 @@ impl S14StarfoldRuntime {
             .context("签发 S14 StarFold 初始 verified lease validation epoch")?;
         let packed_l2 = S14StarfoldPackedL2Cache::new(S14StarfoldPackedL2Config::from_env()?)
             .context("初始化 S14 StarFold packed MXFP4 RAM L2")?;
+        let projection_twin_fallback = projection_twin_fallback_from_env()?;
         Ok(Self {
             cache_root: cache_root.to_path_buf(),
             page_fetch_mode,
+            projection_twin_fallback,
             validation_epoch,
             contract,
             resource_owner: Some(resource_owner),
@@ -1114,12 +1161,12 @@ impl S14StarfoldRuntime {
     /// selects exactly the weight/scale Range pair for each expert carried by
     /// the next immutable packet.  The following `verify_microtile` calls still
     /// own proof/SHA/mmap publication; this method only makes those files ready.
-    pub fn fetch_b4_packet_ranges(
+    pub fn prepare_b4_packet_ranges(
         &self,
         plan: &S14StarfoldB4LayerPlan,
         projection: S14StarfoldExpertProjection,
         expert_ids: &[u16],
-    ) -> Result<()> {
+    ) -> Result<Vec<S14StarfoldExpertProjection>> {
         if expert_ids.is_empty() || expert_ids.len() > STARFOLD_B4_LANES * STARFOLD_TOP_K {
             bail!(
                 "S14 StarFold packet expert 数量非法: actual={}, max={}",
@@ -1132,26 +1179,40 @@ impl S14StarfoldRuntime {
         let position = plan.authoritative_routes.base_position();
         let mut seen = BTreeMap::<u16, ()>::new();
         let mut assets = Vec::with_capacity(expert_ids.len() * 2);
+        let mut source_projections = Vec::with_capacity(expert_ids.len());
         for &expert_id in expert_ids {
             if seen.insert(expert_id, ()).is_some() {
                 bail!("S14 StarFold packet expert identity 重复: {expert_id}");
             }
-            for segment in [projection.weight_segment(), projection.scale_segment()] {
-                let source = plan
-                    .microtile_sources()
+            let exact = packet_projection_planned_assets(plan, expert_id, projection)?;
+            let exact_local = exact
+                .iter()
+                .all(|planned| planned_range_asset_committed_locally(planned));
+            let source_projection = if self.projection_twin_fallback
+                && projection == S14StarfoldExpertProjection::W3
+                && !exact_local
+            {
+                let twin = packet_projection_planned_assets(
+                    plan,
+                    expert_id,
+                    S14StarfoldExpertProjection::W1,
+                )?;
+                if twin
                     .iter()
-                    .find(|source| {
-                        source.span.key.expert_id == expert_id
-                            && source.span.key.segment == segment
-                    })
-                    .with_context(|| {
-                        format!(
-                            "S14 StarFold packet 缺少 expert={expert_id} segment={segment:?} Range source"
-                        )
-                    })?;
+                    .all(|planned| planned_range_asset_committed_locally(planned))
+                {
+                    S14StarfoldExpertProjection::W1
+                } else {
+                    projection
+                }
+            } else {
+                projection
+            };
+            source_projections.push(source_projection);
+            for planned in packet_projection_planned_assets(plan, expert_id, source_projection)? {
                 assets.push(DynamicPagePlannedFetchAsset::new(
                     expert_id,
-                    source.planned.clone(),
+                    planned.clone(),
                 ));
             }
         }
@@ -1162,7 +1223,7 @@ impl S14StarfoldRuntime {
             &self.cache_root,
             self.page_fetch_mode,
         )
-        .map(|_| ())
+        .map(|_| source_projections)
         .map_err(anyhow::Error::new)
         .context("补齐 S14 StarFold constellation packet Range cache")
     }

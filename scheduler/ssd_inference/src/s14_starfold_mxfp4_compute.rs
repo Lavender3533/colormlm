@@ -770,6 +770,7 @@ impl S14StarfoldMxfp4ComputeOwner {
             }
             members.push(S14StarfoldConstellationMemberReceipt {
                 expert_id: member.expert_id,
+                source_projection: member.source_projection,
                 source_key: member.source_key,
                 window_offset: member.window_offset,
                 payload_bytes: member.payload_bytes,
