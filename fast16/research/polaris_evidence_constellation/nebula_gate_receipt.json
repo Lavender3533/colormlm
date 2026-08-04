@@ -1,0 +1,1061 @@
+{
+  "format": "polaris-nebula-reframe-minimal-gate-v0",
+  "status": "structural_reframe_only_not_model_intelligence",
+  "passed": true,
+  "assertions": {
+    "input_candidate_count_is_zero": true,
+    "flat_world_contains_conflicts": true,
+    "reframe_selected_from_relations": true,
+    "reframe_removes_internal_conflicts": true,
+    "reframe_not_singleton_memorization": true,
+    "no_single_organ_covers_whole_frame": true,
+    "frame_not_committed_before_evidence": true,
+    "frame_committed_after_runtime_receipts": true
+  },
+  "input_fragments": [
+    {
+      "fragment_id": "request.code",
+      "organ_id": "code_organ",
+      "context": [
+        [
+          "deployment",
+          "shared_host"
+        ],
+        [
+          "workload",
+          "request"
+        ]
+      ],
+      "assertions": [
+        [
+          "runtime",
+          "php"
+        ]
+      ]
+    },
+    {
+      "fragment_id": "request.env",
+      "organ_id": "environment_organ",
+      "context": [
+        [
+          "deployment",
+          "managed"
+        ],
+        [
+          "workload",
+          "request"
+        ]
+      ],
+      "assertions": [
+        [
+          "runtime",
+          "php"
+        ]
+      ]
+    },
+    {
+      "fragment_id": "batch.code",
+      "organ_id": "code_organ",
+      "context": [
+        [
+          "deployment",
+          "managed"
+        ],
+        [
+          "workload",
+          "batch"
+        ]
+      ],
+      "assertions": [
+        [
+          "runtime",
+          "jvm"
+        ]
+      ]
+    },
+    {
+      "fragment_id": "batch.ops",
+      "organ_id": "operations_organ",
+      "context": [
+        [
+          "deployment",
+          "shared_host"
+        ],
+        [
+          "workload",
+          "batch"
+        ]
+      ],
+      "assertions": [
+        [
+          "runtime",
+          "jvm"
+        ]
+      ]
+    },
+    {
+      "fragment_id": "interaction.ui",
+      "organ_id": "ui_organ",
+      "context": [
+        [
+          "deployment",
+          "browser"
+        ],
+        [
+          "workload",
+          "interaction"
+        ]
+      ],
+      "assertions": [
+        [
+          "runtime",
+          "javascript"
+        ]
+      ]
+    },
+    {
+      "fragment_id": "interaction.product",
+      "organ_id": "product_organ",
+      "context": [
+        [
+          "deployment",
+          "edge"
+        ],
+        [
+          "workload",
+          "interaction"
+        ]
+      ],
+      "assertions": [
+        [
+          "runtime",
+          "javascript"
+        ]
+      ]
+    }
+  ],
+  "decision": {
+    "flat_conflicts": 4,
+    "flat_description_length": 16.0,
+    "selected": {
+      "partition_keys": [
+        "workload"
+      ],
+      "groups": [
+        {
+          "coordinates": [
+            [
+              "workload",
+              "batch"
+            ]
+          ],
+          "fragment_ids": [
+            "batch.code",
+            "batch.ops"
+          ],
+          "organ_ids": [
+            "code_organ",
+            "operations_organ"
+          ],
+          "consensus": [
+            [
+              "runtime",
+              "jvm"
+            ]
+          ]
+        },
+        {
+          "coordinates": [
+            [
+              "workload",
+              "interaction"
+            ]
+          ],
+          "fragment_ids": [
+            "interaction.product",
+            "interaction.ui"
+          ],
+          "organ_ids": [
+            "product_organ",
+            "ui_organ"
+          ],
+          "consensus": [
+            [
+              "runtime",
+              "javascript"
+            ]
+          ]
+        },
+        {
+          "coordinates": [
+            [
+              "workload",
+              "request"
+            ]
+          ],
+          "fragment_ids": [
+            "request.code",
+            "request.env"
+          ],
+          "organ_ids": [
+            "code_organ",
+            "environment_organ"
+          ],
+          "consensus": [
+            [
+              "runtime",
+              "php"
+            ]
+          ]
+        }
+      ],
+      "residual_conflicts": 0,
+      "singleton_groups": 0,
+      "description_length": 3.0,
+      "gain_over_flat": 13.0,
+      "emergent": true
+    },
+    "alternatives": [
+      {
+        "partition_keys": [
+          "workload"
+        ],
+        "groups": [
+          {
+            "coordinates": [
+              [
+                "workload",
+                "batch"
+              ]
+            ],
+            "fragment_ids": [
+              "batch.code",
+              "batch.ops"
+            ],
+            "organ_ids": [
+              "code_organ",
+              "operations_organ"
+            ],
+            "consensus": [
+              [
+                "runtime",
+                "jvm"
+              ]
+            ]
+          },
+          {
+            "coordinates": [
+              [
+                "workload",
+                "interaction"
+              ]
+            ],
+            "fragment_ids": [
+              "interaction.product",
+              "interaction.ui"
+            ],
+            "organ_ids": [
+              "product_organ",
+              "ui_organ"
+            ],
+            "consensus": [
+              [
+                "runtime",
+                "javascript"
+              ]
+            ]
+          },
+          {
+            "coordinates": [
+              [
+                "workload",
+                "request"
+              ]
+            ],
+            "fragment_ids": [
+              "request.code",
+              "request.env"
+            ],
+            "organ_ids": [
+              "code_organ",
+              "environment_organ"
+            ],
+            "consensus": [
+              [
+                "runtime",
+                "php"
+              ]
+            ]
+          }
+        ],
+        "residual_conflicts": 0,
+        "singleton_groups": 0,
+        "description_length": 3.0,
+        "gain_over_flat": 13.0,
+        "emergent": true
+      },
+      {
+        "partition_keys": [
+          "deployment"
+        ],
+        "groups": [
+          {
+            "coordinates": [
+              [
+                "deployment",
+                "browser"
+              ]
+            ],
+            "fragment_ids": [
+              "interaction.ui"
+            ],
+            "organ_ids": [
+              "ui_organ"
+            ],
+            "consensus": [
+              [
+                "runtime",
+                "javascript"
+              ]
+            ]
+          },
+          {
+            "coordinates": [
+              [
+                "deployment",
+                "edge"
+              ]
+            ],
+            "fragment_ids": [
+              "interaction.product"
+            ],
+            "organ_ids": [
+              "product_organ"
+            ],
+            "consensus": [
+              [
+                "runtime",
+                "javascript"
+              ]
+            ]
+          },
+          {
+            "coordinates": [
+              [
+                "deployment",
+                "managed"
+              ]
+            ],
+            "fragment_ids": [
+              "batch.code",
+              "request.env"
+            ],
+            "organ_ids": [
+              "code_organ",
+              "environment_organ"
+            ],
+            "consensus": []
+          },
+          {
+            "coordinates": [
+              [
+                "deployment",
+                "shared_host"
+              ]
+            ],
+            "fragment_ids": [
+              "batch.ops",
+              "request.code"
+            ],
+            "organ_ids": [
+              "code_organ",
+              "operations_organ"
+            ],
+            "consensus": []
+          }
+        ],
+        "residual_conflicts": 2,
+        "singleton_groups": 2,
+        "description_length": 16.0,
+        "gain_over_flat": 0.0,
+        "emergent": true
+      },
+      {
+        "partition_keys": [
+          "deployment",
+          "workload"
+        ],
+        "groups": [
+          {
+            "coordinates": [
+              [
+                "deployment",
+                "browser"
+              ],
+              [
+                "workload",
+                "interaction"
+              ]
+            ],
+            "fragment_ids": [
+              "interaction.ui"
+            ],
+            "organ_ids": [
+              "ui_organ"
+            ],
+            "consensus": [
+              [
+                "runtime",
+                "javascript"
+              ]
+            ]
+          },
+          {
+            "coordinates": [
+              [
+                "deployment",
+                "edge"
+              ],
+              [
+                "workload",
+                "interaction"
+              ]
+            ],
+            "fragment_ids": [
+              "interaction.product"
+            ],
+            "organ_ids": [
+              "product_organ"
+            ],
+            "consensus": [
+              [
+                "runtime",
+                "javascript"
+              ]
+            ]
+          },
+          {
+            "coordinates": [
+              [
+                "deployment",
+                "managed"
+              ],
+              [
+                "workload",
+                "batch"
+              ]
+            ],
+            "fragment_ids": [
+              "batch.code"
+            ],
+            "organ_ids": [
+              "code_organ"
+            ],
+            "consensus": [
+              [
+                "runtime",
+                "jvm"
+              ]
+            ]
+          },
+          {
+            "coordinates": [
+              [
+                "deployment",
+                "managed"
+              ],
+              [
+                "workload",
+                "request"
+              ]
+            ],
+            "fragment_ids": [
+              "request.env"
+            ],
+            "organ_ids": [
+              "environment_organ"
+            ],
+            "consensus": [
+              [
+                "runtime",
+                "php"
+              ]
+            ]
+          },
+          {
+            "coordinates": [
+              [
+                "deployment",
+                "shared_host"
+              ],
+              [
+                "workload",
+                "batch"
+              ]
+            ],
+            "fragment_ids": [
+              "batch.ops"
+            ],
+            "organ_ids": [
+              "operations_organ"
+            ],
+            "consensus": [
+              [
+                "runtime",
+                "jvm"
+              ]
+            ]
+          },
+          {
+            "coordinates": [
+              [
+                "deployment",
+                "shared_host"
+              ],
+              [
+                "workload",
+                "request"
+              ]
+            ],
+            "fragment_ids": [
+              "request.code"
+            ],
+            "organ_ids": [
+              "code_organ"
+            ],
+            "consensus": [
+              [
+                "runtime",
+                "php"
+              ]
+            ]
+          }
+        ],
+        "residual_conflicts": 0,
+        "singleton_groups": 6,
+        "description_length": 19.0,
+        "gain_over_flat": -3.0,
+        "emergent": true
+      }
+    ],
+    "reason": "重构降低描述长度，且没有单一器官提出完整新 Frame"
+  },
+  "evidence_bindings": [
+    {
+      "claim_id": "claim.reframe.workload_batch.runtime",
+      "slot": "frame.workload_batch.runtime",
+      "requirement_id": "probe.reframe.workload_batch.runtime",
+      "expected": "jvm",
+      "coordinates": [
+        [
+          "workload",
+          "batch"
+        ]
+      ],
+      "predicate": "runtime"
+    },
+    {
+      "claim_id": "claim.reframe.workload_interaction.runtime",
+      "slot": "frame.workload_interaction.runtime",
+      "requirement_id": "probe.reframe.workload_interaction.runtime",
+      "expected": "javascript",
+      "coordinates": [
+        [
+          "workload",
+          "interaction"
+        ]
+      ],
+      "predicate": "runtime"
+    },
+    {
+      "claim_id": "claim.reframe.workload_request.runtime",
+      "slot": "frame.workload_request.runtime",
+      "requirement_id": "probe.reframe.workload_request.runtime",
+      "expected": "php",
+      "coordinates": [
+        [
+          "workload",
+          "request"
+        ]
+      ],
+      "predicate": "runtime"
+    }
+  ],
+  "before_evidence": {
+    "epoch": 4,
+    "action": "partial_commit",
+    "detail": {
+      "viable_branches": [
+        "branch.0"
+      ],
+      "common_slots": [
+        "frame.workload_batch.runtime",
+        "frame.workload_interaction.runtime",
+        "frame.workload_request.runtime",
+        "goal"
+      ],
+      "newly_committed_claims": [],
+      "committed": {
+        "goal": "anchor.goal"
+      },
+      "blocked": false
+    }
+  },
+  "after_evidence": {
+    "epoch": 8,
+    "action": "partial_commit",
+    "detail": {
+      "viable_branches": [
+        "branch.0"
+      ],
+      "common_slots": [
+        "frame.workload_batch.runtime",
+        "frame.workload_interaction.runtime",
+        "frame.workload_request.runtime",
+        "goal"
+      ],
+      "newly_committed_claims": [
+        "claim.reframe.workload_batch.runtime",
+        "claim.reframe.workload_interaction.runtime",
+        "claim.reframe.workload_request.runtime"
+      ],
+      "committed": {
+        "frame.workload_batch.runtime": "claim.reframe.workload_batch.runtime",
+        "frame.workload_interaction.runtime": "claim.reframe.workload_interaction.runtime",
+        "frame.workload_request.runtime": "claim.reframe.workload_request.runtime",
+        "goal": "anchor.goal"
+      },
+      "blocked": false
+    }
+  },
+  "constellation": {
+    "field_id": "gate.nebula.reframe",
+    "epoch": 8,
+    "proposal_round_sealed": true,
+    "claims": {
+      "anchor.goal": {
+        "claim_id": "anchor.goal",
+        "slot": "goal",
+        "value": "deliver_maintainable_site",
+        "organ_id": "user",
+        "requirements": [],
+        "depends_on": [],
+        "anchor": true
+      },
+      "claim.reframe.workload_batch.runtime": {
+        "claim_id": "claim.reframe.workload_batch.runtime",
+        "slot": "frame.workload_batch.runtime",
+        "value": {
+          "coordinates": {
+            "workload": "batch"
+          },
+          "predicate": "runtime",
+          "value": "jvm",
+          "source_fragments": [
+            "batch.code",
+            "batch.ops"
+          ]
+        },
+        "organ_id": "nebula.reframe",
+        "requirements": [
+          {
+            "requirement_id": "probe.reframe.workload_batch.runtime",
+            "expected": "jvm",
+            "threshold": 0.95
+          }
+        ],
+        "depends_on": [
+          "anchor.goal"
+        ],
+        "anchor": false
+      },
+      "claim.reframe.workload_interaction.runtime": {
+        "claim_id": "claim.reframe.workload_interaction.runtime",
+        "slot": "frame.workload_interaction.runtime",
+        "value": {
+          "coordinates": {
+            "workload": "interaction"
+          },
+          "predicate": "runtime",
+          "value": "javascript",
+          "source_fragments": [
+            "interaction.product",
+            "interaction.ui"
+          ]
+        },
+        "organ_id": "nebula.reframe",
+        "requirements": [
+          {
+            "requirement_id": "probe.reframe.workload_interaction.runtime",
+            "expected": "javascript",
+            "threshold": 0.95
+          }
+        ],
+        "depends_on": [
+          "anchor.goal"
+        ],
+        "anchor": false
+      },
+      "claim.reframe.workload_request.runtime": {
+        "claim_id": "claim.reframe.workload_request.runtime",
+        "slot": "frame.workload_request.runtime",
+        "value": {
+          "coordinates": {
+            "workload": "request"
+          },
+          "predicate": "runtime",
+          "value": "php",
+          "source_fragments": [
+            "request.code",
+            "request.env"
+          ]
+        },
+        "organ_id": "nebula.reframe",
+        "requirements": [
+          {
+            "requirement_id": "probe.reframe.workload_request.runtime",
+            "expected": "php",
+            "threshold": 0.95
+          }
+        ],
+        "depends_on": [
+          "anchor.goal"
+        ],
+        "anchor": false
+      }
+    },
+    "proposals": {
+      "proposal.nebula.reframe": {
+        "proposal_id": "proposal.nebula.reframe",
+        "organ_id": "nebula.reframe",
+        "claims": [
+          {
+            "claim_id": "claim.reframe.workload_batch.runtime",
+            "slot": "frame.workload_batch.runtime",
+            "value": {
+              "coordinates": {
+                "workload": "batch"
+              },
+              "predicate": "runtime",
+              "value": "jvm",
+              "source_fragments": [
+                "batch.code",
+                "batch.ops"
+              ]
+            },
+            "organ_id": "nebula.reframe",
+            "requirements": [
+              {
+                "requirement_id": "probe.reframe.workload_batch.runtime",
+                "expected": "jvm",
+                "threshold": 0.95
+              }
+            ],
+            "depends_on": [
+              "anchor.goal"
+            ],
+            "anchor": false
+          },
+          {
+            "claim_id": "claim.reframe.workload_interaction.runtime",
+            "slot": "frame.workload_interaction.runtime",
+            "value": {
+              "coordinates": {
+                "workload": "interaction"
+              },
+              "predicate": "runtime",
+              "value": "javascript",
+              "source_fragments": [
+                "interaction.product",
+                "interaction.ui"
+              ]
+            },
+            "organ_id": "nebula.reframe",
+            "requirements": [
+              {
+                "requirement_id": "probe.reframe.workload_interaction.runtime",
+                "expected": "javascript",
+                "threshold": 0.95
+              }
+            ],
+            "depends_on": [
+              "anchor.goal"
+            ],
+            "anchor": false
+          },
+          {
+            "claim_id": "claim.reframe.workload_request.runtime",
+            "slot": "frame.workload_request.runtime",
+            "value": {
+              "coordinates": {
+                "workload": "request"
+              },
+              "predicate": "runtime",
+              "value": "php",
+              "source_fragments": [
+                "request.code",
+                "request.env"
+              ]
+            },
+            "organ_id": "nebula.reframe",
+            "requirements": [
+              {
+                "requirement_id": "probe.reframe.workload_request.runtime",
+                "expected": "php",
+                "threshold": 0.95
+              }
+            ],
+            "depends_on": [
+              "anchor.goal"
+            ],
+            "anchor": false
+          }
+        ],
+        "goal_alignment": 1.0,
+        "novelty": 13.0,
+        "expected_gain": 13.0,
+        "physical_cost": 0.0,
+        "exploration_priority": 27.0
+      }
+    },
+    "branches": {
+      "branch.0": {
+        "branch_id": "branch.0",
+        "assignments": {
+          "goal": "anchor.goal",
+          "frame.workload_batch.runtime": "claim.reframe.workload_batch.runtime",
+          "frame.workload_interaction.runtime": "claim.reframe.workload_interaction.runtime",
+          "frame.workload_request.runtime": "claim.reframe.workload_request.runtime"
+        },
+        "parent_branch_id": null,
+        "born_from": "field_birth",
+        "viable": true
+      }
+    },
+    "assessments": {
+      "anchor.goal": {
+        "claim_id": "anchor.goal",
+        "status": "certified",
+        "certification": 1.0,
+        "contradiction": 0.0,
+        "requirement_support": {},
+        "requirement_refute": {}
+      },
+      "claim.reframe.workload_batch.runtime": {
+        "claim_id": "claim.reframe.workload_batch.runtime",
+        "status": "certified",
+        "certification": 1.0,
+        "contradiction": 0.0,
+        "requirement_support": {
+          "probe.reframe.workload_batch.runtime": 1.0
+        },
+        "requirement_refute": {
+          "probe.reframe.workload_batch.runtime": 0.0
+        }
+      },
+      "claim.reframe.workload_interaction.runtime": {
+        "claim_id": "claim.reframe.workload_interaction.runtime",
+        "status": "certified",
+        "certification": 1.0,
+        "contradiction": 0.0,
+        "requirement_support": {
+          "probe.reframe.workload_interaction.runtime": 1.0
+        },
+        "requirement_refute": {
+          "probe.reframe.workload_interaction.runtime": 0.0
+        }
+      },
+      "claim.reframe.workload_request.runtime": {
+        "claim_id": "claim.reframe.workload_request.runtime",
+        "status": "certified",
+        "certification": 1.0,
+        "contradiction": 0.0,
+        "requirement_support": {
+          "probe.reframe.workload_request.runtime": 1.0
+        },
+        "requirement_refute": {
+          "probe.reframe.workload_request.runtime": 0.0
+        }
+      }
+    },
+    "committed": {
+      "frame.workload_batch.runtime": "claim.reframe.workload_batch.runtime",
+      "frame.workload_interaction.runtime": "claim.reframe.workload_interaction.runtime",
+      "frame.workload_request.runtime": "claim.reframe.workload_request.runtime",
+      "goal": "anchor.goal"
+    },
+    "evidence_log": [
+      {
+        "receipt_id": "receipt.runtime.0",
+        "requirement_id": "probe.reframe.workload_batch.runtime",
+        "observed": "jvm",
+        "source_group": "runtime_probe.0",
+        "reliability": 1.0,
+        "match_strength": 1.0,
+        "epoch": 5
+      },
+      {
+        "receipt_id": "receipt.runtime.1",
+        "requirement_id": "probe.reframe.workload_interaction.runtime",
+        "observed": "javascript",
+        "source_group": "runtime_probe.1",
+        "reliability": 1.0,
+        "match_strength": 1.0,
+        "epoch": 6
+      },
+      {
+        "receipt_id": "receipt.runtime.2",
+        "requirement_id": "probe.reframe.workload_request.runtime",
+        "observed": "php",
+        "source_group": "runtime_probe.2",
+        "reliability": 1.0,
+        "match_strength": 1.0,
+        "epoch": 7
+      }
+    ],
+    "transitions": [
+      {
+        "epoch": 1,
+        "action": "anchor",
+        "detail": {
+          "claim_id": "anchor.goal",
+          "slot": "goal"
+        }
+      },
+      {
+        "epoch": 2,
+        "action": "merge",
+        "detail": {
+          "proposal_id": "proposal.nebula.reframe",
+          "branch_id": "branch.0",
+          "priority": 27.0,
+          "written_slots": [
+            "frame.workload_batch.runtime",
+            "frame.workload_interaction.runtime",
+            "frame.workload_request.runtime"
+          ]
+        }
+      },
+      {
+        "epoch": 3,
+        "action": "seal_proposals",
+        "detail": {
+          "proposal_count": 1,
+          "branch_count": 1
+        }
+      },
+      {
+        "epoch": 4,
+        "action": "partial_commit",
+        "detail": {
+          "viable_branches": [
+            "branch.0"
+          ],
+          "common_slots": [
+            "frame.workload_batch.runtime",
+            "frame.workload_interaction.runtime",
+            "frame.workload_request.runtime",
+            "goal"
+          ],
+          "newly_committed_claims": [],
+          "committed": {
+            "goal": "anchor.goal"
+          },
+          "blocked": false
+        }
+      },
+      {
+        "epoch": 5,
+        "action": "attach_evidence",
+        "detail": {
+          "receipt": {
+            "receipt_id": "receipt.runtime.0",
+            "requirement_id": "probe.reframe.workload_batch.runtime",
+            "observed": "jvm",
+            "source_group": "runtime_probe.0",
+            "reliability": 1.0,
+            "match_strength": 1.0,
+            "epoch": 5
+          },
+          "affected_claims": [
+            "claim.reframe.workload_batch.runtime"
+          ],
+          "rolled_back_claims": []
+        }
+      },
+      {
+        "epoch": 6,
+        "action": "attach_evidence",
+        "detail": {
+          "receipt": {
+            "receipt_id": "receipt.runtime.1",
+            "requirement_id": "probe.reframe.workload_interaction.runtime",
+            "observed": "javascript",
+            "source_group": "runtime_probe.1",
+            "reliability": 1.0,
+            "match_strength": 1.0,
+            "epoch": 6
+          },
+          "affected_claims": [
+            "claim.reframe.workload_interaction.runtime"
+          ],
+          "rolled_back_claims": []
+        }
+      },
+      {
+        "epoch": 7,
+        "action": "attach_evidence",
+        "detail": {
+          "receipt": {
+            "receipt_id": "receipt.runtime.2",
+            "requirement_id": "probe.reframe.workload_request.runtime",
+            "observed": "php",
+            "source_group": "runtime_probe.2",
+            "reliability": 1.0,
+            "match_strength": 1.0,
+            "epoch": 7
+          },
+          "affected_claims": [
+            "claim.reframe.workload_request.runtime"
+          ],
+          "rolled_back_claims": []
+        }
+      },
+      {
+        "epoch": 8,
+        "action": "partial_commit",
+        "detail": {
+          "viable_branches": [
+            "branch.0"
+          ],
+          "common_slots": [
+            "frame.workload_batch.runtime",
+            "frame.workload_interaction.runtime",
+            "frame.workload_request.runtime",
+            "goal"
+          ],
+          "newly_committed_claims": [
+            "claim.reframe.workload_batch.runtime",
+            "claim.reframe.workload_interaction.runtime",
+            "claim.reframe.workload_request.runtime"
+          ],
+          "committed": {
+            "frame.workload_batch.runtime": "claim.reframe.workload_batch.runtime",
+            "frame.workload_interaction.runtime": "claim.reframe.workload_interaction.runtime",
+            "frame.workload_request.runtime": "claim.reframe.workload_request.runtime",
+            "goal": "anchor.goal"
+          },
+          "blocked": false
+        }
+      }
+    ]
+  },
+  "contract": {
+    "model_started": false,
+    "gpu_used": false,
+    "training_performed": false,
+    "candidate_list_supplied": false,
+    "fixture_observations_supplied": true,
+    "reframe_is_verified_model_intelligence": false
+  }
+}
