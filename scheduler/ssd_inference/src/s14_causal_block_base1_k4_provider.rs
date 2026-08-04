@@ -366,8 +366,30 @@ impl S14CausalBlockProductionHcQkvResourceProvider for S14Base1K4ProductionHcQkv
     fn terminal_assets(
         &self,
     ) -> std::result::Result<S14CausalBlockProductionTerminalAssets, String> {
-        self.terminal_assets_inner()
-            .map_err(|error| format!("{error:#}"))
+        self.terminal_assets_inner().map_err(|error| {
+            let progress = match self.head_upload.lock() {
+                Ok(upload) => {
+                    let snapshot = upload
+                        .uploader
+                        .causal_block_progress_snapshot(&self.weight_plan);
+                    format!(
+                        "active_lease={:?} phase={:?} static_complete={} static={}/{} routed={} pending_layer={:?} head={}/{} pending_head={:?}",
+                        snapshot.active_lease,
+                        snapshot.lease_phase,
+                        snapshot.static_complete,
+                        snapshot.next_runtime_static_layer,
+                        snapshot.runtime_static_layer_count,
+                        snapshot.next_routed_layer,
+                        snapshot.pending_layer,
+                        snapshot.next_head_chunk,
+                        snapshot.head_chunk_count,
+                        snapshot.pending_head_chunk,
+                    )
+                }
+                Err(_) => "unavailable=head_upload_mutex_poisoned".to_owned(),
+            };
+            format!("{error:#}; persistent_uploader_progress={{ {progress} }}")
+        })
     }
 
     fn abort_block_upload_lease_after_drain(&self) -> std::result::Result<(), String> {

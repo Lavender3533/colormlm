@@ -5,10 +5,13 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import contextlib
 import email.utils
 import http.client
 import json
 import os
+import re
+import shutil
 import sys
 import threading
 import time
@@ -31,6 +34,362 @@ MANIFEST_FORMAT = "polaris-s14-dynamic-page-fetch-manifest-v1"
 MAX_RANGE_COUNT = 8 * 36
 DEFAULT_CACHE_BUDGET_BYTES = 64 << 30
 MIN_DISK_FREE_RESERVE_BYTES = 20 << 30
+L3_CACHE_HYSTERESIS_BYTES = 4 << 30
+_CACHE_PAIR_NAME_RE = re.compile(r"([0-9a-f]{64})\.(bin|json)")
+_L3_BUDGET_LOCK_KEY = "_s14_dynamic_page_l3_budget"
+_STARTUP_TRIM_GUARD = threading.Lock()
+_STARTUP_TRIMMED_ROOTS: set[str] = set()
+
+
+def _complete_cache_pair(cache_root: Path, key: str) -> dict[str, Any] | None:
+    """只把结构闭合且 proof 身份一致的 ``.bin/.json`` 视为可淘汰项。"""
+
+    payload = cache_root / f"{key}.bin"
+    proof_path = cache_root / f"{key}.json"
+    try:
+        if (
+            payload.is_symlink()
+            or proof_path.is_symlink()
+            or not payload.is_file()
+            or not proof_path.is_file()
+        ):
+            return None
+        payload_stat = payload.stat()
+        proof_stat = proof_path.stat()
+        proof = json.loads(proof_path.read_text(encoding="utf-8"))
+        proof_bytes = proof.get("bytes") if isinstance(proof, dict) else None
+        if (
+            not isinstance(proof, dict)
+            or proof.get("format") != online_range.CACHE_META_FORMAT
+            or proof.get("cache_key") != key
+            or isinstance(proof_bytes, bool)
+            or not isinstance(proof_bytes, int)
+            or proof_bytes <= 0
+            or proof_bytes != payload_stat.st_size
+        ):
+            return None
+        return {
+            "key": key,
+            "payload": payload,
+            "proof": proof_path,
+            "payload_bytes": payload_stat.st_size,
+            "pair_bytes": payload_stat.st_size + proof_stat.st_size,
+            # Windows/挂载选项可能不更新 atime；mtime 仅作为从未命中记录时的
+            # 稳定回退。绝不 touch mtime，因为 Rust lease 把它纳入强身份。
+            "last_access_ns": max(
+                payload_stat.st_atime_ns,
+                payload_stat.st_mtime_ns,
+            ),
+        }
+    except (OSError, UnicodeError, ValueError, TypeError, json.JSONDecodeError):
+        return None
+
+
+def _scan_complete_cache_pairs(cache_root: Path) -> tuple[list[dict[str, Any]], int]:
+    keys: set[str] = set()
+    try:
+        children = tuple(cache_root.iterdir())
+    except OSError as error:
+        raise online_range.rp.ContractError(
+            f"Range L3 cache root 无法枚举: {cache_root}: {error}"
+        ) from error
+    for path in children:
+        match = _CACHE_PAIR_NAME_RE.fullmatch(path.name)
+        if match is not None:
+            keys.add(match.group(1))
+    complete: list[dict[str, Any]] = []
+    incomplete_or_unknown = 0
+    for key in keys:
+        pair = _complete_cache_pair(cache_root, key)
+        if pair is None:
+            incomplete_or_unknown += 1
+        else:
+            complete.append(pair)
+    return complete, incomplete_or_unknown
+
+
+@contextlib.contextmanager
+def _try_process_cache_key_lock(cache_root: Path, key: str) -> Any:
+    """非阻塞取得既有 key 锁；活跃下载或其他淘汰者一律跳过。"""
+
+    local_lock = online_range._key_lock(cache_root, key)
+    if not local_lock.acquire(blocking=False):
+        yield False
+        return
+    lock_file = None
+    os_locked = False
+    try:
+        lock_path = (cache_root / f"{key}.lock").resolve()
+        try:
+            lock_path.relative_to(cache_root)
+            lock_file = lock_path.open("a+b")
+            lock_file.seek(0, os.SEEK_END)
+            if lock_file.tell() == 0:
+                lock_file.write(b"\0")
+                lock_file.flush()
+            if os.name == "nt":
+                import msvcrt
+
+                lock_file.seek(0)
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            os_locked = True
+        except (OSError, ValueError):
+            if lock_file is not None:
+                lock_file.close()
+                lock_file = None
+            yield False
+            return
+        yield True
+    finally:
+        if os_locked and lock_file is not None:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+
+                    lock_file.seek(0)
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            finally:
+                lock_file.close()
+        local_lock.release()
+
+
+def _evict_complete_cache_pair(
+    cache_root: Path,
+    pair: dict[str, Any],
+) -> tuple[bool, str | None]:
+    """先把 proof/payload 成对移出命名空间，再删除；共享冲突不破坏原对。"""
+
+    key = str(pair["key"])
+    current = _complete_cache_pair(cache_root, key)
+    if current is None:
+        return False, "changed_or_incomplete"
+    nonce = f"{os.getpid()}.{threading.get_ident()}.{time.time_ns()}"
+    proof_tomb = cache_root / f".s14-l3-evict.{key}.{nonce}.json"
+    payload_tomb = cache_root / f".s14-l3-evict.{key}.{nonce}.bin"
+    try:
+        os.replace(current["proof"], proof_tomb)
+    except OSError as error:
+        if os.name == "nt" and getattr(error, "winerror", None) in (32, 33):
+            return False, "windows_sharing_violation"
+        return False, "proof_rename_conflict"
+    try:
+        os.replace(current["payload"], payload_tomb)
+    except OSError as error:
+        try:
+            os.replace(proof_tomb, current["proof"])
+        except OSError as restore_error:
+            raise online_range.rp.ContractError(
+                f"Range L3 淘汰回滚 proof 失败: key={key}: {restore_error}"
+            ) from restore_error
+        if os.name == "nt" and getattr(error, "winerror", None) in (32, 33):
+            return False, "windows_sharing_violation"
+        return False, "payload_rename_conflict"
+
+    cleanup_errors: list[str] = []
+    for tomb in (payload_tomb, proof_tomb):
+        try:
+            tomb.unlink()
+        except OSError as error:
+            cleanup_errors.append(f"{tomb.name}:{type(error).__name__}")
+    return True, ",".join(cleanup_errors) or None
+
+
+def _trim_l3_cache(
+    *,
+    cache_root: Path,
+    cache_budget_bytes: int,
+    disk_free_reserve_bytes: int,
+    projected_download_bytes: int,
+    protected_keys: set[str],
+    phase: str,
+    target_cache_bytes: int | None = None,
+) -> dict[str, Any]:
+    """在调用者持有根级锁时按 LRU 收缩完整缓存对。"""
+
+    if target_cache_bytes is None:
+        target_cache_bytes = cache_budget_bytes
+    if not 0 < target_cache_bytes <= cache_budget_bytes:
+        raise online_range.rp.ContractError(
+            "Range L3 target_cache_bytes 必须位于 1..=cache_budget_bytes"
+        )
+    pairs, incomplete_or_unknown = _scan_complete_cache_pairs(cache_root)
+    cache_bytes = sum(int(pair["pair_bytes"]) for pair in pairs)
+    free_bytes = shutil.disk_usage(cache_root).free
+    telemetry: dict[str, Any] = {
+        "phase": phase,
+        "cache_bytes_before": cache_bytes,
+        "disk_free_bytes_before": free_bytes,
+        "cache_budget_bytes": cache_budget_bytes,
+        "target_cache_bytes": target_cache_bytes,
+        "disk_free_reserve_bytes": disk_free_reserve_bytes,
+        "projected_download_bytes": projected_download_bytes,
+        "protected_keys": len(protected_keys),
+        "complete_pairs_before": len(pairs),
+        "incomplete_or_unknown_pairs_ignored": incomplete_or_unknown,
+        "evicted_pairs": 0,
+        "evicted_payload_bytes": 0,
+        "evicted_pair_bytes": 0,
+        "skipped_protected": 0,
+        "skipped_locked_or_active": 0,
+        "skipped_changed_or_incomplete": 0,
+        "tombstone_cleanup_errors": [],
+    }
+
+    def constraints_satisfied() -> bool:
+        return (
+            cache_bytes + projected_download_bytes <= target_cache_bytes
+            and free_bytes - projected_download_bytes >= disk_free_reserve_bytes
+        )
+
+    for pair in sorted(pairs, key=lambda row: (int(row["last_access_ns"]), str(row["key"]))):
+        if constraints_satisfied():
+            break
+        key = str(pair["key"])
+        if key in protected_keys:
+            telemetry["skipped_protected"] += 1
+            continue
+        with _try_process_cache_key_lock(cache_root, key) as acquired:
+            if not acquired:
+                telemetry["skipped_locked_or_active"] += 1
+                continue
+            current = _complete_cache_pair(cache_root, key)
+            if current is None:
+                telemetry["skipped_changed_or_incomplete"] += 1
+                continue
+            evicted, detail = _evict_complete_cache_pair(cache_root, current)
+            if not evicted:
+                if detail == "changed_or_incomplete":
+                    telemetry["skipped_changed_or_incomplete"] += 1
+                else:
+                    telemetry["skipped_locked_or_active"] += 1
+                continue
+            telemetry["evicted_pairs"] += 1
+            telemetry["evicted_payload_bytes"] += int(current["payload_bytes"])
+            telemetry["evicted_pair_bytes"] += int(current["pair_bytes"])
+            if detail:
+                telemetry["tombstone_cleanup_errors"].append(detail)
+            cache_bytes = max(0, cache_bytes - int(current["pair_bytes"]))
+            free_bytes = shutil.disk_usage(cache_root).free
+
+    telemetry["cache_bytes_after"] = cache_bytes
+    telemetry["disk_free_bytes_after"] = free_bytes
+    telemetry["projected_cache_bytes_after"] = (
+        cache_bytes + projected_download_bytes
+    )
+    telemetry["projected_disk_free_bytes_after"] = (
+        free_bytes - projected_download_bytes
+    )
+    telemetry["constraints_satisfied"] = constraints_satisfied()
+    if not telemetry["constraints_satisfied"]:
+        raise online_range.rp.ContractError(
+            "Range L3 cache 无法满足 projected budget；"
+            + json.dumps(telemetry, ensure_ascii=False, sort_keys=True)
+        )
+    return telemetry
+
+
+def _touch_cache_pair_access(cache_root: Path, keys: set[str]) -> int:
+    """只更新 atime，保留被 Rust 强身份门使用的 mtime。"""
+
+    touched = 0
+    now = time.time_ns()
+    for key in keys:
+        pair = _complete_cache_pair(cache_root, key)
+        if pair is None:
+            continue
+        pair_touched = True
+        for path in (pair["payload"], pair["proof"]):
+            try:
+                stat = path.stat()
+                os.utime(
+                    path,
+                    ns=(now, stat.st_mtime_ns),
+                )
+            except (OSError, NotImplementedError):
+                pair_touched = False
+                break
+        if pair_touched:
+            touched += 1
+    return touched
+
+
+def _fast_l3_budget_snapshot(
+    cache: online_range.RangeCache,
+    *,
+    projected_download_bytes: int,
+    cache_budget_bytes: int,
+    disk_free_reserve_bytes: int,
+) -> dict[str, Any]:
+    """热路径只读 RangeCache 计数与磁盘空闲量，不枚举数万缓存文件。"""
+
+    with cache._budget_lock:
+        cache_used_bytes = cache._cache_used
+        cache_reserved_bytes = cache._cache_reserved
+    disk_free_bytes = shutil.disk_usage(cache.root).free
+    projected_cache_bytes = (
+        cache_used_bytes + cache_reserved_bytes + projected_download_bytes
+    )
+    projected_disk_free_bytes = disk_free_bytes - projected_download_bytes
+    return {
+        "phase": "predownload",
+        "scan": "skipped_no_pressure",
+        "cache_used_bytes": cache_used_bytes,
+        "cache_reserved_bytes": cache_reserved_bytes,
+        "disk_free_bytes": disk_free_bytes,
+        "projected_download_bytes": projected_download_bytes,
+        "projected_cache_bytes_after": projected_cache_bytes,
+        "projected_disk_free_bytes_after": projected_disk_free_bytes,
+        "cache_budget_bytes": cache_budget_bytes,
+        "disk_free_reserve_bytes": disk_free_reserve_bytes,
+        "constraints_satisfied": (
+            projected_cache_bytes <= cache_budget_bytes
+            and projected_disk_free_bytes >= disk_free_reserve_bytes
+        ),
+    }
+
+
+def _l3_low_water_bytes(cache_budget_bytes: int) -> int:
+    hysteresis = min(L3_CACHE_HYSTERESIS_BYTES, cache_budget_bytes // 8)
+    return max(1, cache_budget_bytes - hysteresis)
+
+
+@contextlib.contextmanager
+def _l3_root_budget_lock(cache_root: Path) -> Any:
+    """所有启动 trim、projected trim 与同一 manifest 下载共享一把根锁。"""
+
+    with online_range._key_lock(
+        cache_root, _L3_BUDGET_LOCK_KEY
+    ), online_range._process_key_lock(cache_root, _L3_BUDGET_LOCK_KEY):
+        yield
+
+
+def _sync_range_cache_storage_accounting(cache: online_range.RangeCache) -> None:
+    """外部 trim 后同步 RangeCache 的硬门计数，保留其第二道预算防线。"""
+
+    active_bytes = sum(
+        path.stat().st_size
+        for path in cache.root.iterdir()
+        if path.is_file()
+        and (
+            path.suffix == ".bin"
+            or path.suffix == ".part"
+            and path.name.endswith(".bin.part")
+        )
+    )
+    with cache._budget_lock:
+        if cache._download_reserved != 0 or cache._cache_reserved != 0:
+            raise online_range.rp.ContractError(
+                "Range L3 trim 后仍有未结算 reservation；拒绝重置缓存计数"
+            )
+        cache._cache_used = active_bytes
 
 
 def _validate_manifest(value: Any) -> list[dict[str, Any]]:
@@ -301,6 +660,10 @@ def _execute_request(
         cache_pool[pool_key] = cache
     else:
         cache.begin_request_budget(download_budget_bytes)
+    protected_keys = {
+        cache._paths(cache._identity(entry))[0]
+        for entry in entries
+    }
     retryable = (
         TimeoutError,
         ConnectionError,
@@ -346,7 +709,49 @@ def _execute_request(
 
     # 每个 manifest 至多288项；RangeCache 内部已有预算锁、proof锁与 keyed
     # file lock。受控并发只重叠 HTTPS Range I/O，仍逐项执行精确206/长度/SHA门。
-    results = list(executor.map(fetch_one, entries))
+    startup_trim: dict[str, Any] | None = None
+    cache_root_identity = str(cache.root)
+    if os.name == "nt":
+        cache_root_identity = cache_root_identity.casefold()
+    # 根锁覆盖 trim 与本 manifest 的全部并行 fetch。这样多个 resident
+    # worker/进程不能在分别通过 projected 检查后同时把磁盘写爆；锁序恒为
+    # root -> 非阻塞候选 key，正式 fetch 则为 root -> 当前 key，不形成反向等待。
+    with _l3_root_budget_lock(cache.root):
+        with _STARTUP_TRIM_GUARD:
+            needs_startup_trim = cache_root_identity not in _STARTUP_TRIMMED_ROOTS
+        if needs_startup_trim:
+            startup_trim = _trim_l3_cache(
+                cache_root=cache.root,
+                cache_budget_bytes=cache_budget_bytes,
+                disk_free_reserve_bytes=disk_free_reserve_bytes,
+                projected_download_bytes=0,
+                protected_keys=protected_keys,
+                phase="startup",
+                target_cache_bytes=_l3_low_water_bytes(cache_budget_bytes),
+            )
+            _sync_range_cache_storage_accounting(cache)
+            with _STARTUP_TRIM_GUARD:
+                _STARTUP_TRIMMED_ROOTS.add(cache_root_identity)
+        predownload_trim = _fast_l3_budget_snapshot(
+            cache,
+            projected_download_bytes=download_budget_bytes,
+            cache_budget_bytes=cache_budget_bytes,
+            disk_free_reserve_bytes=disk_free_reserve_bytes,
+        )
+        if not predownload_trim["constraints_satisfied"]:
+            predownload_trim = _trim_l3_cache(
+                cache_root=cache.root,
+                cache_budget_bytes=cache_budget_bytes,
+                disk_free_reserve_bytes=disk_free_reserve_bytes,
+                projected_download_bytes=download_budget_bytes,
+                protected_keys=protected_keys,
+                phase="predownload",
+                target_cache_bytes=_l3_low_water_bytes(cache_budget_bytes),
+            )
+            _sync_range_cache_storage_accounting(cache)
+        results = list(executor.map(fetch_one, entries))
+        touched_pairs = _touch_cache_pair_access(cache.root, protected_keys)
+        post_request_storage = cache.cache_storage_telemetry
     hits = sum(row[0] for row in results)
     misses = sum(row[1] for row in results)
     rows = [row[2] for row in results]
@@ -372,6 +777,18 @@ def _execute_request(
         "ranges": rows,
         "proof_cache": cache.proof_cache_telemetry,
         "cache_storage": cache.cache_storage_telemetry,
+        "l3_cache": {
+            "policy": "complete-pair-lru/root-serialized/projected-budget-v1",
+            "cache_budget_env": "S14_DYNAMIC_PAGE_CACHE_BUDGET_BYTES",
+            "disk_reserve_env": "S14_DYNAMIC_PAGE_DISK_RESERVE_BYTES",
+            "cache_budget_bytes": cache_budget_bytes,
+            "disk_free_reserve_bytes": disk_free_reserve_bytes,
+            "manifest_protected_keys": len(protected_keys),
+            "startup_trim": startup_trim,
+            "predownload_trim": predownload_trim,
+            "touched_pairs": touched_pairs,
+            "post_request": post_request_storage,
+        },
         "transport": transport.telemetry,
     }
 
