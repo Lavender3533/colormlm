@@ -2,6 +2,7 @@ use crate::{
     EngineChatRequest, EngineDelta, EngineDone, EngineError, EngineErrorKind, EngineEvent,
     EngineEventSender, FinishReason, ResidentChatBackend,
 };
+use serde_json::json;
 use sha2::{Digest, Sha256};
 use ssd_inference::{
     s14_runtime::{S14Runtime, S14Session},
@@ -501,6 +502,8 @@ pub struct S14ResidentK4Checkpoint {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct S14ResidentK4CommittedBlock {
+    pub block_sequence: u64,
+    pub base_position: u32,
     pub consumed: S14ResidentK4Checkpoint,
     pub committed: S14ResidentK4Checkpoint,
     pub token_ids: Vec<u32>,
@@ -725,13 +728,19 @@ impl<C: S14ChatCodec, D: S14ResidentK4Decoder> S14ResidentK4ChatBackend<C, D> {
     ) -> Result<Option<EngineDone>, EngineError> {
         let mut completion_ids = Vec::with_capacity(max_tokens as usize);
         let mut emitted = String::new();
+        let mut last_block_sequence = None;
+        let mut request_block_ordinal = 0u64;
         while completion_ids.len() < max_tokens as usize {
             let expected = resident.checkpoint().clone();
             let remaining = max_tokens - completion_ids.len() as u32;
             let block = resident.execute_next_block(remaining)?;
             let block_tokens_u32 = block.token_ids.len() as u32;
             let block_tokens_u64 = u64::from(block_tokens_u32);
-            if block.consumed != expected
+            if block.block_sequence == 0
+                || block.base_position != block.consumed.position
+                || last_block_sequence
+                    .is_some_and(|previous| block.block_sequence.checked_sub(previous) != Some(1))
+                || block.consumed != expected
                 || block.committed.position <= block.consumed.position
                 || block
                     .committed
@@ -757,6 +766,43 @@ impl<C: S14ChatCodec, D: S14ResidentK4Decoder> S14ResidentK4ChatBackend<C, D> {
                     "resident K4 block checkpoint/commit/token 链漂移",
                 ));
             }
+
+            request_block_ordinal = request_block_ordinal.checked_add(1).ok_or_else(|| {
+                EngineError::new(
+                    EngineErrorKind::Internal,
+                    "resident K4 request block ordinal overflow",
+                )
+            })?;
+            let eos_token_offset = block
+                .token_ids
+                .iter()
+                .position(|&token_id| self.codec.is_eos(token_id));
+            eprintln!(
+                "{}",
+                json!({
+                    "event": "s14_api_block_commit",
+                    "schema_version": 1,
+                    "request_block_ordinal": request_block_ordinal,
+                    "second_block_commit": request_block_ordinal == 2,
+                    "block_sequence": block.block_sequence,
+                    "base_position": block.base_position,
+                    "committed_token_count": block_tokens_u32,
+                    "consumed_checkpoint": {
+                        "position": block.consumed.position,
+                        "commit_epoch": block.consumed.commit_epoch,
+                        "sha256": block.consumed.sha256,
+                    },
+                    "committed_checkpoint": {
+                        "position": block.committed.position,
+                        "commit_epoch": block.committed.commit_epoch,
+                        "sha256": block.committed.sha256,
+                    },
+                    "eos": eos_token_offset.is_some(),
+                    "eos_token_offset": eos_token_offset,
+                    "wall_ms": block.wall_ms,
+                })
+            );
+            last_block_sequence = Some(block.block_sequence);
 
             for token_id in block.token_ids {
                 completion_ids.push(token_id);

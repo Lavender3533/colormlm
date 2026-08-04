@@ -94,6 +94,8 @@ impl S14StarfoldRuntimeCheckpointReceipt {
 /// GPU head candidate、teacher-forced 输入或截断后的 API 视图。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct S14StarfoldRuntimeCommittedBlockReceipt {
+    block_sequence: u64,
+    base_position: u32,
     consumed: S14StarfoldRuntimeCheckpointReceipt,
     committed: S14StarfoldRuntimeCheckpointReceipt,
     committed_token_ids: Vec<u32>,
@@ -101,15 +103,27 @@ pub struct S14StarfoldRuntimeCommittedBlockReceipt {
 
 impl S14StarfoldRuntimeCommittedBlockReceipt {
     pub fn from_atomic_runtime_commit(
+        block_sequence: u64,
+        base_position: u32,
         consumed: S14StarfoldRuntimeCheckpointReceipt,
         committed: S14StarfoldRuntimeCheckpointReceipt,
         committed_token_ids: Vec<u32>,
     ) -> Self {
         Self {
+            block_sequence,
+            base_position,
             consumed,
             committed,
             committed_token_ids,
         }
+    }
+
+    pub const fn block_sequence(&self) -> u64 {
+        self.block_sequence
+    }
+
+    pub const fn base_position(&self) -> u32 {
+        self.base_position
     }
 
     pub const fn consumed(&self) -> S14StarfoldRuntimeCheckpointReceipt {
@@ -131,6 +145,11 @@ impl S14StarfoldRuntimeCommittedBlockReceipt {
     ) -> Result<Self, EngineError> {
         let committed_token_ids = receipt.decision.committed_token_ids.clone();
         let valid = receipt.schema_version == S14_STARFOLD_TERMINAL_CHAIN_SCHEMA_VERSION
+            && receipt.block_sequence > 0
+            && receipt
+                .committed_position
+                .checked_sub(receipt.base_position)
+                == u32::try_from(receipt.committed_tokens).ok()
             && (1..=usize::from(S14_PRODUCTION_K4_MAX_COMMITTED_TOKENS))
                 .contains(&receipt.commit_limit)
             && receipt.committed_tokens == committed_token_ids.len()
@@ -158,6 +177,8 @@ impl S14StarfoldRuntimeCommittedBlockReceipt {
             ));
         }
         Ok(Self::from_atomic_runtime_commit(
+            receipt.block_sequence,
+            receipt.base_position,
             S14StarfoldRuntimeCheckpointReceipt::from_runtime_receipt(
                 receipt.base_position,
                 receipt.base_commit_epoch,
@@ -323,8 +344,12 @@ where
         let consumed = receipt.consumed.into_production();
         let committed = receipt.committed.into_production();
         let committed_token_ids = receipt.committed_token_ids;
+        let block_sequence = receipt.block_sequence;
+        let base_position = receipt.base_position;
         self.committed = observed_after;
         Ok(S14ProductionK4CommittedBlock::from_runtime_commit(
+            block_sequence,
+            base_position,
             consumed,
             committed,
             committed_token_ids,

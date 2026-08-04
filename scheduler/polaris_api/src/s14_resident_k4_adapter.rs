@@ -54,6 +54,8 @@ impl S14ProductionK4CheckpointIdentity {
 /// candidate head、fixture 或 API 层采样结果。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct S14ProductionK4CommittedBlock {
+    block_sequence: u64,
+    base_position: u32,
     consumed: S14ProductionK4CheckpointIdentity,
     committed: S14ProductionK4CheckpointIdentity,
     committed_token_ids: Vec<u32>,
@@ -61,15 +63,27 @@ pub struct S14ProductionK4CommittedBlock {
 
 impl S14ProductionK4CommittedBlock {
     pub fn from_runtime_commit(
+        block_sequence: u64,
+        base_position: u32,
         consumed: S14ProductionK4CheckpointIdentity,
         committed: S14ProductionK4CheckpointIdentity,
         committed_token_ids: Vec<u32>,
     ) -> Self {
         Self {
+            block_sequence,
+            base_position,
             consumed,
             committed,
             committed_token_ids,
         }
+    }
+
+    pub const fn block_sequence(&self) -> u64 {
+        self.block_sequence
+    }
+
+    pub const fn base_position(&self) -> u32 {
+        self.base_position
     }
 
     pub const fn consumed(&self) -> S14ProductionK4CheckpointIdentity {
@@ -242,10 +256,14 @@ where
 
         let consumed = to_api_checkpoint(block.consumed)?;
         let committed = to_api_checkpoint(block.committed)?;
+        let block_sequence = block.block_sequence;
+        let base_position = block.base_position;
         let token_ids = block.committed_token_ids;
         self.production_checkpoint = observed_after;
         self.api_checkpoint = committed.clone();
         Ok(S14ResidentK4CommittedBlock {
+            block_sequence,
+            base_position,
             consumed,
             committed,
             token_ids,
@@ -287,7 +305,9 @@ fn validate_runtime_block(
         )
     })?;
     let committed_tokens_u64 = u64::from(committed_tokens_u32);
-    let valid = block.consumed == expected
+    let valid = block.block_sequence > 0
+        && block.base_position == block.consumed.next_position()
+        && block.consumed == expected
         && block.committed == observed_after
         && (1..=usize::from(max_committed_tokens)).contains(&committed_tokens)
         && committed_tokens <= usize::from(S14_PRODUCTION_K4_MAX_COMMITTED_TOKENS)
