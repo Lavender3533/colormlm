@@ -623,9 +623,16 @@ pub fn fetch_dynamic_page_plans_batched_only(
 
     let position = plans.iter().map(|plan| plan.position).min().unwrap_or(0);
     let mut merged = BTreeMap::<String, DynamicPageFetchEntry>::new();
+    let mut committed_paths = BTreeMap::<String, (PathBuf, PathBuf, PathBuf)>::new();
     for plan in plans {
         for physical in plan.physical_ranges()? {
             let range = physical.range;
+            let planned = physical.planned_asset(cache_root)?;
+            let canonical_paths = (
+                planned.payload_path,
+                planned.proof_path,
+                cache_root.join(format!("{}.bin.part", planned.cache_key)),
+            );
             let entry = DynamicPageFetchEntry {
                 tensor: range.tensor.clone(),
                 kind: range.kind.clone(),
@@ -643,12 +650,19 @@ pub fn fetch_dynamic_page_plans_batched_only(
             };
             match merged.entry(entry.range_key.clone()) {
                 std::collections::btree_map::Entry::Vacant(slot) => {
+                    committed_paths.insert(entry.range_key.clone(), canonical_paths);
                     slot.insert(entry);
                 }
                 std::collections::btree_map::Entry::Occupied(slot) => {
                     if slot.get() != &entry {
                         return Err(DynamicPageMaterializeError::Failed(anyhow::anyhow!(
                             "fetch-only dynamic page 重复 range_key identity 漂移: {}",
+                            slot.key()
+                        )));
+                    }
+                    if committed_paths.get(slot.key()) != Some(&canonical_paths) {
+                        return Err(DynamicPageMaterializeError::Failed(anyhow::anyhow!(
+                            "fetch-only dynamic page 重复 range_key canonical cache identity 漂移: {}",
                             slot.key()
                         )));
                     }
@@ -681,9 +695,9 @@ pub fn fetch_dynamic_page_plans_batched_only(
     // `verify_microtile` 执行；这里只做不会把损坏文件冒充 verified asset 的尺寸快检。
     // 这样热缓存 block 不再为 43 层各支付一次 JSONL/进程往返。
     let all_committed_locally = entries.iter().all(|entry| {
-        let payload = cache_root.join(format!("{}.bin", entry.range_key));
-        let proof = cache_root.join(format!("{}.json", entry.range_key));
-        let partial = cache_root.join(format!("{}.bin.part", entry.range_key));
+        let Some((payload, proof, partial)) = committed_paths.get(&entry.range_key) else {
+            return false;
+        };
         !partial.exists()
             && proof.is_file()
             && fs::metadata(payload)

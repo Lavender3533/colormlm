@@ -16,6 +16,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -456,7 +457,24 @@ class _ThreadLocalRequestsRangeTransport:
         self._requests = 0
         self._rate_limit_events = 0
         self._rate_limit_wait_seconds = 0.0
-        self._blocked_until = 0.0
+        self._blocked_until_by_origin: dict[str, float] = {}
+        self._fallback_attempts = 0
+        self._fallback_successes = 0
+        self._primary_endpoint = os.environ.get(
+            "S14_DYNAMIC_PAGE_FETCH_ENDPOINT", "https://huggingface.co"
+        ).rstrip("/")
+        fallback_raw = os.environ.get(
+            "S14_DYNAMIC_PAGE_FETCH_FALLBACK_ENDPOINTS", "https://huggingface.co"
+        )
+        fallback_endpoints: list[str] = []
+        for candidate in fallback_raw.split(","):
+            endpoint = candidate.strip().rstrip("/")
+            if not endpoint or endpoint == self._primary_endpoint:
+                continue
+            online_range._require_https(endpoint)
+            if endpoint not in fallback_endpoints:
+                fallback_endpoints.append(endpoint)
+        self._fallback_endpoints = tuple(fallback_endpoints)
         self._rate_limit_retries = int(
             os.environ.get("S14_DYNAMIC_PAGE_FETCH_429_RETRIES", "8")
         )
@@ -485,10 +503,67 @@ class _ThreadLocalRequestsRangeTransport:
         self, url: str, start: int, end: int, timeout: float
     ) -> _RequestsResponse:
         online_range._require_https(url)
+        candidates = self._candidate_urls(url)
+        last_error: BaseException | None = None
+        for index, candidate in enumerate(candidates):
+            is_last = index + 1 == len(candidates)
+            # 某个镜像已明确要求退避时，不让它的等待窗口阻塞健康 fallback。
+            # 最后一个 origin 仍执行正常等待，避免所有 endpoint 同时被打爆。
+            if not is_last and self._origin_blocked(self._origin(candidate)):
+                with self._stats_lock:
+                    self._fallback_attempts += 1
+                continue
+            try:
+                response = self._open_single_range(
+                    candidate,
+                    start,
+                    end,
+                    timeout,
+                    allow_extended_retry=is_last,
+                )
+            except urllib.error.HTTPError as error:
+                last_error = error
+                if is_last or error.code not in {429, 500, 502, 503, 504}:
+                    raise
+                with self._stats_lock:
+                    self._fallback_attempts += 1
+                continue
+            except (ConnectionError, requests.ConnectionError, requests.Timeout) as error:
+                last_error = error
+                if is_last:
+                    raise
+                with self._stats_lock:
+                    self._fallback_attempts += 1
+                continue
+            if index > 0:
+                with self._stats_lock:
+                    self._fallback_successes += 1
+            return response
+        if last_error is not None:
+            raise last_error
+        raise AssertionError("Range endpoint candidate list must not be empty")
+
+    def _candidate_urls(self, url: str) -> tuple[str, ...]:
+        prefix = f"{self._primary_endpoint}/"
+        if not url.startswith(prefix):
+            return (url,)
+        suffix = url[len(self._primary_endpoint) :]
+        return (url, *(f"{endpoint}{suffix}" for endpoint in self._fallback_endpoints))
+
+    def _open_single_range(
+        self,
+        url: str,
+        start: int,
+        end: int,
+        timeout: float,
+        *,
+        allow_extended_retry: bool,
+    ) -> _RequestsResponse:
+        origin = self._origin(url)
         connection_attempt = 0
         rate_limit_attempt = 0
         while True:
-            self._wait_for_global_rate_limit()
+            self._wait_for_origin_rate_limit(origin)
             try:
                 response = self._session().get(
                     url,
@@ -512,12 +587,12 @@ class _ThreadLocalRequestsRangeTransport:
                     headers = response.headers
                     final_url = response.url
                     response.close()
-                    if rate_limit_attempt >= self._rate_limit_retries:
+                    self._extend_origin_rate_limit(origin, retry_after)
+                    if not allow_extended_retry or rate_limit_attempt >= self._rate_limit_retries:
                         raise urllib.error.HTTPError(
                             final_url, status, reason, headers, None
                         )
                     rate_limit_attempt += 1
-                    self._extend_global_rate_limit(retry_after)
                     continue
                 if response.status_code >= 400:
                     status = response.status_code
@@ -532,10 +607,18 @@ class _ThreadLocalRequestsRangeTransport:
             except urllib.error.HTTPError:
                 raise
             except (requests.ConnectionError, requests.Timeout) as error:
-                if connection_attempt >= 3:
+                max_connection_attempts = 3 if allow_extended_retry else 0
+                if connection_attempt >= max_connection_attempts:
                     raise ConnectionError(str(error)) from error
                 time.sleep(0.5 * (2**connection_attempt))
                 connection_attempt += 1
+
+    @staticmethod
+    def _origin(url: str) -> str:
+        parsed = urllib.parse.urlsplit(url)
+        if parsed.scheme != "https" or not parsed.netloc:
+            raise online_range.rp.ContractError("Range endpoint origin 必须为 HTTPS")
+        return f"{parsed.scheme}://{parsed.netloc}"
 
     @staticmethod
     def _retry_after_seconds(value: str | None, attempt: int) -> float:
@@ -551,23 +634,30 @@ class _ThreadLocalRequestsRangeTransport:
         except (TypeError, ValueError, OverflowError):
             return fallback
 
-    def _extend_global_rate_limit(self, delay_seconds: float) -> None:
+    def _extend_origin_rate_limit(self, origin: str, delay_seconds: float) -> None:
         with self._stats_lock:
             self._rate_limit_events += 1
-            self._blocked_until = max(
-                self._blocked_until, time.monotonic() + delay_seconds
+            self._blocked_until_by_origin[origin] = max(
+                self._blocked_until_by_origin.get(origin, 0.0),
+                time.monotonic() + delay_seconds,
             )
 
-    def _wait_for_global_rate_limit(self) -> None:
+    def _wait_for_origin_rate_limit(self, origin: str) -> None:
         while True:
             with self._stats_lock:
-                remaining = self._blocked_until - time.monotonic()
+                remaining = (
+                    self._blocked_until_by_origin.get(origin, 0.0) - time.monotonic()
+                )
             if remaining <= 0.0:
                 return
             slept = min(remaining, 1.0)
             time.sleep(slept)
             with self._stats_lock:
                 self._rate_limit_wait_seconds += slept
+
+    def _origin_blocked(self, origin: str) -> bool:
+        with self._stats_lock:
+            return self._blocked_until_by_origin.get(origin, 0.0) > time.monotonic()
 
     @property
     def telemetry(self) -> dict[str, int | str]:
@@ -580,6 +670,9 @@ class _ThreadLocalRequestsRangeTransport:
                 "rate_limit_wait_seconds": round(
                     self._rate_limit_wait_seconds, 3
                 ),
+                "fallback_endpoints": len(self._fallback_endpoints),
+                "fallback_attempts": self._fallback_attempts,
+                "fallback_successes": self._fallback_successes,
             }
 
 
